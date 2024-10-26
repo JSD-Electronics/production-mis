@@ -1,0 +1,22 @@
+.custom-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scroll::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: var(--wizard-yellow);
+  border-radius: 8px;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--wizard-blue);
+  border-radius: 10px;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb:active {
+  background: var(--wizard-mocha);
+  border-radius: 10px;
+}
