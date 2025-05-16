@@ -5,7 +5,6 @@ import Image from "next/image";
 import ClickOutside from "@/components/ClickOutside";
 import { logout } from '../../lib/api';
 import { useRouter } from 'next/navigation';
-import { verifyTokenClientSide } from "@/middleware/verifytoken";
 
 
 const DropdownUser = () => {
@@ -14,16 +13,12 @@ const DropdownUser = () => {
   const [profilePic,setProfilePicture] = useState("");
   const router = useRouter();
   React.useEffect(() => {
-    const decoded = verifyTokenClientSide();
-    // if (!decoded) {
-    //   router.push("/");
-    // } else {
-      let response = JSON.parse(localStorage.getItem('userDetails'));
-      setUserDetails(response);
-      const filePath = response.profilePic;
-      const normalizedFilePath = filePath.replace(/\\/g, "/");
-      setProfilePicture(`${process.env.NEXT_PUBLIC_BASE_URL}/${normalizedFilePath}`,)
-    // }
+    let response = JSON.parse(localStorage.getItem('userDetails'));
+    setUserDetails(response);
+    const filePath = response.profilePic;
+    const normalizedFilePath = filePath.replace(/\\/g, "/");
+    setProfilePicture(`${process.env.NEXT_PUBLIC_BASE_URL}/${normalizedFilePath}`,)
+    // console.log("userDetails",userDetails);
 
   }, [localStorage.getItem('userDetails')]); 
   const handleLogout = async () => {

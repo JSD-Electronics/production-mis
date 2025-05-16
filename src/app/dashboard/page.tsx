@@ -1,12 +1,10 @@
-"use client";
 import Dashboard from "@/components/Dashboard/E-commerce";
 import { Metadata } from "next";
-import withAuth from "@/app/auth/withAuth/withAuth";
 import DefaultLayout from "@/components/Layouts/DefaultLayout";
 import React from "react";
 
 
-const DashboardPage: React.FC = () => {
+const BasicChartPage: React.FC = () => {
   return (
     <DefaultLayout>
       <Dashboard />
@@ -14,4 +12,4 @@ const DashboardPage: React.FC = () => {
   );
 };
 
-export default withAuth(DashboardPage);
+export default BasicChartPage;

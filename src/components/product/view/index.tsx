@@ -9,7 +9,6 @@ import { FiEdit, FiTrash } from "react-icons/fi";
 import { BallTriangle } from "react-loader-spinner";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 const ViewProduct = () => {
   const [showPopup, setShowPopup] = React.useState(false);
   const [productId, setProductId] = React.useState("");
