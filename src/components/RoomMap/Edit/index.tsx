@@ -29,7 +29,6 @@ const EditRoomMap = () => {
         setFloorName(result.floorName || "");
         setLayout(result.lines || []); // Set layout directly to avoid duplicates
       }
-      console.log("result ===>", result);
     } catch (error) {
       console.error("Failed to fetch room plan:", error);
     }

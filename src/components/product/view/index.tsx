@@ -9,7 +9,6 @@ import { FiEdit, FiTrash } from "react-icons/fi";
 import { BallTriangle } from "react-loader-spinner";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 const ViewProduct = () => {
   const [showPopup, setShowPopup] = React.useState(false);
   const [productId, setProductId] = React.useState("");
@@ -99,8 +98,6 @@ const ViewProduct = () => {
           >
             <FiEdit size={16} />
           </button>
-
-          {/* Delete Button */}
           <button
             onClick={() => handlepopup(row._id)}
             className="transform rounded-full bg-danger p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-danger"

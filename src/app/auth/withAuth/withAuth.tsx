@@ -9,7 +9,7 @@ interface UserRoles {
 interface MenuItem {
   label: string;
   route: string;
-  children?: MenuItem[]; // Array of MenuItem, allowing for nested structure
+  children?: MenuItem[];
 }
 
 const withAuth = (WrappedComponent: ComponentType<any>) => {
@@ -22,7 +22,9 @@ const withAuth = (WrappedComponent: ComponentType<any>) => {
 
     useEffect(() => {
       const fetchUserRoles = async () => {
-        const userDetails = JSON.parse(localStorage.getItem("userDetails") || "{}");
+        const userDetails = JSON.parse(
+          localStorage.getItem("userDetails") || "{}",
+        );
         if (!userDetails || !userDetails.userType) {
           console.log("User details not found or user type is missing.");
           window.location.href = "/not-authorized";
@@ -35,7 +37,6 @@ const withAuth = (WrappedComponent: ComponentType<any>) => {
           const result = await getUseTypeByType();
           const roles = result.userType[0]?.roles || {};
           setUserRoles(roles);
-          console.log("Fetched User Roles:", roles);
         } catch (error) {
           console.error("Failed to fetch user roles:", error);
         }
@@ -46,52 +47,57 @@ const withAuth = (WrappedComponent: ComponentType<any>) => {
           const result = await getAllMenus();
           const menus = result.getMenu[0]?.menus || [];
           setMenuGroups(menus);
-          console.log("Fetched Menus:", menus);
         } catch (error) {
           console.error("Failed to fetch menus:", error);
         }
       };
 
-      Promise.all([fetchUserRoles(), fetchMenus()]).then(() => {
-        setLoading(false); // Set loading to false after both fetches complete
-      }).catch((error) => {
-        console.error("Error fetching data:", error);
-        setLoading(false); // Ensure loading is set to false even if there's an error
-      });
+      Promise.all([fetchUserRoles(), fetchMenus()])
+        .then(() => {
+          setLoading(false);
+        })
+        .catch((error) => {
+          console.error("Error fetching data:", error);
+          setLoading(false);
+        });
     }, []);
 
     useEffect(() => {
-      if (loading || !userRoles || Object.keys(userRoles).length === 0 || menuGroups.length === 0) {
-        return; // Wait until loading is false and data is ready
+      if (
+        loading ||
+        !userRoles ||
+        Object.keys(userRoles).length === 0 ||
+        menuGroups.length === 0
+      ) {
+        return;
       }
 
       const currentPath = window.location.pathname;
 
       const checkAccess = (menuItem: MenuItem): boolean => {
         if (menuItem.route === currentPath) {
-          const transformedLabel = menuItem.label.replace(/\s+/g, "_").toLowerCase();
-          const accessGranted = userRoles[transformedLabel]?.[userType.toLowerCase()] === true;
-
-          console.log(`Checking access for ${menuItem.label} at ${menuItem.route}:`, accessGranted);
+          const transformedLabel = menuItem.label
+            .replace(/\s+/g, "_")
+            .toLowerCase();
+          const formattedUserType = userType.toLowerCase().replace(/\s+/g, "_");
+          const accessGranted =
+            userRoles[transformedLabel]?.[formattedUserType] === true;
           return accessGranted;
         }
 
-        // Recursively check children if the menu item has children
         if (menuItem.children && menuItem.children.length > 0) {
           return menuItem.children.some(checkAccess);
         }
 
-        return false; // Default case if no match found
+        return false;
       };
 
       const accessGranted = menuGroups.some(checkAccess);
-      console.log("Overall Access Granted:", accessGranted);
       setHasAccess(accessGranted);
     }, [userRoles, menuGroups, userType, loading]);
 
     useEffect(() => {
       if (hasAccess === false) {
-        console.log("Access denied, redirecting to /not-authorized");
         window.location.href = "/not-authorized";
       }
     }, [hasAccess]);

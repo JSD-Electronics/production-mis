@@ -2,7 +2,13 @@
 import React, { useState } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { createProduct, getProductById, updateProduct } from "../../../lib/api";
+import {
+  getProductById,
+  getStickerFields,
+  getOperatorSkills,
+  updateProduct,
+  getUserType,
+} from "../../../lib/api";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
@@ -12,14 +18,25 @@ import {
   faChevronUp,
   faChevronDown,
 } from "@fortawesome/free-solid-svg-icons";
+import PrintTableComponent from "../printTableComponents";
 
 const EditProduct = () => {
   const [errors, setErrors] = useState({ name: false, stages: [] });
   const [name, setName] = useState("");
   const [submitDisabled, setSubmitDisabled] = useState(false);
+  const [stickerFields, setStickerFields] = useState([]);
+  const [stickerData, setStickerData] = useState([]);
+  const [skillData, setSkillFieldData] = useState([]);
+  const [userType, setUserType] = useState([]);
+  const [stickerDimensions, setStickerDimensions] = useState({
+    width: 100,
+    height: 100,
+  });
   const [stages, setStages] = useState([
     {
       stageName: "",
+      managedBy: "",
+      requiredSkill: "",
       upha: "",
       sopFile: "",
       jigId: "",
@@ -27,19 +44,84 @@ const EditProduct = () => {
       subSteps: [
         {
           stepName: "",
+          isPrinterEnable: false,
           isSubExpand: true,
+          isPackagingStatus: true,
+          isCheckboxNGStatus: false,
+          packagingData: {
+            packagingType: "",
+            cartonWidth: 0,
+            cartonHeight: 0,
+            maxCapacity: 0,
+            cartonWeight: 0,
+          },
           stepType: "manual",
+          printerFields: [],
           jigFields: [],
           stepFields: {},
         },
       ],
     },
   ]);
+  const [commonStages, setCommonStages] = useState([
+    {
+      stageName: "PDI",
+      requiredSkill: "",
+      managedBy: "",
+      upha: "",
+    },
+    {
+      stageName: "FG to Store",
+      requiredSkill: "",
+      managedBy: "",
+      upha: "",
+    },
+    {
+      stageName: "Dispatch",
+      requiredSkill: "",
+      managedBy: "",
+      upha: "",
+    },
+    {
+      stageName: "Delivery",
+      requiredSkill: "",
+      managedBy: "",
+      upha: "",
+    },
+  ]);
   React.useEffect(() => {
     const pathname = window.location.pathname;
     const id = pathname.split("/").pop();
     getProduct(id);
+    getStickerField();
+    getSkillField();
+    getUserRoles();
   }, []);
+  const getUserRoles = async () => {
+    try {
+      let result = await getUserType();
+      console.log("userType ==>", result?.userType);
+      setUserType(result?.userType);
+    } catch (error) {
+      console.log("Error Fetching User Roles");
+    }
+  };
+  const getSkillField = async () => {
+    try {
+      let result = await getOperatorSkills();
+      setSkillFieldData(result.skills);
+    } catch (error) {
+      console.error("Error Fetching Shifts:", error);
+    }
+  };
+  const getStickerField = async () => {
+    try {
+      let result = await getStickerFields();
+      setStickerFields(result?.data);
+    } catch (error) {
+      console.log(`Error Fetching Sticker Fields!!`, error);
+    }
+  };
   const validateForm = () => {
     let isValid = true;
     let tempErrors = { name: false, stages: [] };
@@ -52,7 +134,7 @@ const EditProduct = () => {
 
     stages.forEach((stage, stageIndex) => {
       if (!tempErrors.stages[stageIndex]) {
-        tempErrors.stages[stageIndex] = { stageName: false, subSteps: [] }; // Initialize subSteps array
+        tempErrors.stages[stageIndex] = { stageName: false, subSteps: [] };
       }
 
       if (!stage.stageName) {
@@ -65,7 +147,7 @@ const EditProduct = () => {
         if (!tempErrors.stages[stageIndex].subSteps[subStepIndex]) {
           tempErrors.stages[stageIndex].subSteps[subStepIndex] = {
             stepName: false,
-          }; // Initialize stepName error
+          };
         }
 
         if (!subStep.stepName) {
@@ -83,9 +165,11 @@ const EditProduct = () => {
   };
   const getProduct = async (id: any) => {
     let result = await getProductById(id);
-    setName(result.name);
-    setStages(result.stages);
-    console.log("result ===>", result);
+    setName(result.product.name);
+    setStages(result.product.stages);
+    if(result.product.commonStages.length > 0) {
+      setCommonStages(result.product.commonStages);
+    }
   };
   const handleAddStage = () => {
     setStages([
@@ -94,6 +178,7 @@ const EditProduct = () => {
         stageName: "",
         upha: "",
         sopFile: "",
+        managedBy: "",
         isExpanded: false,
         jigId: "",
         subSteps: [
@@ -101,6 +186,7 @@ const EditProduct = () => {
             stepName: "",
             isSubExpand: true,
             stepType: "manual",
+            printerFields: [],
             jigFields: [],
             stepFields: {},
           },
@@ -115,10 +201,9 @@ const EditProduct = () => {
       const formData = new FormData();
       formData.append("name", name);
       formData.append("stages", JSON.stringify(stages));
-
+      formData.append("commonStages", JSON.stringify(commonStages));
       try {
         const result = await updateProduct(formData, id);
-
         if (result && result.status === 200) {
           toast.success("Stage Updated successfully!!");
         } else {
@@ -152,6 +237,7 @@ const EditProduct = () => {
       stepName: "",
       isSubExpand: false,
       stepType: "manual",
+      printerFields: [],
       jigFields: [
         // {
         //   jigName: "",
@@ -206,6 +292,11 @@ const EditProduct = () => {
       event.target.value;
     setStages(newStages);
   };
+  const handleCommonStageChange = (index: any, event: any, param: any) => {
+    const newStages = [...commonStages];
+    newStages[index][param] = event?.target.value;
+    setCommonStages(newStages);
+  };
 
   const handleJigSubStepChange = (
     stageIndex: any,
@@ -258,6 +349,17 @@ const EditProduct = () => {
     ].subSteps[subIndex].jigFields.filter((_, i) => i !== jigIndex);
     setStages(newStages);
   };
+  const handleAddPrinterFields = (
+    index: any,
+    subIndex: any,
+    printIndex: any,
+  ) => {
+    const newStages = [...stages];
+    newStages[index].subSteps[subIndex].printerFields[printIndex].fields.push({
+      fieldName: "",
+    });
+    setStages(newStages);
+  };
   // Function to remove a sub-step field
   const handleRemoveSubStep = (stageIndex: any, subStepIndex: any) => {
     const newStages = [...stages];
@@ -277,16 +379,193 @@ const EditProduct = () => {
       !newStages[index].subSteps[subIndex].isSubExpand;
     setStages(newStages);
   };
+  const handleRemovePrintField = (
+    index: number,
+    subIndex: number,
+    fieldIndex: number,
+    PrintFieldindex: number,
+  ) => {
+    const newStages = [...stages];
+    newStages[index].subSteps[subIndex].printerFields[fieldIndex].fields =
+      newStages[index].subSteps[subIndex].printerFields[
+        fieldIndex
+      ].fields.filter((_, i) => i !== PrintFieldindex);
+
+    setStages(newStages);
+  };
+  const handleFieldDimensionChange = (
+    index: number,
+    subIndex: number,
+    fieldIndex: number,
+    PrintFieldindex: number,
+    name: string,
+    value: any,
+  ) => {
+    const newStages = [...stages];
+    const field = newStages[index].subSteps[subIndex].printerFields[fieldIndex];
+    const updatedFields = field?.fields.map((f, i) =>
+      i === PrintFieldindex ? { ...f, [name]: value } : f,
+    );
+    newStages[index].subSteps[subIndex].printerFields[fieldIndex].fields =
+      updatedFields;
+
+    setStages(newStages);
+  };
   const toggleJigExpand = (index: any, subIndex: any, jigIndex: any) => {
     const newStages = [...stages];
     newStages[index].subSteps[subIndex].jigFields[jigIndex].isSubExpand =
       !newStages[index].subSteps[subIndex].jigFields[jigIndex].isSubExpand;
     setStages(newStages);
   };
+  const handleCheckboxNGStatus = (
+    index: number,
+    subIndex: number,
+    value: boolean,
+  ) => {
+    const updatedStages = [...stages];
+    const subStep = updatedStages[index].subSteps[subIndex];
+    subStep.isCheckboxNGStatus = !subStep.isCheckboxNGStatus;
+    if (subStep.ngStatusData && subStep.ngStatusData.length === 0) {
+      subStep.ngStatusData.push({
+        id: Date.now(),
+        value: "",
+      });
+    }
+    setStages(updatedStages);
+  };
+  const handleCheckboxPrinter = (
+    index: number,
+    subIndex: number,
+    value: boolean,
+  ) => {
+    const updatedStages = [...stages];
+    const subStep = updatedStages[index].subSteps[subIndex];
+    subStep.isPrinterEnable = !subStep.isPrinterEnable;
+    if (subStep.isPrinterEnable && subStep.printerFields.length === 0) {
+      subStep.printerFields.push({
+        isExpanded: true,
+        dimensions: {
+          length: 0,
+          breadth: 0,
+        },
+        fields: [],
+      });
+    }
+    setStages(updatedStages);
+  };
+  const togglePrintFieldExpand = (
+    index: any,
+    subIndex: any,
+    fieldIndex: any,
+  ) => {
+    const newStages = [...stages];
+    newStages[index].subSteps[subIndex].printerFields[fieldIndex].isExpanded =
+      !newStages[index].subSteps[subIndex].printerFields[fieldIndex].isExpanded;
+    setStages(newStages);
+  };
+
+  const handleDimensionChange = (
+    index: number,
+    subIndex: number,
+    fieldIndex: number,
+    name: string,
+    value: string,
+  ) => {
+    const newStages = [...stages];
+    const parsedValue = value ? parseFloat(value) : 0;
+    newStages[index].subSteps[subIndex].printerFields[fieldIndex].dimensions[
+      name
+    ] = parsedValue;
+    setStages(newStages);
+  };
+  const updateNGField = (
+    stageIndex: number,
+    subStepIndex: number,
+    ngIndex: number,
+    newValue: String,
+  ) => {
+    setStages((prevStages) => {
+      const updatedStages = [...prevStages];
+      updatedStages[stageIndex].subSteps[subStepIndex].ngStatusData[
+        ngIndex
+      ].value = newValue;
+      return updatedStages;
+    });
+  };
+
+  const removeNGField = (
+    stageIndex: number,
+    subStepIndex: number,
+    ngIndex: number,
+  ) => {
+    setStages((prevStages) => {
+      const updatedStages = [...prevStages];
+      updatedStages[stageIndex].subSteps[subStepIndex].ngStatusData.splice(
+        ngIndex,
+        1,
+      );
+      return updatedStages;
+    });
+  };
+  const handlePackagingStatus = (index: any, subIndex: any, value: any) => {
+    const updatedStages = [...stages];
+    const subStep = updatedStages[index].subSteps[subIndex];
+    subStep.isPackagingStatus = !subStep.isPackagingStatus;
+    if (subStep.packagingData && subStep.packagingData.length === 0) {
+      subStep.packagingData.push({
+        id: Date.now(),
+        value: "",
+      });
+    }
+    setStages(updatedStages);
+  };
+  const addNGField = (stageIndex: number, subStepIndex: number) => {
+    setStages((prevStages) =>
+      prevStages.map((stage, sIndex) =>
+        sIndex === stageIndex
+          ? {
+              ...stage,
+              subSteps: stage.subSteps.map((subStep, subIndex) =>
+                subIndex === subStepIndex
+                  ? {
+                      ...subStep,
+                      ngStatusData: [
+                        ...subStep.ngStatusData,
+                        { id: Date.now(), value: "" },
+                      ],
+                    }
+                  : subStep,
+              ),
+            }
+          : stage,
+      ),
+    );
+  };
+  const handleCartonInputs = (
+    index: any,
+    subIndex: any,
+    value: any,
+    field: any,
+  ) => {
+    const updatedStages = [...stages];
+    const subStep = updatedStages[index].subSteps[subIndex];
+    subStep.packagingData[field] = value;
+    setStages(updatedStages);
+  };
+  const handlePackagingFieldTypeChange = (
+    index: any,
+    subIndex: any,
+    value: any,
+  ) => {
+    const updatedStages = [...stages];
+    const subStep = updatedStages[index].subSteps[subIndex];
+    subStep.packagingData.packagingType = value;
+    setStages(updatedStages);
+  };
   return (
     <>
       <Breadcrumb parentName="Product Management" pageName="Edit Product" />
-      <div className="grid grid-cols-1 bg-white shadow-lg dark:bg-boxdark sm:grid-cols-1">
+      <div className="mt-4 grid grid-cols-1 bg-white shadow-lg dark:bg-boxdark sm:grid-cols-1">
         <ToastContainer
           position="top-center"
           closeOnClick
@@ -350,6 +629,64 @@ const EditProduct = () => {
                           placeholder={`Stage Name ${index + 1}`}
                           className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
                         />
+                      </div>
+                      <div>
+                        <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                          Managed By
+                        </label>
+                        <select
+                          value={stage.managedBy || ""}
+                          onChange={(e) => {
+                            handleStageChange(index, e, "managedBy");
+                          }}
+                          className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
+                        >
+                          <option
+                            value=""
+                            className="text-body dark:text-bodydark"
+                          >
+                            Please Select
+                          </option>
+                          {userType.map((user, index) => (
+                            <option
+                              key={index}
+                              value={user?.name}
+                              className="text-body dark:text-bodydark"
+                              // disabled={skills.includes(skill?.name) ? true : false}
+                            >
+                              {user?.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                          Required Skill
+                        </label>
+                        <select
+                          value={stage.requiredSkill || ""}
+                          onChange={(e) => {
+                            handleStageChange(index, e, "requiredSkill");
+                          }}
+                          className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
+                        >
+                          <option
+                            value=""
+                            className="text-body dark:text-bodydark"
+                          >
+                            Please Select
+                          </option>
+                          {skillData.map((skill, index) => (
+                            <option
+                              key={index}
+                              value={skill?.name}
+                              className="text-body dark:text-bodydark"
+                              // disabled={skills.includes(skill?.name) ? true : false}
+                            >
+                              {skill?.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                       <div>
                         <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
@@ -431,7 +768,7 @@ const EditProduct = () => {
                                   onChange={(e) =>
                                     handlestepTypeChange(index, subIndex, e)
                                   }
-                                  className={`relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
+                                  className={`relative z-20 w-full appearance-none rounded rounded-lg border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
                                 >
                                   <option
                                     value="jig"
@@ -463,7 +800,7 @@ const EditProduct = () => {
                                           e,
                                         )
                                       }
-                                      className={`relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
+                                      className={`relative z-20 w-full appearance-none rounded rounded-lg border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
                                     >
                                       <option
                                         value="value"
@@ -548,7 +885,244 @@ const EditProduct = () => {
                                   )}
                                 </>
                               )}
+                              {subStep?.isPackagingStatus && (
+                                <div className="rounded-lg">
+                                  <div className="gap-4 rounded-lg">
+                                    <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                      Packaging Type
+                                    </label>
+                                    <select
+                                      value={
+                                        subStep?.packagingData.packagingType
+                                      }
+                                      onChange={(e) =>
+                                        handlePackagingFieldTypeChange(
+                                          index,
+                                          subIndex,
+                                          e.target.value,
+                                        )
+                                      }
+                                      className={`relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
+                                    >
+                                      <option value="">Select</option>
+                                      <option value="Single">Single</option>
+                                      <option value="Carton">Carton</option>
+                                    </select>
+                                  </div>
+                                </div>
+                              )}
                             </div>
+                            <div className="flex gap-9">
+                              <div className="mt-6.5 flex items-center space-x-2">
+                                <input
+                                  type="checkbox"
+                                  checked={subStep?.isPrinterEnable || false}
+                                  onChange={(e) =>
+                                    handleCheckboxPrinter(
+                                      index,
+                                      subIndex,
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
+                                />
+                                <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                                  Enable Printing Option
+                                </label>
+                              </div>
+                              <div className="mt-6.5 flex items-center space-x-2">
+                                <input
+                                  type="checkbox"
+                                  checked={subStep?.isCheckboxNGStatus || false}
+                                  onChange={(e) =>
+                                    handleCheckboxNGStatus(
+                                      index,
+                                      subIndex,
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
+                                />
+                                <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                                  Mark As NG
+                                </label>
+                              </div>
+                              <div className="mt-6.5 flex items-center space-x-2">
+                                <input
+                                  type="checkbox"
+                                  checked={subStep?.isPackagingStatus || false}
+                                  onChange={(e) =>
+                                    handlePackagingStatus(
+                                      index,
+                                      subIndex,
+                                      e.target.value,
+                                    )
+                                  }
+                                  className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
+                                />
+                                <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                                  Packaging Stage
+                                </label>
+                              </div>
+                            </div>
+                            {subStep?.isPackagingStatus &&
+                              subStep?.packagingData.packagingType ==
+                                "Carton" && (
+                                <>
+                                  <div className="mt-6.5 rounded-lg border border-[#eee] px-3">
+                                    <div className="grid grid-cols-2 gap-5 py-6">
+                                      <div>
+                                        <label className="text-gray-700 dark:text-gray-300 mb-3 block text-sm font-medium">
+                                          Carton Width
+                                        </label>
+                                        <input
+                                          type="number"
+                                          value={
+                                            subStep?.packagingData?.cartonWidth
+                                          }
+                                          onChange={(e) =>
+                                            handleCartonInputs(
+                                              index,
+                                              subIndex,
+                                              e.target.value,
+                                              "cartonWidth",
+                                            )
+                                          }
+                                          placeholder="Carton Width"
+                                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-gray-700 dark:text-gray-300 mb-3 block text-sm font-medium">
+                                          Carton Height
+                                        </label>
+                                        <input
+                                          type="number"
+                                          placeholder="Carton Height"
+                                          value={
+                                            subStep?.packagingData?.cartonHeight
+                                          }
+                                          onChange={(e) =>
+                                            handleCartonInputs(
+                                              index,
+                                              subIndex,
+                                              e.target.value,
+                                              "cartonHeight",
+                                            )
+                                          }
+                                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-gray-700 dark:text-gray-300 mb-3 block text-sm font-medium">
+                                          Max Capacity
+                                        </label>
+                                        <input
+                                          type="number"
+                                          placeholder="Max Capacity"
+                                          value={
+                                            subStep?.packagingData?.maxCapacity
+                                          }
+                                          onChange={(e) =>
+                                            handleCartonInputs(
+                                              index,
+                                              subIndex,
+                                              e.target.value,
+                                              "maxCapacity",
+                                            )
+                                          }
+                                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-gray-700 dark:text-gray-300 mb-3 block text-sm font-medium">
+                                          Carton Weight (in Kg)
+                                        </label>
+                                        <input
+                                          type="number"
+                                          value={
+                                            subStep?.packagingData?.cartonWeight
+                                          }
+                                          onChange={(e) =>
+                                            handleCartonInputs(
+                                              index,
+                                              subIndex,
+                                              e.target.value,
+                                              "cartonWeight",
+                                            )
+                                          }
+                                          placeholder="Carton Weight"
+                                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+                            {subStep?.isCheckboxNGStatus &&
+                              subStep?.ngStatusData?.map((ngField, ngIndex) => (
+                                <div
+                                  key={ngIndex}
+                                  className="mt-2.5 flex gap-4 rounded-lg px-2 py-3"
+                                >
+                                  <div className="w-full">
+                                    <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                      NG Field {ngIndex + 1}
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={ngField.value}
+                                      onChange={(e) =>
+                                        updateNGField(
+                                          index,
+                                          subIndex,
+                                          ngIndex,
+                                          e.target.value,
+                                        )
+                                      }
+                                      placeholder="Value"
+                                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="mt-6.5 flex items-center text-danger"
+                                    onClick={() =>
+                                      removeNGField(index, subIndex, ngIndex)
+                                    }
+                                  >
+                                    <FontAwesomeIcon
+                                      icon={faTrash}
+                                      className="mr-2"
+                                    />
+                                  </button>
+                                </div>
+                              ))}
+                            {subStep?.isPrinterEnable &&
+                              subStep?.printerFields.map(
+                                (field, fieldIndex) => (
+                                  <div key={fieldIndex}>
+                                    <PrintTableComponent
+                                      stages={stages}
+                                      setStages={setStages}
+                                      stickerFields={stickerFields}
+                                      stickerDimensions={field.dimensions}
+                                      setStickerDimensions={
+                                        setStickerDimensions
+                                      }
+                                      index={index}
+                                      subIndex1={subIndex}
+                                      fieldIndex={fieldIndex}
+                                      stickerData={
+                                        field.fields
+                                          ? field.fields
+                                          : stickerData
+                                      }
+                                      setStickerData={setStickerData}
+                                    />
+                                  </div>
+                                ),
+                              )}
                             {subStep.stepType == "jig" && (
                               <>
                                 {subStep.jigFields.map((jigField, jigIndex) => (
@@ -752,6 +1326,19 @@ const EditProduct = () => {
                                     Add Jig Fields
                                   </button>
                                 )}
+                              {subStep?.isCheckboxNGStatus && (
+                                <button
+                                  type="button"
+                                  className="mt-4 flex items-center text-blue-500"
+                                  onClick={() => addNGField(index, subIndex)}
+                                >
+                                  <FontAwesomeIcon
+                                    icon={faPlus}
+                                    className="mr-2"
+                                  />
+                                  Add NG Field
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 className="mt-4 flex items-center text-danger"
@@ -818,6 +1405,92 @@ const EditProduct = () => {
                 <FontAwesomeIcon icon={faPlus} className="mr-2" />
                 Add Stage
               </button>
+            </div>
+            <div className="bg-gray-50 space-y-4 border border-[#eee] p-6 shadow-lg dark:border-form-strokedark dark:bg-boxdark">
+              <div className="grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
+                <h3 className="text-gray-900 block text-lg font-semibold dark:text-black">
+                  Common Stages
+                </h3>
+              </div>
+              {commonStages.map((stage, index) => (
+                <div
+                  key={index}
+                  className="mb-6 grid gap-6 rounded-xl border border-[#eee] bg-white p-4 shadow-md dark:bg-boxdark"
+                >
+                  <div>
+                    <p className="text-gray-700 mb-2 block text-sm font-semibold dark:text-white">
+                      Stage: {stage?.stageName}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-gray-800 mb-2 block text-sm font-semibold dark:text-white">
+                      Managed By
+                    </label>
+                    <select
+                      value={stage.managedBy}
+                      onChange={(e) => {
+                        handleCommonStageChange(index, e, "managedBy");
+                      }}
+                      className="text-gray-800 w-full rounded-lg border border border-stroke bg-transparent px-4 py-3 text-sm outline-none transition-all focus:border-primary focus:ring-1 focus:ring-primary dark:border-strokedark dark:bg-form-input dark:text-white"
+                    >
+                      <option className="text-gray-400 dark:text-gray-500">
+                        Please Select
+                      </option>
+                      {userType.map((user, idx) => (
+                        <option
+                          key={idx}
+                          value={user?.name}
+                          className="text-gray-700 dark:text-white"
+                        >
+                          {user?.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                      Required Skill
+                    </label>
+                    <select
+                      value={stage.requiredSkill || ""}
+                      onChange={(e) => {
+                        handleCommonStageChange(index, e, "requiredSkill");
+                      }}
+                      className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
+                    >
+                      <option value="" className="text-body dark:text-bodydark">
+                        Please Select
+                      </option>
+                      {skillData.map((skill, index) => (
+                        <option
+                          key={index}
+                          value={skill?.name}
+                          className="text-body dark:text-bodydark"
+                          // disabled={skills.includes(skill?.name) ? true : false}
+                        >
+                          {skill?.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-gray-800 mb-2 block text-sm font-semibold dark:text-white">
+                      UPHA (Units Per Hour Analysis)
+                    </label>
+                    <input
+                      type="number"
+                      value={stage.upha || ""}
+                      onChange={(e) => {
+                        handleCommonStageChange(index, e, "upha");
+                      }}
+                      placeholder="Enter UPHA"
+                      className="text-gray-800 w-full rounded-lg border border border-stroke bg-transparent px-4 py-3 text-sm outline-none transition-all focus:border-primary focus:ring-1 focus:ring-primary dark:border-strokedark dark:bg-form-input dark:text-white"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="col-span-12 flex justify-end gap-5">
               <button
                 type="button"
                 className="mt-4 flex items-center rounded-md bg-[#34D399] px-4 py-2 text-white"

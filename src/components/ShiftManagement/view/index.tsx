@@ -2,7 +2,7 @@
 import React from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
-import { viewShift, deleteShift,deleteMultipleShifts } from "@/lib/api";
+import { viewShift, deleteShift, deleteMultipleShifts } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { FiEdit, FiTrash } from "react-icons/fi";
 import { BallTriangle } from "react-loader-spinner";
@@ -80,6 +80,11 @@ const ViewShift = () => {
     {
       name: "End Time",
       selector: (row: Shifts) => row?.endTime,
+      sortable: true,
+    },
+    {
+      name: "Break Time",
+      selector: (row: Shifts) => row?.totalBreakTime ? row?.totalBreakTime + " minutes" : "-",
       sortable: true,
     },
     {

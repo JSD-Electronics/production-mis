@@ -2,8 +2,9 @@
 
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import DatePickerOne from "@/components/FormElements/DatePicker/DatePickerOne";
-import React,{ useState } from "react";
-import { updateUser,getUserDetail } from "../../../lib/api";
+import React, { useState } from "react";
+import Select from "react-select";
+import { updateUser, getUserDetail, getOperatorSkills } from "../../../lib/api";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -18,14 +19,65 @@ const EditOperators = () => {
   const [userType, setUserType] = useState("Operator");
   const [skills, setSkills] = useState([]);
   const [newSkill, setNewSkill] = useState("");
+  const [skillData, setSkillFieldData] = useState([]);
+  const customStyles = {
+    control: (provided, state) => ({
+      ...provided,
+      backgroundColor: "#fff",
+      borderColor: state.isFocused ? "#6366F1" : "#D1D5DB",
+      borderWidth: "1.5px",
+      borderRadius: "0.75rem",
+      padding: "0.25rem 0.5rem",
+      boxShadow: state.isFocused ? "0 0 0 1px #6366F1" : "none",
+      "&:hover": {
+        borderColor: "#6366F1",
+      },
+    }),
+    placeholder: (provided) => ({
+      ...provided,
+      color: "#6B7280",
+      fontSize: "0.875rem",
+    }),
+    multiValue: (provided) => ({
+      ...provided,
+      backgroundColor: "#E0E7FF",
+      borderRadius: "0.375rem",
+    }),
+    multiValueLabel: (provided) => ({
+      ...provided,
+      color: "#3730A3",
+      fontWeight: 500,
+    }),
+    multiValueRemove: (provided) => ({
+      ...provided,
+      color: "#4F46E5",
+      cursor: "pointer",
+      ":hover": {
+        backgroundColor: "#C7D2FE",
+        color: "#1E3A8A",
+      },
+    }),
+  };
   React.useEffect(() => {
     const pathname = window.location.pathname;
     const id = pathname.split("/").pop();
     getUser(id);
+    getSkillField();
   }, []);
-  const getUser = async(id: any) => {
+  const getSkillField = async () => {
+    try {
+      let result = await getOperatorSkills();
+      let options = [];
+      result.skills.map((value, index) => {
+        options.push({ value: value._id, label: value.name });
+      });
+      setSkillFieldData(options);
+    } catch (error) {
+      console.error("Error Fetching Shifts:", error);
+    }
+  };
+  const getUser = async (id: any) => {
     let result = await getUserDetail(id);
-    console.log("result ===> ", result);
     setName(result.user.name);
     setEmail(result.user.email);
     setEmployeeCode(result.user.employeeCode);
@@ -34,9 +86,11 @@ const EditOperators = () => {
     setPhoneNumber(result.user.phoneNumber);
     setGender(result.user.gender);
     setUserType(result.user.userType);
-    setSkills(result.user.skills);
+    // let options = []
+    // result.user.skills.map((value, index) => {
 
-    console.log("result ===>", result);
+    // })
+    setSkills(result.user.skills);
   };
   const handleAddSkill = () => {
     if (newSkill.trim() !== "" && !skills.includes(newSkill.trim())) {
@@ -46,18 +100,14 @@ const EditOperators = () => {
       toast.error("Skill is empty or already exists.");
     }
   };
-
   const handleRemoveSkill = (index: any) => {
     setSkills((prevSkills) => prevSkills.filter((_, i) => i !== index));
   };
-
   const handleSubmit = async (e: any) => {
-    console.log("dateOfBirth ==> ",dateOfBirth);
-    // return;
     e.preventDefault();
     try {
-        const pathname = window.location.pathname;
-        const id = pathname.split("/").pop();
+      const pathname = window.location.pathname;
+      const id = pathname.split("/").pop();
       const formData = {
         name,
         employeeCode,
@@ -72,11 +122,15 @@ const EditOperators = () => {
 
       const result = await updateUser(formData, id);
       toast.success("User details submitted successfully!");
-
     } catch (error) {
       console.error("Error submitting form:");
       toast.error("Failed to submit user details. Please try again.");
     }
+  };
+  const handleChange = (selected) => {
+    const selectedValues = selected ? selected.map((opt) => opt.label) : [];
+    console.log('Selected Values:', selectedValues);
+    setSkills(selectedValues);
   };
 
   return (
@@ -99,7 +153,6 @@ const EditOperators = () => {
             </div>
             <form onSubmit={handleSubmit}>
               <div className="grid gap-6 px-8 pr-8 pt-4 sm:grid-cols-2">
-                {/* Operator Name Field */}
                 <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -114,7 +167,6 @@ const EditOperators = () => {
                     />
                   </div>
                 </div>
-                {/* Employee Code Field */}
                 <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -129,7 +181,6 @@ const EditOperators = () => {
                     />
                   </div>
                 </div>
-                {/* Email Address Field */}
                 <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -144,7 +195,6 @@ const EditOperators = () => {
                     />
                   </div>
                 </div>
-                {/* Password Field */}
                 <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -159,15 +209,13 @@ const EditOperators = () => {
                     />
                   </div>
                 </div>
-                {/* Date of Birth Field */}
                 <div className="space-x-4">
-                <DatePickerOne
+                  <DatePickerOne
                     label="Date Of Birth"
                     value={dateOfBirth}
                     setValue={setDateOfBirth}
-                />
+                  />
                 </div>
-                {/* Phone Number Field */}
                 <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -182,7 +230,6 @@ const EditOperators = () => {
                     />
                   </div>
                 </div>
-                {/* Gender Field */}
                 <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -198,7 +245,6 @@ const EditOperators = () => {
                     </select>
                   </div>
                 </div>
-                {/* User Type Field */}
                 <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -223,42 +269,17 @@ const EditOperators = () => {
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
                       Skills
                     </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newSkill}
-                        onChange={(e) => setNewSkill(e.target.value)}
-                        placeholder="Enter a skill"
-                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddSkill}
-                        className="rounded-md bg-blue-700 px-4 py-2 text-white transition hover:bg-blue-600"
-                      >
-                        <svg
-                          fill="#ffffff"
-                          version="1.1"
-                          id="Capa_1"
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="20px"
-                          height="20px"
-                          viewBox="0 0 45.402 45.402"
-                        >
-                          <g>
-                            <path
-                              d="M41.267,18.557H26.832V4.134C26.832,1.851,24.99,0,22.707,0c-2.283,0-4.124,1.851-4.124,4.135v14.432H4.141
-                            c-2.283,0-4.139,1.851-4.138,4.135c-0.001,1.141,0.46,2.187,1.207,2.934c0.748,0.749,1.78,1.222,2.92,1.222h14.453V41.27
-                            c0,1.142,0.453,2.176,1.201,2.922c0.748,0.748,1.777,1.211,2.919,1.211c2.282,0,4.129-1.851,4.129-4.133V26.857h14.435
-                            c2.283,0,4.134-1.867,4.133-4.15C45.399,20.425,43.548,18.557,41.267,18.557z"
-                            />
-                          </g>
-                        </svg>
-                      </button>
-                    </div>
+                    <Select
+                      options={skillData}
+                      isMulti
+                      styles={customStyles}
+                      onChange={handleChange}
+                      className="basic-multi-select w-full rounded-lg border-[1.5px] bg-transparent text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                      classNamePrefix="select"
+                      placeholder="Select Skills"
+                    />
                   </div>
                 </div>
-                {/* Skills Input Section */}
                 <div className="space-x-4">
                   <div className="border-gray-300 bg-gray-50 dark:bg-gray-800 items-center justify-between rounded-lg border px-4 py-2 shadow-sm transition dark:border-strokedark">
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -274,7 +295,7 @@ const EditOperators = () => {
                             {skill}
                           </h4>
                           <button
-                            type="button" 
+                            type="button"
                             onClick={() => handleRemoveSkill(index)}
                             className="ml-4 flex items-center justify-center rounded-md bg-danger px-2 py-1 text-white transition duration-300 hover:bg-danger focus:outline-none"
                             aria-label="Remove Skill"
@@ -306,8 +327,7 @@ const EditOperators = () => {
                   </div>
                 </div>
               </div>
-              {/* Submit Button */}
-              <div className="col-span-2 p-8 pr-8 flex justify-end">
+              <div className="col-span-2 flex justify-end p-8 pr-8">
                 <button
                   type="submit"
                   className="rounded-md bg-green-700 px-4 py-2 text-white transition hover:bg-green-800"

@@ -2,8 +2,9 @@
 
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import DatePickerOne from "@/components/FormElements/DatePicker/DatePickerOne";
-import { useState } from "react";
-import { createUser } from "../../../lib/api";
+import React, { useState } from "react";
+import Select from 'react-select';
+import { createUser, getUserType,getOperatorSkills } from "../../../lib/api";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -15,10 +16,62 @@ const AddOperators = () => {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [gender, setGender] = useState("M");
+  const [userRoles, setUserRole] = useState([]);
   const [userType, setUserType] = useState("Operator");
   const [skills, setSkills] = useState([]);
   const [newSkill, setNewSkill] = useState("");
-
+  const [skillData, setSkillFieldData] = useState([]);
+  const customStyles = {
+    control: (provided, state) => ({
+      ...provided,
+      backgroundColor: "#fff",
+      borderColor: state.isFocused ? "#6366F1" : "#D1D5DB",
+      borderWidth: "1.5px",
+      borderRadius: "0.75rem",
+      padding: "0.25rem 0.5rem",
+      boxShadow: state.isFocused ? "0 0 0 1px #6366F1" : "none",
+      "&:hover": {
+        borderColor: "#6366F1",
+      },
+    }),
+    placeholder: (provided) => ({
+      ...provided,
+      color: "#6B7280",
+      fontSize: "0.875rem",
+    }),
+    multiValue: (provided) => ({
+      ...provided,
+      backgroundColor: "#E0E7FF",
+      borderRadius: "0.375rem",
+    }),
+    multiValueLabel: (provided) => ({
+      ...provided,
+      color: "#3730A3",
+      fontWeight: 500,
+    }),
+    multiValueRemove: (provided) => ({
+      ...provided,
+      color: "#4F46E5",
+      cursor: "pointer",
+      ':hover': {
+        backgroundColor: "#C7D2FE",
+        color: "#1E3A8A",
+      },
+    }),
+  };
+  React.useEffect(() => {
+    getUserTypeRoles();
+    getSkillField();
+  }, []);
+  const getUserTypeRoles = async () => {
+    try {
+      let result = await getUserType();
+      setUserRole(result.userType);
+    } catch (error) {
+      console.error("Error Fetching user Roles.");
+      toast.error("Error Fetching user Roles.");
+    }
+  };
   const handleAddSkill = () => {
     if (newSkill.trim() !== "" && !skills.includes(newSkill.trim())) {
       setSkills((prevSkills) => [...prevSkills, newSkill.trim()]);
@@ -27,14 +80,27 @@ const AddOperators = () => {
       toast.error("Skill is empty or already exists.");
     }
   };
-
+  const getSkillField = async () => {
+    try {
+      let result = await getOperatorSkills();
+      let options = [];
+      result.skills.map((value,index) => {
+        options.push({value: value._id, label:value.name})
+      });
+      setSkillFieldData(options);
+    } catch (error) {
+      console.error("Error Fetching Shifts:", error);
+    }
+  };
   const handleRemoveSkill = (index: any) => {
     setSkills((prevSkills) => prevSkills.filter((_, i) => i !== index));
   };
-
+  const handleStageChange = (index: any, event: any, param: any) => {
+    const newStages = [...stages];
+    newStages[index][param] = event.target.value;
+    // setStages(newStages);
+  };
   const handleSubmit = async (e: any) => {
-    console.log("dateOfBirth ==> ",dateOfBirth);
-    // return;
     e.preventDefault();
     try {
       const formData = {
@@ -60,11 +126,16 @@ const AddOperators = () => {
       setGender("");
       setUserType("");
       setSkills([]);
-
     } catch (error) {
       console.error("Error submitting form:");
       toast.error("Failed to submit user details. Please try again.");
     }
+  };
+  const handleChange = (selected) => {
+    //setSkills(selected); // update local state
+     const selectedValues = selected ? selected.map((opt) => opt.label) : [];
+    console.log('Selected Values:', selectedValues);
+    setSkills(selectedValues);
   };
 
   return (
@@ -143,17 +214,17 @@ const AddOperators = () => {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter Password"
-                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
                     />
                   </div>
                 </div>
                 {/* Date of Birth Field */}
                 <div className="space-x-4">
-                <DatePickerOne
+                  <DatePickerOne
                     label="Date Of Birth"
                     value={dateOfBirth}
                     setValue={setDateOfBirth}
-                />
+                  />
                 </div>
                 {/* Phone Number Field */}
                 <div className="space-x-4">
@@ -197,10 +268,15 @@ const AddOperators = () => {
                       onChange={(e) => setUserType(e.target.value)}
                       className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-6 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
                     >
-                      <option value="Operator">Operator</option>
-                      <option value="PPC">PPC</option>
-                      <option value="TRC">TRC</option>
-                      <option value="QC">Quality Control</option>
+                      {userRoles.map((userRole, index) => (
+                        <option
+                          key={index}
+                          value={userRole?.name}
+                          className="text-body dark:text-bodydark"
+                        >
+                          {userRole?.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -211,7 +287,37 @@ const AddOperators = () => {
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
                       Skills
                     </label>
-                    <div className="flex gap-2">
+                    <Select
+                      options={skillData}
+                      isMulti
+                      styles={customStyles}
+                      // value={newSkill}
+                      onChange={handleChange}
+                      className="basic-multi-select w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                      classNamePrefix="select"
+                      placeholder="Select Skills"
+                    />
+                    {/* <select
+                      // onChange={(e) => {
+                      //   handleStageChange(index, e, "requiredSkill");
+                      // }}
+                      className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
+                    >
+                      <option value="" className="text-body dark:text-bodydark">
+                        Please Select
+                      </option>
+                      {skillData.map((skill, index) => (
+                        <option
+                          key={index}
+                          value={skill?.name}
+                          className="text-body dark:text-bodydark"
+                          // disabled={skills.includes(skill?.name) ? true : false}
+                        >
+                          {skill?.name}
+                        </option>
+                      ))}
+                    </select> */}
+                    {/* <div className="flex gap-2">
                       <input
                         type="text"
                         value={newSkill}
@@ -243,7 +349,7 @@ const AddOperators = () => {
                           </g>
                         </svg>
                       </button>
-                    </div>
+                    </div> */}
                   </div>
                 </div>
                 {/* Skills Input Section */}
@@ -294,7 +400,7 @@ const AddOperators = () => {
                 </div>
               </div>
               {/* Submit Button */}
-              <div className="col-span-2 p-8 pr-8 flex justify-end">
+              <div className="col-span-2 flex justify-end p-8 pr-8">
                 <button
                   type="submit"
                   className="rounded-md bg-green-700 px-4 py-2 text-white transition hover:bg-green-800"

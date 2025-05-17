@@ -50,8 +50,6 @@ const EditUserRoles = () => {
     try {
       const result = await getUserType();
       setUserRoleType(result.userType);
-
-      console.log("userRoleType ==> ", userRoleType);
     } catch (error) {
       toast.error(
         error?.message || "An error occurred while creating the user role.",
@@ -133,7 +131,7 @@ const EditUserRoles = () => {
                     {menus.map((menu) => (
                       <div key={menu.label} className="py-2 pt-2">
                         {/* <div className="flex grid p-4 sm:grid-cols-2"> */}
-                        <div className="flex grid sm:grid-cols-2">
+                        <div className="flex grid sm:grid-cols-4">
                           <div className="px-3">
                             <h2 className="text-md mb-1 block font-medium text-black dark:text-white">
                               {menu.label}
@@ -188,12 +186,12 @@ const EditUserRoles = () => {
                             ))}
                           </div>
                         </div>
-                        <div className="px-8">
+                        <div className="px-8 py-1">
                           {menu.children.length > 0 &&
                             menu.children.map((child) => (
                               <div
                                 key={child.label}
-                                className="flex grid sm:grid-cols-2"
+                                className="flex grid sm:grid-cols-4"
                               >
                                 <label
                                   key={child.label}

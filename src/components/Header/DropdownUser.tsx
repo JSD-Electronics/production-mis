@@ -1,34 +1,34 @@
 "use client";
-import React,{ useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import ClickOutside from "@/components/ClickOutside";
-import { logout } from '../../lib/api';
-import { useRouter } from 'next/navigation';
+import { logout } from "../../lib/api";
+import { useRouter } from "next/navigation";
 import { verifyTokenClientSide } from "@/middleware/verifytoken";
-
 
 const DropdownUser = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [userDetails,setUserDetails] = useState({});
-  const [profilePic,setProfilePicture] = useState("");
+  const [userDetails, setUserDetails] = useState({});
+  const [profilePic, setProfilePicture] = useState("");
   const router = useRouter();
   React.useEffect(() => {
     const decoded = verifyTokenClientSide();
     // if (!decoded) {
     //   router.push("/");
     // } else {
-      let response = JSON.parse(localStorage.getItem('userDetails'));
-      setUserDetails(response);
-      const filePath = response.profilePic;
-      const normalizedFilePath = filePath.replace(/\\/g, "/");
-      setProfilePicture(`${process.env.NEXT_PUBLIC_BASE_URL}/${normalizedFilePath}`,)
+    let response = JSON.parse(localStorage.getItem("userDetails"));
+    setUserDetails(response);
+    const filePath = response.profilePic;
+    const normalizedFilePath = filePath.replace(/\\/g, "/");
+    setProfilePicture(
+      `${process.env.NEXT_PUBLIC_BASE_URL}/${normalizedFilePath}`,
+    );
     // }
-
-  }, [localStorage.getItem('userDetails')]); 
+  }, [localStorage.getItem("userDetails")]);
   const handleLogout = async () => {
     await logout(); // Call the logout function
-    router.push('/'); // Redirect to login page
+    router.push("/"); // Redirect to login page
   };
   return (
     <ClickOutside onClick={() => setDropdownOpen(false)} className="relative">
@@ -44,21 +44,19 @@ const DropdownUser = () => {
           <span className="block text-xs">{userDetails.department}</span>
         </span>
 
-        <span className="h-12 w-12 rounded-full overflow-hidden">
-            <Image
-              width={112}
-              height={112}
-              src={profilePic}
-              style={{
-                width: "100%",  // Use 100% to fill the span
-                height: "100%", // Use 100% to fill the span
-                objectFit: "cover", // Ensures the image covers the area without distortion
-              }}
-              alt="User"
-            />
-          </span>
-
-
+        <span className="h-12 w-12 overflow-hidden rounded-full">
+          <Image
+            width={112}
+            height={112}
+            src={profilePic}
+            style={{
+              width: "100%", // Use 100% to fill the span
+              height: "100%", // Use 100% to fill the span
+              objectFit: "cover", // Ensures the image covers the area without distortion
+            }}
+            alt="User"
+          />
+        </span>
         <svg
           className="hidden fill-current sm:block"
           width="12"
@@ -133,7 +131,10 @@ const DropdownUser = () => {
               </Link>
             </li>
           </ul>
-          <button className="flex items-center gap-3.5 px-6 py-4 text-sm font-medium duration-300 ease-in-out hover:text-primary lg:text-base" onClick={handleLogout}>
+          <button
+            className="flex items-center gap-3.5 px-6 py-4 text-sm font-medium duration-300 ease-in-out hover:text-primary lg:text-base"
+            onClick={handleLogout}
+          >
             <svg
               className="fill-current"
               width="22"
