@@ -1,0 +1,18 @@
+.dataTable {
+  table-layout: auto; /* Allow columns to resize dynamically */
+  width: 100%;
+}
+
+.dataTable th, .dataTable td {
+  white-space: normal; /* Allow text to wrap */
+  word-wrap: break-word; /* Break long words */
+}
+
+.dataTable .rdt_TableCol {
+  flex-grow: 1; /* Ensure columns grow dynamically */
+}
+.bOmZtP div:first-child {
+  white-space: break-spaces;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

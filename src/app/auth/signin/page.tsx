@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 const SignIn: React.FC = () => {
   return (
     <DefaultLayout>
-      <Breadcrumb pageName="Sign In" />
+      <Breadcrumb parentName="" pageName="Sign In" />
 
       <div className="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
         <div className="flex flex-wrap items-center">
@@ -35,12 +35,10 @@ const SignIn: React.FC = () => {
                   height={32}
                 />
               </Link>
-
               <p className="2xl:px-20">
                 Lorem ipsum dolor sit amet, consectetur adipiscing elit
                 suspendisse.
               </p>
-
               <span className="mt-15 inline-block">
                 <svg
                   width="350"

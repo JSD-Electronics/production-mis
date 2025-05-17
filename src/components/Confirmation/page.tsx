@@ -1,6 +1,6 @@
 import React from "react";
 
-const ConfirmationPopup = ({ message, onConfirm, onCancel }) => {
+const ConfirmationPopup = ({message,onConfirm,onCancel,}: {message: string;onConfirm: () => void;onCancel: () => void;}) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 transition-opacity duration-300">
       <div className="w-full max-w-sm scale-95 transform rounded-lg bg-white p-8 shadow-lg transition-transform duration-300 ease-out hover:scale-100">

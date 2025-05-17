@@ -1,0 +1,21 @@
+/* Custom styles for reserved and available dates */
+.reserved-date {
+  background-color: #ffcccc !important;
+  color: #ff0000 !important;
+}
+
+.available-date {
+  background-color: #ccffcc !important;
+  color: #008000 !important;
+}
+
+/* Tooltip for seat info */
+.react-datepicker__day {
+  position: relative;
+}
+
+.react-datepicker__day small {
+  font-size: 0.6rem;
+  display: block;
+  margin-top: 2px;
+}

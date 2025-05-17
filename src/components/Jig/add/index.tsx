@@ -27,6 +27,7 @@ const AddJig = () => {
   const handlesubmit = async () => {
     // if (validateForm()) {
     setSubmitDisabled(true);
+
     const formData = new FormData();
     formData.append("name", name);
     formData.append("jigCategory", jigCategory);

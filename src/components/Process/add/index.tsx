@@ -2,7 +2,12 @@
 import React from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import { useState } from "react";
-import { createProcess, viewProduct } from "../../../lib/api";
+import {
+  createProcess,
+  viewProduct,
+  createProcessLogs,
+  getOrderConfirmationNumers
+} from "../../../lib/api";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -10,13 +15,24 @@ const AddProcess = () => {
   const [name, setName] = useState("");
   const [selectedProduct, setSelectedProduct] = useState("");
   const [orderConfirmationNo, setOrderConfirmationNo] = useState("");
+  const [ocNoArr,setOcNoArr] = useState([]);
   const [descripition, setDescripition] = useState("");
   const [processID, setProcessID] = useState("");
   const [quantity, setQuantity] = useState("");
   const [products, setProduct] = useState([]);
+  const [isProcessSubmitButtonDisabled, setProcessSubmitButtonDisabled] = useState(false); 
   React.useEffect(() => {
     getAllProduct();
+    getOrderConfirmationNumbersList();
   }, []);
+  const getOrderConfirmationNumbersList = async () => {
+    try {
+      let response = await getOrderConfirmationNumers();
+      setOcNoArr(response.getOrderConfirmationNo);
+    } catch (error) {
+      console.log('Error Fethcing Order Confirmation Numbers', error?.message);
+    }
+  };
   const getAllProduct = async () => {
     try {
       let result = await viewProduct();
@@ -26,7 +42,6 @@ const AddProcess = () => {
     }
   };
   const handleSubmit = async (e: any) => {
-    // return;
     e.preventDefault();
     try {
       const formData = {
@@ -37,11 +52,27 @@ const AddProcess = () => {
         quantity,
         descripition,
       };
-
       const result = await createProcess(formData);
-      toast.success("Process submitted successfully!");
+      if (result && result.status === 200) {
+        let userDetails = JSON.parse(localStorage.getItem("userDetails"));
+        const formData3 = new FormData();
+        formData3.append("action", "CREATE");
+        formData3.append("processId", result?.newProcess?._id || "");
+        formData3.append("userId", userDetails?._id || "");
+        formData3.append("description",`Process Created Successfully By ${userDetails?.name}`);
+        try {
+          const result = await createProcessLogs(formData3);
+          if (result && result.status === 200) {
+            toast.success("Process submitted successfully!");
+          } else {
+            console.error("Error Creating Process Logs");
+          }
+        } catch (error) {
+          console.error("Error creating plan logs: ", error);
+        }
+      }
     } catch (error) {
-      console.error("Error submitting Process:");
+      console.error("Error submitting Process:", error?.message);
       toast.error("Failed to submit Process. Please try again.");
     }
   };
@@ -88,7 +119,7 @@ const AddProcess = () => {
                   <select
                     value={selectedProduct || ""}
                     onChange={(e) => setSelectedProduct(e.target.value)}
-                    className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
+                    className="w-full mt-1 rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
                   >
                     <option value="" className="text-body dark:text-bodydark">
                       Please Select
@@ -109,13 +140,25 @@ const AddProcess = () => {
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
                       Order Confirmation
                     </label>
-                    <input
-                      type="text"
-                      value={orderConfirmationNo}
+                    <select
+                      value={orderConfirmationNo || ""}
                       onChange={(e) => setOrderConfirmationNo(e.target.value)}
-                      placeholder="Enter Process Name"
-                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                    />
+                      className="w-full mt-1 rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
+                    >
+                      <option value="" className="text-body dark:text-bodydark">
+                        Please Select
+                      </option>
+                      {ocNoArr.map((oc, index) => (
+                        <option
+                          key={index}
+                          value={oc.orderConfirmationNo
+                          }
+                          className="text-body dark:text-bodydark"
+                        >
+                          {oc.orderConfirmationNo}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <div className="space-x-4">
