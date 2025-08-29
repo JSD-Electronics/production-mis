@@ -191,7 +191,7 @@ const FormComponent = ({
                 value={shift?._id}
                 className="text-body dark:text-bodydark"
               >
-                {shift?.name} ({shift?.startTime} - {shift?.endTime})
+                {shift?.name} ({shift?.intervals[0].startTime} - {shift?.intervals[shift?.intervals.length - 1].endTime})
               </option>
             ))}
           </select>
@@ -245,8 +245,8 @@ const FormComponent = ({
                 <strong className="font-medium">Shift :</strong>{" "}
                 {selectedShift && (
                   <span>
-                    {selectedShift?.name} ({selectedShift?.startTime} -{" "}
-                    {selectedShift?.endTime})
+                    {selectedShift?.name} ({selectedShift?.intervals[0].startTime} -{" "}
+                    {selectedShift?.intervals[selectedShift?.intervals.length - 1].endTime})
                   </span>
                 )}
               </div>

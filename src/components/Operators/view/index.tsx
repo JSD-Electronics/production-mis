@@ -47,6 +47,7 @@ const ViewOperator = () => {
 
   React.useEffect(() => {
     let userDetails = JSON.parse(localStorage.getItem("userDetails"));
+    console.log("userDetails ==>", userDetails);
     setUserType(userDetails.userType);
     getStages();
     getSkillField();
@@ -158,7 +159,7 @@ const ViewOperator = () => {
     {
       name: "Actions",
       cell: (row: Stages) => (
-        <div className="flex items-center space-x-3.5">
+        <div className="flex items-center space-x-1">
           {userType == "admin" && (
             <>
               {/* Edit Button */}
@@ -171,7 +172,7 @@ const ViewOperator = () => {
               {/* Delete Button */}
               <button
                 onClick={() => handlepopup(row._id)}
-                className="bg-red-500 hover:bg-red-600 transform rounded-full p-2 text-white shadow-lg transition-transform hover:scale-105"
+                className="bg-danger hover:bg-red-600 transform rounded-full p-2 text-white shadow-lg transition-transform hover:scale-105"
               >
                 <FiTrash size={16} />
               </button>

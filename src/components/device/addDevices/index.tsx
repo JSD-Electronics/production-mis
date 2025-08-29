@@ -262,7 +262,7 @@ const AddDeviceComponent = () => {
               />
             </div>
           </div>
-          <div className="bg-gray-100 rounded p-4">
+          <div className="bg-gray-100 rounded p-1">
             <h2 className="mb-2 font-semibold">Serial Report:</h2>
             {serials.length > 0 ? (
               <ul className="grid grid-cols-6 pl-6 h-64 overflow-x-auto">

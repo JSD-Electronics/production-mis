@@ -63,13 +63,18 @@ const EditProcess = () => {
       const id = pathname.split("/").pop();
       const existingProcess = await getProcessByID(id);
 
-      const formData = {
-        name,
-        orderConfirmationNo,
-        processID,
-        quantity,
-        descripition,
-      };
+      let selectedProductObj = products.find((value) => value._id == selectedProduct);
+      const formData = new FormData();
+      formData.append("name",name);
+      formData.append("selectedProduct",selectedProduct);
+      formData.append("orderConfirmationNo",orderConfirmationNo);
+      formData.append("processID",processID);
+      formData.append("quantity", quantity);
+      formData.append("descripition",descripition);
+      if(processStatus != "active" || processStatus != "down_time_hold" || processStatus != "completed"){
+        formData.append("stages",JSON.stringify(selectedProductObj?.stages));
+        formData.append("commonStages",JSON.stringify(selectedProductObj?.commonStages));
+      }
 
       const result = await updateProcess(formData, id);
 

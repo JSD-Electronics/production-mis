@@ -238,7 +238,7 @@ const AddProduct = () => {
         const result = await createProduct(formData);
 
         if (result && result.status === 200) {
-          toast.success("Stage created successfully!!");
+          toast.success("Product created successfully!!");
         } else {
           throw new Error(result.message || "Failed to create stage");
         }
@@ -256,9 +256,9 @@ const AddProduct = () => {
     setStages(newStages);
   };
   const handleCommonStageChange = (index: any, event: any, param: any) => {
+    
     const newStages = [...commonStages];
     newStages[index][param] = event?.target.value;
-    return false;
     setCommonStages(newStages);
   };
   const handleRemoveStage = (index: any) => {

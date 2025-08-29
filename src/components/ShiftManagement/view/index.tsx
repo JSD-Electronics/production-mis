@@ -74,18 +74,42 @@ const ViewShift = () => {
     },
     {
       name: "Start Time",
-      selector: (row: Shifts) => row?.startTime,
+      selector: (row: Shifts) => row?.intervals[0]?.startTime,
       sortable: true,
     },
     {
       name: "End Time",
-      selector: (row: Shifts) => row?.endTime,
+      selector: (row: Shifts) =>
+        row?.intervals[row?.intervals.length - 1]?.endTime,
       sortable: true,
     },
     {
       name: "Break Time",
-      selector: (row: Shifts) => row?.totalBreakTime ? row?.totalBreakTime + " minutes" : "-",
-      sortable: true,
+      selector: (row: Shifts) => {
+        const breakSlots = row?.intervals
+          ?.filter((slot) => slot.breakTime)
+          ?.map(
+            (slot, index) =>
+              `${index + 1}. ${slot.startTime} - ${slot.endTime}`,
+          )
+          ?.join("\n"); // Line breaks for display
+
+        return breakSlots || "-";
+      },
+      sortable: false,
+      cell: (row) => (
+        <div style={{ whiteSpace: "pre-line" }}>
+          {row?.intervals?.filter((slot) => slot.breakTime)?.length > 0
+            ? row?.intervals
+                .filter((slot) => slot.breakTime)
+                .map(
+                  (slot, index) =>
+                    `(${slot.startTime} - ${slot.endTime})`,
+                )
+                .join("\n")
+            : "-"}
+        </div>
+      ),
     },
     {
       name: "Created At",

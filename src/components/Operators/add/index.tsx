@@ -221,7 +221,9 @@ const AddOperators = () => {
                 {/* Date of Birth Field */}
                 <div className="space-x-4">
                   <DatePickerOne
-                    label="Date Of Birth"
+                    formLabel="Date Of Birth"
+                    name="dateOfBirth"
+                    id="dateOfBirth"
                     value={dateOfBirth}
                     setValue={setDateOfBirth}
                   />

@@ -6,6 +6,7 @@ const Modal = ({
   onClose,
   title,
   submitOption = true,
+  closeOption = true,
   children,
 }) => {
   if (!isOpen) return null;
@@ -22,6 +23,7 @@ const Modal = ({
         </h2>
         <div className="text-gray-700 mb-6">{children}</div>
         <div className="flex justify-end space-x-2">
+          {closeOption && (
           <button
             type="button"
             onClick={onClose}
@@ -29,6 +31,7 @@ const Modal = ({
           >
             Close
           </button>
+          )}
           {submitOption && (
             <button
               type="button"

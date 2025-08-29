@@ -332,13 +332,13 @@ const FormComponent = ({
                 <strong className="font-medium">Shift :</strong>{" "}
                 {shiftChangedFromDate ? (
                   <span>
-                    {selectedShift?.name} ({startTime} - {endTime})
+                    {selectedShift?.name} ({selectedShift?.intervals[0]?.startTime} - {selectedShift?.intervals[selectedShift?.intervals.length - 1]?.endTime})
                   </span>
                 ) : (
                   selectedShift && (
                     <span>
-                      {selectedShift?.name} ({selectedShift?.startTime} -{" "}
-                      {selectedShift?.endTime})
+                      {selectedShift?.name} ({selectedShift?.intervals[0]?.startTime} -{" "}
+                      {selectedShift?.intervals[selectedShift?.intervals.length - 1]?.endTime})
                     </span>
                   )
                 )}

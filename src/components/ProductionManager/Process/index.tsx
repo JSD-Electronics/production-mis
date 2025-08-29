@@ -198,7 +198,7 @@ const ViewProcessInventory = () => {
   const handleIssuedKits = (row: any) => {
     setProcessData({});
     let assignedStages = JSON.parse(row.assignStages);
-    let productStages = row.productStage.length;
+    let productStages = row.stages.length;
     let repeatCount = row.repeatCount;
     const keys = Object.keys(assignedStages);
     const selectedStageEntries: any[] = [];
@@ -210,9 +210,12 @@ const ViewProcessInventory = () => {
           key,
           data: assignedStages[key],
           issuedKits: row.issuedKits,
+          issuedCartons: row.issuedCartons,
         });
       }
     }
+    console.log("selectedStageEntries ===>", selectedStageEntries);
+    // return false;
     setProcessData(row);
     setStartLineStage(selectedStageEntries);
     setIssuedKitsToLineModel(true);
@@ -496,6 +499,9 @@ const ViewProcessInventory = () => {
                       </div>
                       <div>
                         <strong>Kit Issued:</strong> {value.issuedKits}
+                      </div>
+                      <div>
+                        <strong>Carton Issued :</strong> {value.issuedCartons}
                       </div>
                     </div>
                     <div>
