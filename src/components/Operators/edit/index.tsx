@@ -4,7 +4,12 @@ import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import DatePickerOne from "@/components/FormElements/DatePicker/DatePickerOne";
 import React, { useState } from "react";
 import Select from "react-select";
-import { updateUser, getUserDetail, getOperatorSkills } from "../../../lib/api";
+import {
+  updateUser,
+  getUserDetail,
+  getOperatorSkills,
+  getUserType,
+} from "../../../lib/api";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -16,6 +21,7 @@ const EditOperators = () => {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [gender, setGender] = useState("M");
+  const [userRoles, setUserRole] = useState([]);
   const [userType, setUserType] = useState("Operator");
   const [skills, setSkills] = useState([]);
   const [newSkill, setNewSkill] = useState("");
@@ -63,7 +69,17 @@ const EditOperators = () => {
     const id = pathname.split("/").pop();
     getUser(id);
     getSkillField();
+    getUserTypeRoles();
   }, []);
+  const getUserTypeRoles = async () => {
+    try {
+      let result = await getUserType();
+      setUserRole(result.userType);
+    } catch (error) {
+      console.error("Error Fetching user Roles.");
+      toast.error("Error Fetching user Roles.");
+    }
+  };
   const getSkillField = async () => {
     try {
       let result = await getOperatorSkills();
@@ -129,7 +145,7 @@ const EditOperators = () => {
   };
   const handleChange = (selected) => {
     const selectedValues = selected ? selected.map((opt) => opt.label) : [];
-    console.log('Selected Values:', selectedValues);
+    console.log("Selected Values:", selectedValues);
     setSkills(selectedValues);
   };
 
@@ -255,10 +271,15 @@ const EditOperators = () => {
                       onChange={(e) => setUserType(e.target.value)}
                       className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-6 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
                     >
-                      <option value="Operator">Operator</option>
-                      <option value="PPC">PPC</option>
-                      <option value="TRC">TRC</option>
-                      <option value="QC">Quality Control</option>
+                      {userRoles.map((userRole, index) => (
+                        <option
+                          key={index}
+                          value={userRole?.name}
+                          className="text-body dark:text-bodydark"
+                        >
+                          {userRole?.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>

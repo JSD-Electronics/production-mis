@@ -12,7 +12,7 @@ import {
   getPlaningAndSchedulingById,
   fetchHolidays,
   viewJigCategory,
-  getDeviceTestRecordsByPlanId,
+  getDeviceTestRecordsByProcessId,
 } from "@/lib/api";
 import { formatDate } from "@/lib/common";
 import { ToastContainer, toast } from "react-toastify";
@@ -285,8 +285,10 @@ const ViewPlanSchedule = () => {
     setID(id);
     getPlaningById(id);
   }, [loading]);
-  const assignedStageKeys = Object.keys(assignedStages);
-  const stages = selectedProduct?.product?.stages || [];
+  const assignedStageKeys = Object.keys(assignedStages || {}).filter(
+    (key) => assignedStages[key][0].name !== "Reserved"
+  );
+  const stages = selectedProcess?.stages || [];
   const stageLength = stages.length;
   const rows = [];
   for (let i = 0; i < repeatCount; i++) {
@@ -373,7 +375,6 @@ const ViewPlanSchedule = () => {
   const getPlaningById = async (id: any) => {
     try {
       let result = await getPlaningAndSchedulingById(id);
-      console.log("result?.assignedCustomStages ==>", result?.assignedCustomStages);
       setPlanData(result);
       let shifts = await getAllShifts();
       let roomPlan = await getAllRoomPlan();
@@ -393,8 +394,9 @@ const ViewPlanSchedule = () => {
       const Shift = shifts.find(
         (value) => value?._id === result?.selectedShift,
       );
-      let deviceTestEntry = await getDeviceTestRecordsByPlanId(id);
+      let deviceTestEntry = await getDeviceTestRecordsByProcessId(result.selectedProcess);
       let deviceTests = deviceTestEntry?.deviceTestRecords;
+      
       if (singleProcess?.selectedProduct) {
         processData = await getProductById(singleProcess?.selectedProduct);
       }
@@ -881,6 +883,8 @@ const ViewPlanSchedule = () => {
     assignedIssuedKits = 0,
     deviceTests = [],
   ) => {
+    console.log("deviceTests ===>", deviceTests);
+
     const stagePassCount = deviceTests.reduce((acc, record) => {
       const stage = record.stageName?.trim();
       if (record.status === "Pass") {
@@ -901,6 +905,7 @@ const ViewPlanSchedule = () => {
     }, {});
     const testResultsBySeatAndStage = {};
     deviceTests.forEach((record) => {
+      console.log("record ==>", record);
       const key = `${record.seatNumber}:${record.stageName?.trim()}`;
       if (!testResultsBySeatAndStage[key]) {
         testResultsBySeatAndStage[key] = { passed: 0, ng: 0 };
@@ -910,7 +915,7 @@ const ViewPlanSchedule = () => {
         testResultsBySeatAndStage[key].ng++;
     });
     const assignedSeatsKeys = Object.keys(assignedStages);
-    const stages = Products?.product?.stages || [];
+    const stages = selectedProcess?.stages || [];
     const newAssignedStages: any = {};
     const totalSeatsAvailable = selectedRoom?.lines?.reduce(
       (total: number, row: any) => total + row?.seats?.length,
@@ -925,6 +930,7 @@ const ViewPlanSchedule = () => {
       return false;
     }
     let seatIndex = 0;
+    console.log("testResultsBySeatAndStage ===>", testResultsBySeatAndStage);
     selectedRoom.lines?.forEach((row: any, rowIndex: number) => {
       row.seats.forEach((_: any, seatPosition: number) => {
         const seatKey = `${rowIndex}-${seatPosition}`;
@@ -1105,7 +1111,7 @@ const ViewPlanSchedule = () => {
       (value) => value?._id === planData?.selectedProcess,
     );
 
-    const deviceTestEntry = await getDeviceTestRecordsByPlanId(planData._id);
+    const deviceTestEntry = await getDeviceTestRecordsByProcessId(planData.selectedProcess);
     const deviceTests = deviceTestEntry?.deviceTestRecords || [];
 
     if (singleProcess?.selectedProduct) {
@@ -1174,7 +1180,6 @@ const ViewPlanSchedule = () => {
       const cleanedStageName = record.stageName?.trim();
       const stageIndex = stageHeaders.indexOf(cleanedStageName);
       if (stageIndex === -1) {
-        console.warn(`Stage not found in stageHeaders: "${record.stageName}"`);
         return;
       }
 
@@ -1703,7 +1708,7 @@ const ViewPlanSchedule = () => {
                           style={{ position: "relative", width: "auto" }}
                         >
                           <div className="grid grid-cols-4 gap-3">
-                            {selectedProduct?.product?.commonStages.map(
+                            {selectedProcess?.commonStages.map(
                               (value, index) => (
                                 <div
                                   key={index}
@@ -1776,7 +1781,7 @@ const ViewPlanSchedule = () => {
                           <table className="border-gray-300 min-w-full overflow-hidden rounded-lg border shadow-md">
                             <thead className="bg-[#0FADCF] text-sm text-white">
                               <tr>
-                                {selectedProduct?.product?.stages?.map(
+                                {selectedProcess?.stages?.map(
                                   (value, index) => (
                                     <th
                                       className="px-4 py-3 text-left"
@@ -1787,10 +1792,11 @@ const ViewPlanSchedule = () => {
                                     </th>
                                   ),
                                 )}
-                                {/* <th className="px-4 py-3 text-left">Actions</th> */}
                               </tr>
                             </thead>
                             <tbody className="divide-gray-200 divide-y text-sm">
+                              {console.log("assignedStages ==>", assignedStages)}
+                              {console.log("rows ==>", rows)}
                               {rows.map((rowKeys, rowIndex) => (
                                 <tr
                                   key={rowIndex}
@@ -1800,14 +1806,14 @@ const ViewPlanSchedule = () => {
                                     const stageData = assignedStages[key]?.[0];
                                     return (
                                       <td key={colIndex} className="pl-4">
+                                        {console.log("{assignedStages[key] ==>",assignedStages[key])}
                                         {assignedStages[key].map(
                                           (stage: any, stageIndex: any) => (
                                             <div key={stageIndex}>
                                               <div className="">
                                                 <strong className="text-gray-900 text-xs">
-                                                  {/* {stage.name} */}
                                                   <p className="mt-2">
-                                                    UPH Target :{stage.upha}
+                                                    UPH Target :{stage.upha || 0}
                                                   </p>
                                                   <p className="mt-2">
                                                     Achieved UPH :

@@ -1,4 +1,18 @@
 import React, { useState } from "react";
+import { Search, XCircle } from "lucide-react";
+
+interface SearchableInputProps {
+  options : any[],
+  checkedDevice:any[],
+  searchQuery:any,
+  setSearchQuery:any,
+  onNoResults:any,
+  setSearchResult:any,
+  getDeviceById:any,
+  setIsPassNGButtonShow:any,
+  setIsStickerPrinted:any,
+}
+
 
 const SearchableInput = ({
   options,
@@ -8,8 +22,9 @@ const SearchableInput = ({
   onNoResults,
   setSearchResult,
   getDeviceById,
-  setIsPassNGButtonShow
-}) => {
+  setIsPassNGButtonShow,
+  setIsStickerPrinted,
+}:SearchableInputProps) => {
   const [filteredOptions, setFilteredOptions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -22,9 +37,11 @@ const SearchableInput = ({
       setShowSuggestions(false);
       return;
     }
+
     const filtered = options.filter((value) =>
       value?.serialNo?.toLowerCase().includes(query.toLowerCase()),
     );
+
     setFilteredOptions(filtered);
     setShowSuggestions(true);
   };
@@ -35,6 +52,7 @@ const SearchableInput = ({
     setSearchResult(option?.serialNo);
     setShowSuggestions(false);
   };
+
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
       if (filteredOptions.length > 0) {
@@ -45,90 +63,68 @@ const SearchableInput = ({
         setSearchResult("");
         setSearchQuery(e.target.value);
       }
-      setIsPassNGButtonShow(true)
+      setIsStickerPrinted(false);
+      setIsPassNGButtonShow(false);
       setShowSuggestions(false);
     }
   };
+
   if (filteredOptions.length === 0 && searchQuery.trim() !== "") {
     onNoResults(searchQuery);
   }
 
   return (
-    <div style={styles.container}>
-      <input
-        type="text"
-        value={searchQuery}
-        onChange={handleInputChange}
-        onFocus={() => setShowSuggestions(true)}
-        onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-        onKeyDown={handleKeyDown} // Add event listener for "Enter"
-        placeholder="Search..."
-        style={styles.input}
-      />
+    <div className="relative w-full">
+      {/* Input */}
+      <div className="border-gray-300 flex items-center rounded-md border bg-white px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-blue-500">
+        <Search className="text-gray-400 mr-2 h-4 w-4" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={handleInputChange}
+          onFocus={() => setShowSuggestions(true)}
+          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+          onKeyDown={handleKeyDown}
+          placeholder="Search by Serial No..."
+          className="text-gray-700 placeholder-gray-400 w-full border-none text-sm focus:outline-none"
+        />
+        {searchQuery && (
+          <XCircle
+            className="text-gray-400 hover:text-red-500 ml-2 h-4 w-4 cursor-pointer"
+            onClick={() => {
+              setSearchQuery("");
+              setFilteredOptions([]);
+              setSearchResult("");
+              setShowSuggestions(false);
+            }}
+          />
+        )}
+      </div>
+
+      {/* Suggestions */}
       {showSuggestions && (
-        <div style={styles.suggestionsContainer}>
+        <div className="border-gray-200 absolute z-10 mt-1 w-full rounded-md border bg-white shadow-lg">
           {filteredOptions.length > 0 ? (
-            <ul style={styles.suggestionsList}>
+            <ul className="max-h-40 overflow-y-auto py-1 text-sm">
               {filteredOptions.map((option, index) => (
                 <li
                   key={index}
-                  onClick={() => {
-                    handleSuggestionClick(option);
-                  }}
-                  style={styles.suggestionItem}
+                  onClick={() => handleSuggestionClick(option)}
+                  className="cursor-pointer px-3 py-2 hover:bg-blue-50"
                 >
                   {option.serialNo}
                 </li>
               ))}
             </ul>
           ) : searchQuery.trim() !== "" ? (
-            <div style={styles.noResults}>No results found</div>
+            <div className="text-red-500 px-3 py-2 text-center text-sm">
+              No results found
+            </div>
           ) : null}
         </div>
       )}
     </div>
   );
-};
-
-const styles = {
-  container: {
-    width: "auto",
-    margin: "0 auto",
-    position: "relative",
-  },
-  input: {
-    width: "100%",
-    padding: "10px",
-    border: "1px solid #ccc",
-    borderRadius: "4px",
-  },
-  suggestionsContainer: {
-    position: "absolute",
-    top: "100%",
-    left: 0,
-    right: 0,
-    background: "white",
-    border: "1px solid #ccc",
-    borderRadius: "4px",
-    zIndex: 1000,
-  },
-  suggestionsList: {
-    listStyle: "none",
-    margin: 0,
-    padding: "5px",
-    maxHeight: "150px",
-    overflowY: "auto",
-  },
-  suggestionItem: {
-    padding: "8px",
-    cursor: "pointer",
-    borderBottom: "1px solid #f0f0f0",
-  },
-  noResults: {
-    padding: "10px",
-    textAlign: "center",
-    color: "red",
-  },
 };
 
 export default SearchableInput;

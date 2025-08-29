@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import FormComponent from "@/components/PlaningScheduling/add/FormComponents";
+import DraggableGridItem from "@/components/PlaningScheduling/add/DraggableGridItem";
 import {
   viewRoom,
   getProductById,
@@ -20,439 +21,9 @@ import {
 } from "@/lib/api";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { DndProvider, useDrag, useDrop } from "react-dnd";
+import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import Modal from "@/components/Modal/page";
-
-const DraggableGridItem = ({
-  item,
-  rowIndex,
-  seatIndex,
-  handleDrop,
-  handleDragOver,
-  handleRemoveStage,
-  assignedStages,
-  coordinates,
-  moveItem,
-  operators,
-  assignedOperators,
-  setAssignedOperators,
-  filteredOperators,
-  setFilteredOperators,
-  rowSeatLength,
-  jigCategories,
-  assignedJigs,
-  setAssignedJigs,
-}) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isAssignJigModalOpen, setAssignJigModelOpen] = useState(false);
-  const [jigs, setJigs] = useState([]);
-  const closeModal = () => setIsModalOpen(false);
-
-  const openModal = (stages: any) => {
-    const requiredSkills = stages.map((stage) => {
-      return stage.requiredSkill.toLowerCase().trim();
-    });
-    const assignedOperatorIds = Object.values(assignedOperators)
-      .flat()
-      .map((operator) => operator._id);
-    const compatibleOperators = operators.filter((operator) => {
-      const normalizedSkills = operator.skills.map((skill) =>
-        skill.toLowerCase().trim(),
-      );
-      const hasAllSkills = requiredSkills.every((skill) =>
-        normalizedSkills.includes(skill),
-      );
-      const hasUserType = stages.map((stage) => {
-        return stage.managedBy == operator.userType;
-      });
-      const isAlreadyAssigned = assignedOperatorIds.includes(operator._id);
-      return hasUserType && hasAllSkills && !isAlreadyAssigned;
-    });
-    console.log("compatibleOperators ==>", compatibleOperators);
-    setFilteredOperators(compatibleOperators);
-    setIsModalOpen(true);
-  };
-  const openAssignJigModal = (stages: any) => {
-    setAssignJigModelOpen(true);
-  };
-  const closeAssignJigModal = () => {
-    setAssignJigModelOpen(false);
-  };
-  const [{ isDragging }, drag] = useDrag({
-    type: "Test",
-    item: { coordinates },
-    collect: (monitor) => ({
-      isDragging: monitor.isDragging(),
-    }),
-  });
-  const [, drop] = useDrop({
-    accept: "Test",
-    hover: () => {},
-    drop: (draggedItem) => {
-      if (draggedItem?.coordinates !== coordinates) {
-        moveItem(draggedItem?.coordinates, coordinates);
-      }
-    },
-  });
-  const handleOperator = (rowIndex, seatIndex, event) => {
-    let operator = operators.filter((val) => val._id == event);
-    let key = `${rowIndex}-${seatIndex}`;
-    let newAssignedOperators = { ...assignedOperators };
-    if (!newAssignedOperators[key]) {
-      newAssignedOperators[key] = [];
-    }
-    newAssignedOperators[key].push(operator[0]);
-    setAssignedOperators(newAssignedOperators);
-  };
-  const handleJig = (rowIndex, seatIndex, event) => {
-    let jig = jigs.filter((val) => val._id == event);
-    let key = `${rowIndex}-${seatIndex}`;
-    let newAssignedJigs = { ...assignedJigs };
-    if (!newAssignedJigs[key]) {
-      newAssignedJigs[key] = [];
-    }
-    newAssignedJigs[key].push(jig[0]);
-    setAssignedJigs(newAssignedJigs);
-  };
-  const handlesubmitOperator = () => {
-    setIsModalOpen(false);
-  };
-  const handlesubmitJigs = () => {
-    setAssignJigModelOpen(false);
-  };
-  const handleRemoveOperator = (rowIndex, seatIndex) => {
-    const key = `${rowIndex}-${seatIndex}`;
-    setAssignedOperators((prevAssignedOperators) => {
-      const newAssignedOperators = { ...prevAssignedOperators };
-      delete newAssignedOperators[key];
-      return newAssignedOperators;
-    });
-  };
-  const handleRemoveJig = (rowIndex, seatIndex, index) => {
-    const key = `${rowIndex}-${seatIndex}`;
-    setAssignedJigs((prevAssignedJigs) => {
-      const newAssignedJigs = { ...prevAssignedJigs };
-      delete newAssignedJigs[key][index];
-      return newAssignedJigs;
-    });
-  };
-  const isOperatorAssignedToAnySeat = (operatorName) => {
-    return Object.values(assignedOperators).some((operatorsForSeat) =>
-      operatorsForSeat?.some(
-        (assignedOperator) => assignedOperator.name === operatorName,
-      ),
-    );
-  };
-  const isJigAssignedToAnySeat = (jigName) => {
-    return Object.values(assignedJigs).some((jigForSeat) =>
-      jigForSeat?.some((assignedJig) => assignedJig.name === jigName),
-    );
-  };
-
-  const changeJigCategories = async (id: any) => {
-    try {
-      let result = await fetchJigsById(id);
-      setJigs(result);
-    } catch (error) {
-      console.log("Error Fecth Jig Category :", error);
-    }
-  };
-  return (
-    <div
-      ref={(node) => drag(drop(node))}
-      key={seatIndex}
-      className={`flex flex-col rounded-lg border-2 p-2 transition-all duration-300 ${
-        assignedStages[coordinates] && assignedStages[coordinates].length > 0
-          ? !assignedStages[coordinates][0]?.reserved
-            ? "border-green-500 bg-green-200 shadow-xl"
-            : "border-danger bg-[#fbc0c0] shadow-xl"
-          : "border-gray-300 bg-white hover:shadow-lg"
-      }`}
-      onDrop={handleDrop(rowIndex, seatIndex)}
-      onDragOver={handleDragOver}
-      title={
-        assignedStages[coordinates] && assignedStages[coordinates].length > 0
-          ? assignedStages[coordinates].join(",")
-          : "Drop Stage Here"
-      }
-    >
-      <span className="text-gray-800 flex items-center justify-between text-xs font-bold">
-        <p className="text-sm"> S{item.seatNumber} </p>
-      </span>
-      {assignedStages[coordinates] && assignedStages[coordinates].length > 0 ? (
-        <div className="mt-1">
-          <div>
-            {assignedStages[coordinates].map((stage: any, stageIndex: any) => (
-              <div key={stageIndex}>
-                <div className="flex items-center justify-between">
-                  <strong className="text-gray-900 text-xs">
-                    {stage.name}
-                    <p>{stage.upha}</p>
-                  </strong>
-                  {!stage?.reserved && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleRemoveStage(
-                          rowIndex,
-                          seatIndex,
-                          stageIndex,
-                          rowSeatLength,
-                        )
-                      }
-                      className="ml-3 h-5 rounded-full bg-danger p-1 text-white transition-all duration-200 hover:bg-danger"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth="2"
-                        stroke="currentColor"
-                        className="h-3 w-3"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M6 18L18 6M6 6l12 12"
-                        />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-                {stageIndex === assignedStages[coordinates].length - 1 &&
-                  assignedOperators[`${rowIndex}-${seatIndex}`]?.map(
-                    (operator: any, index: any) => (
-                      <p
-                        key={index}
-                        className="flex items-center justify-end text-xs"
-                      >
-                        <span>
-                          <strong>Operator : </strong>
-                          {operator.name}{" "}
-                        </span>
-                        {!stage?.reserved && (
-                          <button
-                            type="button"
-                            className="h-5 rounded-full p-1 transition-all duration-200"
-                            onClick={() =>
-                              handleRemoveOperator(rowIndex, seatIndex)
-                            }
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              strokeWidth="2"
-                              stroke="currentColor"
-                              className="h-3 pt-0.5"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M6 18L18 6M6 6l12 12"
-                              />
-                            </svg>
-                          </button>
-                        )}
-                      </p>
-                    ),
-                  )}
-                {assignedJigs[coordinates] &&
-                  assignedJigs[`${rowIndex}-${seatIndex}`]?.map(
-                    (jig: any, index: any) => (
-                      <p
-                        key={index}
-                        className="flex items-center justify-end text-xs"
-                      >
-                        <span>
-                          <strong>Jig : </strong>
-                          {jig?.name}{" "}
-                        </span>
-                        {!stage?.reserved && (
-                          <button
-                            type="button"
-                            className="h-5 rounded-full p-1 transition-all duration-200"
-                            onClick={() =>
-                              handleRemoveJig(rowIndex, seatIndex, index)
-                            }
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              strokeWidth="2"
-                              stroke="currentColor"
-                              className="h-3 pt-0.5"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M6 18L18 6M6 6l12 12"
-                              />
-                            </svg>
-                          </button>
-                        )}
-                      </p>
-                    ),
-                  )}
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <span className="text-gray-500 text-sm italic">No Stage Assigned</span>
-      )}
-      {assignedStages[coordinates] &&
-        assignedStages[coordinates].length > 0 &&
-        !assignedStages[`${rowIndex}-${seatIndex}`][0]?.reserved &&
-        !assignedOperators[`${rowIndex}-${seatIndex}`] && (
-          <div>
-            <div className="mt-1 flex justify-end">
-              <button
-                type="button"
-                className="text-dark ml-3 h-6 rounded-full bg-gray p-1.5 transition-all duration-200"
-                onClick={() => openModal(assignedStages[coordinates])}
-              >
-                <svg viewBox="0 0 24 24" fill="none" width="10px" height="10px">
-                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                  <g
-                    id="SVGRepo_tracerCarrier"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  ></g>
-                  <g id="SVGRepo_iconCarrier">
-                    {" "}
-                    <path
-                      d="M20 18L14 18M17 15V21M4 21C4 17.134 7.13401 14 11 14C11.695 14 12.3663 14.1013 13 14.2899M15 7C15 9.20914 13.2091 11 11 11C8.79086 11 7 9.20914 7 7C7 4.79086 8.79086 3 11 3C13.2091 3 15 4.79086 15 7Z"
-                      stroke="#000000"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    ></path>{" "}
-                  </g>
-                </svg>
-              </button>
-            </div>
-          </div>
-        )}
-      {assignedStages[coordinates] &&
-        assignedStages[coordinates][0].hasJigStepType && (
-          <div className="mt-1 flex justify-end">
-            <button
-              type="button"
-              className="text-dark ml-3 h-6 rounded-full bg-gray p-1.5 transition-all duration-200"
-              onClick={() => openAssignJigModal(assignedStages[coordinates])}
-            >
-              <svg
-                fill="#000000"
-                width="10px"
-                height="10px"
-                viewBox="0 0 100 100"
-              >
-                <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                <g
-                  id="SVGRepo_tracerCarrier"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                ></g>
-                <g id="SVGRepo_iconCarrier">
-                  {" "}
-                  <g>
-                    {" "}
-                    <path d="m56.59 37.92h-3.29v-3.3a2.2 2.2 0 0 0 -2.2-2.19h-2.2a2.2 2.2 0 0 0 -2.2 2.19v3.3h-3.29a2.21 2.21 0 0 0 -2.2 2.2v2.19a2.21 2.21 0 0 0 2.2 2.2h3.29v3.3a2.21 2.21 0 0 0 2.2 2.19h2.2a2.21 2.21 0 0 0 2.2-2.2v-3.3h3.29a2.21 2.21 0 0 0 2.2-2.2v-2.18a2.21 2.21 0 0 0 -2.2-2.2z"></path>{" "}
-                    <path d="m79.6 25.33a5 5 0 0 0 -4.93-4.93h-49.34a5 5 0 0 0 -4.93 4.93v32.07a5 5 0 0 0 4.93 4.93h49.34a5 5 0 0 0 4.93-4.93zm-7.4 27.75a1.89 1.89 0 0 1 -1.85 1.85h-40.7a1.89 1.89 0 0 1 -1.85-1.85v-23.43a1.89 1.89 0 0 1 1.85-1.85h40.7a1.89 1.89 0 0 1 1.85 1.85zm-13.57 19.12h-3.7a1.16 1.16 0 0 1 -1.23-1.2v-2.5a1.16 1.16 0 0 0 -1.23-1.23h-4.94a1.16 1.16 0 0 0 -1.23 1.23v2.5a1.16 1.16 0 0 1 -1.23 1.23h-3.7a5 5 0 0 0 -4.94 4.93v.62a1.9 1.9 0 0 0 1.85 1.85h23.44a1.9 1.9 0 0 0 1.85-1.85v-.62a5 5 0 0 0 -4.94-4.96z"></path>{" "}
-                  </g>{" "}
-                </g>
-              </svg>
-            </button>
-          </div>
-        )}
-      <Modal
-        isOpen={isModalOpen}
-        onSubmit={handlesubmitOperator}
-        onClose={closeModal}
-        title="Assign Operators"
-      >
-        <div>
-          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-            Operators
-          </label>
-          <select
-            onChange={(e) =>
-              handleOperator(rowIndex, seatIndex, e.target.value)
-            }
-            className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          >
-            <option value="">Please Select</option>
-            {filteredOperators?.map((operator, index) => (
-              <option
-                key={index}
-                value={operator._id}
-                className="text-body dark:text-bodydark"
-                disabled={isOperatorAssignedToAnySeat(operator.name)}
-              >
-                {operator.name}
-                {isOperatorAssignedToAnySeat(operator.name) && "(Assigned)"}
-              </option>
-            ))}
-          </select>
-        </div>
-      </Modal>
-      <Modal
-        isOpen={isAssignJigModalOpen}
-        onSubmit={handlesubmitJigs}
-        onClose={closeAssignJigModal}
-        title="Assign Jigs"
-      >
-        <div>
-          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-            Jig Category
-          </label>
-          <select
-            onChange={(e) => changeJigCategories(e.target.value)}
-            className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          >
-            <option value="">Please Select</option>
-            {jigCategories?.map((category, index) => (
-              <option
-                key={index}
-                value={category._id}
-                className="text-body dark:text-bodydark"
-                // disabled={isJigAssignedToAnySeat(category.name)}
-              >
-                {category.name}
-                {/* {isJigAssignedToAnySeat(category.name) && "(Assigned)"} */}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="text-gray-800 mb-3 mt-2 block text-sm font-medium dark:text-bodydark">
-            Jig
-          </label>
-          <select
-            onChange={(e) => handleJig(rowIndex, seatIndex, e.target.value)}
-            className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          >
-            <option value="">Please Select</option>
-            {jigs?.map((jig, index) => (
-              <option
-                key={index}
-                value={jig?._id}
-                className="text-body dark:text-bodydark"
-                disabled={isJigAssignedToAnySeat(jig?.name)}
-              >
-                {jig?.name}
-                {isJigAssignedToAnySeat(jig?.name) && "(Assigned)"}
-              </option>
-            ))}
-          </select>
-        </div>
-      </Modal>
-    </div>
-  );
-};
 
 const ADDPlanSchedule = () => {
   const [shiftTime, setShiftTime] = useState(0);
@@ -488,6 +59,8 @@ const ADDPlanSchedule = () => {
     useState(false);
   const [customStagesCompatibleOperator, setCustomStagesCompatibleOperator] =
     useState([]);
+  const [stages, setStages] = useState([]);
+  const [commonStages, setCommonStages] = useState([]);
   const [customStagesIndexVal, setCustomStagesIndexVal] = useState(0);
   const [isCustomStagesModalOpen, setCustomStagesModalOpen] = useState(false);
   const [isSubmitButtonDisabled, setIsSubmitButtonDisabled] = useState(false);
@@ -684,6 +257,8 @@ const ADDPlanSchedule = () => {
         (value) => value?.status == "waiting_schedule",
       );
       let selectedProces = result.Processes.filter((value) => value?._id == id);
+      setStages(selectedProces[0].stages);
+      setCommonStages(selectedProces[0].commonStages);
       getProduct(selectedProces[0].selectedProduct);
       setSelectedProcess(selectedProces[0]);
       setProcess(filterProcess);
@@ -765,13 +340,17 @@ const ADDPlanSchedule = () => {
     }
   };
   const calculateTimeDifference = (selected) => {
-    const startDate = new Date(`1970-01-01T${selected.startTime}`);
-    const endDate = new Date(`1970-01-01T${selected.endTime}`);
+    const startDate = new Date(`1970-01-01T${selected.intervals[0].startTime}`);
+    const endDate = new Date(
+      `1970-01-01T${selected.intervals[selected.intervals.length - 1].endTime}`,
+    );
+    // console.log("endDate ==>", endDate);
 
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
       throw new Error("Invalid start or end time format");
     }
     const differenceInMilliseconds = endDate - startDate;
+    console.log()
     const totalMinutes = Math.floor(differenceInMilliseconds / (1000 * 60));
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
@@ -888,12 +467,12 @@ const ADDPlanSchedule = () => {
     event.preventDefault();
   };
   const allocateStagesToSeats = (
-    Products: any,
+    Stages: any,
     selectedRoom: any,
     repeatCount = 1,
     reservedSeats = {},
   ) => {
-    const stages = Products?.stages;
+    const stages = Stages;
     let stageIndex = 0;
     const newAssignedStages = {};
     const totalSeatsAvailable = selectedRoom?.lines?.reduce(
@@ -927,6 +506,7 @@ const ADDPlanSchedule = () => {
         }
         if (stageIndex < stages.length * repeatCount) {
           const currentStage = stages[stageIndex % stages.length];
+          console.log("currentStage ===>", currentStage);
           const hasJigStepType = currentStage.subSteps.some(
             (step) => step.stepType === "jig",
           );
@@ -951,6 +531,16 @@ const ADDPlanSchedule = () => {
     setAssignedStages(newAssignedStages);
     return newAssignedStages;
   };
+  const calculateTotalBreakHours = (slots) => {
+    const toMinutes = (timeStr) => {
+      const [h, m] = timeStr.split(":").map(Number);
+      return h * 60 + m;
+    };
+    const totalMinutes = slots.reduce((total, slot) => {
+      return total + (toMinutes(slot.endTime) - toMinutes(slot.startTime));
+    }, 0);
+    return (totalMinutes / 60).toFixed(0);
+  };
   const handleCalculation = async () => {
     if (!selectedProcess || !selectedProduct) {
       return;
@@ -964,10 +554,30 @@ const ADDPlanSchedule = () => {
       parseInt(stage.upha, 10),
     );
     const leastUpha = Math.min(...uphaValues);
-    const breakTime = selectedShift?.totalBreakTime || 0;
+    const breakSlots = selectedShift?.intervals?.filter(
+      (slot) => slot.breakTime,
+    );
+    const formattedBreaks = breakSlots.map((slot) => ({
+      start: slot.startTime,
+      end: slot.endTime,
+    }));
+    const totalBreakTime = calculateTotalBreakHours(breakSlots);
+    const breakTime = totalBreakTime || 0;
     const adjustedShiftTime = shiftTime - breakTime / 60;
     const unitsPer8HourDay = leastUpha * adjustedShiftTime * repeatCount;
     const totalTimeEstimationInDays = totalQuantity / unitsPer8HourDay;
+
+    console.log(
+      "shiftTime ===>",
+      shiftTime,
+      " === adjustedShiftTime ==>",
+      adjustedShiftTime,
+      " === leastUpha ==>",
+      leastUpha,
+      " === unitsPer8HourDay ===> ",
+      unitsPer8HourDay,
+    );
+    // return false;
     const expectedEndDate = await calculateEstimatedEndDate(
       totalTimeEstimationInDays,
     );
@@ -978,12 +588,11 @@ const ADDPlanSchedule = () => {
       expectedEndDate,
     );
     const assignedStages = allocateStagesToSeats(
-      selectedProduct,
+      stages,
       selectedRoom,
       repeatCount,
       reservedSeats,
     );
-
     if (!assignedStages) {
       return;
     }
@@ -1037,14 +646,16 @@ const ADDPlanSchedule = () => {
 
     return formattedEndDate;
   };
-  const handleDragStart =(stage: any, substep = null) => (event: any) => {
-    const data = {
-      name: stage.stageName,
-      upha: stage.upha,
-      substepName: substep ? [substep.stepName] : null,
+  const handleDragStart =
+    (stage: any, substep = null) =>
+    (event: any) => {
+      const data = {
+        name: stage.stageName,
+        upha: stage.upha,
+        substepName: substep ? [substep.stepName] : null,
+      };
+      event.dataTransfer.setData("text/plain", JSON.stringify(data));
     };
-    event.dataTransfer.setData("text/plain", JSON.stringify(data));
-  };
   const moveItem = (fromCoordinates: any, toCoordinates: any) => {
     setAssignedStages((prevStages) => {
       const updatedStages = { ...prevStages };
@@ -1393,17 +1004,12 @@ const ADDPlanSchedule = () => {
   };
   const handleRemoveAssignCustomOperator = (index, opId) => {
     try {
-      // let form = new FormData();
-      // form.append("status", "Free");
-      // let data = await getUpdateStatus(operatorid, form);
-      // if (data && data.status == 200) {
       const key = `${index}`;
       setAssignedCustomOperators((prevAssignedOperators) => {
         const newAssignedOperators = { ...prevAssignedOperators };
         delete newAssignedOperators[key];
         return newAssignedOperators;
       });
-      //   }
     } catch (error) {
       console.log("Error Handle Remove Operator :", error);
     }
@@ -1517,7 +1123,7 @@ const ADDPlanSchedule = () => {
                           Stages
                         </h3>
                         <div className="custom-scroll mt-4 h-90 flex-wrap gap-4 overflow-x-auto pt-4">
-                          {selectedProduct?.stages?.map((stage, index) => (
+                          {stages?.map((stage, index) => (
                             <div className="mb-2" key={index}>
                               <button
                                 className="w-40 rounded-lg bg-blue-500 px-2 py-2 text-sm text-white hover:bg-blue-400"
@@ -1579,30 +1185,28 @@ const ADDPlanSchedule = () => {
                           </h3>
                         </div>
                         <div className="grid grid-cols-4 gap-4 overflow-x-auto pt-4">
-                          {selectedProduct?.commonStages.map(
-                            (value, index) => (
-                              <>
-                                <div
-                                  key={index}
-                                  className="border-gray-300 mb-4 mt-4 flex flex-col rounded-lg border-2 border-green-500 bg-green-200 p-2 transition-all duration-300 hover:shadow-lg"
-                                  title="Drop Stage Here"
-                                >
-                                  <span className="text-gray-800 flex items-center justify-between text-xs font-bold">
-                                    <p className="text-sm font-bold">
-                                      {" "}
-                                      {value?.stageName}
-                                    </p>
-                                  </span>
-                                  <div className="mt-1">
-                                    <div>
-                                      <div className="flex items-center justify-end ">
-                                        {assignedCustomOperators[index] &&
-                                          assignedCustomOperators[index]
-                                            .length > 0 && (
-                                            <div className="flex gap-2">
-                                              {assignedCustomOperators[
-                                                index
-                                              ].map((op, i) => (
+                          {commonStages?.map((value, index) => (
+                            <>
+                              <div
+                                key={index}
+                                className="border-gray-300 mb-4 mt-4 flex flex-col rounded-lg border-2 border-green-500 bg-green-200 p-2 transition-all duration-300 hover:shadow-lg"
+                                title="Drop Stage Here"
+                              >
+                                <span className="text-gray-800 flex items-center justify-between text-xs font-bold">
+                                  <p className="text-sm font-bold">
+                                    {" "}
+                                    {value?.stageName}
+                                  </p>
+                                </span>
+                                <div className="mt-1">
+                                  <div>
+                                    <div className="flex items-center justify-end ">
+                                      {assignedCustomOperators[index] &&
+                                        assignedCustomOperators[index].length >
+                                          0 && (
+                                          <div className="flex gap-2">
+                                            {assignedCustomOperators[index].map(
+                                              (op, i) => (
                                                 <>
                                                   <div className="flex">
                                                     <p
@@ -1638,54 +1242,54 @@ const ADDPlanSchedule = () => {
                                                     </button>
                                                   </div>
                                                 </>
-                                              ))}
-                                            </div>
-                                          )}
-                                        {!assignedCustomOperators[index] && (
-                                          <div className="mt-2 flex justify-end">
-                                            <button
-                                              type="button"
-                                              className="text-dark ml-3 h-6 rounded-full bg-gray p-1.5 transition-all duration-200"
-                                              onClick={() =>
-                                                openCustomStagesModal(
-                                                  value,
-                                                  index,
-                                                )
-                                              }
-                                            >
-                                              <svg
-                                                fill="#000000"
-                                                version="1.1"
-                                                id="Capa_1"
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                width="10px"
-                                                height="10px"
-                                                viewBox="0 0 45.402 45.402"
-                                                stroke="#000000"
-                                              >
-                                                <g
-                                                  id="SVGRepo_bgCarrier"
-                                                  strokeWidth="0"
-                                                ></g>
-                                                <g
-                                                  id="SVGRepo_tracerCarrier"
-                                                  strokeLinecap="round"
-                                                  strokeLinejoin="round"
-                                                ></g>
-                                                <g id="SVGRepo_iconCarrier">
-                                                  <path d="M41.267,18.557H26.832V4.134C26.832,1.851,24.99,0,22.707,0c-2.283,0-4.124,1.851-4.124,4.135v14.432H4.141 c-2.283,0-4.139,1.851-4.138,4.135c-0.001,1.141,0.46,2.187,1.207,2.934c0.748,0.749,1.78,1.222,2.92,1.222h14.453V41.27 c0,1.142,0.453,2.176,1.201,2.922c0.748,0.748,1.777,1.211,2.919,1.211c2.282,0,4.129-1.851,4.129-4.133V26.857h14.435 c2.283,0,4.134-1.867,4.133-4.15C45.399,20.425,43.548,18.557,41.267,18.557z"></path>
-                                                </g>
-                                              </svg>
-                                            </button>
+                                              ),
+                                            )}
                                           </div>
                                         )}
-                                      </div>
+                                      {!assignedCustomOperators[index] && (
+                                        <div className="mt-2 flex justify-end">
+                                          <button
+                                            type="button"
+                                            className="text-dark ml-3 h-6 rounded-full bg-gray p-1.5 transition-all duration-200"
+                                            onClick={() =>
+                                              openCustomStagesModal(
+                                                value,
+                                                index,
+                                              )
+                                            }
+                                          >
+                                            <svg
+                                              fill="#000000"
+                                              version="1.1"
+                                              id="Capa_1"
+                                              xmlns="http://www.w3.org/2000/svg"
+                                              width="10px"
+                                              height="10px"
+                                              viewBox="0 0 45.402 45.402"
+                                              stroke="#000000"
+                                            >
+                                              <g
+                                                id="SVGRepo_bgCarrier"
+                                                strokeWidth="0"
+                                              ></g>
+                                              <g
+                                                id="SVGRepo_tracerCarrier"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                              ></g>
+                                              <g id="SVGRepo_iconCarrier">
+                                                <path d="M41.267,18.557H26.832V4.134C26.832,1.851,24.99,0,22.707,0c-2.283,0-4.124,1.851-4.124,4.135v14.432H4.141 c-2.283,0-4.139,1.851-4.138,4.135c-0.001,1.141,0.46,2.187,1.207,2.934c0.748,0.749,1.78,1.222,2.92,1.222h14.453V41.27 c0,1.142,0.453,2.176,1.201,2.922c0.748,0.748,1.777,1.211,2.919,1.211c2.282,0,4.129-1.851,4.129-4.133V26.857h14.435 c2.283,0,4.134-1.867,4.133-4.15C45.399,20.425,43.548,18.557,41.267,18.557z"></path>
+                                              </g>
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
-                              </>
-                            ),
-                          )}
+                              </div>
+                            </>
+                          ))}
                         </div>
                       </div>
                     </div>
@@ -1715,9 +1319,8 @@ const ADDPlanSchedule = () => {
                                 )}
                               >
                                 {operator.name}
-                                {isOperatorAssignedToAnySeat(
-                                  operator?.name,
-                                ) && "(Assigned)"}
+                                {isOperatorAssignedToAnySeat(operator?.name) &&
+                                  "(Assigned)"}
                               </option>
                             ),
                           )}

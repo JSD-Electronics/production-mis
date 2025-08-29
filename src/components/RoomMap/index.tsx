@@ -66,7 +66,7 @@ const RoomMap = () => {
     try {
       const result = await createRoomPlan(formData);
       if (result && result.status === 200) {
-        toast.success("Stage created successfully!!");
+        toast.success("Room created successfully!!");
       } else {
         throw new Error(result.message || "Failed to create stage");
       }

@@ -1,35 +1,40 @@
 type CheckboxOneProps = {
-  id: string;                   // Assuming id is a string
-  value: string | number;       // Depending on your use case
+  id: string;
+  value: string | number;
   checked: boolean;
-  setValue: (value: boolean) => void; // Assuming it toggles the checkbox state
+  setValue: (value: boolean) => void;
 };
-const CheckboxOne = ({ id, value, checked, setValue }:CheckboxOneProps) => {
+
+const CheckboxOne = ({ id, value, checked, setValue }: CheckboxOneProps) => {
   return (
     <div>
       <label
-        htmlFor="checkboxLabelOne"
+        htmlFor={id}
         className="flex cursor-pointer select-none items-center"
       >
         <div className="relative">
           <input
             type="checkbox"
-            id="checkboxLabelOne"
+            id={id}
             className="sr-only"
             checked={checked}
             onChange={(e) => setValue(e.target.checked)}
           />
           <div
             className={`mr-4 flex h-5 w-5 items-center justify-center rounded border ${
-              isChecked && "border-primary bg-gray dark:bg-transparent"
+              checked
+                ? "border-primary bg-gray dark:bg-transparent"
+                : "border-gray-400 bg-white"
             }`}
           >
             <span
-              className={`h-2.5 w-2.5 rounded-sm ${isChecked && "bg-primary"}`}
+              className={`h-2.5 w-2.5 rounded-sm ${
+                checked ? "bg-primary" : ""
+              }`}
             ></span>
           </div>
         </div>
-        Checkbox Text
+        {value}
       </label>
     </div>
   );

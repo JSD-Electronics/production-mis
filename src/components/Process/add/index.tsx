@@ -33,6 +33,7 @@ const AddProcess = () => {
       console.log('Error Fethcing Order Confirmation Numbers', error?.message);
     }
   };
+  
   const getAllProduct = async () => {
     try {
       let result = await viewProduct();
@@ -44,14 +45,16 @@ const AddProcess = () => {
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     try {
-      const formData = {
-        name,
-        selectedProduct,
-        orderConfirmationNo,
-        processID,
-        quantity,
-        descripition,
-      };
+      let selectedProductObj = products.find((value) => value._id == selectedProduct);
+      const formData = new FormData();
+      formData.append("name",name);
+      formData.append("selectedProduct",selectedProduct);
+      formData.append("orderConfirmationNo",orderConfirmationNo);
+      formData.append("processID",processID);
+      formData.append("quantity", quantity);
+      formData.append("descripition",descripition);
+      formData.append("stages",JSON.stringify(selectedProductObj?.stages));
+      formData.append("commonStages",JSON.stringify(selectedProductObj?.commonStages));
       const result = await createProcess(formData);
       if (result && result.status === 200) {
         let userDetails = JSON.parse(localStorage.getItem("userDetails"));
@@ -60,6 +63,7 @@ const AddProcess = () => {
         formData3.append("processId", result?.newProcess?._id || "");
         formData3.append("userId", userDetails?._id || "");
         formData3.append("description",`Process Created Successfully By ${userDetails?.name}`);
+        
         try {
           const result = await createProcessLogs(formData3);
           if (result && result.status === 200) {
