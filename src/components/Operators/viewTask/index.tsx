@@ -135,7 +135,7 @@ const ViewTaskDetailsComponent = ({
       let result = await getDeviceTestByDeviceId(id);
       // return;
       if (result && result.status == 200) {
-          setDeviceHistory(result.data);
+        setDeviceHistory(result.data);
       } else {
         setDeviceHistory([]);
       }
@@ -424,7 +424,10 @@ const ViewTaskDetailsComponent = ({
             const commonStages = processData?.commonStages || [];
             if (commonStages.length > 0) {
               formData1.append("currentStage", commonStages[0].stageName);
-              formData1.append("commonStages", JSON.stringify(commonStages.map((cs) => cs.stageName)));
+              formData1.append(
+                "commonStages",
+                JSON.stringify(commonStages.map((cs) => cs.stageName)),
+              );
             } else {
               formData1.append("currentStage", assignUserStage?.name);
             }
