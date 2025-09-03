@@ -2,17 +2,17 @@ import React, { useState } from "react";
 import { Search, XCircle } from "lucide-react";
 
 interface SearchableInputProps {
-  options : any[],
-  checkedDevice:any[],
-  searchQuery:any,
-  setSearchQuery:any,
-  onNoResults:any,
-  setSearchResult:any,
-  getDeviceById:any,
-  setIsPassNGButtonShow:any,
-  setIsStickerPrinted:any,
+  options: any[];
+  checkedDevice: any[];
+  searchQuery: any;
+  setSearchQuery: any;
+  onNoResults: any;
+  setSearchResult: any;
+  getDeviceById: any;
+  setIsPassNGButtonShow: any;
+  setIsStickerPrinted: any;
+  checkIsPrintEnable: any;
 }
-
 
 const SearchableInput = ({
   options,
@@ -24,7 +24,8 @@ const SearchableInput = ({
   getDeviceById,
   setIsPassNGButtonShow,
   setIsStickerPrinted,
-}:SearchableInputProps) => {
+  checkIsPrintEnable,
+}: SearchableInputProps) => {
   const [filteredOptions, setFilteredOptions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -64,7 +65,9 @@ const SearchableInput = ({
         setSearchQuery(e.target.value);
       }
       setIsStickerPrinted(false);
-      setIsPassNGButtonShow(false);
+      if (!checkIsPrintEnable) {
+        setIsPassNGButtonShow(true);
+      }
       setShowSuggestions(false);
     }
   };

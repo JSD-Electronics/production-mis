@@ -1,6 +1,8 @@
 "use client";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import React, { useState } from "react";
+import { Reorder } from "framer-motion";
+import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import { updateShift, getShift } from "../../../lib/api";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -30,6 +32,13 @@ const EditShiftManagement = () => {
     const id = pathname.split("/").pop();
     getShiftByID(id);
   }, []);
+  const onDragEnd = (result) => {
+    if (!result.destination) return;
+    const reordered = Array.from(intervals);
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+    setIntervals(reordered);
+  };
   const getShiftByID = async (id: any) => {
     try {
       let result = await getShift(id);
@@ -49,40 +58,115 @@ const EditShiftManagement = () => {
     }));
   };
   const handleSubmit = async (e: any) => {
-    // return;
+    e.preventDefault();
     const pathname = window.location.pathname;
     const id = pathname.split("/").pop();
-    e.preventDefault();
+
     try {
-      // Extract start and end times
-      const shiftStartTime = intervals[0].startTime;
-      const shiftEndTime = intervals[intervals.length - 1].endTime;
-      const totalBreakTime = intervals.filter((interval) => interval.breakTime)
-      .reduce((total, breakInterval) => {
-        return (
-          total +
-          calculateTimeDifference(
-            breakInterval.startTime,
-            breakInterval.endTime,
-          )
-        );
-      }, 0);
+      // sort intervals by start time
+      const sortedIntervals = intervals.sort((a, b) => {
+        const [aHours, aMinutes] = a.startTime.split(":").map(Number);
+        const [bHours, bMinutes] = b.startTime.split(":").map(Number);
+        return aHours * 60 + aMinutes - (bHours * 60 + bMinutes);
+      });
+
+      // find shift start (skip leading breaks)
+      let shiftStartTime = sortedIntervals[0].startTime;
+      for (let i = 0; i < sortedIntervals.length; i++) {
+        if (!sortedIntervals[i].breakTime) {
+          // if it’s a working interval, take its startTime
+          shiftStartTime = sortedIntervals[i].startTime;
+          break;
+        } else {
+          // if it’s a break, push start time to its endTime
+          shiftStartTime = sortedIntervals[i].endTime;
+        }
+      }
+
+      // find shift end (skip trailing breaks)
+      let shiftEndTime = sortedIntervals[sortedIntervals.length - 1].endTime;
+      for (let i = sortedIntervals.length - 1; i >= 0; i--) {
+        if (!sortedIntervals[i].breakTime) {
+          shiftEndTime = sortedIntervals[i].endTime;
+          break;
+        }
+      }
+
+      // calculate total break time
+      const totalBreakTime = sortedIntervals
+        .filter((interval) => interval.breakTime)
+        .reduce((total, breakInterval) => {
+          return (
+            total +
+            calculateTimeDifference(
+              breakInterval.startTime,
+              breakInterval.endTime,
+            )
+          );
+        }, 0);
+
       const formData = {
         name,
         startTime: shiftStartTime,
         endTime: shiftEndTime,
         totalBreakTime,
-        intervals,
+        intervals: sortedIntervals,
         descripition,
         weekDays,
       };
       const result = await updateShift(formData, id);
       toast.success("User details Updated successfully!");
     } catch (error) {
-      console.error("Error submitting form:");
+      console.error("Error submitting form:", error);
       toast.error("Failed to submit user details. Please try again.");
     }
   };
+
+  // const handleSubmit = async (e: any) => {
+  //   // return;
+  //   const pathname = window.location.pathname;
+  //   const id = pathname.split("/").pop();
+  //   e.preventDefault();
+  //   try {
+  //     const sortedIntervals = intervals.sort((a, b) => {
+  //       const [aHours, aMinutes] = a.startTime.split(":").map(Number);
+  //       const [bHours, bMinutes] = b.startTime.split(":").map(Number);
+
+  //       const aTotalMinutes = aHours * 60 + aMinutes;
+  //       const bTotalMinutes = bHours * 60 + bMinutes;
+
+  //       return aTotalMinutes - bTotalMinutes;
+  //     });
+
+  //     const shiftStartTime = sortedIntervals[0].startTime;
+  //     const shiftEndTime = sortedIntervals[intervals.length - 1].endTime;
+  //     const totalBreakTime = sortedIntervals
+  //       .filter((interval) => interval.breakTime)
+  //       .reduce((total, breakInterval) => {
+  //         return (
+  //           total +
+  //           calculateTimeDifference(
+  //             breakInterval.startTime,
+  //             breakInterval.endTime,
+  //           )
+  //         );
+  //       }, 0);
+  //     const formData = {
+  //       name,
+  //       startTime: shiftStartTime,
+  //       endTime: shiftEndTime,
+  //       totalBreakTime,
+  //       intervals:sortedIntervals,
+  //       descripition,
+  //       weekDays,
+  //     };
+  //     const result = await updateShift(formData, id);
+  //     toast.success("User details Updated successfully!");
+  //   } catch (error) {
+  //     console.error("Error submitting form:");
+  //     toast.error("Failed to submit user details. Please try again.");
+  //   }
+  // };
   const calculateTimeDifference = (start, end) => {
     const [startHours, startMinutes] = start.split(":").map(Number);
     const [endHours, endMinutes] = end.split(":").map(Number);
@@ -105,8 +189,34 @@ const EditShiftManagement = () => {
   ) => {
     const updatedIntervals = [...intervals];
     updatedIntervals[index][field] = value;
+
+    const start = updatedIntervals[index].startTime;
+    const end = updatedIntervals[index].endTime;
+    if (start && end && start >= end) {
+      toast.error("Start time must be before End time");
+      return;
+    }
+
+    if (index > 0) {
+      const prevEnd = updatedIntervals[index - 1].endTime;
+      if (prevEnd && start < prevEnd) {
+        toast.error("Intervals must not overlap");
+        return;
+      }
+    }
+
     setIntervals(updatedIntervals);
   };
+
+  // const handleIntervalChange = (
+  //   index: number,
+  //   field: string,
+  //   value: string,
+  // ) => {
+  //   const updatedIntervals = [...intervals];
+  //   updatedIntervals[index][field] = value;
+  //   setIntervals(updatedIntervals);
+  // };
   const removeInterval = (index: number) => {
     const updatedIntervals = intervals.filter((_, i) => i !== index);
     setIntervals(updatedIntervals);
@@ -204,7 +314,211 @@ const EditShiftManagement = () => {
                   Shift Time Interval
                 </h3>
               </div>
-              <div className="grid gap-6 px-8 pr-8 pt-4">
+              <div className="px-8 pt-4">
+                <h3 className="mb-2 font-medium text-black dark:text-white">
+                  Shift Intervals
+                </h3>
+                <div className="overflow-y-auto">
+                  <DragDropContext onDragEnd={onDragEnd}>
+                    <Droppable droppableId="intervals">
+                      {(provided) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.droppableProps}
+                          className="space-y-2 overflow-y-auto px-2"
+                        >
+                          {intervals.map((interval, index) => (
+                            <Draggable
+                              key={interval.id || index}
+                              draggableId={interval.id || String(index)}
+                              index={index}
+                            >
+                              {(provided, snapshot) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  {...provided.dragHandleProps}
+                                  className={`flex items-center gap-3 rounded-lg border p-3 transition-shadow ${
+                                    snapshot.isDragging
+                                      ? "border-blue-400 bg-blue-50 shadow-lg dark:bg-blue-900"
+                                      : "border-gray-200 dark:border-gray-600 dark:bg-gray-800 hover:shadow-md"
+                                  }`}
+                                >
+                                  <div className="flex w-full items-center gap-2">
+                                    <input
+                                      type="time"
+                                      value={interval.startTime}
+                                      onChange={(e) =>
+                                        handleIntervalChange(
+                                          index,
+                                          "startTime",
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="dark:bg-gray-700 w-75 rounded border px-2 py-1 text-sm dark:text-white"
+                                      required
+                                    />
+                                    <span className="text-gray-500 dark:text-gray-300 text-sm">
+                                      to
+                                    </span>
+                                    <input
+                                      type="time"
+                                      value={interval.endTime}
+                                      onChange={(e) =>
+                                        handleIntervalChange(
+                                          index,
+                                          "endTime",
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="dark:bg-gray-700 w-75 rounded border px-2 py-1 text-sm dark:text-white"
+                                      required
+                                    />
+                                    <label className="text-gray-700 dark:text-gray-200 ml-4 flex items-center gap-1 text-sm">
+                                      <input
+                                        type="checkbox"
+                                        checked={interval.breakTime || false}
+                                        onChange={(e) =>
+                                          handleCheckboxBreakTime(
+                                            index,
+                                            "breakTime",
+                                            e.target.checked,
+                                          )
+                                        }
+                                        className="accent-blue-500"
+                                      />
+                                      Break
+                                    </label>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeInterval(index)}
+                                    className="ml-2 rounded bg-danger px-3 py-1 text-sm text-white transition hover:bg-danger"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
+                        </div>
+                      )}
+                    </Droppable>
+
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={addInterval}
+                        className="flex items-center gap-1 rounded bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
+                      >
+                        <span className="text-lg font-bold">+</span> Add
+                        Interval
+                      </button>
+                    </div>
+                  </DragDropContext>
+                </div>
+
+                <div className="mt-2 text-right">
+                  <button
+                    type="button"
+                    onClick={addInterval}
+                    className="flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700"
+                  >
+                    Add Interval
+                    <span className="text-lg">+</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* <div className="grid gap-6 px-8 pr-8 pt-4">
+                <Reorder.Group
+                  axis="y"
+                  values={intervals}
+                  onReorder={setIntervals} // automatically updates the state
+                >
+                  {intervals.map((interval, index) => (
+                    <Reorder.Item
+                      key={interval.id || index} // ensure unique key
+                      value={interval}
+                      className="mb-4 grid gap-6 sm:grid-cols-3"
+                    >
+                      <div>
+                        <label className="mb-3 block text-sm font-medium text-black dark:text-white">
+                          Start Time
+                        </label>
+                        <input
+                          type="time"
+                          value={interval.startTime}
+                          onChange={(e) =>
+                            handleIntervalChange(
+                              index,
+                              "startTime",
+                              e.target.value,
+                            )
+                          }
+                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-3 block text-sm font-medium text-black dark:text-white">
+                          End Time
+                        </label>
+                        <input
+                          type="time"
+                          value={interval.endTime}
+                          onChange={(e) =>
+                            handleIntervalChange(
+                              index,
+                              "endTime",
+                              e.target.value,
+                            )
+                          }
+                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                          required
+                        />
+                      </div>
+                      <div className="mt-8 flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={interval.breakTime || false}
+                            onChange={(e) =>
+                              handleCheckboxBreakTime(
+                                index,
+                                "breakTime",
+                                e.target.checked,
+                              )
+                            }
+                          />
+                          <label className="capitalize text-black dark:text-white">
+                            Break Time
+                          </label>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeInterval(index)}
+                          className="hover:bg-red-600 rounded-md bg-danger px-2.5 py-2 text-white transition"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </Reorder.Item>
+                  ))}
+                </Reorder.Group>
+
+                <div className="text-end">
+                  <button
+                    type="button"
+                    onClick={addInterval}
+                    className="rounded-md bg-blue-600 px-2.5 py-2 text-white transition hover:bg-blue-700"
+                  >
+                    Add Interval
+                  </button>
+                </div>
+              </div> */}
+              {/* <div className="grid gap-6 px-8 pr-8 pt-4">
                 {intervals.map((interval, index) => (
                   <div key={index} className="grid gap-6 sm:grid-cols-3">
                     <div>
@@ -256,20 +570,6 @@ const EditShiftManagement = () => {
                           Break Time
                         </label>
                       </div>
-                      {/* <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={interval.breakTime}
-                          onChange={(e) => handleCheckboxBreakTime(index,"breakTime",e.target.value)}
-                          // id={day}
-                        />
-                        <label
-                          // htmlFor={day}
-                          className="capitalize text-black dark:text-white"
-                        >
-                          Break Time
-                        </label>
-                      </div> */}
                       <button
                         type="button"
                         onClick={() => removeInterval(index)}
@@ -334,54 +634,7 @@ const EditShiftManagement = () => {
                     </svg>
                   </button>
                 </div>
-              </div>
-              {/* <div className="grid gap-6 px-8 pr-8 pt-4 sm:grid-cols-2">
-                <div>
-                  <label className="text-gray-900 mb-2 block text-sm font-medium dark:text-white">
-                    End Time:
-                  </label>
-                  <input
-                    type="time"
-                    id="time"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    className="bg-gray-50 border-gray-300 text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 block w-full rounded-lg border p-2.5 text-sm leading-none focus:border-blue-500 focus:ring-blue-500 dark:text-white dark:focus:border-blue-500 dark:focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-gray-900 mb-2 block text-sm font-medium dark:text-white">
-                    Break Time:
-                  </label>
-                  <select
-                    value={breakTime || ""}
-                    onChange={(e) => setBreakTime(e.target.value)}
-                    className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
-                  >
-                    <option value="" className="text-body dark:text-bodydark">
-                      Please Select
-                    </option>
-                    {breakTimeArr.map((room, index) => (
-                      <option
-                        key={index}
-                        value={room}
-                        className="text-body dark:text-bodydark"
-                      >
-                        {room} Minutes
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="time"
-                    id="time"
-                    value={breakTime}
-                    onChange={(e) => setBreakTime(e.target.value)}
-                    className="bg-gray-50 border-gray-300 text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 block w-full rounded-lg border p-2.5 text-sm leading-none focus:border-blue-500 focus:ring-blue-500 dark:text-white dark:focus:border-blue-500 dark:focus:ring-blue-500"
-                    required
-                  /> 
-                </div>
               </div> */}
-
               {/* Submit Button */}
               <div className="col-span-2 flex justify-end p-8 pr-8">
                 <button

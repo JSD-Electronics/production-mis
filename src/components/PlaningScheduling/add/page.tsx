@@ -272,6 +272,7 @@ const ADDPlanSchedule = () => {
     stageIndex,
     rowSeatLength,
   ) => {
+    alert("hello");
     setAssignedStages((prev) => {
       const updatedStages = { ...prev };
       const currentKey = `${rowIndex}-${seatIndex}`;

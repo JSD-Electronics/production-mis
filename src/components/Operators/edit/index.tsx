@@ -227,12 +227,14 @@ const EditOperators = () => {
                 </div>
                 <div className="space-x-4">
                   <DatePickerOne
-                    label="Date Of Birth"
+                    formLabel="Date Of Birth"
+                    name="dateOfBirth"
+                    id="dateOfBirth"
                     value={dateOfBirth}
                     setValue={setDateOfBirth}
                   />
                 </div>
-                <div className="space-x-4">
+                {/* <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
                       Phone Number
@@ -245,7 +247,7 @@ const EditOperators = () => {
                       className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
                     />
                   </div>
-                </div>
+                </div> */}
                 <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">

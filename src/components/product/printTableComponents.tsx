@@ -489,7 +489,7 @@ const StickerDesigner = ({
             </style>
           </head>
           <body>
-            <img src="${imageData}" alt="Sticker">
+            <Image src="${imageData}" alt="Sticker">
             <script>
               window.onload = function() {
                 setTimeout(() => {

@@ -1495,7 +1495,7 @@ const ViewPlanSchedule = () => {
                                         selectedProcess?.quantity /
                                           packagingData[0].packagingData
                                             .maxCapacity,
-                                    )
+                                    ).toFixed(2)
                                   : 0}
                               </div>
                               <div className="text-gray-700 dark:text-gray-300 mb-2">
@@ -1555,7 +1555,7 @@ const ViewPlanSchedule = () => {
                     </p>
                     <p>
                       Units Processed Per{" "}
-                      {shiftTime - selectedShift?.totalBreakTime / 60}-Hour Day:{" "}
+                      {(shiftTime - selectedShift?.totalBreakTime / 60).toFixed(2)}-Hour Day:{" "}
                       {totalUPHA || "Not calculated yet"}
                     </p>
                   </div>

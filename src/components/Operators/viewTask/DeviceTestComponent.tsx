@@ -91,6 +91,7 @@ interface DeviceTestComponentProps {
   isCartonBarcodePrinted: any;
   setProcessCartons: any;
   processCartons: any[];
+  assignedTaskDetails: any;
 }
 export default function DeviceTestComponent({
   product,
@@ -137,6 +138,7 @@ export default function DeviceTestComponent({
   isCartonBarcodePrinted,
   setProcessCartons,
   processCartons,
+  assignedTaskDetails,
 }: DeviceTestComponentProps) {
   useEffect(() => {
     fetchExistingCartonsByProcessID();
@@ -241,7 +243,6 @@ export default function DeviceTestComponent({
     let newCarton: Cart | null = null;
 
     setCartons((prevCarts: Cart[]) => {
-      console.log("prevCarts ==>", prevCarts);
       const deviceExists = prevCarts.some((c) =>
         c.devices.includes(selectedDevice.serialNo),
       );
@@ -427,17 +428,38 @@ export default function DeviceTestComponent({
                 <Search className="text-gray-500 h-4 w-4" />
                 Search Device
               </label>
-              <SearchableInput
-                options={deviceList}
-                checkedDevice={checkedDevice}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                onNoResults={handleNoResults}
-                setSearchResult={setSearchResult}
-                getDeviceById={getDeviceById}
-                setIsPassNGButtonShow={setIsPassNGButtonShow}
-                setIsStickerPrinted={setIsStickerPrinted}
-              />
+              {assignedTaskDetails.stageType == "common" ? (
+                <>
+                  <SearchableInput
+                    options={deviceList}
+                    checkedDevice={checkedDevice}
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    onNoResults={handleNoResults}
+                    setSearchResult={setSearchResult}
+                    getDeviceById={getDeviceById}
+                    setIsPassNGButtonShow={setIsPassNGButtonShow}
+                    setIsStickerPrinted={setIsStickerPrinted}
+                  />
+                </>
+              ) : (
+                <>
+                  <SearchableInput
+                    options={deviceList}
+                    checkedDevice={checkedDevice}
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    onNoResults={handleNoResults}
+                    setSearchResult={setSearchResult}
+                    getDeviceById={getDeviceById}
+                    setIsPassNGButtonShow={setIsPassNGButtonShow}
+                    setIsStickerPrinted={setIsStickerPrinted}
+                    checkIsPrintEnable={processAssignUserStage?.subSteps?.some(
+                      (s: any) => s.isPrinterEnable,
+                    )}
+                  />
+                </>
+              )}
 
               {/* Device Result */}
               {searchResult ? (
@@ -464,9 +486,7 @@ export default function DeviceTestComponent({
                             {deviceHistory.map((value, index) => (
                               <tr key={index} className="border-t text-center">
                                 <td className="px-2 py-1">{value?.serialNo}</td>
-                                <td className="px-2 py-1">
-                                  {value?.stageName}
-                                </td>
+                                <td className="px-2 py-1">{value.stageName}</td>
                                 <td
                                   className={`px-2 py-1 font-medium ${
                                     value?.status === "Pass"
@@ -566,32 +586,32 @@ export default function DeviceTestComponent({
                             </div>
                           )}
                         {/* Pass / NG */}
-                        {isPassNGButtonShow &&
-                          !processAssignUserStage?.subSteps?.some(
-                            (subStep: any) => subStep.isPackagingStatus,
-                          ) && (
-                            <div className="flex justify-center gap-4 p-6">
-                              <button
-                                className="flex items-center gap-2 rounded-lg bg-success px-4 py-2 text-white shadow hover:bg-green-500"
-                                onClick={() => handleUpdateStatus("Pass")}
-                              >
-                                <CheckCircle className="h-5 w-5" />
-                                Pass
-                              </button>
-                              <button
-                                className="hover:bg-red-600 flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-white shadow"
-                                onClick={() => handleUpdateStatus("NG")}
-                              >
-                                <XCircle className="h-5 w-5" />
-                                NG
-                              </button>
-                            </div>
-                          )}
+
+                        {!processAssignUserStage?.subSteps?.some(
+                          (subStep: any) => subStep.isPackagingStatus,
+                        ) && (
+                          <div className="flex justify-center gap-4 p-6">
+                            <button
+                              className="flex items-center gap-2 rounded-lg bg-success px-4 py-2 text-white shadow hover:bg-green-500"
+                              onClick={() => handleUpdateStatus("Pass")}
+                            >
+                              <CheckCircle className="h-5 w-5" />
+                              Pass
+                            </button>
+                            <button
+                              className="hover:bg-red-600 flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-white shadow"
+                              onClick={() => handleUpdateStatus("NG")}
+                            >
+                              <XCircle className="h-5 w-5" />
+                              NG
+                            </button>
+                          </div>
+                        )}
                       </>
                     )}
-
                     {/* CASE 2: Packaging Stage */}
-                    {isPassNGButtonShow &&
+                    {isStickerPrinted &&
+                      isPassNGButtonShow &&
                       processAssignUserStage?.subSteps?.some(
                         (s: any) => s.isPackagingStatus,
                       ) && (
@@ -746,7 +766,7 @@ export default function DeviceTestComponent({
                                                                 carton.cartonSerial
                                                               }
                                                               options={{
-                                                                level: "M", // ✅ correct prop for error correction
+                                                                level: "M",
                                                                 margin: 2,
                                                                 scale: 4,
                                                                 width: 180,
@@ -829,26 +849,27 @@ export default function DeviceTestComponent({
                       )}
 
                     {/* CASE 3: Normal Pass/NG */}
-                    {!processAssignUserStage?.subSteps?.some(
-                      (s: any) => s.isPrinterEnable || s.isPackagingStatus,
-                    ) && (
-                      <div className="flex justify-center gap-4 p-6">
-                        <button
-                          className="flex items-center gap-2 rounded-lg bg-success px-4 py-2 text-white shadow hover:bg-green-500"
-                          onClick={() => handleUpdateStatus("Pass")}
-                        >
-                          <CheckCircle className="h-5 w-5" />
-                          Pass
-                        </button>
-                        <button
-                          className="hover:bg-red-600 flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-white shadow"
-                          onClick={() => handleUpdateStatus("NG")}
-                        >
-                          <XCircle className="h-5 w-5" />
-                          NG
-                        </button>
-                      </div>
-                    )}
+                    {isPassNGButtonShow &&
+                      !processAssignUserStage?.subSteps?.some(
+                        (s: any) => s.isPrinterEnable || s.isPackagingStatus,
+                      ) && (
+                        <div className="flex justify-center gap-4 p-6">
+                          <button
+                            className="flex items-center gap-2 rounded-lg bg-success px-4 py-2 text-white shadow hover:bg-green-500"
+                            onClick={() => handleUpdateStatus("Pass")}
+                          >
+                            <CheckCircle className="h-5 w-5" />
+                            Pass
+                          </button>
+                          <button
+                            className="hover:bg-red-600 flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-white shadow"
+                            onClick={() => handleUpdateStatus("NG")}
+                          >
+                            <XCircle className="h-5 w-5" />
+                            NG
+                          </button>
+                        </div>
+                      )}
                   </div>
                 </div>
               ) : (
@@ -983,53 +1004,57 @@ export default function DeviceTestComponent({
                 </table>
               </div>
             </div>
-            <div className="border-gray-200 rounded-xl border bg-white p-5 py-2 shadow-sm">
-              <h3 className="bg-gray-100 text-gray-700 sticky top-0 flex items-center justify-center gap-2 rounded-t-xl py-2 text-center text-sm font-bold">
-                <ListChecks className="h-4 w-4 text-indigo-600" />
-                Carton Details
-              </h3>
-              <div className="max-h-[247px] overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50 text-gray-600">
-                    <tr>
-                      <th className="px-2 py-1">Serial</th>
-                      <th className="px-2 py-1">Status</th>
-                      <th className="px-2 py-1">Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {processCartons.length > 0 ? (
-                      processCartons.map((row, rowIndex) => (
-                        <tr
-                          key={rowIndex}
-                          className="hover:bg-gray-50 border-t text-center"
-                        >
-                          <td className="px-2 py-1">{row?.cartonSerial}</td>
-                          <td className="px-2 py-1">{row?.status}</td>
-                          <td className="px-2 py-1">{row?.createdAt}</td>
-                        </tr>
-                      ))
-                    ) : (
+            {processAssignUserStage?.subSteps?.some(
+              (s: any) => s.isPackagingStatus,
+            ) && (
+              <div className="border-gray-200 rounded-xl border bg-white p-5 py-2 shadow-sm">
+                <h3 className="bg-gray-100 text-gray-700 sticky top-0 flex items-center justify-center gap-2 rounded-t-xl py-2 text-center text-sm font-bold">
+                  <ListChecks className="h-4 w-4 text-indigo-600" />
+                  Carton Details
+                </h3>
+                <div className="max-h-[247px] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-600">
                       <tr>
-                        <td colSpan="3" className="py-2 text-center">
-                          No Result Found
-                        </td>
+                        <th className="px-2 py-1">Serial</th>
+                        <th className="px-2 py-1">Status</th>
+                        <th className="px-2 py-1">Time</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-                {processCartons.length > 0 && (
-                  <div className="flex items-end justify-end py-2">
-                    <button
-                      className="flex items-center gap-2 rounded-lg bg-[#0FADCF] px-4 py-2 text-sm font-semibold text-white shadow"
-                      onClick={handleShiftToPDI}
-                    >
-                      Shift To PDI
-                    </button>
-                  </div>
-                )}
+                    </thead>
+                    <tbody>
+                      {processCartons.length > 0 ? (
+                        processCartons.map((row, rowIndex) => (
+                          <tr
+                            key={rowIndex}
+                            className="hover:bg-gray-50 border-t text-center"
+                          >
+                            <td className="px-2 py-1">{row?.cartonSerial}</td>
+                            <td className="px-2 py-1">{row?.status}</td>
+                            <td className="px-2 py-1">{row?.createdAt}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="3" className="py-2 text-center">
+                            No Result Found
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                  {processCartons.length > 0 && (
+                    <div className="flex items-end justify-end py-2">
+                      <button
+                        className="flex items-center gap-2 rounded-lg bg-[#0FADCF] px-4 py-2 text-sm font-semibold text-white shadow"
+                        onClick={handleShiftToPDI}
+                      >
+                        Shift To PDI
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
 
