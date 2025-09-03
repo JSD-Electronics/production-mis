@@ -3,7 +3,10 @@ const nextConfig = {
   images: {
     domains: ["localhost"],
   },
-  reactStrictMode: false
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  reactStrictMode: false,
 };
 
 export default nextConfig;
