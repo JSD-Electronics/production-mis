@@ -1373,7 +1373,7 @@ const EditPlanSchedule = () => {
                     </p>
                     <p>
                       Units Processed Per{" "}
-                      {shiftTime - selectedShift?.totalBreakTime / 60}-Hour Day:{" "}
+                      {(shiftTime - selectedShift?.totalBreakTime / 60).toFixed(2)}-Hour Day:{" "}
                       {totalUPHA || "Not calculated yet"}
                     </p>
                   </div>

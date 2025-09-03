@@ -29,6 +29,7 @@ const DraggableGridItem = ({
 
   const openModal = (stages: any) => {
     const requiredSkills = stages.map((stage) => {
+      console.log("stage ==>", stage);
       return stage.requiredSkill.toLowerCase().trim();
     });
     const assignedOperatorIds = Object.values(assignedOperators)

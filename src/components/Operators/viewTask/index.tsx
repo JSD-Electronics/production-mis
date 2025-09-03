@@ -135,7 +135,7 @@ const ViewTaskDetailsComponent = ({
       let result = await getDeviceTestByDeviceId(id);
       // return;
       if (result && result.status == 200) {
-        setDeviceHistory(result.data);
+          setDeviceHistory(result.data);
       } else {
         setDeviceHistory([]);
       }
@@ -336,6 +336,7 @@ const ViewTaskDetailsComponent = ({
       let result = await getPlaningAndSchedulingById(id);
       let user = JSON.parse(localStorage.getItem("userDetails"));
       let assignedTaskDetails = await getAssignedTask(user._id);
+      setAssignedTaskDetails(assignedTaskDetails);
       let assignOperator, assignStage;
       if (assignedTaskDetails.stageType == "common") {
         assignOperator = JSON.parse(result?.assignedCustomStagesOp);
@@ -392,20 +393,30 @@ const ViewTaskDetailsComponent = ({
       let deviceInfo = deviceList.filter(
         (device) => device.serialNo === searchResult,
       );
+      // Find current stage index
+      const stageData = Array.isArray(assignUserStage)
+        ? assignUserStage[0]
+        : assignUserStage;
 
       if (status === "Pass") {
+        setIsPassNGButtonShow(false);
         let formData1 = new FormData();
 
         // Find current stage index
         const currentIndex = processData?.stages?.findIndex(
-          (stage) => stage.stageName === assignUserStage?.name,
+          (stage) => stage.stageName === stageData?.name,
         );
+
+        // console.log("currentIndex ==>", currentIndex);
+        // return false;
 
         if (currentIndex !== -1) {
           const nextStage =
             currentIndex < processData?.stages?.length - 1
               ? processData?.stages[currentIndex + 1]
               : null;
+          // console.log("nextStage ==>", nextStage?.stageName);
+          // return;
 
           if (nextStage) {
             formData1.append("currentStage", nextStage?.stageName);
@@ -413,16 +424,12 @@ const ViewTaskDetailsComponent = ({
             const commonStages = processData?.commonStages || [];
             if (commonStages.length > 0) {
               formData1.append("currentStage", commonStages[0].stageName);
-              formData1.append(
-                "commonStages",
-                JSON.stringify(commonStages.map((cs) => cs.stageName)),
-              );
+              formData1.append("commonStages", JSON.stringify(commonStages.map((cs) => cs.stageName)));
             } else {
               formData1.append("currentStage", assignUserStage?.name);
             }
           }
         }
-
         // Update device stage
         await updateStageByDeviceId(deviceInfo[0]._id, formData1);
       }
@@ -443,7 +450,9 @@ const ViewTaskDetailsComponent = ({
         "seatNumber",
         operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber,
       );
-      formData.append("stageName", assignUserStage?.name);
+      // Append safely
+      formData.append("stageName", stageData?.name ?? "");
+
       formData.append("status", status);
       formData.append("timeConsumed", deviceDisplay);
 
@@ -454,7 +463,7 @@ const ViewTaskDetailsComponent = ({
           ...prev,
           {
             deviceInfo: deviceInfo[0],
-            stageName: assignUserStage?.name,
+            stageName: stageData?.name,
             status,
             timeTaken: deviceDisplay,
           },
@@ -748,9 +757,8 @@ const ViewTaskDetailsComponent = ({
     <div className="bg-gray-100 min-h-screen">
       {/* Header */}
       <div className="sticky top-0 z-10 flex items-center justify-between bg-white p-4 shadow-sm">
-        {console.log("product ==>", product)}
         <Breadcrumb
-          pageName={`${product?.name} - ${assignUserStage?.name ?? assignUserStage?.stage}`}
+          pageName={`${product?.name} - ${assignUserStage[0]?.name || assignUserStage?.stage || ""}`}
           parentName="Task Management"
         />
         {isDownTimeEnable && (
@@ -873,6 +881,7 @@ const ViewTaskDetailsComponent = ({
           isCartonBarcodePrinted={isCartonBarcodePrinted}
           setProcessCartons={setProcessCartons}
           processCartons={processCartons}
+          assignedTaskDetails={assignedTaskDetails}
         />
       ) : (
         <BasicInformation

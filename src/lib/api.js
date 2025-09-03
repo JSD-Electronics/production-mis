@@ -4,6 +4,10 @@ const api = axios.create({
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
+    "Cache-Control": "no-cache",
+    Pragma: "no-cache",
+    "If-None-Match": "",
+    "If-Modified-Since": "0",
   },
 });
 api.interceptors.request.use(
@@ -1223,22 +1227,22 @@ export const fetchCartonByProcessID = async (processID) => {
   } catch (error) {
     console.log("Error Fetching Carton By Process ID :", error.message);
   }
-}
+};
 export const fetchCartons = async (processID) => {
   try {
     let response = await api.get(`/cartons/${processID}`);
     return response.data;
   } catch (error) {
-    console.log("Error Fetxhing Cartons :", error.message );
+    console.log("Error Fetxhing Cartons :", error.message);
   }
-}
+};
 export const shiftToPDI = async (formData) => {
   try {
-    let response = await api.post(`cartons/shift-to-pdi`,formData);
+    let response = await api.post(`cartons/shift-to-pdi`, formData);
     return response.data;
   } catch (error) {
     console.log("Error Carton Shift To PDI :", error.message);
   }
-}
+};
 
 export default api;
