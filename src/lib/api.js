@@ -1244,5 +1244,21 @@ export const shiftToPDI = async (formData) => {
     console.log("Error Carton Shift To PDI :", error.message);
   }
 };
+export const shiftToNextCommonStage = async (processId, formData) => {
+  try {
+    let response = await api.post(`/cartons/${processId}/shift`, formData);
+    return response.data;
+  } catch (error) {
+    console.log("Error Carton Shift To Common Stage :", error.message);
+  }
+};
+export const getFGInventoryToShift = async () => {
+  try {
+    let result = await api.get(`/process/getFGInventory`);
+    return result.data;
+  } catch (error) {
+    console.error("Error Fetching FG Inventory", error.message);
+  }
+};
 
 export default api;
