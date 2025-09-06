@@ -399,7 +399,8 @@ const ViewTaskDetailsComponent = ({
         : assignUserStage;
 
       if (status === "Pass") {
-        setIsPassNGButtonShow(false);
+        // setIsPassNGButtonShow(false);
+        setIsStickerPrinted(false);
         let formData1 = new FormData();
 
         // Find current stage index
@@ -407,17 +408,11 @@ const ViewTaskDetailsComponent = ({
           (stage) => stage.stageName === stageData?.name,
         );
 
-        // console.log("currentIndex ==>", currentIndex);
-        // return false;
-
         if (currentIndex !== -1) {
           const nextStage =
             currentIndex < processData?.stages?.length - 1
               ? processData?.stages[currentIndex + 1]
               : null;
-          // console.log("nextStage ==>", nextStage?.stageName);
-          // return;
-
           if (nextStage) {
             formData1.append("currentStage", nextStage?.stageName);
           } else {
