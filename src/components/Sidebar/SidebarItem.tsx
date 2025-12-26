@@ -45,13 +45,22 @@ const SidebarItem = ({
           <Link
             href={item.route}
             onClick={handleClick}
-            className={`${isItemActive ? "bg-graydark dark:bg-meta-4" : ""} group relative flex items-center gap-2.5 rounded-sm px-4 py-2 font-medium text-bodydark1 duration-300 ease-in-out hover:bg-graydark dark:hover:bg-meta-4`}
+            className={`group relative flex items-center gap-2.5 rounded-lg px-4 py-2 font-medium duration-200 ease-in-out ${
+              isItemActive
+                ? "bg-white/10 text-white shadow-inner"
+                : "text-white/80 hover:bg-white/5 hover:text-white"
+            }`}
           >
+            <span
+              className={`absolute left-0 top-0 h-full w-1 rounded-r ${
+                isItemActive ? "bg-blue-500" : "bg-transparent group-hover:bg-blue-500/60"
+              }`}
+            />
             <SvgIcon svgString={item.icon} />
             {item.label}
             {item.children.length > 0 && (
               <svg
-                className={`absolute right-4 top-1/2 -translate-y-1/2 fill-current ${
+                className={`absolute right-4 top-1/2 -translate-y-1/2 fill-white/70 transition-transform ${
                   pageName === item.label.toLowerCase() && "rotate-180"
                 }`}
                 width="20"
@@ -72,7 +81,7 @@ const SidebarItem = ({
 
           {item.children.length > 0 && (
             <div
-              className={`translate transform overflow-hidden ${
+              className={`translate transform overflow-hidden pl-4 ${
                 pageName !== item.label.toLowerCase() && "hidden"
               }`}
             >

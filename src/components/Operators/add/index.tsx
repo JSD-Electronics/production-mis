@@ -3,8 +3,8 @@
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import DatePickerOne from "@/components/FormElements/DatePicker/DatePickerOne";
 import React, { useState } from "react";
-import Select from 'react-select';
-import { createUser, getUserType,getOperatorSkills } from "../../../lib/api";
+import Select from "react-select";
+import { createUser, getUserType, getOperatorSkills } from "../../../lib/api";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -53,7 +53,7 @@ const AddOperators = () => {
       ...provided,
       color: "#4F46E5",
       cursor: "pointer",
-      ':hover': {
+      ":hover": {
         backgroundColor: "#C7D2FE",
         color: "#1E3A8A",
       },
@@ -84,8 +84,8 @@ const AddOperators = () => {
     try {
       let result = await getOperatorSkills();
       let options = [];
-      result.skills.map((value,index) => {
-        options.push({value: value._id, label:value.name})
+      result.skills.map((value, index) => {
+        options.push({ value: value._id, label: value.name });
       });
       setSkillFieldData(options);
     } catch (error) {
@@ -133,8 +133,8 @@ const AddOperators = () => {
   };
   const handleChange = (selected) => {
     //setSkills(selected); // update local state
-     const selectedValues = selected ? selected.map((opt) => opt.label) : [];
-    console.log('Selected Values:', selectedValues);
+    const selectedValues = selected ? selected.map((opt) => opt.label) : [];
+    console.log("Selected Values:", selectedValues);
     setSkills(selectedValues);
   };
 
@@ -142,6 +142,195 @@ const AddOperators = () => {
     <>
       <Breadcrumb parentName="User Management" pageName="Add User" />
       <div className="grid gap-9">
+        <ToastContainer
+          position="top-center"
+          closeOnClick
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+        />
+
+        <div className="flex flex-col gap-9">
+          <div className="border-gray-200 dark:border-gray-700 rounded-2xl border bg-white shadow-xl dark:bg-boxdark">
+            {/* Header */}
+            <div className="border-gray-200 dark:border-gray-700 border-b px-8 py-5">
+              <h3 className="text-gray-900 text-lg font-semibold dark:text-white">
+                User Management
+              </h3>
+              <p className="text-gray-500 dark:text-gray-400 text-sm">
+                Add or update user details with required fields
+              </p>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="space-y-8 px-8 py-6">
+              {/* Basic Info */}
+              <div className="grid gap-6 sm:grid-cols-2">
+                {/* Name */}
+                <div>
+                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                    Name
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Enter full name"
+                    className="border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-800 w-full rounded-lg border px-4 py-3 text-sm focus:border-primary focus:ring focus:ring-primary/30 dark:text-white"
+                  />
+                </div>
+
+                {/* Employee Code */}
+                <div>
+                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                    Employee Code
+                  </label>
+                  <input
+                    type="text"
+                    value={employeeCode}
+                    onChange={(e) => setEmployeeCode(e.target.value)}
+                    placeholder="Enter employee code"
+                    className="border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-800 w-full rounded-lg border px-4 py-3 text-sm focus:border-primary focus:ring focus:ring-primary/30 dark:text-white"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter email address"
+                    className="border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-800 w-full rounded-lg border px-4 py-3 text-sm focus:border-primary focus:ring focus:ring-primary/30 dark:text-white"
+                  />
+                </div>
+
+                {/* Password */}
+                <div>
+                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
+                    className="border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-800 w-full rounded-lg border px-4 py-3 text-sm focus:border-primary focus:ring focus:ring-primary/30 dark:text-white"
+                  />
+                </div>
+
+                {/* Date of Birth */}
+                <div>
+                  <DatePickerOne
+                    formLabel="Date Of Birth"
+                    name="dateOfBirth"
+                    id="dateOfBirth"
+                    value={dateOfBirth}
+                    setValue={setDateOfBirth}
+                  />
+                </div>
+
+                {/* Gender */}
+                <div>
+                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                    Gender
+                  </label>
+                  <select
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-800 w-full rounded-lg border px-4 py-3 text-sm focus:border-primary focus:ring focus:ring-primary/30 dark:text-white"
+                  >
+                    <option value="">Select gender</option>
+                    <option value="M">Male</option>
+                    <option value="F">Female</option>
+                  </select>
+                </div>
+
+                {/* User Type */}
+                <div>
+                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                    User Type
+                  </label>
+                  <select
+                    value={userType}
+                    onChange={(e) => setUserType(e.target.value)}
+                    className="border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-800 w-full rounded-lg border px-4 py-3 text-sm focus:border-primary focus:ring focus:ring-primary/30 dark:text-white"
+                  >
+                    <option value="">Select user type</option>
+                    {userRoles.map((userRole, index) => (
+                      <option key={index} value={userRole?.name}>
+                        {userRole?.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Skills Section */}
+              <div className="space-y-4">
+                <label className="text-gray-700 dark:text-gray-300 block text-sm font-medium">
+                  Skills
+                </label>
+                <Select
+                  options={skillData}
+                  isMulti
+                  styles={customStyles}
+                  onChange={handleChange}
+                  className="basic-multi-select w-full"
+                  classNamePrefix="select"
+                  placeholder="Select skills..."
+                />
+
+                {/* Skills Set */}
+                <div className="border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-800 rounded-lg border p-4">
+                  <h4 className="text-gray-700 dark:text-gray-300 mb-3 text-sm font-medium">
+                    Selected Skills
+                  </h4>
+                  <ul className="space-y-2">
+                    {skills.map((skill, index) => (
+                      <li
+                        key={index}
+                        className="dark:bg-gray-700 flex items-center justify-between rounded-md bg-white px-3 py-2 shadow-sm"
+                      >
+                        <span className="text-gray-800 dark:text-gray-200 text-sm">
+                          {skill}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSkill(index)}
+                          className="bg-danger hover:bg-danger rounded px-2 py-1 text-xs text-white"
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                    {skills.length === 0 && (
+                      <p className="text-gray-500 dark:text-gray-400 text-center text-sm">
+                        No skills added yet.
+                      </p>
+                    )}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Submit */}
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  className="rounded-lg bg-green-600 px-6 py-2 text-sm font-medium text-white shadow hover:bg-green-700"
+                >
+                  Save User
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {/* <div className="grid gap-9">
         <ToastContainer
           position="top-center"
           closeOnClick
@@ -158,7 +347,6 @@ const AddOperators = () => {
             </div>
             <form onSubmit={handleSubmit}>
               <div className="grid gap-6 px-8 pr-8 pt-4 sm:grid-cols-2">
-                {/* Operator Name Field */}
                 <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -173,7 +361,6 @@ const AddOperators = () => {
                     />
                   </div>
                 </div>
-                {/* Employee Code Field */}
                 <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -188,7 +375,6 @@ const AddOperators = () => {
                     />
                   </div>
                 </div>
-                {/* Email Address Field */}
                 <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -203,7 +389,6 @@ const AddOperators = () => {
                     />
                   </div>
                 </div>
-                {/* Password Field */}
                 <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -218,7 +403,6 @@ const AddOperators = () => {
                     />
                   </div>
                 </div>
-                {/* Date of Birth Field */}
                 <div className="space-x-4">
                   <DatePickerOne
                     formLabel="Date Of Birth"
@@ -228,22 +412,6 @@ const AddOperators = () => {
                     setValue={setDateOfBirth}
                   />
                 </div>
-                {/* Phone Number Field */}
-                {/* <div className="space-x-4">
-                  <div>
-                    <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                      Phone Number
-                    </label>
-                    <input
-                      type="text"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="Enter Phone Number"
-                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                    />
-                  </div>
-                </div> */}
-                {/* Gender Field */}
                 <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -259,7 +427,6 @@ const AddOperators = () => {
                     </select>
                   </div>
                 </div>
-                {/* User Type Field */}
                 <div className="space-x-4">
                   <div>
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -293,68 +460,13 @@ const AddOperators = () => {
                       options={skillData}
                       isMulti
                       styles={customStyles}
-                      // value={newSkill}
                       onChange={handleChange}
                       className="basic-multi-select w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
                       classNamePrefix="select"
                       placeholder="Select Skills"
                     />
-                    {/* <select
-                      // onChange={(e) => {
-                      //   handleStageChange(index, e, "requiredSkill");
-                      // }}
-                      className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
-                    >
-                      <option value="" className="text-body dark:text-bodydark">
-                        Please Select
-                      </option>
-                      {skillData.map((skill, index) => (
-                        <option
-                          key={index}
-                          value={skill?.name}
-                          className="text-body dark:text-bodydark"
-                          // disabled={skills.includes(skill?.name) ? true : false}
-                        >
-                          {skill?.name}
-                        </option>
-                      ))}
-                    </select> */}
-                    {/* <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newSkill}
-                        onChange={(e) => setNewSkill(e.target.value)}
-                        placeholder="Enter a skill"
-                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddSkill}
-                        className="rounded-md bg-blue-700 px-4 py-2 text-white transition hover:bg-blue-600"
-                      >
-                        <svg
-                          fill="#ffffff"
-                          version="1.1"
-                          id="Capa_1"
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="20px"
-                          height="20px"
-                          viewBox="0 0 45.402 45.402"
-                        >
-                          <g>
-                            <path
-                              d="M41.267,18.557H26.832V4.134C26.832,1.851,24.99,0,22.707,0c-2.283,0-4.124,1.851-4.124,4.135v14.432H4.141
-                            c-2.283,0-4.139,1.851-4.138,4.135c-0.001,1.141,0.46,2.187,1.207,2.934c0.748,0.749,1.78,1.222,2.92,1.222h14.453V41.27
-                            c0,1.142,0.453,2.176,1.201,2.922c0.748,0.748,1.777,1.211,2.919,1.211c2.282,0,4.129-1.851,4.129-4.133V26.857h14.435
-                            c2.283,0,4.134-1.867,4.133-4.15C45.399,20.425,43.548,18.557,41.267,18.557z"
-                            />
-                          </g>
-                        </svg>
-                      </button>
-                    </div> */}
                   </div>
                 </div>
-                {/* Skills Input Section */}
                 <div className="space-x-4">
                   <div className="border-gray-300 bg-gray-50 dark:bg-gray-800 items-center justify-between rounded-lg border px-4 py-2 shadow-sm transition dark:border-strokedark">
                     <label className="mb-3 block text-sm font-medium text-black dark:text-white">
@@ -401,7 +513,6 @@ const AddOperators = () => {
                   </div>
                 </div>
               </div>
-              {/* Submit Button */}
               <div className="col-span-2 flex justify-end p-8 pr-8">
                 <button
                   type="submit"
@@ -413,7 +524,7 @@ const AddOperators = () => {
             </form>
           </div>
         </div>
-      </div>
+      </div> */}
     </>
   );
 };

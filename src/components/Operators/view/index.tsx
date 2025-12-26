@@ -142,11 +142,6 @@ const ViewOperator = () => {
       sortable: true,
     },
     {
-      name: "Phone Number",
-      selector: (row: Stages) => row?.phoneNumber,
-      sortable: true,
-    },
-    {
       name: "Created At",
       selector: (row: Stages) => new Date(row.createdAt).toLocaleDateString(),
       sortable: true,

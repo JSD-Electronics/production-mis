@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { useDrag, useDrop } from "react-dnd";
 import Modal from "@/components/Modal/page";
-import { getUpdateStatus } from "@/lib/api";
+import { getUpdateStatus,fetchJigsById} from "@/lib/api";
 const DraggableGridItem = ({
   item,
   rowIndex,
@@ -22,7 +22,6 @@ const DraggableGridItem = ({
   setAssignedJigs,
   assignedJigs,
   jigCategories,
-  fetchJigsById,
   handlePlaningSubmit,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -33,13 +32,17 @@ const DraggableGridItem = ({
     const requiredSkills = stages.map((stage) =>
       stage.requiredSkill.toLowerCase().trim(),
     );
-    const assignedOperatorIds = Object.values(assignedOperators)
-    .flat()
-    .map((operator) => operator._id);
+    console.log("requiredSkills ==>", requiredSkills);
+    const assignedOperatorIds = Object.values(assignedOperators || {})
+      .flat()
+      .filter((operator) => operator && operator._id) // only valid ones
+      .map((operator) => operator._id);
+    console.log("assignedOperatorIds ==>", assignedOperatorIds);
     const compatibleOperators = operators.filter((operator) => {
       const normalizedSkills = operator.skills.map((skill) =>
         skill.toLowerCase().trim(),
       );
+
       const hasAllSkills = requiredSkills.every((skill) =>
         normalizedSkills.includes(skill),
       );

@@ -14,6 +14,20 @@ import {
   viewJigCategory,
   getDeviceTestRecordsByProcessId,
 } from "@/lib/api";
+import {
+  FiClipboard,
+  FiTag,
+  FiClock,
+  FiHash,
+  FiLayers,
+  FiBox,
+  FiCalendar,
+  FiInfo,
+  FiPackage,
+  FiArchive,
+  FiTrendingUp,
+} from "react-icons/fi";
+import { FiUsers, FiActivity, FiCheckCircle, FiXCircle } from "react-icons/fi";
 import { formatDate } from "@/lib/common";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -92,107 +106,97 @@ const DraggableGridItem = ({
           ? !assignedStages[coordinates][0]?.reserved
             ? "border-green-500 bg-green-200 shadow-xl"
             : "border-danger bg-[#fbc0c0] shadow-xl"
-          : "border-gray-300 bg-white hover:shadow-lg"
+          : "hidden"
       }`}
       title={
-        assignedStages[coordinates] && assignedStages[coordinates].length > 0
-          ? assignedStages[coordinates].join(",")
-          : "Drop Stage Here"
+        assignedStages[coordinates] &&
+        assignedStages[coordinates].length > 0 &&
+        assignedStages[coordinates].map((stage: any) => stage.name).join(", ")
       }
     >
+      {/* Seat Number */}
       <span className="text-gray-800 flex items-center justify-between text-xs font-bold">
-        <p className="text-sm"> S{item.seatNumber} </p>
+        <p className="text-sm">S{item.seatNumber}</p>
       </span>
-      {assignedStages[coordinates] && assignedStages[coordinates].length > 0 ? (
-        <div className="mt-1">
-          <div>
-            {assignedStages[coordinates].map((stage: any, stageIndex: any) => (
-              <div key={stageIndex}>
-                <div className="flex items-center justify-between">
-                  <strong className="text-gray-900 text-xs">
-                    {stage.name}
-                    {stage.name == "Reserved" && (
-                      <>
-                        <p>Process Name : {stage?.processName}</p>
-                        <p>Process Id : {stage?.pId}</p>
-                      </>
-                    )}
-                    {stage.name != "Reserved" && (
-                      <>
-                        <p>UPH Target:{stage.upha}</p>
-                        <p>Achieved UPH:</p>
-                        <div className="my-2">
-                          <div>
-                            {stage?.totalUPHA != null &&
-                            stage?.totalUPHA != undefined ? (
-                              <p>WIP : {String(stage?.totalUPHA ?? "N/A")}</p>
-                            ) : null}
-                          </div>
-                          <div>
-                            <p>Pass : {stage.passedDevice || 0}</p>
-                            <p>NG : {stage.ngDevice || 0}</p>
-                            <p>
-                              Status : {""}
-                              <span
-                                className={
-                                  assignedStages &&
-                                  selectedProcess?.quantity >
-                                    assignedStages[coordinates]?.[0]?.totalUPHA
-                                    ? assignedStages &&
-                                      assignedStages[coordinates]?.[0]
-                                        ?.totalUPHA > 0
-                                      ? "font-semibold text-orange-500"
-                                      : "font-semibold text-danger"
-                                    : "font-semibold text-green-600"
-                                }
-                              >
-                                {selectedProcess?.quantity > stage?.totalUPHA
-                                  ? stage?.totalUPHA > 0
-                                    ? "Active"
-                                    : "Downtime"
-                                  : "Completed"}
-                              </span>
-                            </p>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </strong>
-                </div>
-                {assignedOperators[`${rowIndex}-${seatIndex}`]?.map(
-                  (operator: any, index1: number) => (
-                    <p
-                      key={`${rowIndex}-${seatIndex}-${operator._id || index1}`}
-                      className="flex items-center justify-end pr-1 text-xs"
-                    >
-                      <span>
-                        <strong>Operator : </strong>
-                        {operator.name}{" "}
-                      </span>
-                    </p>
-                  ),
-                )}
-                {assignedJigs[coordinates] &&
-                  assignedJigs[`${rowIndex}-${seatIndex}`]?.map(
-                    (jig: any, index: any) => (
-                      <p
-                        key={index}
-                        className="flex items-center justify-end text-xs"
-                      >
-                        <span>
-                          <strong>Jig : </strong>
-                          {jig?.name}{" "}
-                        </span>
-                      </p>
-                    ),
+
+      {/* Assigned Stages */}
+      <div className="mt-1">
+        {assignedStages[coordinates] &&
+          assignedStages[coordinates].length > 0 &&
+          assignedStages[coordinates].map((stage: any, stageIndex: number) => (
+            <div key={stageIndex}>
+              <div className="flex items-center justify-between">
+                <strong className="text-gray-900 text-xs">
+                  {stage.name}
+                  {stage.name === "Reserved" ? (
+                    <>
+                      <p>Process Name : {stage?.processName}</p>
+                      <p>Process Id : {stage?.pId}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p>UPH Target: {stage.upha}</p>
+                      <p>Achieved UPH:</p>
+                      <div className="my-2">
+                        {stage?.totalUPHA != null && (
+                          <p>WIP : {String(stage?.totalUPHA)}</p>
+                        )}
+                        <p>Pass : {stage.passedDevice || 0}</p>
+                        <p>NG : {stage.ngDevice || 0}</p>
+                        <p>
+                          Status :{" "}
+                          <span
+                            className={
+                              selectedProcess?.quantity > stage?.totalUPHA
+                                ? stage?.totalUPHA > 0
+                                  ? "font-semibold text-orange-500"
+                                  : "font-semibold text-danger"
+                                : "font-semibold text-green-600"
+                            }
+                          >
+                            {selectedProcess?.quantity > stage?.totalUPHA
+                              ? stage?.totalUPHA > 0
+                                ? "Active"
+                                : "Downtime"
+                              : "Completed"}
+                          </span>
+                        </p>
+                      </div>
+                    </>
                   )}
+                </strong>
               </div>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <span className="text-gray-500 text-sm italic">No Stage Assigned</span>
-      )}
+
+              {/* Assigned Operators */}
+              {assignedOperators[coordinates]?.map(
+                (operator: any, index1: number) => (
+                  <p
+                    key={`${coordinates}-${operator._id || index1}`}
+                    className="flex items-center justify-end pr-1 text-xs"
+                  >
+                    <span>
+                      <strong>Operator : </strong>
+                      {operator.name}
+                    </span>
+                  </p>
+                ),
+              )}
+
+              {/* Assigned Jigs */}
+              {assignedJigs[coordinates]?.map((jig: any, index: number) => (
+                <p
+                  key={index}
+                  className="flex items-center justify-end text-xs"
+                >
+                  <span>
+                    <strong>Jig : </strong>
+                    {jig?.name}
+                  </span>
+                </p>
+              ))}
+            </div>
+          ))}
+      </div>
     </div>
   );
 };
@@ -286,7 +290,7 @@ const ViewPlanSchedule = () => {
     getPlaningById(id);
   }, [loading]);
   const assignedStageKeys = Object.keys(assignedStages || {}).filter(
-    (key) => assignedStages[key][0].name !== "Reserved"
+    (key) => assignedStages[key][0].name !== "Reserved",
   );
   const stages = selectedProcess?.stages || [];
   const stageLength = stages.length;
@@ -345,7 +349,6 @@ const ViewPlanSchedule = () => {
     }
     return intervals;
   };
-  // Helper to convert "HH:mm" to Date
   const toDate = (timeStr) => {
     const [hours, minutes] = timeStr.split(":").map(Number);
     const date = new Date();
@@ -394,20 +397,28 @@ const ViewPlanSchedule = () => {
       const Shift = shifts.find(
         (value) => value?._id === result?.selectedShift,
       );
-      let deviceTestEntry = await getDeviceTestRecordsByProcessId(result.selectedProcess);
+      let deviceTestEntry = await getDeviceTestRecordsByProcessId(
+        result.selectedProcess,
+      );
       let deviceTests = deviceTestEntry?.deviceTestRecords;
-      
+
       if (singleProcess?.selectedProduct) {
         processData = await getProductById(singleProcess?.selectedProduct);
       }
-      const stageHeaders = processData?.product?.stages?.map((stage) =>
-        stage?.stageName?.trim(),
-      ) || [];
-      const totalHours = calculateWorkingHours(result.startTime,result.endTime,result.totalBreakTime);
-      const stageUPHMap = processData?.product?.stages?.reduce((acc, stage) => {
-        acc[stage.stageName] = stage.upha || 0;
-        return acc;
-      }, {}) || {};
+      const stageHeaders =
+        processData?.product?.stages?.map((stage) =>
+          stage?.stageName?.trim(),
+        ) || [];
+      const totalHours = calculateWorkingHours(
+        result.startTime,
+        result.endTime,
+        result.totalBreakTime,
+      );
+      const stageUPHMap =
+        processData?.product?.stages?.reduce((acc, stage) => {
+          acc[stage.stageName] = stage.upha || 0;
+          return acc;
+        }, {}) || {};
       const tableData = Array.from({ length: totalHours }, (_, i) => ({
         hour: `${i + 1}${i === 0 ? "st" : i === 1 ? "nd" : i === 2 ? "rd" : "th"} Hour`,
         values: stageHeaders.map((stage) => ({
@@ -419,8 +430,12 @@ const ViewPlanSchedule = () => {
         status: "future",
       }));
       const now = new Date();
-      const [startHour, startMin] = result?.ProcessShiftMappings?.startTime.split(":").map(Number);
-      const [endHour, endMin] = result?.ProcessShiftMappings?.endTime.split(":").map(Number);
+      const [startHour, startMin] = result?.ProcessShiftMappings?.startTime
+        .split(":")
+        .map(Number);
+      const [endHour, endMin] = result?.ProcessShiftMappings?.endTime
+        .split(":")
+        .map(Number);
       const shiftStart = new Date(now);
       shiftStart.setHours(startHour, startMin, 0, 0);
 
@@ -532,10 +547,10 @@ const ViewPlanSchedule = () => {
       setStartDate(formatDate(result?.startDate));
 
       setAssignedOperators(JSON.parse(result?.assignedOperators));
-      if(result?.assignedCustomStages){
+      if (result?.assignedCustomStages) {
         setAssignedCustomStages(JSON.parse(result?.assignedCustomStages));
       }
-      if(result?.assignedCustomStagesOp){
+      if (result?.assignedCustomStagesOp) {
         setAssignedCustomOperators(JSON.parse(result?.assignedCustomStagesOp));
       }
       setAssignedJigs(JSON.parse(result?.assignedJigs));
@@ -1111,7 +1126,9 @@ const ViewPlanSchedule = () => {
       (value) => value?._id === planData?.selectedProcess,
     );
 
-    const deviceTestEntry = await getDeviceTestRecordsByProcessId(planData.selectedProcess);
+    const deviceTestEntry = await getDeviceTestRecordsByProcessId(
+      planData.selectedProcess,
+    );
     const deviceTests = deviceTestEntry?.deviceTestRecords || [];
 
     if (singleProcess?.selectedProduct) {
@@ -1271,10 +1288,13 @@ const ViewPlanSchedule = () => {
       <div className="container mx-auto grid grid-cols-1 gap-9 p-6 sm:grid-cols-1">
         <div className="flex flex-col gap-9">
           <div className="rounded-lg border border-stroke bg-white p-6 shadow-lg dark:border-strokedark dark:bg-boxdark">
-            <div className="flex items-center justify-between border-b border-stroke px-6 py-4 dark:border-strokedark">
+            <div className="flex flex-wrap items-center justify-between border-b border-stroke px-2 py-4 dark:border-strokedark">
+              {/* Title */}
               <h3 className="text-xl font-semibold text-black dark:text-white">
                 View Planning
               </h3>
+
+              {/* Status Message */}
               {downTimeval &&
                 (() => {
                   const currentDate = new Date();
@@ -1287,388 +1307,368 @@ const ViewPlanSchedule = () => {
                   return (
                     downTimeFrom <= currentDate &&
                     currentDate <= downTimeTo &&
-                    selectedProcess.status != "completed"
+                    selectedProcess.status !== "completed"
                   );
                 })() && (
-                  <p className="text-danger">
-                    On Hold : ( {downTimeval?.downTimeFrom} -{" "}
-                    {downTimeval?.downTimeTo} ) Due to{" "}
-                    {downTimeval?.downTimeDesc}
-                  </p>
+                  <div className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-md px-3 py-1 text-sm font-medium">
+                    ⏸ On Hold (
+                    {new Date(downTimeval?.downTimeFrom).toLocaleDateString()} –{" "}
+                    {new Date(downTimeval?.downTimeTo).toLocaleDateString()}) ·
+                    Reason: {downTimeval?.downTimeDesc}
+                  </div>
                 )}
-              {selectedProcess?.status != "completed" ? (
-                <div className="flex gap-2">
+
+              {/* Actions */}
+              {selectedProcess?.status !== "completed" ? (
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    className="flex items-center justify-center gap-2 rounded-lg bg-primary px-2 py-2 text-sm  text-white"
-                    onClick={() => handleDeviceSerialNo()}
+                    onClick={handleDeviceSerialNo}
+                    className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white shadow-md transition hover:bg-primary/90"
                   >
-                    <FiCodepen />
-                    Generate Device Serials
+                    <FiCodepen size={16} />
+                    Generate Serials
                   </button>
                   <button
-                    className="flex items-center justify-center gap-2 rounded-lg bg-primary px-2 py-2 text-sm  text-white"
-                    onClick={() => handleEditPlaning()}
+                    onClick={handleEditPlaning}
+                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-md transition hover:bg-blue-700"
                   >
-                    <FiEdit fontSize={"16"} />
+                    <FiEdit size={16} />
+                    Edit Planning
                   </button>
                 </div>
               ) : (
-                <button className="flex items-center justify-center gap-2 rounded-lg bg-green-700 px-2 py-2 text-sm  text-white">
-                  Complete
-                </button>
+                <span className="rounded-lg bg-green-100 px-3 py-1 text-sm font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                  ✅ Completed
+                </span>
               )}
             </div>
             <form action="#">
               <div className="p-6">
-                <div className="dark:bg-gray-800 mt-2 rounded-lg bg-white pb-5">
-                  <div className="flex w-full items-center justify-between">
-                    <h3 className="text-gray-900 mb-4 text-2xl font-semibold dark:text-white">
-                      {selectedProcess?.name}
+                <div className="space-y-6">
+                  {/* Process Info */}
+                  <div className="dark:bg-gray-800 rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-md">
+                    <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-blue-600 dark:text-blue-400">
+                      <FiClipboard /> Process Details
                     </h3>
-                  </div>
-                  <div className="grid sm:grid-cols-2">
-                    <div className="text-gray-700 dark:text-gray-300 mb-2">
-                      <strong className="font-medium">Product Name:</strong>{" "}
-                      {productName}
-                    </div>
-                    <div className="text-gray-700 dark:text-gray-300 mb-2">
-                      <strong className="font-medium">Shift :</strong>{" "}
-                      {shiftChangedFromDate ? (
-                        <span>
-                          {selectedShift?.name} ({startTime} - {endTime})
-                        </span>
-                      ) : (
-                        selectedShift && (
-                          <span>
-                            {selectedShift?.name} ({selectedShift?.startTime} -{" "}
-                            {selectedShift?.endTime})
-                          </span>
-                        )
-                      )}
-                    </div>
-                    <div className="text-gray-700 dark:text-gray-300 mb-2">
-                      <strong className="font-medium">Break Time :</strong>{" "}
-                      {selectedShift && (
-                        <span>{selectedShift?.totalBreakTime} Minutes</span>
-                      )}
-                    </div>
-                    <div className="text-gray-700 dark:text-gray-300 mb-2">
-                      <strong className="font-medium">
-                        Order Confirmation No:
-                      </strong>{" "}
-                      {selectedProcess?.orderConfirmationNo}
-                    </div>
-                    <div className="text-gray-700 dark:text-gray-300 mb-2">
-                      <strong className="font-medium">Process ID:</strong>{" "}
-                      {selectedProcess?.processID}
-                    </div>
-                    <div className="text-gray-700 dark:text-gray-300 mb-2">
-                      <strong className="font-medium">Quantity:</strong>{" "}
-                      {selectedProcess?.quantity}
-                    </div>
-                    <div className="text-gray-700 dark:text-gray-300">
-                      <strong className="font-medium">Shift Days:</strong>{" "}
-                      {selectedShift &&
-                        Object.keys(selectedShift.weekDays)
+                    <div className="text-gray-700 dark:text-gray-300 grid gap-2 text-sm sm:grid-cols-2">
+                      <div>
+                        <FiTag className="inline text-primary" />{" "}
+                        <strong>Product:</strong> {productName}
+                      </div>
+                      <div>
+                        <FiClock className="inline text-primary" />{" "}
+                        <strong>Shift:</strong>{" "}
+                        {shiftChangedFromDate
+                          ? `${selectedShift?.name} (${startTime} - ${endTime})`
+                          : `${selectedShift?.name} (${selectedShift?.startTime} - ${selectedShift?.endTime})`}
+                      </div>
+                      <div>
+                        <FiClock className="inline text-yellow-500" />{" "}
+                        <strong>Break:</strong> {selectedShift?.totalBreakTime}{" "}
+                        min
+                      </div>
+                      <div>
+                        <FiHash className="inline text-green-500" />{" "}
+                        <strong>Order No:</strong>{" "}
+                        {selectedProcess?.orderConfirmationNo}
+                      </div>
+                      <div>
+                        <FiLayers className="inline text-indigo-500" />{" "}
+                        <strong>Process ID:</strong>{" "}
+                        {selectedProcess?.processID}
+                      </div>
+                      <div>
+                        <FiBox className="inline text-pink-500" />{" "}
+                        <strong>Qty:</strong> {selectedProcess?.quantity}
+                      </div>
+                      <div className="sm:col-span-2">
+                        <FiCalendar className="text-red-500 inline" />{" "}
+                        <strong>Shift Days:</strong>{" "}
+                        {Object.keys(selectedShift?.weekDays || {})
                           .filter(
-                            (day) =>
-                              day !== "_id" && selectedShift.weekDays[day],
+                            (d) => d !== "_id" && selectedShift?.weekDays[d],
                           )
-                          .map((day) => (
-                            <span key={day}>
-                              {day}
-                              {", "}
-                            </span>
-                          ))}
-                    </div>
-                    <div className="text-gray-700 dark:text-gray-300">
-                      <strong className="font-medium">Description:</strong>{" "}
-                      {selectedProcess?.descripition}
+                          .join(", ")}
+                      </div>
+                      <div className="sm:col-span-2">
+                        <FiInfo className="inline text-blue-400" />{" "}
+                        <strong>Description:</strong>{" "}
+                        {selectedProcess?.descripition}
+                      </div>
                     </div>
                   </div>
-                </div>
-                {inventoryData && (
-                  <>
-                    <div className="dark:bg-gray-800 mt-3 rounded-lg bg-white pb-5">
-                      <h3 className="text-gray-900 text-md mb-4 font-semibold dark:text-white">
-                        Kit
+
+                  {/* Kits */}
+                  {inventoryData && (
+                    <div className="dark:bg-gray-800 rounded-lg border-l-4 border-green-500 bg-white p-4 shadow-md">
+                      <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-green-600 dark:text-green-400">
+                        <FiPackage /> Kits
                       </h3>
-                      <div className="grid sm:grid-cols-2">
-                        <div className="text-gray-700 dark:text-gray-300 mb-2">
-                          <strong className="font-medium">
-                            Required kits:
-                          </strong>{" "}
-                          {selectedProcess?.quantity}
+                      <div className="text-gray-700 dark:text-gray-300 grid gap-3 text-sm sm:grid-cols-3">
+                        <div>
+                          <strong>Required:</strong> {selectedProcess?.quantity}
                         </div>
-                        <div className="text-gray-700 dark:text-gray-300 mb-2">
-                          <strong className="font-medium">
-                            Available kits :
-                          </strong>{" "}
-                          {inventoryData?.quantity}
+                        <div>
+                          <strong>Available:</strong> {inventoryData?.quantity}
                         </div>
-                        <div className="text-gray-700 dark:text-gray-300 mb-2">
-                          <strong className="font-medium">
-                            Kits Shortage :
-                          </strong>{" "}
-                          {selectedProcess?.issuedKits <
-                          selectedProcess?.quantity
-                            ? Math.abs(
-                                selectedProcess?.issuedKits -
-                                  selectedProcess?.quantity,
-                              )
-                            : 0}
+                        <div>
+                          <strong>Issued:</strong> {selectedProcess?.issuedKits}
                         </div>
-                        <div className="text-gray-700 dark:text-gray-300 mb-2">
-                          <strong className="font-medium">
-                            Surplus Kits :
-                          </strong>{" "}
-                          {selectedProcess?.issuedKits >
-                          selectedProcess?.quantity
-                            ? Math.abs(
-                                selectedProcess?.issuedKits -
-                                  selectedProcess?.quantity,
-                              )
-                            : 0}
+                        <div className="flex items-center gap-2">
+                          <span className="bg-red-100 text-red-600 rounded-full px-2 py-0.5 text-xs font-medium">
+                            Short:{" "}
+                            {Math.max(
+                              0,
+                              selectedProcess?.quantity -
+                                selectedProcess?.issuedKits,
+                            )}
+                          </span>
                         </div>
-                        <div className="text-gray-700 dark:text-gray-300 mb-2">
-                          <strong className="font-medium">Issued Kits :</strong>{" "}
-                          {selectedProcess?.issuedKits >
-                          selectedProcess?.quantity
-                            ? Math.abs(
-                                selectedProcess?.quantity -
-                                  selectedProcess?.issuedKits,
-                              )
-                            : selectedProcess?.issuedKits}
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
+                            Surplus:{" "}
+                            {Math.max(
+                              0,
+                              selectedProcess?.issuedKits -
+                                selectedProcess?.quantity,
+                            )}
+                          </span>
                         </div>
-                        <div className="text-gray-700 dark:text-gray-300 mb-2">
-                          <strong className="font-medium">Total Kits :</strong>{" "}
+                        <div>
+                          <strong>Total:</strong>{" "}
                           {inventoryData?.quantity +
                             selectedProcess?.issuedKits}
                         </div>
                       </div>
-                      {packagingData.length > 0 &&
-                        packagingData[0].packagingData.packagingType ==
-                          "Carton" && (
-                          <div className="dark:bg-gray-800 mt-3 rounded-lg bg-white pb-5">
-                            <h3 className="text-gray-900 text-md mb-4 font-semibold dark:text-white">
-                              Cartons
-                            </h3>
-                            <div className="grid sm:grid-cols-2">
-                              <div className="text-gray-700 dark:text-gray-300 mb-2">
-                                <strong className="font-medium">
-                                  Cartons Required :
-                                </strong>{" "}
-                                {selectedProcess?.quantity /
-                                  packagingData[0].packagingData.maxCapacity}
-                              </div>
-                              <div className="text-gray-700 dark:text-gray-300 mb-2">
-                                <strong className="font-medium">
-                                  Cartons Available :
-                                </strong>{" "}
-                                {selectedProcess?.issuedCartons}
-                              </div>
-                              <div className="text-gray-700 dark:text-gray-300 mb-2">
-                                <strong className="font-medium">
-                                  Carton shortage :
-                                </strong>{" "}
-                                {selectedProcess?.issuedCartons <
-                                selectedProcess?.quantity /
-                                  packagingData[0].packagingData.maxCapacity
-                                  ? Math.abs(
-                                      selectedProcess?.quantity /
-                                        packagingData[0].packagingData
-                                          .maxCapacity -
-                                        selectedProcess?.issuedCartons,
-                                    )
-                                  : 0}
-                              </div>
-                              <div className="text-gray-700 dark:text-gray-300 mb-2">
-                                <strong className="font-medium">
-                                  Carton surplus :
-                                </strong>{" "}
-                                {selectedProcess?.issuedCartons >
-                                selectedProcess?.quantity /
-                                  packagingData[0].packagingData.maxCapacity
-                                  ? Math.abs(
-                                      selectedProcess?.issuedCartons -
-                                        selectedProcess?.quantity /
-                                          packagingData[0].packagingData
-                                            .maxCapacity,
-                                    ).toFixed(2)
-                                  : 0}
-                              </div>
-                              <div className="text-gray-700 dark:text-gray-300 mb-2">
-                                <strong className="font-medium">
-                                  Cartons Dimension :
-                                </strong>{" "}
-                                ({packagingData[0].packagingData.cartonWidth} x{" "}
-                                {packagingData[0].packagingData.cartonHeight})
-                              </div>
-                            </div>
+                    </div>
+                  )}
+
+                  {/* Cartons */}
+                  {packagingData.length > 0 &&
+                    packagingData[0].packagingData.packagingType ===
+                      "Carton" && (
+                      <div className="dark:bg-gray-800 rounded-lg border-l-4 border-orange-500 bg-white p-4 shadow-md">
+                        <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-orange-600 dark:text-orange-400">
+                          <FiArchive /> Cartons
+                        </h3>
+                        <div className="text-gray-700 dark:text-gray-300 grid gap-3 text-sm sm:grid-cols-3">
+                          <div>
+                            <strong>Required:</strong>{" "}
+                            {(
+                              selectedProcess?.quantity /
+                              packagingData[0].packagingData.maxCapacity
+                            ).toFixed(0)}
                           </div>
-                        )}
-                    </div>
-                  </>
-                )}
-                <div className="mb-2 mt-2">
-                  <h3 className="text-gray-900 mb-4 text-2xl font-semibold dark:text-white">
-                    Shift Summary
-                  </h3>
-                  <div className="flex justify-center gap-2">
-                    {selectedShift?.intervals?.map((interval, index) => (
-                      <div
-                        key={index}
-                        className={`rounded-lg p-2 text-center ${
-                          interval.breakTime
-                            ? "bg-[#fbc0c0] text-danger dark:bg-[#fbc0c0] dark:text-danger"
-                            : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-                        }`}
-                      >
-                        {interval.breakTime ? (
-                          <p className="text-sm font-medium">
-                            Breaktime: {interval.startTime} - {interval.endTime}
-                          </p>
-                        ) : (
-                          <p className="text-sm font-medium">
-                            Interval: {interval.startTime} - {interval.endTime}
-                          </p>
-                        )}
+                          <div>
+                            <strong>Available:</strong>{" "}
+                            {selectedProcess?.issuedCartons}
+                          </div>
+                          <div>
+                            <span className="bg-red-100 text-red-600 rounded-full px-2 py-0.5 text-xs font-medium">
+                              Short:{" "}
+                              {Math.max(
+                                0,
+                                (
+                                  selectedProcess?.quantity /
+                                    packagingData[0].packagingData.maxCapacity -
+                                  selectedProcess?.issuedCartons
+                                ).toFixed(0),
+                              )}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
+                              Surplus:{" "}
+                              {Math.max(
+                                0,
+                                (
+                                  selectedProcess?.issuedCartons -
+                                  selectedProcess?.quantity /
+                                    packagingData[0].packagingData.maxCapacity
+                                ).toFixed(0),
+                              )}
+                            </span>
+                          </div>
+                          <div>
+                            <strong>Dimensions:</strong>{" "}
+                            {packagingData[0].packagingData.cartonWidth} x{" "}
+                            {packagingData[0].packagingData.cartonHeight}
+                          </div>
+                        </div>
                       </div>
-                    ))}
+                    )}
+
+                  {/* Shift Summary */}
+                  <div className="dark:bg-gray-800 rounded-lg border-l-4 border-purple-500 bg-white p-4 shadow-md">
+                    <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-purple-600 dark:text-purple-400">
+                      <FiClock /> Shift Summary
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedShift?.intervals?.map((interval, i) => (
+                        <span
+                          key={i}
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${
+                            interval.breakTime
+                              ? "bg-[#fbc0c0] text-danger dark:bg-danger dark:text-danger"
+                              : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+                          }`}
+                        >
+                          {interval.breakTime
+                            ? `Break: ${interval.startTime} - ${interval.endTime}`
+                            : `Interval: ${interval.startTime} - ${interval.endTime}`}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                {/* end FormComponent 1 */}
-                {totalTimeEstimation && (
-                  <div className="grid w-full justify-center py-2">
-                    <p>
-                      Start Date :{" "}
-                      {startDate || "N/A"}
-                    </p>
-                    <p>
-                      Estimated Completed Date :{" "}
-                      {estimatedEndDate || "Not calculated yet"}
-                    </p>
-                    <p>
-                      Total Time Estimation (in days):{" "}
-                      {totalTimeEstimation || "Not calculated yet"}
-                    </p>
-                    <p>
-                      Units Processed Per{" "}
-                      {(shiftTime - selectedShift?.totalBreakTime / 60).toFixed(2)}-Hour Day:{" "}
-                      {totalUPHA || "Not calculated yet"}
-                    </p>
-                  </div>
-                )}
-                {/* component 2 */}
-                <div className="flex gap-10">
-                  <div className="w-[200%]">
-                    <div className="flex justify-between">
-                      <h3 className="text-lg font-semibold text-black dark:text-white">
-                        Room
+
+                  {/* Time Estimation */}
+                  {totalTimeEstimation && (
+                    <div className="dark:bg-gray-800 mb-4 rounded-lg border-l-4 border-indigo-500 bg-white p-4 shadow-md">
+                      <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-indigo-600 dark:text-indigo-400">
+                        <FiTrendingUp /> Time Estimation
                       </h3>
-                      <div>
-                        <button className="flex items-center justify-center gap-2 rounded-lg bg-danger px-2 py-2 text-sm text-secondary text-white">
-                          Consumed : {totalConsumedKits}
-                        </button>
+                      <div className="text-gray-700 dark:text-gray-300 grid gap-1 text-sm">
+                        <p>
+                          <strong>Start:</strong> {startDate || "N/A"}
+                        </p>
+                        <p>
+                          <strong>End:</strong>{" "}
+                          {estimatedEndDate || "Not calculated"}
+                        </p>
+                        <p>
+                          <strong>Days:</strong> {totalTimeEstimation || "N/A"}
+                        </p>
+                        <p>
+                          <strong>Units/Day:</strong> {totalUPHA || "N/A"} (per{" "}
+                          {(
+                            shiftTime -
+                            selectedShift?.totalBreakTime / 60
+                          ).toFixed(2)}{" "}
+                          hrs)
+                        </p>
                       </div>
                     </div>
+                  )}
+                </div>
+                {/* component 2 */}
+
+                <div className="mt-6 flex gap-10">
+                  <div className="w-full">
+                    {/* Header */}
+                    <div className="mb-6 flex items-center justify-between">
+                      <h3 className="text-gray-900 text-2xl font-bold dark:text-white">
+                        Room Overview
+                      </h3>
+                      <button className="flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-danger">
+                        Consumed: {totalConsumedKits}
+                      </button>
+                    </div>
+
+                    {/* Tabs */}
                     <Tabs>
-                      <TabList className="bg-gray-100 flex w-fit space-x-2 rounded-xl p-1 shadow-inner">
+                      <TabList className="flex space-x-3">
                         {["Floor View", "Table View"].map((tab) => (
                           <Tab
                             key={tab}
-                            className={`rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200`}
+                            className={({ selected }) =>
+                              `inline-flex items-center justify-center rounded-lg px-6 py-2 text-sm font-semibold transition-all duration-200
+                              focus:outline-none focus:ring-2 focus:ring-offset-1
+                              ${
+                                selected
+                                  ? "bg-blue-600 text-white shadow-md hover:bg-blue-700 focus:ring-blue-600"
+                                  : "bg-gray-200 text-gray-800 hover:bg-gray-300 border-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:border-gray-600 border"
+                              }`
+                            }
                           >
                             {tab}
                           </Tab>
                         ))}
                       </TabList>
+
+                      {/* Floor View */}
                       <TabPanel>
-                        <div
-                          className="bg-gray-50 mt-4 grid h-screen gap-6 overflow-x-auto rounded-lg p-4 shadow-inner"
-                          style={{ position: "relative", width: "auto" }}
-                        >
-                          <div className="grid grid-cols-4 gap-3">
-                            {assignedCustomStages.length> 0 && assignedCustomStages.map(
-                              (value, index) => (
+                        <div className="mt-6 rounded-md border border-primary p-2 pt-3">
+                          {/* Assigned Custom Stages */}
+                          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                            {assignedCustomStages.length > 0 &&
+                              assignedCustomStages.map((stage, index) => (
                                 <div
                                   key={index}
-                                  className="border-gray-300 mb-4 mt-4 flex flex-col rounded-lg border-2 border-green-500 bg-green-200 p-2 transition-all duration-300 hover:shadow-lg"
-                                  title="Drop Stage Here"
+                                  className="rounded-xl border border-green-400 bg-green-50 p-4 shadow transition hover:shadow-md dark:border-green-600 dark:bg-green-900"
                                 >
-                                  <span className="text-gray-800 flex items-center justify-between text-xs font-bold">
-                                    <p className="text-sm font-bold">
-                                      {" "}
-                                      {value?.stageName}
+                                  <div className="mb-3 flex items-center justify-between">
+                                    <p className="text-gray-900 text-base font-semibold dark:text-white">
+                                      {stage?.stage}
                                     </p>
-                                  </span>
+                                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-600 dark:bg-orange-700 dark:text-orange-300">
+                                      Active
+                                    </span>
+                                  </div>
 
-                                  <div className="mt-1">
-                                    <div>
-                                      <div className="flex items-center justify-between ">
-                                        <strong className="text-gray-900 text-xs">
-                                          <p>
-                                            UPH Target: {value?.upha || "100"}
-                                          </p>
-                                          <p>
-                                            Achieved UPH:{" "}
-                                            {value?.achievedUph || "0"}
-                                          </p>
+                                  {/* Quick Stats */}
+                                  <div className="text-gray-700 dark:text-gray-200 grid gap-1 text-xs">
+                                    <p className="flex items-center gap-1">
+                                      <FiTrendingUp /> UPH Target:{" "}
+                                      {stage?.upha || "100"}
+                                    </p>
+                                    <p className="flex items-center gap-1">
+                                      <FiActivity /> Achieved:{" "}
+                                      {stage?.achievedUph || "0"}
+                                    </p>
+                                    <p className="flex items-center gap-1">
+                                      <FiUsers /> WIP: {stage?.wip || "0"}
+                                    </p>
+                                    <p className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                      <FiCheckCircle /> Pass:{" "}
+                                      {stage?.pass || "0"}
+                                    </p>
+                                    <p className="text-red-600 dark:text-red-400 flex items-center gap-1">
+                                      <FiXCircle /> NG: {stage?.ng || "0"}
+                                    </p>
+                                  </div>
 
-                                          <div className="my-2">
-                                            <div>
-                                              <p>WIP : {value?.wip || "0"}</p>
-                                            </div>
-                                            <div>
-                                              <p>Pass : {value?.pass || "0"}</p>
-                                              <p>NG : {value?.ng || "0"}</p>
-                                              <p>
-                                                Status:{" "}
-                                                <span className="font-semibold text-orange-500">
-                                                  Active
-                                                </span>
-                                              </p>
-                                            </div>
-                                            {assignedCustomOperators[index] && (
-                                              <div>
-                                                <p className="flex justify-end gap-1 pr-1 text-xs">
-                                                  <strong className="pt-0.5">
-                                                    Operator :{" "}
-                                                  </strong>
-                                                  {assignedCustomOperators[
-                                                    index
-                                                  ]?.map((op, i) => (
-                                                    <>
-                                                      <p
-                                                        key={i}
-                                                        className="text-gray-700 text-sm"
-                                                      >
-                                                        {op.name}
-                                                      </p>
-                                                    </>
-                                                  ))}
-                                                </p>
-                                              </div>
-                                            )}
-                                          </div>
-                                        </strong>
+                                  {/* Operators */}
+                                  {assignedCustomOperators[index] && (
+                                    <div className="text-gray-600 dark:text-gray-300 mt-3 text-xs">
+                                      <strong>Operators:</strong>
+                                      <div className="mt-1 flex flex-wrap gap-1">
+                                        {assignedCustomOperators[index].map(
+                                          (op, i) => (
+                                            <span
+                                              key={i}
+                                              className="bg-gray-200 dark:bg-gray-700 inline-block rounded-full px-2 py-0.5 text-xs font-medium"
+                                            >
+                                              {op.name}
+                                            </span>
+                                          ),
+                                        )}
                                       </div>
                                     </div>
-                                  </div>
+                                  )}
                                 </div>
-                              ),
-                            )}
+                              ))}
                           </div>
+
+                          {/* Room Layout */}
                           {selectedRoom &&
-                            selectedRoom.lines?.map((row, rowIndex) => (
-                              <div key={rowIndex} className="mb-4">
-                                <div className="text-md mb-2 font-bold">
-                                  {row.rowName}
-                                </div>
-                                <div className="grid grid-cols-4 gap-3">
-                                  {row.seats?.map((seat, seatIndex) => {
-                                    return (
+                            selectedRoom.lines
+                              .filter((row, rowIndex) =>
+                                row.seats?.some((_, seatIndex) => {
+                                  const coordinates = `${rowIndex}-${seatIndex}`;
+                                  return (
+                                    assignedStages[coordinates] &&
+                                    assignedStages[coordinates].length > 0
+                                  );
+                                }),
+                              )
+                              .map((row, rowIndex) => (
+                                <div key={rowIndex} className="space-y-2">
+                                  <h4 className="text-gray-800 mt-3 text-sm font-bold dark:text-white">
+                                    {row.rowName}
+                                  </h4>
+                                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                                    {row.seats?.map((seat, seatIndex) => (
                                       <DraggableGridItem
                                         key={`${rowIndex}-${seatIndex}`}
                                         rowIndex={rowIndex}
@@ -1695,190 +1695,129 @@ const ViewPlanSchedule = () => {
                                         jigCategories={jigCategories}
                                         selectedProcess={selectedProcess}
                                       />
-                                    );
-                                  })}
+                                    ))}
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              ))}
                         </div>
                       </TabPanel>
+
+                      {/* Table View */}
                       <TabPanel>
-                        <div
-                          className="bg-gray-50 mt-4 grid gap-6 overflow-x-auto rounded-lg p-4 shadow-inner"
-                          style={{ position: "relative", width: "auto" }}
-                        >
-                          <div className="grid grid-cols-4 gap-3">
+                        <div className=" bg-gray-50 dark:bg-gray-800 mt-6 h-90 overflow-x-auto rounded-md rounded-xl border border-primary p-2 p-4 pt-3 shadow">
+                          {/* Common Stages */}
+                          <div className="mb-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
                             {selectedProcess?.commonStages.map(
-                              (value, index) => (
+                              (stage, index) => (
                                 <div
                                   key={index}
-                                  className="border-gray-300 mb-4 mt-4 flex flex-col rounded-lg border-2 border-green-500 bg-green-200 p-2 transition-all duration-300 hover:shadow-lg"
-                                  title="Drop Stage Here"
+                                  className="rounded-xl border border-green-400 bg-green-50 p-4 shadow hover:shadow-md dark:border-green-600 dark:bg-green-900"
                                 >
-                                  <span className="text-gray-800 flex items-center justify-between text-xs font-bold">
-                                    <p className="text-sm font-bold">
-                                      {" "}
-                                      {value?.stageName}
+                                  <p className="text-gray-900 mb-2 text-base font-semibold dark:text-white">
+                                    {stage?.stageName}
+                                  </p>
+                                  <div className="text-gray-700 dark:text-gray-200 space-y-1 text-xs">
+                                    <p>UPH Target: {stage?.upha || "100"}</p>
+                                    <p>
+                                      Achieved UPH: {stage?.achievedUph || "0"}
                                     </p>
-                                  </span>
-
-                                  <div className="mt-1">
-                                    <div>
-                                      <div className="flex items-center justify-between ">
-                                        <strong className="text-gray-900 text-xs">
-                                          <p>
-                                            UPH Target: {value?.upha || "100"}
-                                          </p>
-                                          <p>
-                                            Achieved UPH:{" "}
-                                            {value?.achievedUph || "0"}
-                                          </p>
-
-                                          <div className="my-2">
-                                            <div>
-                                              <p>WIP : {value?.wip || "0"}</p>
-                                            </div>
-                                            <div>
-                                              <p>Pass : {value?.pass || "0"}</p>
-                                              <p>NG : {value?.ng || "0"}</p>
-                                              <p>
-                                                Status:{" "}
-                                                <span className="font-semibold text-orange-500">
-                                                  Active
-                                                </span>
-                                              </p>
-                                            </div>
-                                            {assignedCustomOperators[index] && (
-                                              <div>
-                                                <p className="flex justify-end gap-1 pr-1 text-xs">
-                                                  <strong className="pt-0.5">
-                                                    Operator :{" "}
-                                                  </strong>
-                                                  {assignedCustomOperators[
-                                                    index
-                                                  ]?.map((op, i) => (
-                                                    <>
-                                                      <p
-                                                        key={i}
-                                                        className="text-gray-700 text-sm"
-                                                      >
-                                                        {op.name}
-                                                      </p>
-                                                    </>
-                                                  ))}
-                                                </p>
-                                              </div>
-                                            )}
-                                          </div>
-                                        </strong>
-                                      </div>
-                                    </div>
+                                    <p>WIP: {stage?.wip || "0"}</p>
+                                    <p className="text-green-600 dark:text-green-400">
+                                      Pass: {stage?.pass || "0"}
+                                    </p>
+                                    <p className="text-red-600 dark:text-red-400">
+                                      NG: {stage?.ng || "0"}
+                                    </p>
+                                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-600 dark:bg-orange-700 dark:text-orange-300">
+                                      Active
+                                    </span>
                                   </div>
                                 </div>
                               ),
                             )}
                           </div>
-                          <table className="border-gray-300 min-w-full overflow-hidden rounded-lg border shadow-md">
-                            <thead className="bg-[#0FADCF] text-sm text-white">
-                              <tr>
-                                {selectedProcess?.stages?.map(
-                                  (value, index) => (
-                                    <th
-                                      className="px-4 py-3 text-left"
-                                      key={index}
-                                    >
-                                      {value.stageName.charAt(0).toUpperCase() +
-                                        value.stageName.slice(1).toLowerCase()}
-                                    </th>
-                                  ),
-                                )}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-gray-200 divide-y text-sm">
-                              {console.log("assignedStages ==>", assignedStages)}
-                              {console.log("rows ==>", rows)}
-                              {rows.map((rowKeys, rowIndex) => (
-                                <tr
-                                  key={rowIndex}
-                                  className="hover:bg-gray-50 h-10 transition"
-                                >
-                                  {rowKeys.map((key, colIndex) => {
-                                    const stageData = assignedStages[key]?.[0];
-                                    return (
-                                      <td key={colIndex} className="pl-4">
-                                        {console.log("{assignedStages[key] ==>",assignedStages[key])}
+
+                          {/* Table */}
+                          <div className="border-gray-200 dark:border-gray-700 overflow-x-auto rounded-xl border shadow-md">
+                            <table className="min-w-full text-sm">
+                              <thead className="bg-blue-500 text-white">
+                                <tr>
+                                  {selectedProcess?.stages?.map(
+                                    (value, index) => (
+                                      <th
+                                        key={index}
+                                        className="px-4 py-3 text-left uppercase tracking-wide"
+                                      >
+                                        {value.stageName}
+                                      </th>
+                                    ),
+                                  )}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-gray-200 dark:divide-gray-700 divide-y">
+                                {rows.map((rowKeys, rowIndex) => (
+                                  <tr
+                                    key={rowIndex}
+                                    className="hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                                  >
+                                    {rowKeys.map((key, colIndex) => (
+                                      <td
+                                        key={colIndex}
+                                        className="px-4 py-3 align-top"
+                                      >
                                         {assignedStages[key].map(
-                                          (stage: any, stageIndex: any) => (
-                                            <div key={stageIndex}>
-                                              <div className="">
-                                                <strong className="text-gray-900 text-xs">
-                                                  <p className="mt-2">
-                                                    UPH Target :{stage.upha || 0}
-                                                  </p>
-                                                  <p className="mt-2">
-                                                    Achieved UPH :
-                                                  </p>
-                                                  <div className="my-2">
-                                                    <div>
-                                                      {stage?.totalUPHA !=
-                                                        null &&
-                                                      stage?.totalUPHA !=
-                                                        undefined ? (
-                                                        <p>
-                                                          WIP :{" "}
-                                                          {String(
-                                                            stage?.totalUPHA ??
-                                                              "N/A",
-                                                          )}
-                                                        </p>
-                                                      ) : null}
-                                                    </div>
-                                                    <div>
-                                                      <p>
-                                                        Pass :{" "}
-                                                        {stage.passedDevice ||
-                                                          0}
-                                                      </p>
-                                                      <p>
-                                                        NG :{" "}
-                                                        {stage.ngDevice || 0}
-                                                      </p>
-                                                      <p>
-                                                        Status : {""}
-                                                        <span
-                                                          className={
-                                                            selectedProcess?.quantity >
-                                                            stage?.totalUPHA
-                                                              ? stage?.totalUPHA >
-                                                                0
-                                                                ? "font-semibold text-orange-500"
-                                                                : "font-semibold text-danger"
-                                                              : "font-semibold text-green-600"
-                                                          }
-                                                        >
-                                                          {selectedProcess?.quantity >
-                                                          stage?.totalUPHA
-                                                            ? stage?.totalUPHA >
-                                                              0
-                                                              ? "Active"
-                                                              : "Downtime"
-                                                            : "Completed"}
-                                                        </span>
-                                                      </p>
-                                                    </div>
-                                                  </div>
-                                                </strong>
-                                              </div>
+                                          (stage, stageIndex) => (
+                                            <div
+                                              key={stageIndex}
+                                              className="dark:bg-gray-900 mb-2 rounded-lg bg-white p-3 shadow-sm"
+                                            >
+                                              <p className="text-xs font-medium">
+                                                <FiTrendingUp className="mr-1 inline-block" />
+                                                UPH Target: {stage.upha || 0}
+                                              </p>
+                                              <p className="text-xs">
+                                                Achieved:{" "}
+                                                {stage.achievedUph || 0}
+                                              </p>
+                                              <p className="text-xs">
+                                                WIP: {stage?.totalUPHA ?? "N/A"}
+                                              </p>
+                                              <p className="text-xs text-green-600">
+                                                Pass: {stage.passedDevice || 0}
+                                              </p>
+                                              <p className="text-red-600 text-xs">
+                                                NG: {stage.ngDevice || 0}
+                                              </p>
+                                              <p className="text-xs">
+                                                <strong>Status:</strong>{" "}
+                                                <span
+                                                  className={
+                                                    selectedProcess?.quantity >
+                                                    stage?.totalUPHA
+                                                      ? stage?.totalUPHA > 0
+                                                        ? "font-semibold text-orange-500"
+                                                        : "text-red-500 font-semibold"
+                                                      : "font-semibold text-green-600"
+                                                  }
+                                                >
+                                                  {selectedProcess?.quantity >
+                                                  stage?.totalUPHA
+                                                    ? stage?.totalUPHA > 0
+                                                      ? "Active"
+                                                      : "Downtime"
+                                                    : "Completed"}
+                                                </span>
+                                              </p>
                                             </div>
                                           ),
                                         )}
                                       </td>
-                                    );
-                                  })}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       </TabPanel>
                     </Tabs>

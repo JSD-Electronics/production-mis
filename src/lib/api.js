@@ -794,6 +794,14 @@ export const fetchJigsById = async (id) => {
     throw error?.response?.data || { message: `Error Fetching Jigs By ID` };
   }
 };
+export const fetchJigByJigId = async (id) => {
+  try {
+    let response  = await api.get(`/fetchJigByJigId/${id}`);
+    return response?.data;
+  } catch (error){ 
+    throw error?.response?.data || {message:`Error Fetching Jig By ID`};
+  }
+}
 export const createDevice = async (formData) => {
   try {
     let response = await api.post(`/devices/create`, formData);
@@ -1231,6 +1239,7 @@ export const fetchCartonByProcessID = async (processID) => {
 export const fetchCartons = async (processID) => {
   try {
     let response = await api.get(`/cartons/${processID}`);
+    console.log("response ===>", response);
     return response.data;
   } catch (error) {
     console.log("Error Fetxhing Cartons :", error.message);
@@ -1258,6 +1267,22 @@ export const getFGInventoryToShift = async () => {
     return result.data;
   } catch (error) {
     console.error("Error Fetching FG Inventory", error.message);
+  }
+};
+export const getPDICartonByProcessId = async (processId) => {
+  try {
+    let result = await api.get(`/cartonsProcessId/${processId}`);
+    return result.data;
+  } catch (error) {
+    console.error("Error Fetching Carton Shift: ", error.message);
+  }
+};
+export const getCartonsIntoStore = async (processId) => {
+  try {
+    let result = await api.get(`/cartonsIntoStore/${processId}`);
+    return result.data;
+  } catch (error) {
+    console.error("Error Fetching Carton Shift: ", error.message);
   }
 };
 

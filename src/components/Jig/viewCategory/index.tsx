@@ -4,7 +4,12 @@ import DataTable from "react-data-table-component";
 import { Stages } from "@/types/stage";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import withAuth from "@/app/auth/withAuth/withAuth";
-import { viewJigCategory, deleteJigCategories, deleteMultipleJigCategories } from "@/lib/api";
+import AddJigCategoryModal from "@/components/Jig/category/index";
+import {
+  viewJigCategory,
+  deleteJigCategories,
+  deleteMultipleJigCategories,
+} from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { FiEdit, FiTrash } from "react-icons/fi";
 import { BallTriangle } from "react-loader-spinner";
@@ -14,7 +19,13 @@ import "react-toastify/dist/ReactToastify.css";
 const ViewJigCategory = () => {
   const [showPopup, setShowPopup] = React.useState(false);
   const [productId, setProductId] = React.useState("");
-  const [jigCategoryData,setJigCategoryData] = React.useState<Stages[]>([]);
+  const [categoryId,setCategoryId] = React.useState('');
+  const [jigCategoryData, setJigCategoryData] = React.useState<Stages[]>([]);
+  const [categoryModelName, setCategoryModelName] =
+    React.useState("Add Jig Category");
+  const [name, setName] = React.useState("");
+  const [status, setStatus] = React.useState("1");
+  const [isModalOpen, setModalOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [selectedRows, setSelectedRows] = React.useState([]);
   const handleRowSelected = (state: any) => {
@@ -25,6 +36,11 @@ const ViewJigCategory = () => {
   React.useEffect(() => {
     getJigCategory();
   }, []);
+  const handleSuccess = () => {
+    // Refresh list or fetch categories again
+    console.log("Category added successfully!");
+    getJigCategory();
+  };
   const getJigCategory = async () => {
     try {
       let result = await viewJigCategory();
@@ -45,8 +61,12 @@ const ViewJigCategory = () => {
       console.error("Error deleting stage:", error);
     }
   };
-  const handleEdit = (id: string) => {
-    router.push(`/product/edit/${id}`);
+  const handleEdit = (row: any[]) => {
+    setModalOpen(true);
+    setCategoryId(row?._id);
+    setName(row?.name);
+    setStatus(row?.status);
+    setCategoryModelName("Edit Jig Category");
   };
   const handleMultipleRowsDelete = async () => {
     try {
@@ -59,8 +79,8 @@ const ViewJigCategory = () => {
       console.error("Error deleting stage:", error);
     }
   };
-  const handleAddJigCategories = () =>{
-      router.push("/jig/categories");
+  const handleAddJigCategories = () => {
+    router.push("/jig/categories");
   };
   const handlepopup = (id: string) => {
     setProductId(id);
@@ -93,7 +113,7 @@ const ViewJigCategory = () => {
         <div className="flex items-center space-x-3.5">
           {/* Edit Button */}
           <button
-            onClick={() => handleEdit(row._id)}
+            onClick={() => handleEdit(row)}
             className="transform rounded-full bg-blue-500 p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
           >
             <FiEdit size={16} />
@@ -134,7 +154,7 @@ const ViewJigCategory = () => {
           </div>
         ) : (
           <>
-            <div className="flex mb-4 mt-4 text-right gap-3 justify-end">
+            <div className="mb-4 mt-4 flex justify-end gap-3 text-right">
               <button
                 onClick={handleMultipleRowsDelete}
                 disabled={selectedRows.length === 0}
@@ -147,12 +167,27 @@ const ViewJigCategory = () => {
                 Delete
               </button>
               <button
-                onClick={handleAddJigCategories}
+                onClick={() => {
+                  setModalOpen(true);
+                  setCategoryModelName("Add Jig Category");
+                }}
                 className={`rounded bg-primary px-4 py-2 font-semibold text-white`}
               >
                 ADD JIG Categories
               </button>
             </div>
+            <AddJigCategoryModal
+              isOpen={isModalOpen}
+              onClose={() => setModalOpen(false)}
+              onSuccess={handleSuccess}
+              name={name}
+              setName={setName}
+              status={status}
+              setStatus={setStatus}
+              categoryModelName={categoryModelName}
+              categoryId={categoryId}
+            />
+
             <DataTable
               className="dark:bg-bodyDark"
               columns={columns}
@@ -200,4 +235,4 @@ const ViewJigCategory = () => {
   );
 };
 
-export default withAuth(ViewJigCategory)  ;
+export default ViewJigCategory;

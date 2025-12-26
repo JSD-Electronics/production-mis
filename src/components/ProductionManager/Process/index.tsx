@@ -185,8 +185,12 @@ const ViewProcessInventory = () => {
   const handleStatusUpdate = async (data, status) => {
     try {
       let form = new FormData();
-      form.append("id", data._id);
+      form.append("id", data?._id);
       form.append("status", status);
+      if(status === "Waiting_Kits_allocation"){
+        let returnedKits = data?.quantity - data?.issuedKits;
+        form.append("issuedKits",returnedKits);
+      }
       let result = await updateProductionStatus(form);
       if (result && result.status === 200) {
         toast.success("Production Update Successfully!");
@@ -213,8 +217,7 @@ const ViewProcessInventory = () => {
           issuedCartons: row.issuedCartons,
         });
       }
-    }
-    console.log("selectedStageEntries ===>", selectedStageEntries);
+    }  
     // return false;
     setProcessData(row);
     setStartLineStage(selectedStageEntries);
@@ -254,34 +257,21 @@ const ViewProcessInventory = () => {
     {
       name: "Issued Kit Status",
       selector: (row: Inventory) => {
-        const statusColorMap: Record<string, string> = {
-          ISSUED: "#28a745",
-          PARTIALLY_ISSUED: "#ffc107",
-          NOT_ISSUED: "#dc3545",
+        const statusClassMap: Record<string, string> = {
+          ISSUED: "bg-green-600",
+          PARTIALLY_ISSUED: "bg-amber-500",
+          NOT_ISSUED: "bg-red-600",
         };
         const labelMap: Record<string, string> = {
           ISSUED: "Issued",
           PARTIALLY_ISSUED: "Partially Issued",
           NOT_ISSUED: "Not Issued",
         };
-        const backgroundColor =
-          statusColorMap[row.issuedKitsStatus] || "#6c757d";
+        const statusClass =
+          statusClassMap[row.issuedKitsStatus] || "bg-gray-600";
         const displayLabel = labelMap[row.issuedKitsStatus] || "Unknown";
         return (
-          <span
-            style={{
-              backgroundColor,
-              color: "#fff",
-              padding: "10px 5px",
-              borderRadius: "6px",
-              fontSize: "11px",
-              fontWeight: 600,
-              display: "inline-block",
-              textAlign: "center",
-              wordBreak: "break-word",
-              whiteSpace: "normal",
-            }}
-          >
+          <span className={`inline-block rounded px-2.5 py-1 text-[11px] font-semibold text-white ${statusClass}`}>
             {displayLabel}
           </span>
         );
@@ -293,58 +283,33 @@ const ViewProcessInventory = () => {
       selector: (row: Inventory) => row?.status,
       sortable: true,
       cell: (row: Inventory) => {
-        const statusStyles = {
-          waiting_schedule: {
-            label: "Waiting Schedule",
-            backgroundColor: "#f39c12",
-          },
-          Waiting_Kits_allocation: {
-            label: "Waiting Kits Allocation",
-            backgroundColor: "#9b59b6",
-          },
-          Waiting_Kits_approval: {
-            label: "Waiting Kits Approval",
-            backgroundColor: "#1abc9c",
-          },
-          waiting_for_line_feeding: {
-            label: "Waiting For Line Feeding",
-            backgroundColor: "#3498db",
-          },
-          waiting_for_kits_confirmation: {
-            label: "Waiting For Kits Confirmation",
-            backgroundColor: "#e67e22",
-          },
-          active: {
-            label: "Active",
-            backgroundColor: "#f1c40f",
-          },
-          down_time_hold: {
-            label: "Down Time Hold",
-            backgroundColor: "#e74c3c",
-          },
-          completed: {
-            label: "Completed",
-            backgroundColor: "#2ecc71",
-          },
-          default: {
-            label: "Process Created",
-            backgroundColor: "#95a5a6",
-          },
-        };
+        const statusClasses = {
+          waiting_schedule: "bg-orange-500",
+          Waiting_Kits_allocation: "bg-violet-600",
+          Waiting_Kits_approval: "bg-teal-600",
+          waiting_for_line_feeding: "bg-blue-600",
+          waiting_for_kits_confirmation: "bg-orange-600",
+          active: "bg-amber-500",
+          down_time_hold: "bg-red-600",
+          completed: "bg-green-600",
+          default: "bg-gray-500",
+        } as Record<string, string>;
         const status = row?.status;
-        const { label, backgroundColor } =
-          statusStyles[status] || statusStyles.default;
+        const labelMap = {
+          waiting_schedule: "Waiting Schedule",
+          Waiting_Kits_allocation: "Waiting Kits Allocation",
+          Waiting_Kits_approval: "Waiting Kits Approval",
+          waiting_for_line_feeding: "Waiting For Line Feeding",
+          waiting_for_kits_confirmation: "Waiting For Kits Confirmation",
+          active: "Active",
+          down_time_hold: "Down Time Hold",
+          completed: "Completed",
+          default: "Process Created",
+        } as Record<string, string>;
+        const cls = statusClasses[status] || statusClasses.default;
+        const label = labelMap[status] || labelMap.default;
         return (
-          <span
-            style={{
-              backgroundColor,
-              color: "#fff",
-              padding: "5px 10px",
-              borderRadius: "5px",
-              fontSize: "12px",
-              fontWeight: "bold",
-            }}
-          >
+          <span className={`inline-block rounded px-2.5 py-1 text-[11px] font-semibold text-white ${cls}`}>
             {label}
           </span>
         );
@@ -365,7 +330,7 @@ const ViewProcessInventory = () => {
                 <FiCheck size={16} />
               </button>
               <button
-                onClick={() => handleStatusUpdate(row, "Waiting_Kits_approval")}
+                onClick={() => handleStatusUpdate(row, "Waiting_Kits_allocation")}
                 className="transform rounded-full bg-danger p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-danger"
               >
                 <FiX size={16} />
@@ -426,9 +391,9 @@ const ViewProcessInventory = () => {
   ];
 
   return (
-    <div className="bg-gray-100 min-h-screen p-6">
+    <div className="bg-gradient-to-b from-[#0f2a3d] to-[#0b1d2b] min-h-screen p-6">
       <Breadcrumb pageName="View Process" parentName="Production Manager" />
-      <div className="mt-6 rounded-lg bg-white p-6 shadow-lg">
+      <div className="mt-6 rounded-xl bg-white/90 backdrop-blur-md p-6 shadow-2xl ring-1 ring-black/5 dark:bg-boxdark/90 dark:ring-white/10">
         <ToastContainer
           position="top-center"
           closeOnClick
@@ -448,7 +413,7 @@ const ViewProcessInventory = () => {
         ) : (
           <>
             <DataTable
-              className="dark:bg-bodyDark"
+              className="min-w-full text-sm"
               columns={columns}
               data={productionManagerData}
               pagination
@@ -459,14 +424,14 @@ const ViewProcessInventory = () => {
               customStyles={{
                 headCells: {
                   style: {
-                    fontWeight: "bold",
+                    fontWeight: "600",
                     backgroundColor: "#f8f9fa",
                     padding: "12px",
                   },
                 },
                 rows: {
                   style: {
-                    minHeight: "72px",
+                    minHeight: "60px",
                     "&:hover": {
                       backgroundColor: "#f1f5f9",
                     },

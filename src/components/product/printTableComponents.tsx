@@ -9,7 +9,7 @@ import Modal from "../Modal/page";
 import { useDropzone } from "react-dropzone";
 import Cropper from "react-easy-crop";
 import Link from "next/link";
-
+import { Pencil, Trash2, Plus, QrCode, Type, X } from "lucide-react";
 const StickerDesigner = ({
   stages,
   setStages,
@@ -233,44 +233,6 @@ const StickerDesigner = ({
         return { ...stage }; // Force new reference
       }),
     );
-
-    // setStages((prevStages) =>
-    //   prevStages.map((stage, sIndex) =>
-    //     sIndex === index
-    //       ? {
-    //           ...stage,
-    //           subSteps: stage.subSteps.map((subStep, sSubIndex) =>
-    //             sSubIndex === subIndex1
-    //               ? {
-    //                   ...subStep,
-    //                   printerFields: subStep.printerFields.map(
-    //                     (printerField, pFieldIndex) =>
-    //                       pFieldIndex === fieldIndex
-    //                         ? {
-    //                             ...printerField,
-    //                             fields: [
-    //                               ...printerField.fields,
-    //                               {
-    //                                 id: Date.now(),
-    //                                 name: "image",
-    //                                 type: "image",
-    //                                 value: croppedImage,
-    //                                 x: 50,
-    //                                 y: 50,
-    //                                 width: `${dimensions.width}px`,
-    //                                 height: `${dimensions.height}px`,
-    //                               },
-    //                             ],
-    //                           }
-    //                         : printerField,
-    //                   ),
-    //                 }
-    //               : subStep,
-    //           ),
-    //         }
-    //       : stage,
-    //   ),
-    // );
     setImageUploadMoal(false);
   };
   const openImageUploadModal = () => {
@@ -448,7 +410,7 @@ const StickerDesigner = ({
     // Clear the focused field index
     setFocusedFieldIndex(null);
   };
-  const exportSticker = () => {
+  const exportSticker = (width:any, height:any) => {
     const stickerElement = document.getElementById("sticker-preview");
 
     html2canvas(stickerElement, {
@@ -456,9 +418,10 @@ const StickerDesigner = ({
       useCORS: true,
     }).then((canvas) => {
       const imageData = canvas.toDataURL("image/png");
-
-      const stickerWidthMM = 50; // Sticker width in mm
-      const stickerHeightMM = 30; // Sticker height in mm
+      console.log("imageData ==>", imageData);
+      
+      const stickerWidthMM = width; // Sticker width in mm
+      const stickerHeightMM = height; // Sticker height in mm
 
       const printWindow = window.open("", "_blank");
       printWindow?.document.write(`
@@ -478,7 +441,7 @@ const StickerDesigner = ({
                   align-items: center;
                   width: ${stickerWidthMM}mm;
                   height: ${stickerHeightMM}mm;
-                  background-color: white;
+                  background-color: white !important;
                 }
                 img {
                   width: ${stickerWidthMM}mm;
@@ -528,7 +491,6 @@ const StickerDesigner = ({
     setIsModalBarCodeValue(true);
   };
   const handleBarCodeValue = () => {
-    // setBarCodeDropDown(!isBarCodeDropDown);
     setStages((prevStages) =>
       prevStages.map((stage, sIndex) =>
         sIndex === index // Match the target stage
@@ -767,23 +729,6 @@ const StickerDesigner = ({
           </div>
         </div>
         <div className="text-center">
-          {/* <div className="p-5 text-center">
-            <input type="file" onChange={handleFileChange} accept="image/*" /> */}
-          {/* {preview && (
-              <img
-                src={preview}
-                alt="Preview"
-                className="mt-3 h-64 w-64 rounded-md object-cover"
-              />
-            )} */}
-          {/* <button
-              // onClick={handleUpload}
-              disabled={loading}
-              className="mt-3 rounded bg-blue-500 px-4 py-2 text-white"
-            >
-              {loading ? "Uploading..." : "Upload Image"}
-            </button>
-          </div> */}
           {/* Field selection */}
           <div className="mb-5 mt-4">
             <h5 className="font-semibold">Available Fields</h5>
@@ -850,15 +795,6 @@ const StickerDesigner = ({
                       </p>
                     )}
                   </div>
-
-                  {/* File Input for Manual Selection */}
-                  {/* <input
-                    type="file"
-                    onChange={(e) => onDrop(e.target.files)}
-                    accept="image/*"
-                    className="mt-3 w-full rounded border p-2"
-                  /> */}
-
                   {/* Dimension Inputs */}
                   <div className="mt-3 flex justify-center gap-4">
                     <div>
@@ -980,7 +916,7 @@ const StickerDesigner = ({
             <div
               id="sticker-preview"
               ref={stickerRef}
-              className="border-gray-300 relative border bg-white p-6"
+              className="border-gray-300 relative rounded-xl border bg-white p-6 shadow-md dark:border-strokedark dark:bg-boxdark"
               style={{
                 width: `${stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]?.dimensions?.width}px`,
                 height: `${stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]?.dimensions?.height}px`,
@@ -988,398 +924,221 @@ const StickerDesigner = ({
                 fontWeight: fontSettings.weight,
               }}
             >
-              {stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]
-                .fields &&
-                stages[index].subSteps[subIndex1].printerFields[
-                  fieldIndex
-                ].fields.map((field, index) => (
-                  <>
-                    <Rnd
-                      key={index}
-                      bounds="parent"
-                      size={{
-                        width: field.width,
-                        height: field.height,
-                      }}
-                      position={{
-                        x: field.x,
-                        y: field.y,
-                      }}
-                      onDragStop={(e, d) => {
-                        handleFieldChange(index, {
-                          x: d.x,
-                          y: d.y,
-                        });
-                      }}
-                      onResizeStop={(e, direction, ref, delta, position) => {
-                        handleFieldChange(index, {
-                          width: parseInt(ref.style.width, 10),
-                          height: parseInt(ref.style.height, 10),
-                          x: position.x,
-                          y: position.y,
-                        });
-                      }}
-                      className="absolute cursor-pointer"
-                      onClick={() => setFocusedFieldIndex(index)}
-                    >
-                      <div
-                        className={`relative h-full w-full ${
-                          focusedFieldIndex === index
-                            ? "border border-dashed border-blue-500"
-                            : "border-transparent"
-                        } p-1`}
-                      >
-                        {field?.type === "barcode" ? (
-                          <div className="flex h-full w-full items-center justify-center p-6.5">
-                            <Barcode
-                              value={field.value}
-                              width={field.width / 120}
-                              height={field.height - 5}
-                              displayValue={true}
-                            />
-                          </div>
-                        ) : field?.type === "qrcode" ? (
-                          <QRCodeCanvas
-                            value={field.name}
-                            size={Math.min(field.width, field.height)}
-                          />
-                        ) : field?.type === "image" ? (
-                          <div>
-                            <img
-                              src={field.value}
-                              alt="Cropped"
-                              className="rounded-md p-1.5"
-                              style={{
-                                width: field.width,
-                                height: field.height,
-                                objectFit: "cover",
-                              }}
-                            />
-                          </div>
-                        ) : (
-                          <div
-                            className="bg-gray-100 p-2 text-center"
-                            style={field?.styles || {}}
-                          >
-                            {field?.slug || field?.value}
-                          </div>
-                        )}
-                      </div>
-                      {/* Remove Button */}
-                      {focusedFieldIndex === index && (
-                        <div>
-                          {isBarCodeDropDown && (
-                            <div
-                              className={`absolute right-1 top-0 z-99999 mt-1.5 flex cursor-pointer flex-col rounded-lg rounded-sm border border-stroke bg-white text-xs shadow-default dark:border-strokedark dark:bg-boxdark`}
-                            >
-                              <ul className="flex flex-col gap-5 border-b border-stroke px-2 py-2 dark:border-strokedark">
-                                <li
-                                  className="border-b border-[#eee] py-1.5 text-xs"
-                                  onClick={() => openBarCodeValue(field)}
-                                >
-                                  ADD Bar/QR Code
-                                </li>
-                                <li
-                                  className="text-xs"
-                                  onClick={() => {
-                                    setSelectedQRValue(field);
-                                    setEditableFieldStyleValue(
-                                      !isEditableFieldStyleValue,
-                                    );
-                                    setBarCodeDropDown(!isBarCodeDropDown);
-                                  }}
-                                >
-                                  Edit
-                                </li>
-                              </ul>
-                            </div>
-                          )}
-                          <div className="flex absolute gap-1" style={{top: "-8px",right: "-7px"}}>
-                            <button
-                              onClick={() => {
-                                setSelectedQRValue(field);
-                                setEditableFieldStyleValue(
-                                  !isEditableFieldStyleValue,
-                                );
-                              }}
-                              className="z-999 rounded-full bg-primary p-1 text-white"
-                              type="button"
-                            >
-                              <svg
-                                width="7px"
-                                height="7px"
-                                viewBox="0 -0.5 21 21"
-                                version="1.1"
-                                fill="#000000"
-                              >
-                                <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                                <g
-                                  id="SVGRepo_tracerCarrier"
-                                  stroke-linecap="round"
-                                  stroke-linejoin="round"
-                                ></g>
-                                <g id="SVGRepo_iconCarrier">
-                                  {" "}
-                                  <title>edit_fill [#ffffff]</title>{" "}
-                                  <desc>Created with Sketch.</desc>{" "}
-                                  <defs> </defs>{" "}
-                                  <g
-                                    id="Page-1"
-                                    stroke="none"
-                                    stroke-width="1"
-                                    fill="none"
-                                    fill-rule="evenodd"
-                                  >
-                                    {" "}
-                                    <g
-                                      id="Dribbble-Light-Preview"
-                                      transform="translate(-59.000000, -400.000000)"
-                                      fill="#ffffff"
-                                    >
-                                      {" "}
-                                      <g
-                                        id="icons"
-                                        transform="translate(56.000000, 160.000000)"
-                                      >
-                                        {" "}
-                                        <path
-                                          d="M3,260 L24,260 L24,258.010742 L3,258.010742 L3,260 Z M13.3341,254.032226 L9.3,254.032226 L9.3,249.950269 L19.63095,240 L24,244.115775 L13.3341,254.032226 Z"
-                                          id="edit_fill-[#ffffff]"
-                                        >
-                                          {" "}
-                                        </path>{" "}
-                                      </g>{" "}
-                                    </g>{" "}
-                                  </g>{" "}
-                                </g>
-                              </svg>
-                            </button>
-                            {field?.slug && (
-                              <button
-                                // onClick={() =>
-                                //   setBarCodeDropDown(!isBarCodeDropDown)
-                                // } //openBarCodeValue(field)}
-                                onClick={() => openBarCodeValue(field)}
-                                className="z-999 rounded-full bg-primary text-white"
-                                type="button"
-                              >
-                                <svg
-                                  width="15px"
-                                  height="15px"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                >
-                                  <g id="SVGRepo_bgCarrier" strokeWidth="0"></g>
-                                  <g
-                                    id="SVGRepo_tracerCarrier"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  ></g>
-                                  <g id="SVGRepo_iconCarrier">
-                                    <path
-                                      d="M6 12H18M12 6V18"
-                                      stroke="#ffffff"
-                                      strokeWidth="2"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                    ></path>
-                                  </g>
-                                </svg>
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              className="z-999 rounded-full bg-danger text-white"
-                              onClick={() => handleRemoveField(index)}
-                            >
-                              <svg
-                                width="15px"
-                                height="15px"
-                                viewBox="0 -0.5 25 25"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
-                              >
-                                <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                                <g
-                                  id="SVGRepo_tracerCarrier"
-                                  stroke-linecap="round"
-                                  stroke-linejoin="round"
-                                ></g>
-                                <g id="SVGRepo_iconCarrier">
-                                  {" "}
-                                  <path
-                                    d="M6.96967 16.4697C6.67678 16.7626 6.67678 17.2374 6.96967 17.5303C7.26256 17.8232 7.73744 17.8232 8.03033 17.5303L6.96967 16.4697ZM13.0303 12.5303C13.3232 12.2374 13.3232 11.7626 13.0303 11.4697C12.7374 11.1768 12.2626 11.1768 11.9697 11.4697L13.0303 12.5303ZM11.9697 11.4697C11.6768 11.7626 11.6768 12.2374 11.9697 12.5303C12.2626 12.8232 12.7374 12.8232 13.0303 12.5303L11.9697 11.4697ZM18.0303 7.53033C18.3232 7.23744 18.3232 6.76256 18.0303 6.46967C17.7374 6.17678 17.2626 6.17678 16.9697 6.46967L18.0303 7.53033ZM13.0303 11.4697C12.7374 11.1768 12.2626 11.1768 11.9697 11.4697C11.6768 11.7626 11.6768 12.2374 11.9697 12.5303L13.0303 11.4697ZM16.9697 17.5303C17.2626 17.8232 17.7374 17.8232 18.0303 17.5303C18.3232 17.2374 18.3232 16.7626 18.0303 16.4697L16.9697 17.5303ZM11.9697 12.5303C12.2626 12.8232 12.7374 12.8232 13.0303 12.5303C13.3232 12.2374 13.3232 11.7626 13.0303 11.4697L11.9697 12.5303ZM8.03033 6.46967C7.73744 6.17678 7.26256 6.17678 6.96967 6.46967C6.67678 6.76256 6.67678 7.23744 6.96967 7.53033L8.03033 6.46967ZM8.03033 17.5303L13.0303 12.5303L11.9697 11.4697L6.96967 16.4697L8.03033 17.5303ZM13.0303 12.5303L18.0303 7.53033L16.9697 6.46967L11.9697 11.4697L13.0303 12.5303ZM11.9697 12.5303L16.9697 17.5303L18.0303 16.4697L13.0303 11.4697L11.9697 12.5303ZM13.0303 11.4697L8.03033 6.46967L6.96967 7.53033L11.9697 12.5303L13.0303 11.4697Z"
-                                    fill="#ffffff"
-                                  ></path>{" "}
-                                </g>
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </Rnd>
-
-                    <Modal
-                      isOpen={isEditableFieldStyleValue}
-                      onSubmit={handleEditFieldValue}
-                      onClose={closeEditableFieldStyleModal}
-                      title="Edit Style"
-                    >
-                      <div
-                        style={{
-                          padding: "20px",
-                          fontFamily: "'Roboto', sans-serif",
-                          color: "#333",
-                        }}
-                      >
-                        <div className="grid grid-cols-2 gap-3 text-left">
-                          {/* Font Style */}
-                          <div>
-                            <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                              Font Style
-                            </label>
-                            <select
-                              id="fontStyle"
-                              className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-2 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-                              value={styleInput.fontStyle || ""}
-                              onChange={(e) =>
-                                setStyleInput({
-                                  ...styleInput,
-                                  fontStyle: e.target.value,
-                                })
-                              }
-                            >
-                              <option value="">Default</option>
-                              <option value="normal">Normal</option>
-                              <option value="italic">Italic</option>
-                              <option value="oblique">Oblique</option>
-                            </select>
-                          </div>
-                          {/* Font Weight */}
-                          <div>
-                            <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                              Font Weight
-                            </label>
-                            <select
-                              id="fontWeight"
-                              className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-2 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-                              value={styleInput.fontWeight || ""}
-                              onChange={(e) =>
-                                setStyleInput({
-                                  ...styleInput,
-                                  fontWeight: e.target.value,
-                                })
-                              }
-                            >
-                              <option value="">Default</option>
-                              <option value="100">Thin</option>
-                              <option value="400">Normal</option>
-                              <option value="700">Bold</option>
-                              <option value="900">Extra Bold</option>
-                            </select>
-                          </div>
-
-                          {/* Font Color */}
-                          <div className="mb-4">
-                            <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                              Font Color
-                            </label>
-                            <div className="flex items-center space-x-3">
-                              {/* Color Picker */}
-                              <input
-                                id="fontColor"
-                                type="color"
-                                value={styleInput.color || ""}
-                                className="h-9 cursor-pointer rounded-lg border-stroke bg-transparent p-0 outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:focus:border-primary"
-                                onChange={(e) =>
-                                  setStyleInput({
-                                    ...styleInput,
-                                    color: e.target.value,
-                                  })
-                                }
-                              />
-
-                              {/* Display Selected Color Code */}
-                              <input
-                                type="text"
-                                value={styleInput.color || ""}
-                                readOnly
-                                className="w-full rounded-lg border-[1.5px] border-stroke bg-white px-3 py-2 text-black outline-none transition dark:border-form-strokedark dark:bg-form-input dark:text-white"
-                                placeholder="#FFFFFF"
-                              />
-                            </div>
-                          </div>
-
-                          {/* Font Size */}
-                          <div>
-                            <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                              Font Size (e.g., 16px)
-                            </label>
-                            <input
-                              id="fontSize"
-                              type="number"
-                              placeholder="16"
-                              className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-2 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                              value={
-                                styleInput.fontSize
-                                  ? styleInput.fontSize.replace("px", "")
-                                  : ""
-                              }
-                              onChange={(e) =>
-                                setStyleInput({
-                                  ...styleInput,
-                                  fontSize: e.target.value + "px", // Append px to the input value
-                                })
-                              }
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </Modal>
-                    <Modal
-                      isOpen={isModalBarCodeValue}
-                      onSubmit={handleBarCodeValue}
-                      onClose={closeBarCodeValueModal}
-                      title="Add Bar Code"
-                    >
-                      <div className="text-left">
-                        <label className="mb-2 block text-left text-sm font-semibold">
-                          Field Type:
-                        </label>
-                        <select
-                          value={fieldType}
-                          onChange={(e) => setFieldType(e.target.value)}
-                          className="text-md mb-3 w-full rounded-lg border border-[#eee] p-2"
-                        >
-                          <option value="">Please Select Field Type</option>
-                          <option value="barcode">Barcode</option>
-                          <option value="qrcode">QR Code</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="mb-2 block text-left text-sm font-semibold">
-                          Field Value :
-                        </label>
-                        <input
-                          type="text"
-                          value={fieldValue}
-                          onChange={(e) => setFieldValue(e.target.value)}
-                          placeholder="Enter Value"
-                          className="text-md mb-3 w-full rounded-lg border border-[#eee] p-2"
+              {stages[index]?.subSteps[subIndex1]?.printerFields[
+                fieldIndex
+              ].fields?.map((field, i) => (
+                <Rnd
+                  key={i}
+                  bounds="parent"
+                  size={{ width: field.width, height: field.height }}
+                  position={{ x: field.x, y: field.y }}
+                  onDragStop={(e, d) =>
+                    handleFieldChange(i, { x: d.x, y: d.y })
+                  }
+                  onResizeStop={(e, direction, ref, delta, position) => {
+                    handleFieldChange(i, {
+                      width: parseInt(ref.style.width, 10),
+                      height: parseInt(ref.style.height, 10),
+                      x: position.x,
+                      y: position.y,
+                    });
+                  }}
+                  className="absolute cursor-move"
+                  onClick={() => setFocusedFieldIndex(i)}
+                >
+                  <div
+                    className={`relative h-full w-full rounded-md p-1 transition ${
+                      focusedFieldIndex === i
+                        ? "border border-blue-500 shadow-[0_0_0_2px_rgba(59,130,246,0.5)]"
+                        : "border border-transparent"
+                    }`}
+                  >
+                    {field?.type === "barcode" ? (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <Barcode
+                          value={field.value}
+                          width={field.width / 120}
+                          height={field.height - 5}
+                          displayValue={true}
                         />
                       </div>
-                    </Modal>
-                  </>
-                ))}
+                    ) : field?.type === "qrcode" ? (
+                      <QRCodeCanvas
+                        value={field.name}
+                        size={Math.min(field.width, field.height)}
+                      />
+                    ) : field?.type === "image" ? (
+                      <img
+                        src={field.value}
+                        alt="Cropped"
+                        className="h-full w-full rounded-md object-cover"
+                      />
+                    ) : (
+                      <div
+                        className="bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200 flex h-full w-full items-center justify-center rounded text-center text-sm font-medium"
+                        style={field?.styles || {}}
+                      >
+                        {field?.slug || field?.value || "Text"}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Buttons */}
+                  {focusedFieldIndex === i && (
+                    <div className="absolute -top-3 right-0 z-1 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedQRValue(field);
+                          setEditableFieldStyleValue(true);
+                        }}
+                        className="rounded-full bg-blue-600 p-1 text-white hover:bg-blue-700"
+                      >
+                        <Pencil size={14} />
+                      </button>
+
+                      {field?.slug && (
+                        <button
+                          type="button"
+                          onClick={() => openBarCodeValue(field)}
+                          className="rounded-full bg-green-600 p-1 text-white hover:bg-green-700"
+                        >
+                          <Plus size={14} />
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveField(i)}
+                        className="rounded-full bg-danger p-1 text-white hover:bg-danger"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
+                </Rnd>
+              ))}
             </div>
           </div>
+          {/* 🔹 Modal for Editing Styles */}
+          <Modal
+            isOpen={isEditableFieldStyleValue}
+            onSubmit={handleEditFieldValue}
+            onClose={closeEditableFieldStyleModal}
+            title="Edit Field Style"
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Font Style</label>
+                <select
+                  className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2 dark:border-strokedark dark:bg-form-input"
+                  value={styleInput.fontStyle || ""}
+                  onChange={(e) =>
+                    setStyleInput({ ...styleInput, fontStyle: e.target.value })
+                  }
+                >
+                  <option value="">Default</option>
+                  <option value="normal">Normal</option>
+                  <option value="italic">Italic</option>
+                  <option value="oblique">Oblique</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Font Weight</label>
+                <select
+                  className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2 dark:border-strokedark dark:bg-form-input"
+                  value={styleInput.fontWeight || ""}
+                  onChange={(e) =>
+                    setStyleInput({ ...styleInput, fontWeight: e.target.value })
+                  }
+                >
+                  <option value="">Default</option>
+                  <option value="100">Thin</option>
+                  <option value="400">Normal</option>
+                  <option value="700">Bold</option>
+                  <option value="900">Extra Bold</option>
+                </select>
+              </div>
+
+              <div className="col-span-2">
+                <label className="text-sm font-medium">Font Color</label>
+                <div className="mt-1 flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={styleInput.color || "#000000"}
+                    onChange={(e) =>
+                      setStyleInput({ ...styleInput, color: e.target.value })
+                    }
+                    className="border-gray-300 h-9 w-12 cursor-pointer rounded-md border"
+                  />
+                  <input
+                    type="text"
+                    value={styleInput.color || ""}
+                    readOnly
+                    className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Font Size</label>
+                <input
+                  type="number"
+                  placeholder="16"
+                  value={styleInput.fontSize?.replace("px", "") || ""}
+                  onChange={(e) =>
+                    setStyleInput({
+                      ...styleInput,
+                      fontSize: e.target.value + "px",
+                    })
+                  }
+                  className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2 dark:border-strokedark dark:bg-form-input"
+                />
+              </div>
+            </div>
+          </Modal>
+          {/* 🔹 Modal for Adding Barcode/QR */}
+          <Modal
+            isOpen={isModalBarCodeValue}
+            onSubmit={handleBarCodeValue}
+            onClose={closeBarCodeValueModal}
+            title="Add Barcode / QR"
+          >
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Field Type</label>
+                <select
+                  value={fieldType}
+                  onChange={(e) => setFieldType(e.target.value)}
+                  className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2"
+                >
+                  <option value="">Select</option>
+                  <option value="barcode">Barcode</option>
+                  <option value="qrcode">QR Code</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Field Value</label>
+                <input
+                  type="text"
+                  value={fieldValue}
+                  onChange={(e) => setFieldValue(e.target.value)}
+                  placeholder="Enter Value"
+                  className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2"
+                />
+              </div>
+            </div>
+          </Modal>
           {/* Export Sticker Button */}
           <div className="mt-4">
             <button
               type="button"
               className="rounded bg-orange-500 px-4 py-2 text-white"
-              onClick={exportSticker}
+              onClick={() =>{exportSticker(stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]
+                  ?.dimensions?.width,stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]
+                  ?.dimensions?.height)}}
             >
               Preview Sticker
             </button>

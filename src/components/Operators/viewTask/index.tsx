@@ -26,16 +26,35 @@ import {
 } from "@/lib/api";
 import { calculateTimeDifference } from "@/lib/common";
 import SearchableInput from "@/components/SearchableInput/SearchableInput";
-const ViewTaskDetailsComponent = ({
+
+// Utility: safely read current user from localStorage
+const getCurrentUser = () => {
+  try {
+    const raw = localStorage.getItem("userDetails");
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+type Device = any;
+type Carton = any;
+
+interface Props {
+  isFullScreenMode: boolean;
+  setIsFullScreenMode: (v: boolean) => void;
+}
+
+const ViewTaskDetailsComponent: React.FC<Props> = ({
   isFullScreenMode,
   setIsFullScreenMode,
 }) => {
-  const [getPlaningAndScheduling, setPlaningAndScheduling] = useState([]);
-  const [product, setProduct] = useState({});
-  const [shift, setShift] = useState({});
-  const [selectedProduct, setSelectedProduct] = useState({});
-  const [operatorDetails, setOperatorDetail] = useState([]);
-  const [assignUserStage, setAssignUserStage] = useState({});
+  const [getPlaningAndScheduling, setPlaningAndScheduling] = useState<any>(null);
+  const [product, setProduct] = useState<any>({});
+  const [shift, setShift] = useState<any>({});
+  const [selectedProduct, setSelectedProduct] = useState<any>({});
+  const [operatorDetails, setOperatorDetail] = useState<any[]>([]);
+  const [assignUserStage, setAssignUserStage] = useState<any>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [elapsedDevicetime, setElapsedDevicetime] = useState(0);
   const [isPaused, setIsPaused] = useState(true);
@@ -48,61 +67,66 @@ const ViewTaskDetailsComponent = ({
   const [totalCompleted, setTotalCompleted] = useState(0);
   const [totalNg, setTotalNg] = useState(0);
   const [overallTotalAttempts, setOverallTotalAttempts] = useState(0);
-  const [deviceList, setDeviceList] = useState([]);
+  const [deviceList, setDeviceList] = useState<any[]>([]);
   const [choosenDevice, setChoosenDevice] = useState("");
-  const [checkedDevice, setCheckedDevice] = useState([]);
+  const [checkedDevice, setCheckedDevice] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResult, setSearchResult] = useState("");
   const [showOnScan, setShowOnScan] = useState(false);
   const [notFoundError, setNotFoundError] = useState("");
-  const [deviceHistory, setDeviceHistory] = useState([]);
+  const [deviceHistory, setDeviceHistory] = useState<any[]>([]);
   const [isDeviceSectionShow, setIsDeviceSectionShow] = useState(false);
   const [isReportIssueModal, setIsReportIssueModal] = useState(false);
   const [issueType, setIssueType] = useState("");
   const [issueDescription, setIssueDescription] = useState("");
   const [searchedSerialNo, setSearchedSerialNo] = useState("");
-  const [operatorSeatInfo, setOperatorSeatInfo] = useState("");
+  const [operatorSeatInfo, setOperatorSeatInfo] = useState<any>(null);
   const [isPassNGButtonShow, setIsPassNGButtonShow] = useState(false);
   const [isStickerPrinted, setIsStickerPrinted] = useState(false);
   const [isVerifyStickerModal, setIsVerifyStickerModal] = useState(false);
   const [isDownTimeEnable, setIsDownTimeAvailable] = useState(false);
-  const [getDownTimeVal, setDownTimeVal] = useState({});
+  const [getDownTimeVal, setDownTimeVal] = useState<any>({});
   const [processStatus, setProcessStatus] = useState("");
-  const [processData, setProcessData] = useState({});
-  const [processAssignUserStage, setProcessAssignUserStage] = useState({});
+  const [processData, setProcessData] = useState<any>({});
+  const [processAssignUserStage, setProcessAssignUserStage] = useState<any>({});
   const [selectedProcess, setSelectedProcess] = useState("");
   const [assignedTaskDetails, setAssignedTaskDetails] = useState("");
   const [isScanModalOpen, setScanModalOpen] = useState(false);
   const [scanslug, setScanSlug] = useState("");
-  const [isScanValuePass, setIsScanValuePass] = useState([]);
-  const [isCheckValueButtonHide, setCheckValueButtonHide] = useState([]);
-  const [scanValue, setScanValue] = useState([]);
+  const [isScanValuePass, setIsScanValuePass] = useState<boolean[]>([]);
+  const [isCheckValueButtonHide, setCheckValueButtonHide] = useState<boolean[]>([]);
+  const [scanValue, setScanValue] = useState<string[]>([]);
   const [moveToPackaging, setMoveToPackaging] = useState(false);
   const [serialNumber, setSerialNumber] = useState("");
   const [startTest, setStartTest] = useState(false);
-  const [cartons, setCartons] = useState([]);
+  const [cartons, setCartons] = useState<any[]>([]);
   const [isCartonBarcodePrinted, setIsCartonBarCodePrinted] = useState(false);
   const [isVerifiedSticker, setIsVerifiedSticker] = useState(false);
   const [processCartons, setProcessCartons] = useState([]);
+  const [isdevicePassed, setIsDevicePassed] = useState(false);
+  const [processStagesName,setProcessStageName] = useState<string[]>([]);
+  const [selectAssignDeviceDepartment, setAsssignDeviceDepartment] =
+    useState<string>("");
   const { SVG } = useQRCode();
 
   useEffect(() => {
     const pathname = window.location.pathname;
-    let user = JSON.parse(localStorage.getItem("userDetails"));
-
     const id = pathname.split("/").pop();
+    // prefetch using helper
+    const user = getCurrentUser();
     getDeviceTestEntry();
     getPlaningAndSchedulingByID(id);
     getOverallProgress(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const closeScanModal = () => {
     setScanModalOpen(false);
   };
   const handleCreatingCarton = async () => {
     try {
-      // createCatron
-    } catch (error) {
-      console.log(`Error Creating Carton`, error?.message);
+      // createCarton implementation
+    } catch (error: any) {
+      console.log(`Error Creating Carton`, error?.message ?? error);
     }
   };
   const getAssignedTask = async (id: any) => {
@@ -118,16 +142,13 @@ const ViewTaskDetailsComponent = ({
   };
   const getOverallProgress = async (id: any) => {
     try {
-      let user = JSON.parse(localStorage.getItem("userDetails"));
-      let data = {
-        id: id,
-        user_id: user._id,
-      };
+      const user = getCurrentUser();
+      const data = { id, user_id: user?._id };
       let response = await getOverallProgressByOperatorId(data);
-      let devices = response.data;
+      let devices = response.data || [];
       setOverallTotalAttempts(devices.length);
-    } catch (error) {
-      console.log(`Error Fetching Device History`, error);
+    } catch (error: any) {
+      console.log(`Error Fetching Device History`, error?.message ?? error);
     }
   };
   const getDeviceById = async (id: any) => {
@@ -145,13 +166,13 @@ const ViewTaskDetailsComponent = ({
   };
   const getDeviceTestEntry = async () => {
     try {
-      let userDetails = JSON.parse(localStorage.getItem("userDetails"));
-      let result = await getDeviceTestEntryByOperatorId(userDetails._id);
+      const userDetails = getCurrentUser();
+      const result = await getDeviceTestEntryByOperatorId(userDetails?._id);
       let devices = result.data;
       let deviceHistory = [];
       let ngCount = 0;
       let completedCount = 0;
-      const updatedDeviceHistory = devices.map((value) => {
+      const updatedDeviceHistory = devices.map((value:any) => {
         if (value.status === "NG") {
           ngCount += 1;
         } else if (value.status === "Pass" || value.status === "Completed") {
@@ -161,6 +182,7 @@ const ViewTaskDetailsComponent = ({
           deviceInfo: value,
           stageName: value?.stageName,
           status: value?.status,
+          assignedDeviceTo: value?.assignedDeviceTo,
           timeTaken: value?.timeConsumed,
         };
       });
@@ -169,8 +191,8 @@ const ViewTaskDetailsComponent = ({
       setTotalAttempts(devices.length);
       setCheckedDevice(updatedDeviceHistory);
       return updatedDeviceHistory;
-    } catch (error) {
-      console.log(`Error Fetching Devices`, error);
+    } catch (error: any) {
+      console.log(`Error Fetching Devices`, error?.message ?? error);
     }
   };
   const getDeviceTestEntryOverall = async () => {
@@ -184,18 +206,24 @@ const ViewTaskDetailsComponent = ({
   const getDevices = async (id: any, assignStageToUser: any, pId: any) => {
     try {
       const result = await getDeviceByProductId(id);
+      // result?.data contains product devices
       const existingDevices = await getDeviceTestEntryOverall();
       const existingSerials = new Set(
-        existingDevices
-          .filter((device) => device.processId === pId)
-          .map((device) => device.serialNo),
+        (existingDevices || [])
+          .filter((device: any) => device.processId === pId)
+          .map((device: any) => device.serialNo),
       );
+      console.log("Existing Serials:", existingSerials);
       const filteredDeviceList = result?.data.filter(
-        (device) =>
-          //!existingSerials.has(device.serialNo) &&
+        (device: any) =>
+          !existingDevices.includes(device.serialNo) &&
           device.currentStage === assignStageToUser[0]?.name &&
-          device.status !== "Pass",
+          device.status !== "Pass" &&
+          device.assignDeviceTo !== "TRC" &&
+          device.assignDeviceTo !== "QC" 
       );
+      console.log("Filtered Device List:", filteredDeviceList);
+      // set filtered list
       setDeviceList(filteredDeviceList);
     } catch (error) {
       console.error("Error Fetching Devices:", error);
@@ -205,12 +233,14 @@ const ViewTaskDetailsComponent = ({
     const savedTime = localStorage.getItem("elapsedTime");
     const savedDisplayItem = localStorage.getItem("deviceDisplayTime");
     if (savedDisplayItem) {
-      setElapsedDevicetime(Number(savedDisplayItem));
-      setDeviceisplay(Number(savedDisplayItem));
+      const n = Number(savedDisplayItem);
+      setElapsedDevicetime(n);
+      setDeviceisplay(formatTime(n));
     }
     if (savedTime) {
-      setElapsedTime(Number(savedTime));
-      setTimerDisplay(formatTime(Number(savedTime)));
+      const n = Number(savedTime);
+      setElapsedTime(n);
+      setTimerDisplay(formatTime(n));
     }
   }, []);
   useEffect(() => {
@@ -243,14 +273,14 @@ const ViewTaskDetailsComponent = ({
   }, [isPaused]);
   const handleSubmitReport = async () => {
     try {
-      let user = JSON.parse(localStorage.getItem("userDetails"));
+      const user = getCurrentUser();
       const pathname = window.location.pathname;
-      const id = pathname.split("/").pop();
+      const id = pathname.split("/").pop() || "";
       let formData = new FormData();
       formData.append("serialNo", searchedSerialNo);
-      formData.append("reportedBy", user._id);
-      formData.append("processId", id);
-      formData.append("currentStage", assignUserStage?.name);
+      formData.append("reportedBy", String(user?._id || ""));
+      formData.append("processId", String(id));
+      formData.append("currentStage", String(assignUserStage?.name || ""));
       formData.append("issueType", issueType);
       formData.append("issueDescription", issueDescription);
       const response = await createReport(formData);
@@ -258,13 +288,12 @@ const ViewTaskDetailsComponent = ({
         setIsReportIssueModal(false);
         setSearchResult("");
         setSearchQuery("");
+        setIsPassNGButtonShow(false);
+        setIsVerifiedSticker(true);
         return false;
       }
-    } catch (error) {
-      console.error(error?.message);
-      // toast.error(
-      //   error?.message || "An error occurred while creating the stage.",
-      // );
+    } catch (error: any) {
+      console.error(error?.message ?? error);
     }
   };
   const formatTime = (seconds: number) => {
@@ -289,8 +318,6 @@ const ViewTaskDetailsComponent = ({
   };
   const getProduct = async (id: any, assignStageToUser: any) => {
     try {
-      //   console.log("assignStageToUser ===>", assignStageToUser);
-      //  return false;
       let result = await getProductById(id);
 
       setSelectedProduct(result);
@@ -301,11 +328,15 @@ const ViewTaskDetailsComponent = ({
   };
   const fetchProcessByID = async (id: any, assignStageToUser: any) => {
     try {
-      let result = await getProcessByID(id);
-      console.log("result ===>", result);
+      const result = await getProcessByID(id);
+      const stages: string[] = [];
+      (result?.stages || []).forEach((value: any) => {
+        if (value?.stageName) stages.push(value.stageName);
+      });
+      setProcessStageName(stages);
       setProcessStatus(result?.status);
       setProcessData(result);
-      let processStage = result?.stages.find((value) => {
+      const processStage = (result?.stages || []).find((value: any) => {
         return (
           value.stageName ===
           (Array.isArray(assignStageToUser)
@@ -317,8 +348,8 @@ const ViewTaskDetailsComponent = ({
       getDevices(result?.selectedProduct, assignStageToUser, result?._id);
       getProduct(result.selectedProduct, assignStageToUser);
       setProduct(result);
-    } catch (error) {
-      console.log("Error Fetching Processs !", error);
+    } catch (error: any) {
+      console.log("Error Fetching Processs !", error?.message ?? error);
     }
   };
   const getShiftByID = async (id: any) => {
@@ -333,80 +364,77 @@ const ViewTaskDetailsComponent = ({
   };
   const getPlaningAndSchedulingByID = async (id: any) => {
     try {
-      let result = await getPlaningAndSchedulingById(id);
-      let user = JSON.parse(localStorage.getItem("userDetails"));
-      let assignedTaskDetails = await getAssignedTask(user._id);
+      const result = await getPlaningAndSchedulingById(id);
+      const user = getCurrentUser();
+      const assignedTaskDetails = await getAssignedTask(user?._id);
       setAssignedTaskDetails(assignedTaskDetails);
-      let assignOperator, assignStage;
-      if (assignedTaskDetails.stageType == "common") {
-        assignOperator = JSON.parse(result?.assignedCustomStagesOp);
-        assignStage = JSON.parse(result?.assignedCustomStages);
+      let assignOperator: any = {};
+      let assignStage: any = {};
+      if (assignedTaskDetails?.stageType === "common") {
+        assignOperator = JSON.parse(result?.assignedCustomStagesOp || "{}");
+        assignStage = JSON.parse(result?.assignedCustomStages || "{}");
       } else {
-        assignOperator = JSON.parse(result?.assignedOperators);
-        assignStage = JSON.parse(result?.assignedStages);
+        assignOperator = JSON.parse(result?.assignedOperators || "{}");
+        assignStage = JSON.parse(result?.assignedStages || "{}");
       }
-      let currentUserName = JSON.parse(localStorage.getItem("userDetails"));
-      const keys = Object.keys(assignOperator);
-      const keysAssignStages = Object.keys(assignStage);
-      let seatDetails;
-      Object.keys(assignOperator).map((value, index) => {
-        if (assignOperator[value][0]._id == currentUserName._id) {
+      const currentUserName = user;
+      const keys = Object.keys(assignOperator || {});
+      const keysAssignStages = Object.keys(assignStage || {});
+      let seatDetails: string | undefined;
+      keys.forEach((value: string, index: number) => {
+        if (assignOperator[value]?.[0]?._id === currentUserName?._id) {
           seatDetails = keys[index];
         }
       });
-      let seatInfo = seatDetails?.split("-");
+      const seatInfo = seatDetails?.split("-");
       if (seatInfo) {
         setOperatorSeatInfo({
           rowNumber: seatInfo[0],
           seatNumber: seatInfo[1],
         });
       }
-      let assignStageToUser;
-      keysAssignStages.map((value, index) => {
-        if (value == seatDetails) {
+      let assignStageToUser: any = null;
+      keysAssignStages.forEach((value: string) => {
+        if (value === seatDetails) {
           assignStageToUser = assignStage[value];
           setAssignUserStage(assignStage[value]);
         }
       });
-      if (result?.status == "down_time_hold") {
+      if (result?.status === "down_time_hold") {
         setIsDownTimeAvailable(true);
-        setDownTimeVal(JSON.parse(result?.downTime));
+        setDownTimeVal(JSON.parse(result?.downTime || "{}"));
       }
 
       setSelectedProcess(result?.selectedProcess);
       fetchProcessByID(result?.selectedProcess, assignStageToUser);
       getShiftByID(result?.selectedShift);
       setPlaningAndScheduling(result);
-    } catch (error) {
-      console.log("error fetching planing and scheduling", error);
+    } catch (error: any) {
+      console.log("error fetching planing and scheduling", error?.message ?? error);
     }
   };
   const toggleFullScreenMode = () => {
     setIsFullScreenMode(!isFullScreenMode);
   };
-  const handleChoosenDevice = (event) => {
+  const handleChoosenDevice = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setChoosenDevice(event.target.value);
   };
-
-  const handleUpdateStatus = async (status) => {
+  const handleUpdateStatus = async (status: string,deviceDepartment: string) => {
     try {
-      let deviceInfo = deviceList.filter(
-        (device) => device.serialNo === searchResult,
-      );
-      // Find current stage index
-      const stageData = Array.isArray(assignUserStage)
-        ? assignUserStage[0]
-        : assignUserStage;
+      let deviceInfo = deviceList.filter((device: any) => device.serialNo === searchResult);
+       // Find current stage index
+       const stageData = Array.isArray(assignUserStage)
+         ? assignUserStage[0]
+         : assignUserStage;
 
       if (status === "Pass") {
         // setIsPassNGButtonShow(false);
         setIsStickerPrinted(false);
+        setIsDevicePassed(true);
         let formData1 = new FormData();
 
         // Find current stage index
-        const currentIndex = processData?.stages?.findIndex(
-          (stage) => stage.stageName === stageData?.name,
-        );
+        const currentIndex = processData?.stages?.findIndex((stage: any) => stage.stageName === stageData?.name);
 
         if (currentIndex !== -1) {
           const nextStage =
@@ -418,10 +446,10 @@ const ViewTaskDetailsComponent = ({
           } else {
             const commonStages = processData?.commonStages || [];
             if (commonStages.length > 0) {
-              formData1.append("currentStage", commonStages[0].stageName);
+              formData1.append("currentStage", String(commonStages[0].stageName || ""));
               formData1.append(
                 "commonStages",
-                JSON.stringify(commonStages.map((cs) => cs.stageName)),
+                JSON.stringify((commonStages || []).map((cs: any) => cs.stageName)),
               );
             } else {
               formData1.append("currentStage", assignUserStage?.name);
@@ -431,28 +459,30 @@ const ViewTaskDetailsComponent = ({
         // Update device stage
         await updateStageByDeviceId(deviceInfo[0]._id, formData1);
       }
-
       // Save device test entry
       let formData = new FormData();
       const pathname = window.location.pathname;
       const id = pathname.split("/").pop();
 
-      let userDetails = JSON.parse(localStorage.getItem("userDetails"));
-      formData.append("deviceId", deviceInfo[0]._id);
-      formData.append("processId", selectedProcess);
-      formData.append("planId", id);
-      formData.append("productId", selectedProduct?.product?._id);
-      formData.append("operatorId", userDetails._id);
-      formData.append("serialNo", deviceInfo[0].serialNo);
+      const userDetails = getCurrentUser();
+      formData.append("deviceId", String(deviceInfo[0]._id || ""));
+      formData.append("processId", String(selectedProcess || ""));
+      formData.append("planId", String(id || ""));
+      formData.append("productId", String(selectedProduct?.product?._id || ""));
+      formData.append("operatorId", String(userDetails?._id || ""));
+      formData.append("serialNo", String(deviceInfo[0].serialNo || ""));
       formData.append(
         "seatNumber",
         operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber,
       );
+      if (status == "NG") {
+        formData.append("assignedDeviceTo", String(selectAssignDeviceDepartment || ""));
+      }
       // Append safely
-      formData.append("stageName", stageData?.name ?? "");
+      formData.append("stageName", String(stageData?.name ?? ""));
 
-      formData.append("status", status);
-      formData.append("timeConsumed", deviceDisplay);
+      formData.append("status", String(status));
+      formData.append("timeConsumed", String(deviceDisplay));
 
       let result = await createDeviceTestEntry(formData);
 
@@ -474,108 +504,26 @@ const ViewTaskDetailsComponent = ({
         }
         setElapsedDevicetime(0);
         setDeviceisplay("00:00:00");
-
+        // setSearchQuery("");
         getPlaningAndSchedulingByID(id);
         getDevices(result?.selectedProduct, assignUserStage, id);
-
+        getDeviceById(deviceInfo[0]._id);
+        setIsPassNGButtonShow(false);
+        setSearchQuery("");
         toast.success(result.message || `Device ${status} Successfully!!`);
       } else {
         toast.error(result?.message || "Error creating device test entry");
       }
-    } catch (error) {
-      console.log("error Creating Device Test Entry", error);
+    } catch (error: any) {
+      console.log("error Creating Device Test Entry", error?.message ?? error);
       toast.error(error?.message || "Error creating device test entry");
     }
   };
-
-  // const handleUpdateStatus = async (status) => {
-  //   try {
-  //     let deviceInfo = deviceList.filter(
-  //       (device) => device.serialNo === searchResult,
-  //     );
-  //     if (status === "Pass") {
-  //       let formData1 = new FormData();
-  //       const currentIndex = processData?.stages?.findIndex(
-  //         (stage) => stage.stageName === assignUserStage?.name,
-  //       );
-  //       if (currentIndex != -1) {
-  //         const nextStage =
-  //           currentIndex < processData?.stages?.length - 1
-  //             ? processData?.stages[currentIndex + 1]
-  //             : null;
-  //         if (nextStage) {
-  //           formData1.append("currentStage", nextStage?.stageName);
-  //         } else {
-  //           const commonStages = processData?.commonStages;
-  //           if (commonStages && commonStages.length > 0) {
-  //             formData1.append("currentStage", commonStages[0]?.name);
-  //             processData.commonStages.shift();
-  //           } else {
-  //             formData1.append("currentStage", assignUserStage?.name);
-  //           }
-  //         }
-  //       }
-  //       updateStageByDeviceId(deviceInfo[0]._id, formData1);
-  //     }
-  //     let formData = new FormData();
-  //     const pathname = window.location.pathname;
-  //     const id = pathname.split("/").pop();
-
-  //     let userDetails = JSON.parse(localStorage.getItem("userDetails"));
-  //     formData.append("deviceId", deviceInfo[0]._id);
-  //     formData.append("processId", selectedProcess);
-  //     formData.append("planId", id);
-  //     formData.append("productId", selectedProduct?.product?._id);
-  //     formData.append("operatorId", userDetails._id);
-  //     formData.append("serialNo", deviceInfo[0].serialNo);
-  //     formData.append(
-  //       "seatNumber",
-  //       operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber,
-  //     );
-  //     formData.append("stageName", assignUserStage?.name);
-  //     formData.append("status", status);
-  //     formData.append("timeConsumed", deviceDisplay);
-
-  //     let result = await createDeviceTestEntry(formData);
-  //     if (result && result.status == 200) {
-  //       setCheckedDevice((prev) => [
-  //         ...prev,
-  //         {
-  //           deviceInfo: deviceInfo[0],
-  //           stageName: assignUserStage?.name,
-  //           status,
-  //           timeTaken: deviceDisplay,
-  //         },
-  //       ]);
-  //       setTotalAttempts((prev) => prev + 1);
-  //       if (status == "NG") {
-  //         setTotalNg((prev) => prev + 1);
-  //       } else {
-  //         setTotalCompleted((prev) => prev + 1);
-  //       }
-  //       // setIsVerifiedSticker(true);
-  //       // setIsPassNGButtonShow(false);
-  //       setElapsedDevicetime(0);
-  //       setDeviceisplay("00:00:00");
-  //       getPlaningAndSchedulingByID(id);
-  //       getDevices(result?.selectedProduct, assignUserStage, id);
-  //       // setSearchResult("");
-  //       // setSearchQuery("");
-  //       toast.success(result.message || `Device ${status} Successfully!!`);
-  //     } else {
-  //       toast.error(result?.message || "error Creating Device Test Entry");
-  //     }
-  //   } catch (error) {
-  //     console.log("error Creating Device Test Entry", error);
-  //     toast.error(error?.message || "error Creating Device Test Entry");
-  //   }
-  // };
-  const handleNoResults = (query) => {
-    console.log("No results found for:", query);
+  const handleNoResults = (query: string) => {
     setNotFoundError(`No results found for: ${query}`);
     setSearchedSerialNo(query);
   };
-  const calculateEfficiency = (totalAttempts, upha, timeDifference) => {
+  const calculateEfficiency = (totalAttempts: number, upha: number, timeDifference: number) => {
     if (!upha || timeDifference <= 0) {
       return 0;
     }
@@ -590,7 +538,8 @@ const ViewTaskDetailsComponent = ({
   const handlePrintSticker = () => {
     const stickerElement = document.getElementById("sticker-preview");
     setIsVerifiedSticker(false);
-    html2canvas(stickerElement, {
+    if (!stickerElement) return;
+    html2canvas(stickerElement as HTMLElement, {
       scale: window.devicePixelRatio,
       useCORS: true,
     }).then((canvas) => {
@@ -664,13 +613,10 @@ const ViewTaskDetailsComponent = ({
       toast.error("Serial number does not match. Try again.");
     }
   };
-  // const handleVerifyStickerModal = () => {
-  //   setIsVerifyStickerModal(!isVerifyStickerModal);
-  // };
   const handleSubmitScan = () => {
     alert("hello");
   };
-  const handlePrintField = (index: any) => {
+  const handlePrintField = (index: number) => {
     let newValues = [...isScanValuePass];
     let buttonValues = [...isCheckValueButtonHide];
     if (scanValue[index] === searchResult) {
@@ -682,21 +628,21 @@ const ViewTaskDetailsComponent = ({
     setCheckValueButtonHide(buttonValues);
     setIsScanValuePass(newValues);
   };
-  const handleScanValue = (index, event) => {
+  const handleScanValue = (index: number, event: React.ChangeEvent<HTMLInputElement>) => {
     let newValues = [...scanValue];
     newValues[index] = event.target.value;
     setScanValue(newValues);
   };
   const handleAddToCart = async (device: Device, packageData: any) => {
     try {
-      let lastCarton = cartons[cartons.length - 1];
+      const lastCarton = cartons[cartons.length - 1];
 
       if (!lastCarton || lastCarton.devices.length >= lastCarton.maxCapacity) {
         const pathname = window.location.pathname;
-        const processId = pathname.split("/").pop();
+        const processId = pathname.split("/").pop() || "";
 
         const formData = new FormData();
-        formData.append("processId", processId || "");
+        formData.append("processId", String(processId));
         formData.append(
           "cartonSize",
           JSON.stringify({
@@ -704,11 +650,11 @@ const ViewTaskDetailsComponent = ({
             height: packageData.height,
           }),
         );
-        formData.append("maxCapacity", packageData.maxCapacity.toString());
+        formData.append("maxCapacity", String(packageData.maxCapacity));
         formData.append("status", "empty");
-        formData.append("weightCarton", packageData.cartonWeight.toString());
+        formData.append("weightCarton", String(packageData.cartonWeight));
         const newCartonData = await createCarton(formData);
-        const newCarton: Carton = {
+        const newCarton: any = {
           id: newCartonData.id,
           devices: [device],
           maxCapacity: packageData.maxCapacity,
@@ -720,19 +666,23 @@ const ViewTaskDetailsComponent = ({
           status: "partial",
         };
 
-        cartons.push(newCarton);
-        console.log("New carton created and device added:", newCarton);
+        setCartons((prev: any[]) => [...prev, newCarton]);
       } else {
-        lastCarton.devices.push(device);
-        if (lastCarton.devices.length === lastCarton.maxCapacity) {
-          lastCarton.status = "full";
-        } else {
-          lastCarton.status = "partial";
-        }
-        console.log("Device added to existing carton:", lastCarton);
+        setCartons((prev: any[]) => {
+          const copy = [...prev];
+          const last = copy[copy.length - 1];
+          last.devices = [...(last.devices || []), device];
+          if (last.devices.length === last.maxCapacity) {
+            last.status = "full";
+          } else {
+            last.status = "partial";
+          }
+          copy[copy.length - 1] = last;
+          return copy;
+        });
       }
     } catch (error: any) {
-      console.error("Error Creating/Updating Carton", error?.message);
+      console.error("Error Creating/Updating Carton", error?.message ?? error);
     }
   };
   const handleMoveToPackaging = () => {
@@ -756,7 +706,7 @@ const ViewTaskDetailsComponent = ({
       {/* Header */}
       <div className="sticky top-0 z-10 flex items-center justify-between bg-white p-4 shadow-sm">
         <Breadcrumb
-          pageName={`${product?.name} - ${assignUserStage[0]?.name || assignUserStage?.stage || ""}`}
+          pageName={`${product?.name} - ${assignUserStage?.[0]?.name || assignUserStage?.stage || ""}`}
           parentName="Task Management"
         />
         {isDownTimeEnable && (
@@ -787,7 +737,7 @@ const ViewTaskDetailsComponent = ({
           <h3 className="text-lg font-bold text-blue-700">Issued Kits</h3>
           <div className="mt-2 space-y-1 text-sm text-blue-900">
             <p>
-              <b>WIP Kits:</b> {parseInt(assignUserStage?.totalUPHA)}
+              <b>WIP Kits:</b> {parseInt(String(assignUserStage?.[0]?.totalUPHA || 0))}
             </p>
             <p>
               <b>Line Issued Kits:</b>{" "}
@@ -843,7 +793,7 @@ const ViewTaskDetailsComponent = ({
           setDevicePause={setDevicePause}
           deviceDisplay={deviceDisplay}
           deviceList={deviceList}
-          checkedDevice={checkedDevice}
+           checkedDevice={checkedDevice}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           handleNoResults={handleNoResults}
@@ -880,6 +830,12 @@ const ViewTaskDetailsComponent = ({
           setProcessCartons={setProcessCartons}
           processCartons={processCartons}
           assignedTaskDetails={assignedTaskDetails}
+          assignUserStage={assignUserStage}
+          setIsDevicePassed={setIsDevicePassed}
+          isdevicePassed={isdevicePassed}
+          setAsssignDeviceDepartment={setAsssignDeviceDepartment}
+          selectAssignDeviceDepartment={selectAssignDeviceDepartment}
+          processStagesName={processStagesName}
         />
       ) : (
         <BasicInformation
@@ -892,317 +848,6 @@ const ViewTaskDetailsComponent = ({
       )}
     </div>
   );
-  //     <>
-  //       <div
-  //         className="sticky z-10 bg-gray"
-  //         style={
-  //           isFullScreenMode
-  //             ? { top: "80px" }
-  //             : { top: "0px", padding: "0px 15px" }
-  //         }
-  //       >
-  //         <Breadcrumb
-  //           pageName={`${product?.name} - ${assignUserStage?.name}`}
-  //           parentName="Task Management"
-  //         />
-  //         <ToastContainer
-  //           position="top-center"
-  //           closeOnClick
-  //           pauseOnFocusLoss
-  //           draggable
-  //           pauseOnHover
-  //         />
-  //         <div className="flex items-center gap-2 py-1">
-  //           <h5 className="text-lg">
-  //             <strong>Seat Details :</strong>
-  //           </h5>
-  //           <p className="pt-1 text-sm text-black">
-  //             Line Number : {operatorSeatInfo?.rowNumber} , Seat Number :{" "}
-  //             {operatorSeatInfo?.seatNumber}
-  //           </p>
-  //         </div>
-  //         <div className="grid grid-cols-3 gap-4">
-  //           <div className="rounded-lg border border-l-6 border-secondary bg-blue-50 px-4 py-6 shadow-md">
-  //             <h3 className="text-lg font-bold text-secondary">Issued Kits</h3>
-  //             <p className="text-sm text-secondary">
-  //               <p>
-  //                 <strong>WIP Kits :</strong>
-  //                 {parseInt(assignUserStage?.totalUPHA)}
-  //               </p>
-  //               <p>
-  //                 <strong>Line Issued Kits :</strong>
-  //                 {getPlaningAndScheduling?.assignedIssuedKits}
-  //               </p>
-  //               <p>
-  //                 <strong>Kits Shortage : </strong>
-  //                 {getPlaningAndScheduling?.assignedIssuedKits <
-  //                 parseInt(getPlaningAndScheduling?.processQuantity)
-  //                   ? parseInt(getPlaningAndScheduling?.processQuantity) -
-  //                     getPlaningAndScheduling?.assignedIssuedKits
-  //                   : 0}
-  //               </p>
-  //             </p>
-  //           </div>
-  //           <div className="rounded-lg border border-l-6 border-green-500 bg-green-50 px-4 py-6 shadow-md">
-  //             <h3 className="text-lg font-bold text-green-600">Devices</h3>
-  //             <p className="text-xs text-green-800">
-  //               <strong>Attempts : </strong>
-  //               {totalAttempts}
-  //             </p>
-  //             <p className="text-xs text-green-800">
-  //               <strong>Pass : </strong>
-  //               {totalCompleted}
-  //             </p>
-  //             <p className="text-xs text-green-800">
-  //               <strong>NG : </strong>
-  //               {totalNg}
-  //             </p>
-  //           </div>
-  //           <div className="rounded-lg border border-l-6 border-yellow-500 bg-yellow-50 px-4 py-6 shadow-md">
-  //             <h3 className="text-lg font-bold text-yellow-600">Efficiency</h3>
-  //             <p className="text-xs text-yellow-800">
-  //               <strong>Process Efficiency : </strong>
-  //               {calculateEfficiency(
-  //                 overallTotalAttempts,
-  //                 assignUserStage?.upha,
-  //                 timeDifference,
-  //               )}
-  //               %
-  //             </p>
-  //             <p className="text-xs text-yellow-800">
-  //               <strong>Today Efficiency : </strong>{" "}
-  //               {calculateEfficiency(
-  //                 totalAttempts,
-  //                 assignUserStage?.upha,
-  //                 timeDifference,
-  //               )}
-  //               %
-  //             </p>
-  //           </div>
-  //         </div>
-  //       </div>
-  //       <div className="bg-gray-100 min-h-screen px-6">
-  //         <div className="mt-6 rounded-lg bg-white p-6 shadow-lg">
-  //           <ToastContainer
-  //             position="top-center"
-  //             closeOnClick
-  //             pauseOnFocusLoss
-  //             draggable
-  //             pauseOnHover
-  //           />
-  //           <div>
-  //             <div className="flex items-end justify-end">
-  //               <button
-  //                 type="button"
-  //                 className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray px-2 py-2 text-center text-xs text-white"
-  //                 onClick={toggleFullScreenMode}
-  //               >
-  //                 {isFullScreenMode ? (
-  //                   <svg
-  //                     height="15px"
-  //                     width="15px"
-  //                     viewBox="0 0 24 24"
-  //                     fill="none"
-  //                   >
-  //                     <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-  //                     <g
-  //                       id="SVGRepo_tracerCarrier"
-  //                       stroke-linecap="round"
-  //                       stroke-linejoin="round"
-  //                     ></g>
-  //                     <g id="SVGRepo_iconCarrier">
-  //                       {" "}
-  //                       <path
-  //                         d="M23 4C23 2.34315 21.6569 1 20 1H16C15.4477 1 15 1.44772 15 2C15 2.55228 15.4477 3 16 3H20C20.5523 3 21 3.44772 21 4V8C21 8.55228 21.4477 9 22 9C22.5523 9 23 8.55228 23 8V4Z"
-  //                         fill="#0F0F0F"
-  //                       ></path>{" "}
-  //                       <path
-  //                         d="M23 16C23 15.4477 22.5523 15 22 15C21.4477 15 21 15.4477 21 16V20C21 20.5523 20.5523 21 20 21H16C15.4477 21 15 21.4477 15 22C15 22.5523 15.4477 23 16 23H20C21.6569 23 23 21.6569 23 20V16Z"
-  //                         fill="#0F0F0F"
-  //                       ></path>{" "}
-  //                       <path
-  //                         d="M4 21H8C8.55228 21 9 21.4477 9 22C9 22.5523 8.55228 23 8 23H4C2.34315 23 1 21.6569 1 20V16C1 15.4477 1.44772 15 2 15C2.55228 15 3 15.4477 3 16V20C3 20.5523 3.44772 21 4 21Z"
-  //                         fill="#0F0F0F"
-  //                       ></path>{" "}
-  //                       <path
-  //                         d="M1 8C1 8.55228 1.44772 9 2 9C2.55228 9 3 8.55228 3 8L3 4C3 3.44772 3.44772 3 4 3H8C8.55228 3 9 2.55228 9 2C9 1.44772 8.55228 1 8 1H4C2.34315 1 1 2.34315 1 4V8Z"
-  //                         fill="#0F0F0F"
-  //                       ></path>{" "}
-  //                     </g>
-  //                   </svg>
-  //                 ) : (
-  //                   <svg
-  //                     fill="#000000"
-  //                     height="15px"
-  //                     width="15px"
-  //                     version="1.1"
-  //                     id="Capa_1"
-  //                     viewBox="0 0 385.331 385.331"
-  //                   >
-  //                     <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-  //                     <g
-  //                       id="SVGRepo_tracerCarrier"
-  //                       stroke-linecap="round"
-  //                       stroke-linejoin="round"
-  //                     ></g>
-  //                     <g id="SVGRepo_iconCarrier">
-  //                       <g>
-  //                         <g id="Fullscreen_Exit">
-  //                           <path d="M264.943,156.665h108.273c6.833,0,11.934-5.39,11.934-12.211c0-6.833-5.101-11.85-11.934-11.838h-96.242V36.181 c0-6.833-5.197-12.03-12.03-12.03s-12.03,5.197-12.03,12.03v108.273c0,0.036,0.012,0.06,0.012,0.084 c0,0.036-0.012,0.06-0.012,0.096C252.913,151.347,258.23,156.677,264.943,156.665z"></path>{" "}
-  //                           <path d="M120.291,24.247c-6.821,0-11.838,5.113-11.838,11.934v96.242H12.03c-6.833,0-12.03,5.197-12.03,12.03 c0,6.833,5.197,12.03,12.03,12.03h108.273c0.036,0,0.06-0.012,0.084-0.012c0.036,0,0.06,0.012,0.096,0.012 c6.713,0,12.03-5.317,12.03-12.03V36.181C132.514,29.36,127.124,24.259,120.291,24.247z"></path>{" "}
-  //                           <path d="M120.387,228.666H12.115c-6.833,0.012-11.934,5.39-11.934,12.223c0,6.833,5.101,11.85,11.934,11.838h96.242v96.423 c0,6.833,5.197,12.03,12.03,12.03c6.833,0,12.03-5.197,12.03-12.03V240.877c0-0.036-0.012-0.06-0.012-0.084 c0-0.036,0.012-0.06,0.012-0.096C132.418,233.983,127.1,228.666,120.387,228.666z"></path>{" "}
-  //                           <path d="M373.3,228.666H265.028c-0.036,0-0.06,0.012-0.084,0.012c-0.036,0-0.06-0.012-0.096-0.012 c-6.713,0-12.03,5.317-12.03,12.03v108.273c0,6.833,5.39,11.922,12.223,11.934c6.821,0.012,11.838-5.101,11.838-11.922v-96.242 H373.3c6.833,0,12.03-5.197,12.03-12.03S380.134,228.678,373.3,228.666z"></path>{" "}
-  //                         </g>
-  //                         <g> </g> <g> </g> <g> </g> <g> </g> <g> </g> <g> </g>{" "}
-  //                       </g>
-  //                     </g>
-  //                   </svg>
-  //                 )}
-  //               </button>
-  //             </div>
-  //             <div className="flex items-center justify-between pb-2 pt-4">
-  //               <h3 className="text-md text-md font-bold text-black">
-  //                 Process Details
-  //               </h3>
-  //               {isDownTimeEnable && (
-  //                 <div>
-  //                   <button
-  //                     type="button"
-  //                     className="flex items-center justify-center gap-2 rounded-lg bg-danger px-2 py-2 text-sm text-secondary text-white"
-  //                   >
-  //                     On Hold
-  //                   </button>
-  //                 </div>
-  //               )}
-  //             </div>
-  //             <hr className="pb-5 text-blue-500" />
-  //             <div className="mb-4 grid sm:grid-cols-2">
-  //               <div className="text-gray-700 dark:text-gray-300 mb-2">
-  //                 <strong className="font-medium">Process Name :</strong>{" "}
-  //                 {product?.name}
-  //               </div>
-  //               <div className="text-gray-700 dark:text-gray-300 mb-2">
-  //                 <strong className="font-medium">Stage Name :</strong>{" "}
-  //                 {assignUserStage?.name}
-  //               </div>
-  //               <div className="text-gray-700 dark:text-gray-300 mb-2">
-  //                 <strong className="font-medium">Shift :</strong>{" "}
-  //                 {getPlaningAndScheduling?.ProcessShiftMappings && (
-  //                   <span>
-  //                     ({getPlaningAndScheduling?.ProcessShiftMappings?.startTime}{" "}
-  //                     - {getPlaningAndScheduling?.ProcessShiftMappings?.endTime})
-  //                   </span>
-  //                 )}
-  //               </div>
-  //               <div className="text-gray-700 dark:text-gray-300 mb-2">
-  //                 <strong className="font-medium">Order Confirmation No:</strong>{" "}
-  //                 {product?.orderConfirmationNo}
-  //               </div>
-  //               <div className="text-gray-700 dark:text-gray-300 mb-2">
-  //                 <strong className="font-medium">Process ID:</strong>{" "}
-  //                 {product?.processID}
-  //               </div>
-  //               <div className="text-gray-700 dark:text-gray-300">
-  //                 <strong className="font-medium">Shift Days:</strong>
-  //                 {"-"}
-  //                 {shift?.weekDays &&
-  //                   Object.keys(shift?.weekDays)
-  //                     .filter((day) => day !== "_id" && shift?.weekDays[day])
-  //                     .map((day) => (
-  //                       <span key={day}>
-  //                         {day}
-  //                         {", "}
-  //                       </span>
-  //                     ))}
-  //               </div>
-  //               <div className="text-gray-700 dark:text-gray-300 mb-2">
-  //                 <strong className="font-medium">Stage Description :</strong>{" "}
-  //                 {product?.descripition}
-  //               </div>
-  //             </div>
-  //           </div>
-  //           <h3 className="text-md text-md mb-1 mt-3 font-bold text-black">
-  //             Steps to Perform
-  //           </h3>
-  //           <hr className="pb-4 text-blue-500" />
-  //           <div className="grid grid-cols-2 pb-2">
-  //             <div>
-  //               <ul className="ml-3">
-  //                 {assignUserStage?.subSteps?.map((stage: any, index: any) => (
-  //                   <li key={index} className="mt-2">
-  //                     <p>
-  //                       Step {index + 1} : {stage.stepName}
-  //                     </p>
-  //                     <div className="mt-2 flex grid grid-cols-2">
-  //                       {stage?.stepType === "manual" ? (
-  //                         stage?.stepFields?.validationType === "value" ? (
-  //                           <div className="ml-3 text-sm">
-  //                             <b>Value :</b> {stage?.stepFields?.value}
-  //                           </div>
-  //                         ) : (
-  //                           <div className="ml-3 text-sm">
-  //                             <b>Range From :</b> {stage?.stepFields?.rangeFrom} -{" "}
-  //                             <b>Range To :</b> {stage?.stepFields?.rangeTo}
-  //                           </div>
-  //                         )
-  //                       ) : (
-  //                         <>
-  //                           {stage?.jigFields?.map(
-  //                             (jigStage: any, index: any) =>
-  //                               jigStage?.validationType === "value" && (
-  //                                 <div className="ml-3 text-sm" key={index}>
-  //                                   <b>{jigStage?.jigName} : </b>
-  //                                   {jigStage?.value}
-  //                                 </div>
-  //                               ),
-  //                           )}
-  //                         </>
-  //                       )}
-  //                     </div>
-  //                   </li>
-  //                 ))}
-  //               </ul>
-  //             </div>
-  //             <div>
-  //               <div className=""></div>
-  //             </div>
-  //           </div>
-  //           {shift?.intervals && (
-  //             <>
-  //               <h3 className="text-md mb-1 mt-3 font-bold text-black">
-  //                 Shift Summary
-  //               </h3>
-  //               <hr className="pb-4 text-blue-500" />
-  //               <div className="mb-4 mt-2">
-  //                 <div className="flex flex-wrap justify-center gap-4">
-  //                   {shift?.intervals?.map((interval, index) => (
-  //                     <div
-  //                       key={index}
-  //                       className={`rounded-lg p-3 text-center shadow-md ${
-  //                         interval.breakTime
-  //                           ? "bg-[#fbc0c0] text-danger dark:bg-[#fbc0c0] dark:text-danger"
-  //                           : "bg-green-100 text-green-800 dark:bg-green-200 dark:text-green-900"
-  //                       }`}
-  //                     >
-  //                       {interval.breakTime ? (
-  //                         <p className="text-sm font-semibold">
-  //                           Breaktime: {interval.startTime} - {interval.endTime}
-  //                         </p>
-  //                       ) : (
-  //                         <p className="text-sm font-semibold">
-  //                           Interval: {interval.startTime} - {interval.endTime}
-  //                         </p>
-  //                       )}
-  //                     </div>
-  //                   ))}
-  //                 </div>
-  //               </div>
-  //             </>
-  //           )}
-  //         </div>
-  //       </div>
-  //     </>
-  //   );
 };
 
 export default ViewTaskDetailsComponent;

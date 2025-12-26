@@ -3,6 +3,7 @@ import Modal from "@/components/Modal/page";
 import { useQRCode } from "next-qrcode";
 import SearchableInput from "@/components/SearchableInput/SearchableInput";
 import CartonSearchableInput from "@/components/SearchableInput/CartonSearchableInput";
+import NGModel from "@/components/Operators/viewTask/components/NGModal";
 import {
   createCarton,
   fetchCartonByProcessID,
@@ -96,6 +97,12 @@ interface DeviceTestComponentProps {
   setProcessCartons: any;
   processCartons: any[];
   assignedTaskDetails: any;
+  assignUserStage: any;
+  setIsDevicePassed: any;
+  isdevicePassed: any;
+  setAsssignDeviceDepartment: any;
+  selectAssignDeviceDepartment: any;
+  processStagesName: any;
 }
 export default function DeviceTestComponent({
   product,
@@ -143,6 +150,12 @@ export default function DeviceTestComponent({
   setProcessCartons,
   processCartons,
   assignedTaskDetails,
+  assignUserStage,
+  setIsDevicePassed,
+  isdevicePassed,
+  setAsssignDeviceDepartment,
+  selectAssignDeviceDepartment,
+  processStagesName,
 }: DeviceTestComponentProps) {
   useEffect(() => {
     fetchExistingCartonsByProcessID();
@@ -157,6 +170,7 @@ export default function DeviceTestComponent({
   const [selectedCarton, setSelectedCarton] = useState<string | null>(null);
   const [cartonDevices, setCartonDevices] = useState<any[]>([]);
   const [loadingCartonDevices, setLoadingCartonDevices] = useState(false);
+  const [showNGModal, setShowNGModal] = useState(false);
   const handlePrint = () => {
     setIsCartonBarCodePrinted(true);
     const printContents = document.getElementById("barcode-area")?.innerHTML;
@@ -226,12 +240,10 @@ export default function DeviceTestComponent({
   const fetchProcessCartons = async () => {
     try {
       let result = await fetchCartons(processData._id);
-      console.log("resultssdsds  ==>", result);
       if (result) {
         setCartonSerial(result.cartonSerials);
         setCartonDetails(result.cartonDetails);
       }
-      return false;
       setProcessCartons(result);
     } catch (error) {
       console.error("Error fetching cartons:", error);
@@ -353,7 +365,7 @@ export default function DeviceTestComponent({
         alert("No cartons available to shift.");
         return;
       }
-      const cartonSerials = processCartons.map((row) => row.cartonSerial);
+      const cartonSerials = processCartons?.cartonDetails?.map((row) => row.cartonSerial);
       const formData = new FormData();
       cartonSerials.forEach((serial, index) => {
         formData.append(`cartons[${index}]`, serial);
@@ -383,6 +395,49 @@ export default function DeviceTestComponent({
     setCartonDevices(data[0].devices);
     console.log("data ==>", data);
   };
+  const getNGAssignOptions = () => {
+    const options = [];
+
+    if (
+      !Array.isArray(assignUserStage) ||
+      assignUserStage.length === 0 ||
+      !Array.isArray(processStagesName)
+    ) {
+      return options;
+    }
+
+    const currentStageName = assignUserStage[0].name;
+
+    const currentStageIndex = processStagesName.indexOf(currentStageName);
+    const qcStageIndex = processStagesName.indexOf("Functional Quality Check");
+    options.push({ label: "QC", value: "QC" });
+    if (
+      currentStageIndex !== -1 &&
+      qcStageIndex !== -1 &&
+      currentStageIndex <= qcStageIndex
+    ) {
+      options.unshift({ label: "TRC", value: "TRC" });
+    }
+    if (currentStageIndex > 0) {
+      const previousStages = processStagesName.slice(0, currentStageIndex);
+
+      previousStages.forEach((stage) => {
+        options.push({
+          label: stage,
+          value: stage,
+        });
+      });
+    }
+
+    return options;
+  };
+
+  const handleNG = () => {
+    console.log('selectAssignDeviceDepartment ==>',selectAssignDeviceDepartment);
+    handleUpdateStatus("NG",selectAssignDeviceDepartment);
+    setShowNGModal(false);
+
+  };
   const handleShiftToNextStage = async (selectedCarton: any) => {
     try {
       const formData = new FormData();
@@ -405,6 +460,22 @@ export default function DeviceTestComponent({
       alert("Something went wrong while shifting cartons.");
     }
   };
+  const canShowPassNGButtons = (
+    deviceTestHistory: any[],
+    currentStageName: string
+  ) => {
+    if (!Array.isArray(deviceTestHistory) || deviceTestHistory.length === 0) {
+      return true;
+    }
+
+    const lastEntry = deviceTestHistory[deviceTestHistory.length - 1];
+
+    return !(
+      lastEntry.stageName === currentStageName &&
+      lastEntry.status === 'NG'
+    );
+  };
+
 
   return (
     <>
@@ -534,6 +605,7 @@ export default function DeviceTestComponent({
                     checkIsPrintEnable={processAssignUserStage?.subSteps?.some(
                       (s: any) => s.isPrinterEnable,
                     )}
+                    setIsDevicePassed={setIsDevicePassed}
                   />
                 </>
               )}
@@ -721,180 +793,6 @@ export default function DeviceTestComponent({
                   </div>
                 </div>
               )}
-              {/* {selectedCarton && (
-                <div className="mt-4">
-                  <h3 className="text-md mb-2 font-semibold">
-                    Devices in Carton: {selectedCarton}
-                  </h3>
-                  {}
-                  {loadingCartonDevices ? (
-                    <p className="text-gray-500">Loading devices...</p>
-                  ) : cartonDevices.length === 0 ? (
-                    <p className="text-red-500">
-                      No devices found for this carton.
-                    </p>
-                  ) : (
-                    <div className="overflow-x-auto rounded-lg shadow">
-                      <div className="mt-4 flex flex-col items-center gap-3">
-                        <button
-                          type="button"
-                          className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-white shadow hover:bg-blue-700"
-                          onClick={() => handleCommonGenerateQRCode(selectedCarton)}
-                        >
-                          Generate Carton QR Code
-                        </button>
-
-                        {qrCartons[selectedCarton] && (
-                          <>
-                            {" "}
-                            <div
-                              id="barcode-area"
-                              className="rounded-lg bg-white p-2 shadow"
-                            >
-                              <Canvas
-                                text={selectedCarton}
-                                options={{
-                                  level: "M",
-                                  margin: 2,
-                                  scale: 4,
-                                  width: 180,
-                                  color: {
-                                    dark: "#000000",
-                                    light: "#ffffff",
-                                  },
-                                }}
-                              />
-                              <p className="mt-2 text-center font-semibold">
-                                {selectedCarton}
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={handlePrint}
-                              className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white shadow hover:bg-green-700"
-                            >
-                              🖨 Print Carton
-                            </button>
-                          </>
-                        )}
-                      </div>
-                      <table className="border-gray-200 min-w-full border bg-white text-sm">
-                        <thead className="bg-gray-100 text-gray-700">
-                          <tr>
-                            <th className="border px-4 py-2">Serial No</th>
-                            <th className="border px-4 py-2">Model</th>
-                            <th className="border px-4 py-2">IMEI</th>
-                            <th className="border px-4 py-2">Current Stage</th>
-                            <th className="border px-4 py-2">Status</th>
-                            <th className="border px-4 py-2">Created At</th>
-                            <th className="border px-4 py-2">Test Records</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-gray-200 divide-y">
-                          {cartonDevices.map((device, index) => (
-                            <tr
-                              key={device._id || index}
-                              className="hover:bg-gray-50 transition-colors"
-                            >
-                              <td className="text-gray-800 border px-4 py-2 font-medium">
-                                {device.serialNo}
-                              </td>
-                              <td className="border px-4 py-2">
-                                {device.modelName || "N/A"}
-                              </td>
-                              <td className="border px-4 py-2">
-                                {device.imeiNo || "N/A"}
-                              </td>
-                              <td className="border px-4 py-2">
-                                {device.currentStage}
-                              </td>
-                              <td
-                                className={`border px-4 py-2 font-semibold ${
-                                  device.status === "Pass"
-                                    ? "text-green-600"
-                                    : device.status === "Fail"
-                                      ? "text-red-600"
-                                      : "text-gray-500"
-                                }`}
-                              >
-                                {device.status || "N/A"}
-                              </td>
-                              <td className="border px-4 py-2">
-                                {new Date(device.createdAt).toLocaleString()}
-                              </td>
-                              <td className="border px-4 py-2">
-                                {device.testRecords &&
-                                device.testRecords.length > 0 ? (
-                                  <div className="overflow-x-auto">
-                                    <table className="border-gray-200 w-full rounded-md border text-xs">
-                                      <thead className="bg-gray-50">
-                                        <tr>
-                                          <th className="border px-2 py-1">
-                                            Stage
-                                          </th>
-                                          <th className="border px-2 py-1">
-                                            Status
-                                          </th>
-                                          <th className="border px-2 py-1">
-                                            Seat
-                                          </th>
-                                          <th className="border px-2 py-1">
-                                            Time
-                                          </th>
-                                          <th className="border px-2 py-1">
-                                            Operator
-                                          </th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {device.testRecords.map(
-                                          (record: any, rIndex: any) => (
-                                            <tr
-                                              key={record._id || rIndex}
-                                              className="hover:bg-gray-100"
-                                            >
-                                              <td className="border px-2 py-1">
-                                                {record.stageName}
-                                              </td>
-                                              <td
-                                                className={`border px-2 py-1 font-semibold ${
-                                                  record.status === "Pass"
-                                                    ? "text-green-600"
-                                                    : "text-red-600"
-                                                }`}
-                                              >
-                                                {record.status}
-                                              </td>
-                                              <td className="border px-2 py-1">
-                                                {record.seatNumber}
-                                              </td>
-                                              <td className="border px-2 py-1">
-                                                {record.timeConsumed}
-                                              </td>
-                                              <td className="border px-2 py-1">
-                                                {record.operatorId}
-                                              </td>
-                                            </tr>
-                                          ),
-                                        )}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                ) : (
-                                  <span className="text-gray-400 italic">
-                                    No Records
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              )} */}
-
               {/* Device Result */}
               {searchResult ? (
                 <div className="mt-4">
@@ -913,6 +811,7 @@ export default function DeviceTestComponent({
                             <tr>
                               <th className="px-2 py-1">Serial</th>
                               <th className="px-2 py-1">Stage</th>
+                              <th className="px-2 py-1">Assign Device to</th>
                               <th className="px-2 py-1">Status</th>
                             </tr>
                           </thead>
@@ -920,7 +819,8 @@ export default function DeviceTestComponent({
                             {deviceHistory.map((value, index) => (
                               <tr key={index} className="border-t text-center">
                                 <td className="px-2 py-1">{value?.serialNo}</td>
-                                <td className="px-2 py-1">{value.stageName}</td>
+                                <td className="px-2 py-1">{value?.stageName}</td>
+                                <td className="px-2 py-1">{value?.assignedDeviceTo}</td>
                                 <td
                                   className={`px-2 py-1 font-medium ${
                                     value?.status === "Pass"
@@ -940,10 +840,12 @@ export default function DeviceTestComponent({
                     </div>
                   )}
                   <div className="my-3 w-full">
+                    
                     {/* CASE 1: Printing Stage */}
                     {processAssignUserStage?.subSteps?.some(
                       (s: any) => s.isPrinterEnable,
                     ) && (
+                      
                       <>
                         {/* Print Sticker */}
                         {!isStickerPrinted && !isPassNGButtonShow && (
@@ -1044,8 +946,7 @@ export default function DeviceTestComponent({
                       </>
                     )}
                     {/* CASE 2: Packaging Stage */}
-                    {isStickerPrinted &&
-                      isPassNGButtonShow &&
+                    {isPassNGButtonShow &&
                       processAssignUserStage?.subSteps?.some(
                         (s: any) => s.isPackagingStatus,
                       ) && (
@@ -1125,7 +1026,7 @@ export default function DeviceTestComponent({
                                           onClick={() =>
                                             handleUpdateStatus("NG")
                                           }
-                                        >
+                                        > 
                                           <XCircle className="h-5 w-5" />
                                           NG
                                         </button>
@@ -1281,23 +1182,22 @@ export default function DeviceTestComponent({
                           )}
                         </div>
                       )}
-
                     {/* CASE 3: Normal Pass/NG */}
-                    {isPassNGButtonShow &&
+                    {canShowPassNGButtons(deviceHistory, processAssignUserStage?.stageName) && isPassNGButtonShow &&
                       !processAssignUserStage?.subSteps?.some(
                         (s: any) => s.isPrinterEnable || s.isPackagingStatus,
                       ) && (
                         <div className="flex justify-center gap-4 p-6">
                           <button
                             className="flex items-center gap-2 rounded-lg bg-success px-4 py-2 text-white shadow hover:bg-green-500"
-                            onClick={() => handleUpdateStatus("Pass")}
+                            onClick={() => handleUpdateStatus("Pass","")}
                           >
                             <CheckCircle className="h-5 w-5" />
                             Pass
                           </button>
                           <button
                             className="hover:bg-red-600 flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-white shadow"
-                            onClick={() => handleUpdateStatus("NG")}
+                            onClick={() => setShowNGModal(true)}
                           >
                             <XCircle className="h-5 w-5" />
                             NG
@@ -1305,6 +1205,14 @@ export default function DeviceTestComponent({
                         </div>
                       )}
                   </div>
+                  <NGModel
+                    showNGModal={showNGModal}
+                    setShowNGModal={setShowNGModal}
+                    selectAssignDeviceDepartment={selectAssignDeviceDepartment}
+                    setAsssignDeviceDepartment={setAsssignDeviceDepartment}
+                    getNGAssignOptions={getNGAssignOptions}
+                    handleNG={handleNG}
+                  />
                 </div>
               ) : (
                 <div className="mt-3 text-center">
@@ -1388,12 +1296,13 @@ export default function DeviceTestComponent({
                   <ListChecks className="h-4 w-4 text-indigo-600" />
                   Tested History (Today)
                 </h3>
-                <div className="overflow-y-auto">
+                <div className="grid gap-y-3 max-h-[calc(100vh-180px)] overflow-y-auto">
                   <table className="w-full text-xs">
                     <thead className="bg-gray-50 text-gray-600">
                       <tr>
                         <th className="px-2 py-1">Serial</th>
                         <th className="px-2 py-1">Stage</th>
+                        <th className="px-2 py-1">Assign Device To </th>
                         <th className="px-2 py-1">Status</th>
                         <th className="px-2 py-1">Time</th>
                       </tr>
@@ -1409,6 +1318,7 @@ export default function DeviceTestComponent({
                               {row?.deviceInfo?.serialNo}
                             </td>
                             <td className="px-2 py-1">{row?.stageName}</td>
+                            <td className="px-2 py-1">{row?.assignedDeviceTo}</td>
                             <td
                               className={`px-2 py-1 font-medium ${
                                 row?.status === "Pass"
@@ -1441,6 +1351,7 @@ export default function DeviceTestComponent({
                 (s: any) => s.isPackagingStatus,
               ) && (
                 <div className="border-gray-200 rounded-xl border bg-white p-5 py-2 shadow-sm">
+                  {console.log("processCartons.cartonDetails ==> ", processCartons.cartonDetails)}
                   <h3 className="bg-gray-100 text-gray-700 sticky top-0 flex items-center justify-center gap-2 rounded-t-xl py-2 text-center text-sm font-bold">
                     <ListChecks className="h-4 w-4 text-indigo-600" />
                     Carton Details
@@ -1455,8 +1366,8 @@ export default function DeviceTestComponent({
                         </tr>
                       </thead>
                       <tbody>
-                        {processCartons.length > 0 ? (
-                          processCartons.map((row, rowIndex) => (
+                        {processCartons?.cartonDetails?.length > 0 ? (
+                          processCartons.cartonDetails.map((row, rowIndex) => (
                             <tr
                               key={rowIndex}
                               className="hover:bg-gray-50 border-t text-center"
@@ -1475,7 +1386,7 @@ export default function DeviceTestComponent({
                         )}
                       </tbody>
                     </table>
-                    {processCartons.length > 0 && (
+                    {processCartons?.cartonDetails?.length > 0 && (
                       <div className="flex items-end justify-end py-2">
                         <button
                           className="flex items-center gap-2 rounded-lg bg-[#0FADCF] px-4 py-2 text-sm font-semibold text-white shadow"

@@ -1,9 +1,17 @@
 "use client";
 import React, { useState, useEffect, use } from "react";
-import {
-  fetchSeatAvailabilityFromCurrentDate
-} from "@/lib/api";
+import { fetchSeatAvailabilityFromCurrentDate } from "@/lib/api";
 import flatpickr from "flatpickr";
+import { Calendar } from "lucide-react";
+import {
+  FaBox,
+  FaCalendarAlt,
+  FaClock,
+  FaCogs,
+  FaLayerGroup,
+  FaClipboardList,
+} from "react-icons/fa";
+import { MdInventory } from "react-icons/md";
 import SeatAvailabilityDatePicker from "@/components/DateTimePicker/SeatAvailabilityDatePicker";
 
 const FormComponent = ({
@@ -111,330 +119,257 @@ const FormComponent = ({
     } catch (error) {}
   };
   return (
-    <div>
-      <div className="mb-4 flex flex-col gap-6 xl:flex-row">
-        <div className="w-full xl:w-1/2">
-          <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-            Planing Name
+    <div className="flex flex-col gap-6">
+      {/* Planning Form */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <div className="flex flex-col">
+          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-black dark:text-white">
+            <FaCogs /> Planning Name
           </label>
           <input
-            value= {processName}
+            value={processName}
             onChange={(e) => setProcessName(e.target.value)}
             type="text"
-            placeholder="Planing Name"
-            className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+            placeholder="Planning Name"
+            className="dark:bg-gray-700 w-full rounded-lg border border-stroke bg-white px-4 py-2 text-black outline-none transition focus:border-primary focus:ring focus:ring-primary/20 dark:text-white"
           />
         </div>
-        <div className="w-full xl:w-1/2">
-          <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-            Process Type
+
+        <div className="flex flex-col">
+          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-black dark:text-white">
+            <FaLayerGroup /> Process Type
           </label>
           <select
             value={selectedProcess?.name || ""}
             onChange={(e) => handleProcessType(e.target.value)}
-            className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
+            className="dark:bg-gray-700 w-full rounded-lg border border-stroke bg-white px-4 py-2 text-black outline-none transition focus:border-primary focus:ring focus:ring-primary/20 dark:text-white"
           >
-            <option value="" className="text-body dark:text-bodydark">
-              Please Select
-            </option>
-            {process.map((room: any, index: any) => (
-              <option
-                key={index}
-                value={room?.name}
-                className="text-body dark:text-bodydark"
-              >
+            <option value="">Please Select</option>
+            {process.map((room, index) => (
+              <option key={index} value={room?.name}>
                 {room?.name}
               </option>
             ))}
           </select>
         </div>
-        <div className="w-full xl:w-1/2">
-          <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-            Floor Name
+
+        <div className="flex flex-col">
+          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-black dark:text-white">
+            <FaClipboardList /> Floor Name
           </label>
           <select
             value={selectedRoom?.floorName || ""}
             onChange={(e) => handleFloorName(e.target.value)}
-            className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
+            className="dark:bg-gray-700 w-full rounded-lg border border-stroke bg-white px-4 py-2 text-black outline-none transition focus:border-primary focus:ring focus:ring-primary/20 dark:text-white"
           >
-            <option value="" className="text-body dark:text-bodydark">
-              Please Select
-            </option>
-            {roomPlan.map((room: any, index: any) => (
-              <option
-                key={index}
-                value={room?.floorName}
-                className="text-body dark:text-bodydark"
-              >
+            <option value="">Please Select</option>
+            {roomPlan.map((room, index) => (
+              <option key={index} value={room?.floorName}>
                 {room?.floorName}
               </option>
             ))}
           </select>
         </div>
       </div>
-      <div className="mb-4 flex flex-col gap-6 xl:flex-row">
-        <div className="w-full">
-          <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-            Shift
+
+      {/* Shift, Start Date, Repeat Count */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <div className="flex flex-col">
+          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-black dark:text-white">
+            <FaClock /> Shift
           </label>
           <select
             value={selectedShift?._id || ""}
             onChange={(e) => handleShift(e.target.value)}
-            className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
+            className="dark:bg-gray-700 w-full rounded-lg border border-stroke bg-white px-4 py-2 text-black outline-none transition focus:border-primary focus:ring focus:ring-primary/20 dark:text-white"
           >
-            <option value="" className="text-body dark:text-bodydark">
-              Please Select
-            </option>
+            <option value="">Please Select</option>
             {shifts.map((shift, index) => (
-              <option
-                key={index}
-                value={shift?._id}
-                className="text-body dark:text-bodydark"
-              >
-                {shift?.name} ({shift?.intervals[0].startTime} - {shift?.intervals[shift?.intervals.length - 1].endTime})
+              <option key={index} value={shift?._id}>
+                {shift?.name} ({shift?.intervals[0].startTime} -{" "}
+                {shift?.intervals[shift?.intervals.length - 1].endTime})
               </option>
             ))}
           </select>
         </div>
-        <div className="w-full">
-          <div>
-            <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-              Start Date
-            </label>
-            <div>
-              <SeatAvailabilityDatePicker
-                seatAvailability={seatAvailability}
-                floorID={floorID}
-                setStartDate={setStartDate}
-                formatDate={startDate}
-                onDateChange={handleDateChange("start")}
-              />
-            </div>
+
+        <div className="flex flex-col">
+          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-black dark:text-white">
+            <FaCalendarAlt /> Start Date
+          </label>
+          <div className="relative">
+            <Calendar className="text-gray-400 absolute left-3 top-1/2 z-1 h-5 w-5 -translate-y-1/2" />
+            <SeatAvailabilityDatePicker
+              seatAvailability={seatAvailability}
+              floorID={floorID}
+              setStartDate={setStartDate}
+              formatDate={startDate}
+              onDateChange={handleDateChange("start")}
+            />
           </div>
         </div>
-        <div className="w-full">
-          <div>
-            <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-              Repeat Count
-            </label>
-            <div>
-              <input
-                type="number"
-                value={repeatCount}
-                onChange={(e) => handleRepeatCount(e.target.value)}
-                placeholder="Enter Process Name"
-                className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-              />
-            </div>
-          </div>
+
+        <div className="flex flex-col">
+          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-black dark:text-white">
+            <FaBox /> Repeat Count
+          </label>
+          <input
+            type="number"
+            value={repeatCount}
+            onChange={(e) => handleRepeatCount(e.target.value)}
+            placeholder="Enter Repeat Count"
+            className="dark:bg-gray-700 w-full rounded-lg border border-stroke bg-white px-4 py-2 text-black outline-none transition focus:border-primary focus:ring focus:ring-primary/20 dark:text-white"
+          />
         </div>
       </div>
 
+      {/* Selected Process Details */}
       {selectedProcess && (
-        <>
-          <div className="dark:bg-gray-800 mt-2 rounded-lg bg-white pb-5">
-            <h3 className="text-gray-900 mb-4 text-2xl font-semibold dark:text-white">
-              {selectedProcess?.name}
-            </h3>
-            <div className="grid sm:grid-cols-2">
-              <div className="text-gray-700 dark:text-gray-300 mb-2">
-                <strong className="font-medium">Product Name:</strong>{" "}
-                {productName}
-              </div>
-              <div className="text-gray-700 dark:text-gray-300 mb-2">
-                <strong className="font-medium">Shift :</strong>{" "}
-                {selectedShift && (
-                  <span>
-                    {selectedShift?.name} ({selectedShift?.intervals[0].startTime} -{" "}
-                    {selectedShift?.intervals[selectedShift?.intervals.length - 1].endTime})
-                  </span>
-                )}
-              </div>
-              <div className="text-gray-700 dark:text-gray-300 mb-2">
-                <strong className="font-medium">Break Time :</strong>{" "}
-                {selectedShift && (
-                  <span>{selectedShift?.totalBreakTime} Minutes</span>
-                )}
-              </div>
-              <div className="text-gray-700 dark:text-gray-300 mb-2">
-                <strong className="font-medium">Order Confirmation No:</strong>{" "}
-                {selectedProcess?.orderConfirmationNo}
-              </div>
-              <div className="text-gray-700 dark:text-gray-300 mb-2">
-                <strong className="font-medium">Process ID:</strong>{" "}
-                {selectedProcess?.processID}
-              </div>
-              <div className="text-gray-700 dark:text-gray-300 mb-2">
-                <strong className="font-medium">Quantity:</strong>{" "}
-                {selectedProcess?.quantity}
-              </div>
+        <div className="dark:bg-gray-800 mt-2 rounded-lg bg-white p-6 shadow-md">
+          <h3 className="mb-4 flex items-center gap-2 text-2xl font-semibold text-black dark:text-white">
+            <FaCogs /> {selectedProcess?.name}
+          </h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
+              <FaBox /> <strong>Product Name:</strong> {productName}
+            </div>
+            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
+              <FaClock /> <strong>Shift:</strong>{" "}
+              {selectedShift &&
+                `${selectedShift?.name} (${selectedShift?.intervals[0].startTime} - ${selectedShift?.intervals[selectedShift?.intervals.length - 1].endTime})`}
+            </div>
+            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
+              <FaClock /> <strong>Break Time:</strong>{" "}
+              {selectedShift?.totalBreakTime} Minutes
+            </div>
+            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
+              <FaClipboardList /> <strong>Order Confirmation No:</strong>{" "}
+              {selectedProcess?.orderConfirmationNo}
+            </div>
+            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
+              <FaCogs /> <strong>Process ID:</strong>{" "}
+              {selectedProcess?.processID}
+            </div>
+            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
+              <FaBox /> <strong>Quantity:</strong> {selectedProcess?.quantity}
+            </div>
+            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
+              <FaCalendarAlt /> <strong>Shift Days:</strong>{" "}
+              {selectedShift &&
+                Object.keys(selectedShift.weekDays)
+                  .filter((day) => day !== "_id" && selectedShift.weekDays[day])
+                  .join(", ")}
+            </div>
+            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
+              <FaClipboardList /> <strong>Description:</strong>{" "}
+              {selectedProcess?.descripition}
+            </div>
+          </div>
+        </div>
+      )}
 
-              <div className="text-gray-700 dark:text-gray-300">
-                <strong className="font-medium">Shift Days:</strong>{" "}
-                {selectedShift &&
-                  Object.keys(selectedShift.weekDays)
-                    .filter(
-                      (day) => day !== "_id" && selectedShift.weekDays[day],
-                    )
-                    .map((day) => (
-                      <span key={day}>
-                        {day}
-                        {", "}
-                      </span>
-                    ))}
+      {/* Inventory & Kits */}
+      {inventoryData && (
+        <div className="mt-2 grid grid-cols-1 gap-6 xl:grid-cols-2">
+          {/* Kit Section */}
+          <div className="dark:bg-gray-800 rounded-lg bg-white p-6 shadow-md">
+            <h4 className="mb-4 flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
+              <MdInventory /> Kit
+            </h4>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div>
+                <strong>Required Kits:</strong> {selectedProcess?.quantity}
               </div>
-              <div className="text-gray-700 dark:text-gray-300">
-                <strong className="font-medium">Description:</strong>{" "}
-                {selectedProcess?.descripition}
+              <div>
+                <strong>Available Kits:</strong> {inventoryData?.quantity}
+              </div>
+              <div>
+                <strong>Shortage:</strong>{" "}
+                {Math.max(
+                  selectedProcess?.quantity - inventoryData?.quantity,
+                  0,
+                )}
+              </div>
+              <div>
+                <strong>Surplus:</strong>{" "}
+                {Math.max(
+                  inventoryData?.quantity - selectedProcess?.quantity,
+                  0,
+                )}
+              </div>
+              <div>
+                <strong>Issued Kits:</strong>{" "}
+                {Math.min(selectedProcess?.quantity, inventoryData?.quantity)}
               </div>
             </div>
           </div>
-          {inventoryData && (
-            <>
-              <div className="dark:bg-gray-800 mt-3 rounded-lg bg-white pb-5">
-                <h3 className="text-gray-900 text-md mb-4 font-semibold dark:text-white">
-                  Kit
-                </h3>
-                <div className="grid sm:grid-cols-2">
-                  <div className="text-gray-700 dark:text-gray-300 mb-2">
-                    <strong className="font-medium">Required kits:</strong>{" "}
-                    {selectedProcess?.quantity}
+
+          {/* Carton Section */}
+          {packagingData.length > 0 &&
+            packagingData[0].packagingData.packagingType === "Carton" && (
+              <div className="dark:bg-gray-800 rounded-lg bg-white p-6 shadow-md">
+                <h4 className="mb-4 flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
+                  <FaBox /> Cartons
+                </h4>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div>
+                    <strong>Required Cartons:</strong>{" "}
+                    {Math.ceil(
+                      selectedProcess?.quantity /
+                        packagingData[0].packagingData.maxCapacity,
+                    )}
                   </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2">
-                    <strong className="font-medium">Available kits :</strong>{" "}
-                    {inventoryData?.quantity}
+                  <div>
+                    <strong>Available Cartons:</strong>{" "}
+                    {inventoryData?.cartonQuantity}
                   </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2">
-                    <strong className="font-medium">Kits Shortage :</strong>{" "}
-                    {inventoryData?.quantity < selectedProcess?.quantity
+                  <div>
+                    <strong>Shortage:</strong>{" "}
+                    {inventoryData?.cartonQuantity <
+                    selectedProcess?.quantity /
+                      packagingData[0].packagingData.maxCapacity
                       ? Math.abs(
-                          selectedProcess?.quantity - inventoryData?.quantity,
+                          Math.ceil(
+                            selectedProcess?.quantity /
+                              packagingData[0].packagingData.maxCapacity,
+                          ) - inventoryData?.cartonQuantity,
                         )
                       : 0}
                   </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2">
-                    <strong className="font-medium">Surplus Kits :</strong>{" "}
-                    {inventoryData?.quantity > selectedProcess?.quantity
+                  <div>
+                    <strong>Surplus:</strong>{" "}
+                    {inventoryData?.cartonQuantity >
+                    selectedProcess?.quantity /
+                      packagingData[0].packagingData.maxCapacity
                       ? Math.abs(
-                          inventoryData?.quantity - selectedProcess?.quantity,
+                          inventoryData?.cartonQuantity -
+                            Math.ceil(
+                              selectedProcess?.quantity /
+                                packagingData[0].packagingData.maxCapacity,
+                            ),
                         )
                       : 0}
                   </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2">
-                    <strong className="font-medium">Issued Kits :</strong>{" "}
-                    {inventoryData?.quantity > selectedProcess?.quantity
-                      ? Math.abs(
-                          selectedProcess?.quantity - inventoryData?.quantity,
-                        )
-                      : inventoryData?.quantity}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2">
-                    <strong className="font-medium">Total Kits :</strong>{" "}
-                    {inventoryData?.quantity < selectedProcess?.quantity
-                      ? 0
-                      : inventoryData?.quantity}
+                  <div>
+                    <strong>Carton Dimensions:</strong> (
+                    {packagingData[0].packagingData.cartonWidth} x{" "}
+                    {packagingData[0].packagingData.cartonHeight})
                   </div>
                 </div>
-                {packagingData.length > 0 &&
-                  packagingData[0].packagingData.packagingType == "Carton" && (
-                    <div className="dark:bg-gray-800 mt-3 rounded-lg bg-white pb-5">
-                      <h3 className="text-gray-900 text-md mb-4 font-semibold dark:text-white">
-                        Cartons
-                      </h3>
-                      <div className="grid sm:grid-cols-2">
-                        <div className="text-gray-700 dark:text-gray-300 mb-2">
-                          <strong className="font-medium">
-                            Cartons Required :
-                          </strong>{" "}
-                          {selectedProcess?.quantity /
-                            packagingData[0].packagingData.maxCapacity}
-                        </div>
-                        <div className="text-gray-700 dark:text-gray-300 mb-2">
-                          <strong className="font-medium">
-                            Cartons Available :
-                          </strong>{" "}
-                          {inventoryData?.cartonQuantity}
-                        </div>
-                        <div className="text-gray-700 dark:text-gray-300 mb-2">
-                          <strong className="font-medium">
-                            Carton Shortage :
-                          </strong>{" "}
-                          {inventoryData?.cartonQuantity <
-                          selectedProcess?.quantity /
-                            packagingData[0].packagingData.maxCapacity
-                            ? Math.abs(
-                                selectedProcess?.quantity /
-                                  packagingData[0].packagingData.maxCapacity -
-                                  inventoryData?.cartonQuantity,
-                              )
-                            : 0}
-                        </div>
-                        <div className="text-gray-700 dark:text-gray-300 mb-2">
-                          <strong className="font-medium">
-                            Carton Surplus :
-                          </strong>{" "}
-                          {inventoryData?.cartonQuantity >
-                          selectedProcess?.quantity /
-                            packagingData[0].packagingData.maxCapacity
-                            ? Math.abs(
-                                inventoryData?.cartonQuantity -
-                                  selectedProcess?.quantity /
-                                    packagingData[0].packagingData.maxCapacity,
-                              )
-                            : 0}
-                        </div>
-                        <div className="text-gray-700 dark:text-gray-300 mb-2">
-                          <strong className="font-medium">
-                            Cartons Dimension :
-                          </strong>{" "}
-                          ({packagingData[0].packagingData.cartonWidth} x{" "}
-                          {packagingData[0].packagingData.cartonHeight})
-                        </div>
-                      </div>
-                    </div>
-                  )}
               </div>
-            </>
-          )}
-        </>
-      )}
-      <div className="mb-4 mt-2">
-        <h3 className="text-gray-900 mb-4 text-2xl font-semibold dark:text-white">
-          Shift Summary
-        </h3>
-        <div className="flex justify-center gap-2">
-          {selectedShift?.intervals?.map((interval, index) => (
-            <div
-              key={index}
-              className={`rounded-lg p-2 text-center ${
-                interval.breakTime
-                  ? "bg-[#fbc0c0] text-danger dark:bg-[#fbc0c0] dark:text-danger"
-                  : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-              }`}
-            >
-              {interval.breakTime ? (
-                <p className="text-sm font-medium">
-                  Breaktime: {interval.startTime} - {interval.endTime}
-                </p>
-              ) : (
-                <p className="text-sm font-medium">
-                  Interval: {interval.startTime} - {interval.endTime}
-                </p>
-              )}
-            </div>
-          ))}
+            )}
         </div>
-      </div>
-      <div className="text-right">
+      )}
+      {/* Calculate Button */}
+      <div className="mt-4 flex justify-end text-right">
         <button
           type="button"
-          className="w-40 rounded-lg bg-blue-500 px-2 py-2 text-sm text-white hover:bg-blue-400"
           onClick={handleCalculation}
+          className="flex w-44 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white shadow-md transition hover:bg-blue-500"
         >
-          Calculate
+          <FaCogs /> Calculate
         </button>
       </div>
-      {/* end component 1 */}
     </div>
   );
 };

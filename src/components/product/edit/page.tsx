@@ -19,6 +19,7 @@ import {
   faChevronDown,
 } from "@fortawesome/free-solid-svg-icons";
 import PrintTableComponent from "../printTableComponents";
+import { BarChart3, Box, ClipboardList, Paperclip, User } from "lucide-react";
 
 const EditProduct = () => {
   const [errors, setErrors] = useState({ name: false, stages: [] });
@@ -167,7 +168,7 @@ const EditProduct = () => {
     let result = await getProductById(id);
     setName(result.product.name);
     setStages(result.product.stages);
-    if(result.product.commonStages.length > 0) {
+    if (result.product.commonStages.length > 0) {
       setCommonStages(result.product.commonStages);
     }
   };
@@ -576,7 +577,7 @@ const EditProduct = () => {
         <form action="#">
           <div className="flex flex-col space-y-5 p-10">
             <div className="bg-gray-100 px-1 py-6 dark:bg-boxdark">
-              <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+              <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
                 Product Name
               </label>
               <input
@@ -585,7 +586,7 @@ const EditProduct = () => {
                 onChange={(e) => setName(e.target.value)}
                 style={{ borderColor: errors?.name ? "red" : "" }}
                 placeholder="Enter Product Name"
-                className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
               />
             </div>
 
@@ -594,9 +595,10 @@ const EditProduct = () => {
                 key={index}
                 className="bg-gray-50 space-y-4 border border-[#eee] p-6 shadow-lg dark:border-form-strokedark dark:bg-boxdark"
               >
-                <div className="grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-2">
                   <h3 className="text-gray-900 block text-lg font-semibold dark:text-white">
-                    Stage {index + 1} {stage?.stageName}
+                    Stage {index + 1}:{" "}
+                    <span className="text-primary"> {stage?.stageName}</span>
                   </h3>
                   <div className="text-right">
                     <button
@@ -612,9 +614,10 @@ const EditProduct = () => {
                 </div>
                 {stage.isExpanded && (
                   <>
-                    <div className="grid gap-5">
+                    <div className="grid gap-6 rounded-xl shadow-sm  dark:bg-boxdark">
                       <div>
-                        <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                        <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
+                          <ClipboardList className="h-4 w-4 text-primary" />
                           Name
                         </label>
                         <input
@@ -627,11 +630,12 @@ const EditProduct = () => {
                             handleStageChange(index, e, "stageName")
                           }
                           placeholder={`Stage Name ${index + 1}`}
-                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                          className="border-gray-300 bg-gray-50 text-gray-800 w-full rounded-lg border-[1.5px] px-5 py-3 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
                         />
                       </div>
                       <div>
-                        <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                        <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
+                          <User className="h-4 w-4 text-primary" />
                           Managed By
                         </label>
                         <select
@@ -639,7 +643,7 @@ const EditProduct = () => {
                           onChange={(e) => {
                             handleStageChange(index, e, "managedBy");
                           }}
-                          className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
+                          className="border-gray-300 bg-gray-50 text-gray-800 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-strokedark dark:bg-form-input dark:text-white"
                         >
                           <option
                             value=""
@@ -659,7 +663,7 @@ const EditProduct = () => {
                           ))}
                         </select>
                       </div>
-                      <div>
+                      {/* <div>
                         <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
                           Required Skill
                         </label>
@@ -687,9 +691,10 @@ const EditProduct = () => {
                             </option>
                           ))}
                         </select>
-                      </div>
+                      </div> */}
                       <div>
-                        <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                        <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
+                          <BarChart3 className="h-4 w-4 text-primary" />
                           UPHA (Units Per Hour Analysis)
                         </label>
                         <input
@@ -697,8 +702,28 @@ const EditProduct = () => {
                           value={stage.upha}
                           onChange={(e) => handleStageChange(index, e, "upha")}
                           placeholder={`UPHA`}
-                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                          className="border-gray-300 bg-gray-50 text-gray-800 w-full rounded-lg border-[1.5px] px-5 py-3 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
                         />
+                      </div>
+                      <div>
+                        <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
+                          <Paperclip className="h-4 w-4 text-primary" />
+                          Attach SOP
+                        </label>
+                        <input
+                          value={stage.sopFile}
+                          type="file"
+                          className=" border-gray-300 bg-gray-50 text-gray-600 w-full cursor-pointer rounded-lg border-[1.5px] px-3 
+                              py-2 text-sm outline-none transition
+                              file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-white
+                              hover:file:bg-primary/90
+                              focus:border-primary focus:ring-1 focus:ring-primary
+                              dark:border-form-strokedark dark:bg-form-input dark:text-white 
+                              dark:file:bg-primary dark:file:text-white"
+                        />
+                        <p className="text-gray-500 dark:text-gray-400 mt-1 text-xs">
+                          Upload PDF or DOC (Max 5MB)
+                        </p>
                       </div>
                     </div>
                     {/* {stage.stepType == "manual" && ( */}
@@ -707,11 +732,15 @@ const EditProduct = () => {
                     {stage.subSteps.map((subStep, subIndex) => (
                       <div
                         key={subIndex}
-                        className="rounded-lg border border-[#eee] p-2 p-5 dark:border-form-strokedark"
+                        className="border-gray-200 rounded-lg border p-2 p-5 dark:border-form-strokedark dark:border-strokedark"
                       >
                         <div className="grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
                           <h5 className="text-gray-900 text-md block font-semibold dark:text-white">
-                            Step {subIndex + 1} {subStep?.stepName}
+                            Step {subIndex + 1}{" "}
+                            <span className="text-primary">
+                              {" "}
+                              {subStep?.stepName}{" "}
+                            </span>
                           </h5>
                           <div className="text-right">
                             <button
@@ -733,184 +762,234 @@ const EditProduct = () => {
                         </div>
                         {subStep.isSubExpand && (
                           <>
-                            <div className="mt-3 grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
-                              <div>
-                                <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                  Name
-                                </label>
-                                <input
-                                  type="text"
-                                  value={subStep.stepName}
-                                  style={{
-                                    borderColor: errors?.stages[index]
-                                      ?.subSteps[subIndex]
-                                      ? "red"
-                                      : "",
-                                  }}
-                                  onChange={(e) =>
-                                    handleSubStepChange(
-                                      index,
-                                      subIndex,
-                                      e,
-                                      "stepName",
-                                    )
-                                  }
-                                  placeholder={`Name`}
-                                  className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                  Step Type
-                                </label>
-                                <select
-                                  value={subStep.stepType}
-                                  onChange={(e) =>
-                                    handlestepTypeChange(index, subIndex, e)
-                                  }
-                                  className={`relative z-20 w-full appearance-none rounded rounded-lg border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
-                                >
-                                  <option
-                                    value="jig"
-                                    className="text-body dark:text-bodydark"
-                                  >
-                                    Jig
-                                  </option>
-                                  <option
-                                    value="manual"
-                                    className="text-body dark:text-bodydark"
-                                  >
-                                    Manual
-                                  </option>
-                                </select>
-                              </div>
-
-                              {subStep.stepType == "manual" && (
-                                <>
-                                  <div>
-                                    <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                      Validation Type
-                                    </label>
-                                    <select
-                                      value={subStep.stepFields.validationType}
-                                      onChange={(e) =>
-                                        handleValidationTypeChange(
-                                          index,
-                                          subIndex,
-                                          e,
-                                        )
-                                      }
-                                      className={`relative z-20 w-full appearance-none rounded rounded-lg border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
-                                    >
-                                      <option
-                                        value="value"
-                                        className="text-body dark:text-bodydark"
-                                      >
-                                        Value
-                                      </option>
-                                      <option
-                                        value="range"
-                                        className="text-body dark:text-bodydark"
-                                      >
-                                        Range
-                                      </option>
-                                    </select>
-                                  </div>
-                                  {subStep.stepFields.validationType ===
-                                    "value" && (
-                                    <>
-                                      <div>
-                                        <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                          Validation Value
-                                        </label>
-                                        <input
-                                          type="text"
-                                          value={subStep.stepFields.value}
-                                          onChange={(e) =>
-                                            handleSubStepFieldChange(
-                                              index,
-                                              subIndex,
-                                              e,
-                                              "value",
-                                            )
-                                          }
-                                          placeholder={`Validation Value`}
-                                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                        />
-                                      </div>
-                                    </>
-                                  )}
-                                  {subStep.stepFields.validationType ===
-                                    "range" && (
-                                    <>
-                                      <div>
-                                        <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                          Range From
-                                        </label>
-                                        <input
-                                          type="number"
-                                          value={subStep.stepFields.rangeFrom}
-                                          onChange={(e) =>
-                                            handleSubStepFieldChange(
-                                              index,
-                                              subIndex,
-                                              e,
-                                              "rangeFrom",
-                                            )
-                                          }
-                                          placeholder={`min`}
-                                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                          Range To
-                                        </label>
-                                        <input
-                                          type="number"
-                                          value={subStep.stepFields.rangeTo}
-                                          onChange={(e) =>
-                                            handleSubStepFieldChange(
-                                              index,
-                                              subIndex,
-                                              e,
-                                              "rangeTo",
-                                            )
-                                          }
-                                          placeholder={`max`}
-                                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                        />
-                                      </div>
-                                    </>
-                                  )}
-                                </>
-                              )}
-                              {subStep?.isPackagingStatus && (
-                                <div className="rounded-lg">
-                                  <div className="gap-4 rounded-lg">
-                                    <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                      Packaging Type
-                                    </label>
-                                    <select
-                                      value={
-                                        subStep?.packagingData.packagingType
-                                      }
-                                      onChange={(e) =>
-                                        handlePackagingFieldTypeChange(
-                                          index,
-                                          subIndex,
-                                          e.target.value,
-                                        )
-                                      }
-                                      className={`relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
-                                    >
-                                      <option value="">Select</option>
-                                      <option value="Single">Single</option>
-                                      <option value="Carton">Carton</option>
-                                    </select>
-                                  </div>
+                            <div className="mt-6 rounded-xl dark:bg-boxdark">
+                              {/* Grid Layout */}
+                              <div className="grid gap-6 sm:grid-cols-2">
+                                {/* Step Name */}
+                                <div>
+                                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                    Name
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={subStep.stepName}
+                                    style={{
+                                      borderColor: errors?.stages[index]
+                                        ?.subSteps[subIndex]
+                                        ? "red"
+                                        : "",
+                                    }}
+                                    onChange={(e) =>
+                                      handleSubStepChange(
+                                        index,
+                                        subIndex,
+                                        e,
+                                        "stepName",
+                                      )
+                                    }
+                                    placeholder={`Name`}
+                                    className={`w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white ${
+                                      errors?.stages[index]?.subSteps[subIndex]
+                                        ? "border-red-500"
+                                        : ""
+                                    }`}
+                                  />
                                 </div>
-                              )}
+
+                                {/* Required Skill */}
+                                <div>
+                                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                    Required Skill
+                                  </label>
+                                  <select
+                                    value={stage.requiredSkill || ""}
+                                    onChange={(e) => {
+                                      handleStageChange(
+                                        index,
+                                        e,
+                                        "requiredSkill",
+                                      );
+                                    }}
+                                    className="border-gray-300 bg-gray-50 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                  >
+                                    <option
+                                      value=""
+                                      className="text-body dark:text-bodydark"
+                                    >
+                                      Please Select
+                                    </option>
+                                    {skillData.map((skill, index) => (
+                                      <option
+                                        key={index}
+                                        value={skill?.name}
+                                        className="text-body dark:text-bodydark"
+                                        // disabled={skills.includes(skill?.name) ? true : false}
+                                      >
+                                        {skill?.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* Step Type */}
+                                <div>
+                                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                    Step Type
+                                  </label>
+                                  <select
+                                    value={subStep.stepType}
+                                    onChange={(e) =>
+                                      handlestepTypeChange(index, subIndex, e)
+                                    }
+                                    className={`border-gray-300 bg-gray-50 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white`}
+                                  >
+                                    <option
+                                      value="jig"
+                                      className="text-body dark:text-bodydark"
+                                    >
+                                      Jig
+                                    </option>
+                                    <option
+                                      value="manual"
+                                      className="text-body dark:text-bodydark"
+                                    >
+                                      Manual
+                                    </option>
+                                  </select>
+                                </div>
+
+                                {/* Validation (only for manual) */}
+                                {subStep.stepType == "manual" && (
+                                  <>
+                                    <div>
+                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                        Validation Type
+                                      </label>
+                                      <select
+                                        value={
+                                          subStep.stepFields.validationType
+                                        }
+                                        onChange={(e) =>
+                                          handleValidationTypeChange(
+                                            index,
+                                            subIndex,
+                                            e,
+                                          )
+                                        }
+                                        className={`relative z-20 w-full appearance-none rounded rounded-lg border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
+                                      >
+                                        <option
+                                          value="value"
+                                          className="text-body dark:text-bodydark"
+                                        >
+                                          Value
+                                        </option>
+                                        <option
+                                          value="range"
+                                          className="text-body dark:text-bodydark"
+                                        >
+                                          Range
+                                        </option>
+                                      </select>
+                                    </div>
+                                    {subStep.stepFields.validationType ===
+                                      "value" && (
+                                      <>
+                                        <div>
+                                          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                            Validation Value
+                                          </label>
+                                          <input
+                                            type="text"
+                                            value={subStep.stepFields.value}
+                                            onChange={(e) =>
+                                              handleSubStepFieldChange(
+                                                index,
+                                                subIndex,
+                                                e,
+                                                "value",
+                                              )
+                                            }
+                                            placeholder={`Validation Value`}
+                                            className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                          />
+                                        </div>
+                                      </>
+                                    )}
+                                    {subStep.stepFields.validationType ===
+                                      "range" && (
+                                      <>
+                                        <div>
+                                          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                            Range From
+                                          </label>
+                                          <input
+                                            type="number"
+                                            value={subStep.stepFields.rangeFrom}
+                                            onChange={(e) =>
+                                              handleSubStepFieldChange(
+                                                index,
+                                                subIndex,
+                                                e,
+                                                "rangeFrom",
+                                              )
+                                            }
+                                            placeholder={`min`}
+                                            className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                            Range To
+                                          </label>
+                                          <input
+                                            type="number"
+                                            value={subStep.stepFields.rangeTo}
+                                            onChange={(e) =>
+                                              handleSubStepFieldChange(
+                                                index,
+                                                subIndex,
+                                                e,
+                                                "rangeTo",
+                                              )
+                                            }
+                                            placeholder={`max`}
+                                            className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                          />
+                                        </div>
+                                      </>
+                                    )}
+                                  </>
+                                )}
+
+                                {/* Packaging Stage */}
+                                {subStep?.isPackagingStatus && (
+                                  <div className="rounded-lg">
+                                    <div className="gap-4 rounded-lg">
+                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                        Packaging Type
+                                      </label>
+                                      <select
+                                        value={
+                                          subStep?.packagingData.packagingType
+                                        }
+                                        onChange={(e) =>
+                                          handlePackagingFieldTypeChange(
+                                            index,
+                                            subIndex,
+                                            e.target.value,
+                                          )
+                                        }
+                                        className={`relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
+                                      >
+                                        <option value="">Select</option>
+                                        <option value="Single">Single</option>
+                                        <option value="Carton">Carton</option>
+                                      </select>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                             <div className="flex gap-9">
                               <div className="mt-6.5 flex items-center space-x-2">
@@ -969,10 +1048,17 @@ const EditProduct = () => {
                               subStep?.packagingData.packagingType ==
                                 "Carton" && (
                                 <>
-                                  <div className="mt-6.5 rounded-lg border border-[#eee] px-3">
-                                    <div className="grid grid-cols-2 gap-5 py-6">
+                                  <div className="border-gray-200 dark:bg-gray-800 mt-6 rounded-xl border bg-white p-6 shadow-sm dark:border-strokedark">
+                                    <div className="mb-4 flex items-center gap-2">
+                                      <Box className="h-5 w-5 text-primary" />
+                                      <h3 className="text-gray-800 dark:text-gray-100 text-lg font-semibold">
+                                        Carton Details
+                                      </h3>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                                       <div>
-                                        <label className="text-gray-700 dark:text-gray-300 mb-3 block text-sm font-medium">
+                                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
                                           Carton Width
                                         </label>
                                         <input
@@ -989,11 +1075,11 @@ const EditProduct = () => {
                                             )
                                           }
                                           placeholder="Carton Width"
-                                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                          className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
                                         />
                                       </div>
                                       <div>
-                                        <label className="text-gray-700 dark:text-gray-300 mb-3 block text-sm font-medium">
+                                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
                                           Carton Height
                                         </label>
                                         <input
@@ -1010,11 +1096,11 @@ const EditProduct = () => {
                                               "cartonHeight",
                                             )
                                           }
-                                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                          className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
                                         />
                                       </div>
                                       <div>
-                                        <label className="text-gray-700 dark:text-gray-300 mb-3 block text-sm font-medium">
+                                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
                                           Max Capacity
                                         </label>
                                         <input
@@ -1031,11 +1117,11 @@ const EditProduct = () => {
                                               "maxCapacity",
                                             )
                                           }
-                                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                          className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
                                         />
                                       </div>
                                       <div>
-                                        <label className="text-gray-700 dark:text-gray-300 mb-3 block text-sm font-medium">
+                                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
                                           Carton Weight (in Kg)
                                         </label>
                                         <input
@@ -1052,7 +1138,7 @@ const EditProduct = () => {
                                             )
                                           }
                                           placeholder="Carton Weight"
-                                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                          className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
                                         />
                                       </div>
                                     </div>
@@ -1360,18 +1446,6 @@ const EditProduct = () => {
                     {/* </> */}
                     {/* )} */}
                   </>
-                )}
-                {stage.isExpanded && (
-                  <div>
-                    <label className="text-gray-800 mb-3 block text-sm font-medium  dark:text-bodydark">
-                      Attach SOP
-                    </label>
-                    <input
-                      value={stage.sopFile}
-                      type="file"
-                      className="w-full cursor-pointer rounded-lg border-[1.5px] border-stroke bg-transparent outline-none transition file:mr-5 file:border-collapse file:cursor-pointer file:border-0 file:border-r file:border-solid file:border-stroke file:bg-whiter file:px-5 file:py-3 file:hover:bg-primary file:hover:bg-opacity-10 focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:file:border-form-strokedark dark:file:bg-white/30 dark:file:text-bodydark dark:focus:border-primary"
-                    />
-                  </div>
                 )}
                 <div className="col-span-12 flex justify-end gap-5">
                   {stage.isExpanded && (

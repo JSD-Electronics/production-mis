@@ -4,3 +4,51 @@ white-space: normal !important;
 word-break: break-word;
 overflow-wrap: break-word;
 }
+.custom-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+.custom-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.custom-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 9999px;
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+.rdt_TableBody {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+.rdt_TableBody::-webkit-scrollbar {
+  width: 8px;
+}
+.rdt_TableBody::-webkit-scrollbar-track {
+  background: #f8fafc;
+  border-radius: 9999px;
+}
+.rdt_TableBody::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+.rdt_TableBody::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+.dark .custom-scroll {
+  scrollbar-color: #475569 #0b1d2b;
+}
+.dark .rdt_TableBody {
+  scrollbar-color: #475569 #0f172a;
+}
+.dark .custom-scroll::-webkit-scrollbar-track {
+  background: #0b1d2b;
+}
+.dark .rdt_TableBody::-webkit-scrollbar-track {
+  background: #0f172a;
+}
