@@ -15,12 +15,13 @@ import Modal from "@/components/Modal/page";
 import { useRouter } from "next/navigation";
 import { Tooltip } from "react-tooltip";
 import { FiEdit, FiEye, FiPlus, FiTrash } from "react-icons/fi";
-import { Search, Trash2, XCircle } from "lucide-react";
+import { Search, Trash2, XCircle, Activity, CheckCircle, Clock, PauseCircle, Truck, PackageCheck } from "lucide-react";
 import { BallTriangle } from "react-loader-spinner";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import "./process.css";
+import CardDataStats from "@/components/CardDataStats";
 const ViewProcess = () => {
   const [showMarkAsCompletePopup, setShowMarkAsCompletePopup] =
     React.useState(false);
@@ -174,15 +175,10 @@ const ViewProcess = () => {
     }
   };
   const handleSubmitFilter = async () => {
-    let data = shiftData.filter((value, index) => {
-      value.orderConfirmationNo != orderConfirmationNo;
-    });
-    setShiftData(data);
+    return;
   };
   const handleClearFilter = async () => {
     setOrderConfirmationNo("");
-    setShiftData([]);
-    getProcess();
   };
 
   const columns = [
@@ -223,7 +219,7 @@ const ViewProcess = () => {
           <>
             <button
               onClick={() => handleViewPlaning(row.planing._id)}
-              className="rounded bg-blue-500 px-3 py-1 text-white"
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1 text-white shadow-sm transition hover:bg-primary/90"
               data-tooltip-id="view-planing-tooltip"
               data-tooltip-content="View Planning"
             >
@@ -235,7 +231,7 @@ const ViewProcess = () => {
           <>
             <button
               onClick={() => handleAddPlaning(row?._id)}
-              className="rounded bg-blue-500 px-3 py-1 text-white"
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1 text-white shadow-sm transition hover:bg-primary/90"
               data-tooltip-id="add-planing-tooltip"
               data-tooltip-content="Add Planning"
             >
@@ -263,28 +259,28 @@ const ViewProcess = () => {
     },
     {
       name: "Dispatch Status",
-      selector: (row: Shifts) => (
-        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-          row?.dispatchStatus === "dispatched"
-            ? "bg-green-500 text-white"
-            : "bg-danger text-white"
-        }`}>
-          {row?.dispatchStatus}
-        </span>
-      ),
+      selector: (row: Shifts) => {
+        const dispatched = row?.dispatchStatus === "dispatched";
+        const cls = dispatched ? "bg-green-500 text-white" : "bg-danger text-white";
+        return (
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${cls}`}>
+            <Truck size={12} /> {row?.dispatchStatus}
+          </span>
+        );
+      },
       sortable: true,
     },
     {
       name: "Delivery Status",
-      selector: (row: Shifts) => (
-        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-          row?.deliverStatus === "delivered"
-            ? "bg-green-500 text-white"
-            : "bg-yellow-500 text-white"
-        }`}>
-          {row?.deliverStatus}
-        </span>
-      ),
+      selector: (row: Shifts) => {
+        const delivered = row?.deliverStatus === "delivered";
+        const cls = delivered ? "bg-green-500 text-white" : "bg-yellow-500 text-white";
+        return (
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${cls}`}>
+            <PackageCheck size={12} /> {row?.deliverStatus}
+          </span>
+        );
+      },
       sortable: true,
     },
     {
@@ -438,20 +434,26 @@ const ViewProcess = () => {
   ];
 
   const displayData = React.useMemo(() => {
-    if (!searchQuery) return shiftData;
     const q = searchQuery.toLowerCase();
-    return shiftData.filter((row: any) => {
-      const fields = [
-        row?.orderConfirmationNo,
-        row?.processID,
-        row?.productName,
-        row?.name,
-      ];
-      return fields.some((f) =>
-        f ? String(f).toLowerCase().includes(q) : false,
-      );
-    });
-  }, [shiftData, searchQuery]);
+    return shiftData
+      .filter((row: any) =>
+        orderConfirmationNo
+          ? String(row?.orderConfirmationNo) === String(orderConfirmationNo)
+          : true,
+      )
+      .filter((row: any) => {
+        if (!q) return true;
+        const fields = [
+          row?.orderConfirmationNo,
+          row?.processID,
+          row?.productName,
+          row?.name,
+        ];
+        return fields.some((f) =>
+          f ? String(f).toLowerCase().includes(q) : false,
+        );
+      });
+  }, [shiftData, searchQuery, orderConfirmationNo]);
 
   const summary = React.useMemo(() => {
     const s = {
@@ -491,7 +493,7 @@ const ViewProcess = () => {
                 <select
                   value={orderConfirmationNo || ""}
                   onChange={(e) => setOrderConfirmationNo(e.target.value)}
-                  className="h-10 w-full rounded-lg border border-stroke bg-white px-4 text-sm outline-none transition focus:border-primary dark:border-strokedark dark:bg-form-input sm:w-56"
+                  className="h-10 w-full rounded-lg border border-stroke bg-white px-4 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30 shadow-sm dark:border-strokedark dark:bg-form-input sm:w-56"
                 >
                   <option value="">Please Select</option>
                   {ocNoArr.map((oc, index) => (
@@ -505,20 +507,48 @@ const ViewProcess = () => {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleSubmitFilter}
-                    className="flex h-9 items-center justify-center rounded bg-primary px-3 text-white transition hover:bg-primary/90"
+                    className="flex h-9 items-center justify-center rounded bg-primary px-3 text-white shadow-sm transition hover:bg-primary/90"
                   >
                     <Search size={16} />
                   </button>
 
-                  {orderConfirmationNo && (
+                  {/* {orderConfirmationNo && (
                     <button
                       onClick={handleClearFilter}
                       className="text-info flex items-center gap-1 text-sm font-semibold hover:underline"
                     >
                       <XCircle size={16} /> Clear
                     </button>
-                  )}
+                  )} */}
                 </div>
+                {(orderConfirmationNo || searchQuery) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {orderConfirmationNo && (
+                      <span className="group inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary ring-1 ring-primary/30 shadow-sm">
+                        OC: {orderConfirmationNo}
+                        <button
+                          onClick={() => setOrderConfirmationNo("")}
+                          className="rounded-full bg-primary/20 p-0.5 text-primary transition group-hover:bg-primary/30"
+                          aria-label="Clear OC filter"
+                        >
+                          <XCircle size={14} />
+                        </button>
+                      </span>
+                    )}
+                    {searchQuery && (
+                      <span className="group inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 ring-1 ring-gray-300 shadow-sm">
+                        Search: {searchQuery}
+                        <button
+                          onClick={() => setSearchQuery("")}
+                          className="rounded-full bg-gray-200 p-0.5 text-gray-700 transition group-hover:bg-gray-300"
+                          aria-label="Clear search"
+                        >
+                          <XCircle size={14} />
+                        </button>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Right: Delete */}
@@ -535,6 +565,20 @@ const ViewProcess = () => {
                   <Trash2 size={16} /> Delete
                 </button>
               </div>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <CardDataStats title="Active Processes" total={`${summary.active}`} rate="">
+                <Activity className="text-primary" size={22} />
+              </CardDataStats>
+              <CardDataStats title="Completed" total={`${summary.completed}`} rate="">
+                <CheckCircle className="text-green-600" size={22} />
+              </CardDataStats>
+              <CardDataStats title="Waiting Schedule" total={`${summary.waiting_schedule}`} rate="">
+                <Clock className="text-amber-500" size={22} />
+              </CardDataStats>
+              <CardDataStats title="On Hold" total={`${summary.down_time_hold}`} rate="">
+                <PauseCircle className="text-red-600" size={22} />
+              </CardDataStats>
             </div>
 
             {/* 🔹 Table */}
@@ -558,13 +602,13 @@ const ViewProcess = () => {
                 subHeaderAlign="left"
                 subHeaderWrap
                 subHeaderComponent={
-                  <div className="flex w-full items-center justify-between">
+                  <div className="flex w-full items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-2">
                     <div className="relative w-64">
                       <input
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder="Search..."
-                        className="h-9 w-full rounded-lg border border-stroke bg-white pl-9 pr-3 text-sm outline-none transition focus:border-primary"
+                        className="h-9 w-full rounded-lg border border-stroke bg-white pl-9 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30 shadow-sm"
                       />
                       <Search
                         size={16}
@@ -572,16 +616,16 @@ const ViewProcess = () => {
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                      <span className="rounded-full bg-gradient-to-r from-amber-100 to-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200 shadow-sm">
                         Active: {summary.active}
                       </span>
-                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                      <span className="rounded-full bg-gradient-to-r from-green-100 to-green-50 px-3 py-1 text-xs font-semibold text-green-700 ring-1 ring-green-200 shadow-sm">
                         Completed: {summary.completed}
                       </span>
-                      <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
+                      <span className="rounded-full bg-gradient-to-r from-orange-100 to-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 ring-1 ring-orange-200 shadow-sm">
                         Waiting: {summary.waiting_schedule}
                       </span>
-                      <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+                      <span className="rounded-full bg-gradient-to-r from-red-100 to-red-50 px-3 py-1 text-xs font-semibold text-red-700 ring-1 ring-red-200 shadow-sm">
                         Hold: {summary.down_time_hold}
                       </span>
                     </div>
@@ -595,6 +639,7 @@ const ViewProcess = () => {
                       color: "#111827",
                       padding: "12px",
                       borderBottom: "1px solid #e5e7eb",
+                      boxShadow: "inset 0 -1px 0 0 rgba(229,231,235,1)",
                     },
                   },
                   rows: {
@@ -619,15 +664,15 @@ const ViewProcess = () => {
                 conditionalRowStyles={[
                   {
                     when: (row: any) => row?.status === "completed",
-                    style: { backgroundColor: "#f0fdf4" },
+                    style: { backgroundColor: "#f0fdf4", borderLeft: "3px solid #22c55e" },
                   },
                   {
                     when: (row: any) => row?.status === "active",
-                    style: { backgroundColor: "#fffbeb" },
+                    style: { backgroundColor: "#fffbeb", borderLeft: "3px solid #f59e0b" },
                   },
                   {
                     when: (row: any) => row?.status === "down_time_hold",
-                    style: { backgroundColor: "#fef2f2" },
+                    style: { backgroundColor: "#fef2f2", borderLeft: "3px solid #ef4444" },
                   },
                 ]}
               />

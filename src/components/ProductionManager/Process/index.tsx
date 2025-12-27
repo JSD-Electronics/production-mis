@@ -391,7 +391,7 @@ const ViewProcessInventory = () => {
   ];
 
   return (
-    <div className="bg-gradient-to-b from-[#0f2a3d] to-[#0b1d2b] min-h-screen p-6">
+    <div className="bg-gradient-to-b from-gray-50 to-white min-h-screen p-6">
       <Breadcrumb pageName="View Process" parentName="Production Manager" />
       <div className="mt-6 rounded-xl bg-white/90 backdrop-blur-md p-6 shadow-2xl ring-1 ring-black/5 dark:bg-boxdark/90 dark:ring-white/10">
         <ToastContainer
