@@ -11,7 +11,14 @@ import {
 } from "../../lib/api";
 import Modal from "@/components/Modal/page";
 import { ToastContainer, toast } from "react-toastify";
-import { User, ClipboardList, BarChart3, Paperclip, Box } from "lucide-react";
+import {
+  User,
+  ClipboardList,
+  BarChart3,
+  Paperclip,
+  Box,
+  Loader2,
+} from "lucide-react";
 import "react-toastify/dist/ReactToastify.css";
 import {
   faMinus,
@@ -540,6 +547,22 @@ const AddProduct = () => {
     setStages(updatedStages);
   };
   const closeModal = () => setIsModalOpen(false);
+  const stats = React.useMemo(() => {
+    const stageCount = stages.length;
+    const substepCount = stages.reduce(
+      (acc, s) => acc + (s.subSteps?.length || 0),
+      0,
+    );
+    const printerEnabled = stages.reduce(
+      (acc, s) => acc + s.subSteps.filter((ss) => ss.isPrinterEnable).length,
+      0,
+    );
+    const packagingEnabled = stages.reduce(
+      (acc, s) => acc + s.subSteps.filter((ss) => ss.isPackagingStatus).length,
+      0,
+    );
+    return { stageCount, substepCount, printerEnabled, packagingEnabled };
+  }, [stages]);
   return (
     <DndProvider backend={HTML5Backend}>
       <>
@@ -552,17 +575,76 @@ const AddProduct = () => {
             draggable
             pauseOnHover
           />
-          <div className="mr-5 flex justify-end text-right">
-            <button
-              type="button"
-              className="mt-4 flex items-center rounded-lg bg-boxdark p-2.5 text-sm text-white"
-              onClick={openModal}
-            >
-              Clone Settings
-            </button>
+          <div className="flex items-center justify-between px-10 pt-6">
+            <h3 className="text-gray-900 text-lg font-semibold dark:text-white">
+              Configure Product
+            </h3>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="flex items-center rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary/90"
+                onClick={openModal}
+              >
+                Clone Settings
+              </button>
+            </div>
           </div>
           <form action="#">
             <div className="flex flex-col space-y-5 px-10 py-5">
+              <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-sm border border-stroke bg-white px-5 py-4 shadow-default dark:border-strokedark dark:bg-boxdark">
+                  <div className="text-gray-500 dark:text-gray-300 text-sm font-medium">
+                    Stages
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <div className="text-title-md font-bold text-black dark:text-white">
+                      {stats.stageCount}
+                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-meta-2 dark:bg-meta-4">
+                      <ClipboardList className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-sm border border-stroke bg-white px-5 py-4 shadow-default dark:border-strokedark dark:bg-boxdark">
+                  <div className="text-gray-500 dark:text-gray-300 text-sm font-medium">
+                    Sub-steps
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <div className="text-title-md font-bold text-black dark:text-white">
+                      {stats.substepCount}
+                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-meta-2 dark:bg-meta-4">
+                      <BarChart3 className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-sm border border-stroke bg-white px-5 py-4 shadow-default dark:border-strokedark dark:bg-boxdark">
+                  <div className="text-gray-500 dark:text-gray-300 text-sm font-medium">
+                    Printer Enabled
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <div className="text-title-md font-bold text-black dark:text-white">
+                      {stats.printerEnabled}
+                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-meta-2 dark:bg-meta-4">
+                      <Paperclip className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-sm border border-stroke bg-white px-5 py-4 shadow-default dark:border-strokedark dark:bg-boxdark">
+                  <div className="text-gray-500 dark:text-gray-300 text-sm font-medium">
+                    Packaging Enabled
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <div className="text-title-md font-bold text-black dark:text-white">
+                      {stats.packagingEnabled}
+                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-meta-2 dark:bg-meta-4">
+                      <Box className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+              </div>
               <div className="bg-gray-100 px-1 py-6 dark:bg-boxdark">
                 <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
                   Product Name
@@ -1343,6 +1425,27 @@ const AddProduct = () => {
                                               </div>
                                               <div>
                                                 <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                  Unit
+                                                </label>
+                                                <input
+                                                  type="text"
+                                                  value={jigField?.unit}
+                                                  onChange={(e) =>
+                                                    handleJigSubStepChange(
+                                                      index,
+                                                      subIndex,
+                                                      jigIndex,
+                                                      e,
+                                                      "unit",
+                                                    )
+                                                  }
+                                                  placeholder={`Unit (Leave Blank if not need to add unit)`}
+                                                  className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                />
+                                              </div>
+
+                                              <div>
+                                                <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
                                                   Validation Type
                                                 </label>
                                                 <select
@@ -1372,6 +1475,34 @@ const AddProduct = () => {
                                                     Range
                                                   </option>
                                                 </select>
+                                              </div>
+
+                                              <div className="mt-3 items-center gap-3 ">
+                                                {jigField.validationType ===
+                                                  "value" && (
+                                                  <>
+                                                    <div>
+                                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                        Validation Value
+                                                      </label>
+                                                      <input
+                                                        type="text"
+                                                        value={jigField.value}
+                                                        onChange={(e) =>
+                                                          handleJigSubStepChange(
+                                                            index,
+                                                            subIndex,
+                                                            jigIndex,
+                                                            e,
+                                                            "value",
+                                                          )
+                                                        }
+                                                        placeholder={`Validation Value`}
+                                                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                      />
+                                                    </div>
+                                                  </>
+                                                )}
                                               </div>
                                               {jigField.validationType ===
                                                 "range" && (
@@ -1419,33 +1550,7 @@ const AddProduct = () => {
                                                 </>
                                               )}
                                             </div>
-                                            <div className="mt-3 grid grid-cols-1 items-center gap-3 sm:grid-cols-1">
-                                              {jigField.validationType ===
-                                                "value" && (
-                                                <>
-                                                  <div>
-                                                    <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                      Validation Value
-                                                    </label>
-                                                    <input
-                                                      type="text"
-                                                      value={jigField.value}
-                                                      onChange={(e) =>
-                                                        handleJigSubStepChange(
-                                                          index,
-                                                          subIndex,
-                                                          jigIndex,
-                                                          e,
-                                                          "value",
-                                                        )
-                                                      }
-                                                      placeholder={`Validation Value`}
-                                                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                    />
-                                                  </div>
-                                                </>
-                                              )}
-                                            </div>
+
                                             <div className="col-span-12 flex justify-end">
                                               <button
                                                 type="button"
@@ -1605,7 +1710,7 @@ const AddProduct = () => {
                       </div>
 
                       {/* UPHA */}
-                      <div className="sm:col-span-2">
+                      {/* <div className="sm:col-span-2">
                         <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
                           UPHA (Units Per Hour Analysis)
                         </label>
@@ -1618,7 +1723,7 @@ const AddProduct = () => {
                           placeholder="Enter UPHA"
                           className="border-gray-300 bg-gray-50 text-gray-800 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/50 dark:border-strokedark dark:bg-form-input dark:text-white"
                         />
-                      </div>
+                      </div> */}
                     </div>
                   </div>
                 ))}
@@ -1626,11 +1731,22 @@ const AddProduct = () => {
               <div className="col-span-12 flex justify-end gap-5">
                 <button
                   type="button"
-                  className="mt-4 flex items-center rounded-md bg-[#34D399] px-4 py-2 text-white"
+                  className={`mt-4 flex items-center gap-2 rounded-md px-4 py-2 text-white ${
+                    submitDisabled
+                      ? "cursor-not-allowed bg-[#34D399]/70"
+                      : "bg-[#34D399]"
+                  }`}
                   onClick={submitStageForm}
                   disabled={submitDisabled}
                 >
-                  {submitDisabled ? "Submitting..." : "Submit"}
+                  {submitDisabled ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>Submit</>
+                  )}
                 </button>
               </div>
             </div>

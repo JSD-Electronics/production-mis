@@ -377,6 +377,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         assignOperator = JSON.parse(result?.assignedOperators || "{}");
         assignStage = JSON.parse(result?.assignedStages || "{}");
       }
+      console.log("assignStage from function ==>", assignStage);
       const currentUserName = user;
       const keys = Object.keys(assignOperator || {});
       const keysAssignStages = Object.keys(assignStage || {});
@@ -844,6 +845,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           getPlaningAndScheduling={getPlaningAndScheduling}
           shift={shift}
           setStartTest={setStartTest}
+          processAssignUserStage={processAssignUserStage}
         />
       )}
     </div>

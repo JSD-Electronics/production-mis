@@ -1,4 +1,3 @@
-import React from "react";
 import { Printer, CheckCircle, XCircle } from "lucide-react";
 import StickerGenerator from "../../viewTask-old/StickerGenerator";
 
@@ -46,7 +45,7 @@ export default function PrinterSection({
           subStep.printerFields.map((field: any, index: number) => (
             <div
               key={index}
-              className="rounded-lg border border-gray-200 bg-gray-50 p-4 shadow-inner dark:bg-gray-800 dark:border-gray-700"
+              className="rounded-lg border border-gray-200 bg-white p-4 dark:bg-white dark:border-gray-700"
             >
               <StickerGenerator
                 stickerData={field}
@@ -57,7 +56,7 @@ export default function PrinterSection({
             </div>
           ))
         ) : (
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 shadow-inner dark:bg-gray-800 dark:border-gray-700">
+          <div className="rounded-lg border border-gray-200 bg-white p-4 dark:bg-white dark:border-gray-700">
             <StickerGenerator
               stickerData={subStep.stickerData}
               deviceData={deviceList.filter(

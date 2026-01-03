@@ -22,6 +22,7 @@ const StickerGenerator = ({ stickerData, deviceData }) => {
         width: `${width}px`,
         height: `${height}px`,
         position: "relative",
+        backgroundColor: "#ffffff",
       }}
     >
       {stickerData?.fields?.map((field) => {
@@ -42,7 +43,7 @@ const StickerGenerator = ({ stickerData, deviceData }) => {
               fontStyle: field.styles?.fontStyle || "normal",
               color: field.styles?.color || "black",
               border: field.type === "text" ? "none" : "1px dashed #ddd", // ✅ No border for text
-              background: field.styles?.background || "transparent",
+              background: "transparent",
               padding: "2px",
               borderRadius: "4px",
             }}
@@ -50,20 +51,69 @@ const StickerGenerator = ({ stickerData, deviceData }) => {
             {field.type === "barcode" ? (
               <Barcode
                 value={fieldValue || "000000000000"}
-                width={2} // bar thickness
-                height={field.height - 5 || 40}
-                displayValue={true} // show text below
+                renderer="svg"
+                style={{
+                  width:
+                    typeof field.width === "number"
+                      ? `${field.width}px`
+                      : `${parseInt(String(field.width || 100), 10)}px`,
+                  height:
+                    typeof field.height === "number"
+                      ? `${field.height}px`
+                      : `${parseInt(String(field.height || 40), 10)}px`,
+                }}
+                width={
+                  typeof field.barWidth === "number"
+                    ? field.barWidth
+                    : Math.max(
+                        3,
+                        Math.floor(
+                          (typeof field.width === "number"
+                            ? field.width
+                            : parseInt(String(field.width || 100), 10)) / 180,
+                        ),
+                      )
+                }
+                height={
+                  typeof field.barHeight === "number"
+                    ? field.barHeight
+                    : (typeof field.height === "number"
+                        ? field.height
+                        : parseInt(String(field.height || 40), 10)) - 5
+                }
+                displayValue={true}
                 fontSize={12}
-                background="transparent"
+                background="#ffffff"
                 lineColor="#000000"
+                margin={12}
+                svgRef={(node: SVGSVGElement | null) => {
+                  if (node) {
+                    try {
+                      node.setAttribute("preserveAspectRatio", "none");
+                      const w =
+                        typeof field.width === "number"
+                          ? field.width
+                          : parseInt(String(field.width || 100), 10);
+                      const h =
+                        typeof field.height === "number"
+                          ? field.height
+                          : parseInt(String(field.height || 40), 10);
+                      node.setAttribute("width", String(w));
+                      node.setAttribute("height", String(h));
+                    } catch {}
+                  }
+                }}
               />
             ) : field.type === "qrcode" ? (
               <QRCodeCanvas
                 value={fieldValue || "N/A"}
-                size={field.width || 80}
+                size={Math.min(
+                  typeof field.width === "number" ? field.width : parseInt(String(field.width || 80), 10),
+                  typeof field.height === "number" ? field.height : parseInt(String(field.height || 80), 10),
+                )}
                 bgColor="#ffffff"
                 fgColor="#000000"
-                level="H" // error correction (L, M, Q, H)
+                level="H"
                 includeMargin={false}
               />
             ) : (

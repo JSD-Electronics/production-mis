@@ -9,7 +9,8 @@ import Modal from "../Modal/page";
 import { useDropzone } from "react-dropzone";
 import Cropper from "react-easy-crop";
 import Link from "next/link";
-import { Pencil, Trash2, Plus, QrCode, Type, X } from "lucide-react";
+import { Pencil, Trash2, Plus, QrCode, Type, X, ArrowUp, ArrowDown } from "lucide-react";
+import { Tooltip } from "react-tooltip";
 const StickerDesigner = ({
   stages,
   setStages,
@@ -43,6 +44,14 @@ const StickerDesigner = ({
     fontWeight: "400",
     color: "#000000",
     fontSize: "16px",
+    textAlign: "left",
+    backgroundColor: "",
+    borderColor: "",
+    borderWidth: "0px",
+    borderRadius: "0px",
+    padding: "0px",
+    letterSpacing: "0px",
+    transform: "",
   });
   const stickerRef = useRef(null);
   const [customTextVal, setCustomTextVal] = useState("");
@@ -52,6 +61,22 @@ const StickerDesigner = ({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
   const [croppedImage, setCroppedImage] = useState(null);
   const [isCustomTextModal, setIsCustomTextModal] = useState(false);
+  const [dimWidthInput, setDimWidthInput] = useState<string>("");
+  const [dimHeightInput, setDimHeightInput] = useState<string>("");
+  useEffect(() => {
+    const w =
+      stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]?.dimensions
+        ?.width;
+    const h =
+      stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]?.dimensions
+        ?.height;
+    setDimWidthInput(
+      typeof w === "number" ? String(w) : w ? String(w) : "",
+    );
+    setDimHeightInput(
+      typeof h === "number" ? String(h) : h ? String(h) : "",
+    );
+  }, [index, subIndex1, fieldIndex, stages]);
   const handleCloseCustomTextModal = () => {
     setIsCustomTextModal(!isCustomTextModal);
   };
@@ -59,6 +84,9 @@ const StickerDesigner = ({
     setIsCustomTextModal(!isCustomTextModal);
   };
   const handleSubmitCustomText = () => {
+    if (!customTextVal || !customTextVal.trim()) {
+      return;
+    }
     setStages((prevStages) =>
       prevStages.map((stage, sIndex) => {
         if (sIndex === index) {
@@ -84,8 +112,8 @@ const StickerDesigner = ({
                           value: customTextVal,
                           x: 50,
                           y: 50,
-                          width: `${dimensions.width}px`,
-                          height: `${dimensions.height}px`,
+                          width: Number(dimensions.width),
+                          height: Number(dimensions.height),
                         };
                         return {
                           ...printerField,
@@ -187,6 +215,11 @@ const StickerDesigner = ({
   const closeEditableFieldStyleModal = () => setEditableFieldStyleValue(false);
   const closeBarCodeValueModal = () => setIsModalBarCodeValue(false);
   const handleImageUploadModal = () => {
+    const imageSource = croppedImage || preview;
+    if (!imageSource) {
+      setImageUploadMoal(false);
+      return;
+    }
     setStages((prevStages) =>
       prevStages.map((stage, sIndex) => {
         if (sIndex === index) {
@@ -199,38 +232,34 @@ const StickerDesigner = ({
                   printerFields: subStep.printerFields.map(
                     (printerField, pFieldIndex) => {
                       if (pFieldIndex === fieldIndex) {
-                        // Ensure 'fields' exists
-                        const existingFields = Array.isArray(
-                          printerField.fields,
-                        )
+                        const existingFields = Array.isArray(printerField.fields)
                           ? printerField.fields
                           : [];
-
                         const newField = {
                           id: Date.now(),
                           name: "image",
                           type: "image",
-                          value: croppedImage,
+                          value: imageSource,
                           x: 50,
                           y: 50,
-                          width: `${dimensions.width}px`,
-                          height: `${dimensions.height}px`,
+                          width: Number(dimensions.width),
+                          height: Number(dimensions.height),
                         };
                         return {
                           ...printerField,
-                          fields: [...existingFields, newField], // Always create a new array
+                          fields: [...existingFields, newField],
                         };
                       }
-                      return { ...printerField }; // Force new reference
+                      return { ...printerField };
                     },
                   ),
                 };
               }
-              return { ...subStep }; // Force new reference
+              return { ...subStep };
             }),
           };
         }
-        return { ...stage }; // Force new reference
+        return { ...stage };
       }),
     );
     setImageUploadMoal(false);
@@ -475,7 +504,7 @@ const StickerDesigner = ({
       {
         name: type === "barcode" ? "Barcode" : "QR Code",
         type,
-        value: "DynamicValue",
+        value: "",
         displayValue: true,
         x: 125,
         y: 75,
@@ -486,11 +515,29 @@ const StickerDesigner = ({
   };
   const openBarCodeValue = (value) => {
     setFieldType("");
-    setFieldValue("");
     setSelectedQRValue(value);
     setIsModalBarCodeValue(true);
   };
+  const [barWidth, setBarWidth] = useState<number | ''>('');
+  const [barHeight, setBarHeight] = useState<number | ''>('');
+  const [displayBarValue, setDisplayBarValue] = useState(true);
+  const [barFormat, setBarFormat] = useState("CODE128");
+  const [barLineColor, setBarLineColor] = useState("#000000");
+  const [barBackground, setBarBackground] = useState("#ffffff");
+  const [barMargin, setBarMargin] = useState<number | ''>(10);
+  const [barTextSize, setBarTextSize] = useState<number | ''>(14);
+  const [barTextMargin, setBarTextMargin] = useState<number | ''>(2);
+  const [barCodeError, setBarCodeError] = useState<string>("");
   const handleBarCodeValue = () => {
+    if (!fieldType) {
+      setBarCodeError("Please select Barcode or QR Code.");
+      return;
+    }
+    if (fieldType === "barcode" && !selectQRValue?.slug && !selectQRValue?.name) {
+      setBarCodeError("Please choose a field to bind (e.g., Serial No).");
+      return;
+    }
+    setBarCodeError("");
     setStages((prevStages) =>
       prevStages.map((stage, sIndex) =>
         sIndex === index // Match the target stage
@@ -511,29 +558,57 @@ const StickerDesigner = ({
                                   ? printerField.fields.map((field) =>
                                       field.name === selectQRValue.name
                                         ? {
-                                            ...field,
-                                            type: fieldType,
-                                            value: fieldValue,
-                                            styles: {
-                                              ...field.styles,
-                                              x: 50,
-                                              y: 50,
-                                              width:
-                                                fieldType === "text"
-                                                  ? 100
-                                                  : 150,
-                                              height: 50,
-                                            },
-                                          }
-                                        : field,
-                                    )
+                                             ...field,
+                                             type: fieldType,
+                                             slug: selectQRValue?.slug || field.slug,
+                                             displayValue: displayBarValue,
+                                             barWidth:
+                                               barWidth === '' ? undefined : Number(barWidth),
+                                             barHeight:
+                                               barHeight === '' ? undefined : Number(barHeight),
+                                             styles: {
+                                               ...field.styles,
+                                               x: 50,
+                                               y: 50,
+                                               width:
+                                                 fieldType === "text"
+                                                   ? 100
+                                                   : 150,
+                                               height: 50,
+                                             },
+                                             format: barFormat,
+                                             lineColor: barLineColor,
+                                             background: barBackground,
+                                             margin:
+                                               barMargin === '' ? undefined : Number(barMargin),
+                                             fontSize:
+                                               barTextSize === '' ? undefined : Number(barTextSize),
+                                             textMargin:
+                                               barTextMargin === '' ? undefined : Number(barTextMargin),
+                                           }
+                                         : field,
+                                     )
                                   : [
                                       ...printerField.fields,
                                       {
                                         id: Date.now(),
                                         name: selectQRValue.name,
                                         type: fieldType,
-                                        value: fieldValue,
+                                        slug: selectQRValue?.slug,
+                                        displayValue: displayBarValue,
+                                        barWidth:
+                                          barWidth === '' ? undefined : Number(barWidth),
+                                        barHeight:
+                                          barHeight === '' ? undefined : Number(barHeight),
+                                        format: barFormat,
+                                        lineColor: barLineColor,
+                                        background: barBackground,
+                                        margin:
+                                          barMargin === '' ? undefined : Number(barMargin),
+                                        fontSize:
+                                          barTextSize === '' ? undefined : Number(barTextSize),
+                                        textMargin:
+                                          barTextMargin === '' ? undefined : Number(barTextMargin),
                                         styles: {
                                           x: 50,
                                           y: 50,
@@ -649,39 +724,44 @@ const StickerDesigner = ({
             <input
               type="number"
               min={100}
-              value={
-                stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]
-                  ?.dimensions?.width || ""
-              }
+              value={dimWidthInput}
               onChange={(e) => {
-                setStages((prevStages) =>
-                  prevStages.map((stage, sIndex) =>
-                    sIndex === index
-                      ? {
-                          ...stage,
-                          subSteps: stage.subSteps.map((subStep, sSubIndex) =>
-                            sSubIndex === subIndex1
-                              ? {
-                                  ...subStep,
-                                  printerFields: subStep.printerFields.map(
-                                    (printerField, pFieldIndex) =>
-                                      pFieldIndex === fieldIndex
-                                        ? {
-                                            ...printerField,
-                                            dimensions: {
-                                              ...printerField.dimensions,
-                                              width: Number(e.target.value), // Update width
-                                            },
-                                          }
-                                        : printerField,
-                                  ),
-                                }
-                              : subStep,
-                          ),
-                        }
-                      : stage,
-                  ),
-                );
+                setDimWidthInput(e.target.value);
+              }}
+              onBlur={() => {
+                const parsed = Number(dimWidthInput);
+                if (!Number.isNaN(parsed)) {
+                  const nextVal = Math.max(100, parsed);
+                  setStages((prevStages) =>
+                    prevStages.map((stage, sIndex) =>
+                      sIndex === index
+                        ? {
+                            ...stage,
+                            subSteps: stage.subSteps.map((subStep, sSubIndex) =>
+                              sSubIndex === subIndex1
+                                ? {
+                                    ...subStep,
+                                    printerFields: subStep.printerFields.map(
+                                      (printerField, pFieldIndex) =>
+                                        pFieldIndex === fieldIndex
+                                          ? {
+                                              ...printerField,
+                                              dimensions: {
+                                                ...printerField.dimensions,
+                                                width: nextVal,
+                                              },
+                                            }
+                                          : printerField,
+                                    ),
+                                  }
+                                : subStep,
+                            ),
+                          }
+                        : stage,
+                    ),
+                  );
+                  setDimWidthInput(String(nextVal));
+                }
               }}
               placeholder="Width (px)"
               className="text-md w-full rounded-lg border border-[#eee] p-2"
@@ -689,39 +769,44 @@ const StickerDesigner = ({
             <input
               type="number"
               min={100}
-              value={
-                stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]
-                  ?.dimensions?.height || ""
-              }
+              value={dimHeightInput}
               onChange={(e) => {
-                setStages((prevStages) =>
-                  prevStages.map((stage, sIndex) =>
-                    sIndex === index
-                      ? {
-                          ...stage,
-                          subSteps: stage.subSteps.map((subStep, sSubIndex) =>
-                            sSubIndex === subIndex1
-                              ? {
-                                  ...subStep,
-                                  printerFields: subStep.printerFields.map(
-                                    (printerField, pFieldIndex) =>
-                                      pFieldIndex === fieldIndex
-                                        ? {
-                                            ...printerField,
-                                            dimensions: {
-                                              ...printerField.dimensions,
-                                              height: Number(e.target.value), // Update Height
-                                            },
-                                          }
-                                        : printerField,
-                                  ),
-                                }
-                              : subStep,
-                          ),
-                        }
-                      : stage,
-                  ),
-                );
+                setDimHeightInput(e.target.value);
+              }}
+              onBlur={() => {
+                const parsed = Number(dimHeightInput);
+                if (!Number.isNaN(parsed)) {
+                  const nextVal = Math.max(100, parsed);
+                  setStages((prevStages) =>
+                    prevStages.map((stage, sIndex) =>
+                      sIndex === index
+                        ? {
+                            ...stage,
+                            subSteps: stage.subSteps.map((subStep, sSubIndex) =>
+                              sSubIndex === subIndex1
+                                ? {
+                                    ...subStep,
+                                    printerFields: subStep.printerFields.map(
+                                      (printerField, pFieldIndex) =>
+                                        pFieldIndex === fieldIndex
+                                          ? {
+                                              ...printerField,
+                                              dimensions: {
+                                                ...printerField.dimensions,
+                                                height: nextVal,
+                                              },
+                                            }
+                                          : printerField,
+                                    ),
+                                  }
+                                : subStep,
+                            ),
+                          }
+                        : stage,
+                    ),
+                  );
+                  setDimHeightInput(String(nextVal));
+                }
               }}
               placeholder="Height (px)"
               className="text-md w-full rounded-lg border border-[#eee] p-2"
@@ -851,7 +936,7 @@ const StickerDesigner = ({
                         style={{
                           width: `${dimensions.width}px`,
                           height: `${dimensions.height}px`,
-                          objectFit: "cover",
+                          objectFit: "contain",
                         }}
                       />
                     </div>
@@ -916,7 +1001,7 @@ const StickerDesigner = ({
             <div
               id="sticker-preview"
               ref={stickerRef}
-              className="border-gray-300 relative rounded-xl border bg-white p-6 shadow-md dark:border-strokedark dark:bg-boxdark"
+              className="border-gray-300 relative rounded-xl border bg-white p-6 shadow-md dark:border-strokedark print:bg-white print:shadow-none"
               style={{
                 width: `${stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]?.dimensions?.width}px`,
                 height: `${stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]?.dimensions?.height}px`,
@@ -956,16 +1041,111 @@ const StickerDesigner = ({
                     {field?.type === "barcode" ? (
                       <div className="flex h-full w-full items-center justify-center">
                         <Barcode
-                          value={field.value}
-                          width={field.width / 120}
-                          height={field.height - 5}
-                          displayValue={true}
+                          value={(function () {
+                            const fallback = field.slug || field.value || "N/A";
+                            const src = stickerData;
+                            if (src && typeof src === "object") {
+                              const keyCamel = String(field.slug || "")
+                                .toLowerCase()
+                                .replace(/_([a-z])/g, (_, p1) => p1.toUpperCase());
+                              const tryKeys = [
+                                field.slug,
+                                keyCamel,
+                              ].filter(Boolean) as string[];
+                              for (const k of tryKeys) {
+                                const v = (src as any)[k];
+                                if (v !== undefined && v !== null && v !== "") {
+                                  return String(v);
+                                }
+                              }
+                            }
+                            return String(fallback);
+                          })()}
+                          renderer="svg"
+                          style={{
+                            width:
+                              typeof field.width === "number"
+                                ? `${field.width}px`
+                                : `${parseInt(String(field.width), 10)}px`,
+                            height:
+                              typeof field.height === "number"
+                                ? `${field.height}px`
+                                : `${parseInt(String(field.height), 10)}px`,
+                          }}
+                          width={
+                            typeof field.barWidth === "number"
+                              ? field.barWidth
+                              : Math.max(
+                                  3,
+                                  Math.floor(
+                                    (typeof field.width === "number"
+                                      ? field.width
+                                      : parseInt(String(field.width), 10)) / 180,
+                                  ),
+                                )
+                          }
+                          height={
+                            typeof field.barHeight === "number"
+                              ? field.barHeight
+                              : field.height - 5
+                          }
+                          displayValue={
+                            typeof field.displayValue === "boolean"
+                              ? field.displayValue
+                              : true
+                          }
+                          format={typeof field.format === "string" ? field.format : "CODE128"}
+                          lineColor={typeof field.lineColor === "string" ? field.lineColor : "#000000"}
+                          background={typeof field.background === "string" ? field.background : "#ffffff"}
+                          margin={typeof field.margin === "number" ? field.margin : 12}
+                          fontSize={
+                            typeof field.fontSize === "number" ? field.fontSize : 14
+                          }
+                          textMargin={
+                            typeof field.textMargin === "number" ? field.textMargin : 2
+                          }
+                          svgRef={(node: SVGSVGElement | null) => {
+                            if (node) {
+                              try {
+                                node.setAttribute("preserveAspectRatio", "none");
+                                const w =
+                                  typeof field.width === "number"
+                                    ? field.width
+                                    : parseInt(String(field.width), 10);
+                                const h =
+                                  typeof field.height === "number"
+                                    ? field.height
+                                    : parseInt(String(field.height), 10);
+                                node.setAttribute("width", String(w));
+                                node.setAttribute("height", String(h));
+                              } catch {}
+                            }
+                          }}
                         />
                       </div>
                     ) : field?.type === "qrcode" ? (
                       <QRCodeCanvas
-                        value={field.name}
-                        size={Math.min(field.width, field.height)}
+                        value={(function () {
+                          const fallback = field.slug || field.value || "N/A";
+                          const src = stickerData;
+                          if (src && typeof src === "object") {
+                            const keyCamel = String(field.slug || "")
+                              .toLowerCase()
+                              .replace(/_([a-z])/g, (_, p1) => p1.toUpperCase());
+                            const tryKeys = [field.slug, keyCamel].filter(Boolean) as string[];
+                            for (const k of tryKeys) {
+                              const v = (src as any)[k];
+                              if (v !== undefined && v !== null && v !== "") {
+                                return String(v);
+                              }
+                            }
+                          }
+                          return String(fallback);
+                        })()}
+                        size={Math.min(
+                          typeof field.width === "number" ? field.width : parseInt(String(field.width), 10),
+                          typeof field.height === "number" ? field.height : parseInt(String(field.height), 10),
+                        )}
                       />
                     ) : field?.type === "image" ? (
                       <img
@@ -975,7 +1155,7 @@ const StickerDesigner = ({
                       />
                     ) : (
                       <div
-                        className="bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200 flex h-full w-full items-center justify-center rounded text-center text-sm font-medium"
+                        className="bg-white text-gray-700 dark:text-gray-200 flex h-full w-full items-center justify-center rounded text-center text-sm font-medium print:bg-white"
                         style={field?.styles || {}}
                       >
                         {field?.slug || field?.value || "Text"}
@@ -993,27 +1173,170 @@ const StickerDesigner = ({
                           setEditableFieldStyleValue(true);
                         }}
                         className="rounded-full bg-blue-600 p-1 text-white hover:bg-blue-700"
+                        data-tooltip-id={`tooltip-edit-${i}`}
+                        data-tooltip-content="Edit style"
                       >
                         <Pencil size={14} />
                       </button>
+                      <Tooltip id={`tooltip-edit-${i}`} place="top" />
 
                       {field?.slug && (
-                        <button
-                          type="button"
-                          onClick={() => openBarCodeValue(field)}
-                          className="rounded-full bg-green-600 p-1 text-white hover:bg-green-700"
-                        >
-                          <Plus size={14} />
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => openBarCodeValue(field)}
+                            className="rounded-full bg-green-600 p-1 text-white hover:bg-green-700"
+                            data-tooltip-id={`tooltip-barvalue-${i}`}
+                            data-tooltip-content="Add barcode / QR value"
+                          >
+                            <Plus size={14} />
+                          </button>
+                          <Tooltip id={`tooltip-barvalue-${i}`} place="top" />
+                        </>
                       )}
 
                       <button
                         type="button"
+                        onClick={() => {
+                          setStages((prevStages) =>
+                            prevStages.map((stage, sIndex) =>
+                              sIndex === index
+                                ? {
+                                    ...stage,
+                                    subSteps: stage.subSteps.map((subStep, sSubIndex) =>
+                                      sSubIndex === subIndex1
+                                        ? {
+                                            ...subStep,
+                                            printerFields: subStep.printerFields.map(
+                                              (printerField, pFieldIndex) =>
+                                                pFieldIndex === fieldIndex
+                                                  ? {
+                                                      ...printerField,
+                                                      fields: [
+                                                        ...printerField.fields,
+                                                        {
+                                                          ...printerField.fields[i],
+                                                          id: Date.now(),
+                                                          x: printerField.fields[i].x + 10,
+                                                          y: printerField.fields[i].y + 10,
+                                                        },
+                                                      ],
+                                                    }
+                                                  : printerField,
+                                            ),
+                                          }
+                                        : subStep,
+                                    ),
+                                  }
+                                : stage,
+                            ),
+                          );
+                        }}
+                        className="rounded-full bg-purple-600 p-1 text-white hover:bg-purple-700"
+                        data-tooltip-id={`tooltip-dup-${i}`}
+                        data-tooltip-content="Duplicate field"
+                      >
+                        <Plus size={14} />
+                      </button>
+                      <Tooltip id={`tooltip-dup-${i}`} place="top" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStages((prevStages) =>
+                            prevStages.map((stage, sIndex) =>
+                              sIndex === index
+                                ? {
+                                    ...stage,
+                                    subSteps: stage.subSteps.map((subStep, sSubIndex) =>
+                                      sSubIndex === subIndex1
+                                        ? {
+                                            ...subStep,
+                                            printerFields: subStep.printerFields.map(
+                                              (printerField, pFieldIndex) =>
+                                                pFieldIndex === fieldIndex
+                                                  ? {
+                                                      ...printerField,
+                                                      fields: (() => {
+                                                        const next = [...printerField.fields];
+                                                        if (i < next.length - 1) {
+                                                          const tmp = next[i];
+                                                          next[i] = next[i + 1];
+                                                          next[i + 1] = tmp;
+                                                        }
+                                                        return next;
+                                                      })(),
+                                                    }
+                                                  : printerField,
+                                            ),
+                                          }
+                                        : subStep,
+                                    ),
+                                  }
+                                : stage,
+                            ),
+                          );
+                        }}
+                        className="rounded-full bg-slate-600 p-1 text-white hover:bg-slate-700"
+                        data-tooltip-id={`tooltip-down-${i}`}
+                        data-tooltip-content="Move layer down"
+                      >
+                        <ArrowDown size={14} />
+                      </button>
+                      <Tooltip id={`tooltip-down-${i}`} place="top" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStages((prevStages) =>
+                            prevStages.map((stage, sIndex) =>
+                              sIndex === index
+                                ? {
+                                    ...stage,
+                                    subSteps: stage.subSteps.map((subStep, sSubIndex) =>
+                                      sSubIndex === subIndex1
+                                        ? {
+                                            ...subStep,
+                                            printerFields: subStep.printerFields.map(
+                                              (printerField, pFieldIndex) =>
+                                                pFieldIndex === fieldIndex
+                                                  ? {
+                                                      ...printerField,
+                                                      fields: (() => {
+                                                        const next = [...printerField.fields];
+                                                        if (i > 0) {
+                                                          const tmp = next[i];
+                                                          next[i] = next[i - 1];
+                                                          next[i - 1] = tmp;
+                                                        }
+                                                        return next;
+                                                      })(),
+                                                    }
+                                                  : printerField,
+                                            ),
+                                          }
+                                        : subStep,
+                                    ),
+                                  }
+                                : stage,
+                            ),
+                          );
+                        }}
+                        className="rounded-full bg-slate-600 p-1 text-white hover:bg-slate-700"
+                        data-tooltip-id={`tooltip-up-${i}`}
+                        data-tooltip-content="Move layer up"
+                      >
+                        <ArrowUp size={14} />
+                      </button>
+                      <Tooltip id={`tooltip-up-${i}`} place="top" />
+                      <button
+                        type="button"
                         onClick={() => handleRemoveField(i)}
                         className="rounded-full bg-danger p-1 text-white hover:bg-danger"
+                        data-tooltip-id={`tooltip-del-${i}`}
+                        data-tooltip-content="Delete field"
                       >
                         <Trash2 size={14} />
                       </button>
+                      <Tooltip id={`tooltip-del-${i}`} place="top" />
                     </div>
                   )}
                 </Rnd>
@@ -1027,7 +1350,7 @@ const StickerDesigner = ({
             onClose={closeEditableFieldStyleModal}
             title="Edit Field Style"
           >
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 max-h-[65vh] overflow-y-auto pr-2">
               <div>
                 <label className="text-sm font-medium">Font Style</label>
                 <select
@@ -1096,6 +1419,108 @@ const StickerDesigner = ({
                   className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2 dark:border-strokedark dark:bg-form-input"
                 />
               </div>
+              <div>
+                <label className="text-sm font-medium">Text Align</label>
+                <select
+                  className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2 dark:border-strokedark dark:bg-form-input"
+                  value={styleInput.textAlign || "left"}
+                  onChange={(e) =>
+                    setStyleInput({ ...styleInput, textAlign: e.target.value })
+                  }
+                >
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                  <option value="right">Right</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Background</label>
+                <input
+                  type="color"
+                  value={styleInput.backgroundColor || "#ffffff"}
+                  onChange={(e) =>
+                    setStyleInput({
+                      ...styleInput,
+                      backgroundColor: e.target.value,
+                    })
+                  }
+                  className="border-gray-300 mt-1 h-9 w-full rounded-lg border px-3 py-2 dark:border-strokedark dark:bg-form-input"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Border Color</label>
+                <input
+                  type="color"
+                  value={styleInput.borderColor || "#000000"}
+                  onChange={(e) =>
+                    setStyleInput({
+                      ...styleInput,
+                      borderColor: e.target.value,
+                    })
+                  }
+                  className="border-gray-300 mt-1 h-9 w-full rounded-lg border px-3 py-2 dark:border-strokedark dark:bg-form-input"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Border Width</label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={styleInput.borderWidth?.replace("px", "") || ""}
+                  onChange={(e) =>
+                    setStyleInput({
+                      ...styleInput,
+                      borderWidth: e.target.value + "px",
+                    })
+                  }
+                  className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2 dark:border-strokedark dark:bg-form-input"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Border Radius</label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={styleInput.borderRadius?.replace("px", "") || ""}
+                  onChange={(e) =>
+                    setStyleInput({
+                      ...styleInput,
+                      borderRadius: e.target.value + "px",
+                    })
+                  }
+                  className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2 dark:border-strokedark dark:bg-form-input"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Padding</label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={styleInput.padding?.replace("px", "") || ""}
+                  onChange={(e) =>
+                    setStyleInput({
+                      ...styleInput,
+                      padding: e.target.value + "px",
+                    })
+                  }
+                  className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2 dark:border-strokedark dark:bg-form-input"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Letter Spacing</label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={styleInput.letterSpacing?.replace("px", "") || ""}
+                  onChange={(e) =>
+                    setStyleInput({
+                      ...styleInput,
+                      letterSpacing: e.target.value + "px",
+                    })
+                  }
+                  className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2 dark:border-strokedark dark:bg-form-input"
+                />
+              </div>
             </div>
           </Modal>
           {/* 🔹 Modal for Adding Barcode/QR */}
@@ -1105,7 +1530,7 @@ const StickerDesigner = ({
             onClose={closeBarCodeValueModal}
             title="Add Barcode / QR"
           >
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-2">
               <div>
                 <label className="text-sm font-medium">Field Type</label>
                 <select
@@ -1118,17 +1543,117 @@ const StickerDesigner = ({
                   <option value="qrcode">QR Code</option>
                 </select>
               </div>
-
-              <div>
-                <label className="text-sm font-medium">Field Value</label>
-                <input
-                  type="text"
-                  value={fieldValue}
-                  onChange={(e) => setFieldValue(e.target.value)}
-                  placeholder="Enter Value"
-                  className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2"
-                />
-              </div>
+              {barCodeError && (
+                <p className="text-danger text-sm">{barCodeError}</p>
+              )}
+              {fieldType === "barcode" && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <label className="text-sm font-medium">Format</label>
+                      <select
+                        value={barFormat}
+                        onChange={(e) => setBarFormat(e.target.value)}
+                        className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2"
+                      >
+                        <option value="CODE128">CODE128</option>
+                        <option value="CODE39">CODE39</option>
+                        <option value="EAN13">EAN13</option>
+                        <option value="EAN8">EAN8</option>
+                        <option value="UPC">UPC</option>
+                        <option value="ITF">ITF</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Bar Width</label>
+                      <input
+                        type="number"
+                        value={barWidth === '' ? '' : barWidth}
+                        onChange={(e) =>
+                          setBarWidth(e.target.value === '' ? '' : Number(e.target.value))
+                        }
+                        placeholder="Line width"
+                        className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Bar Height</label>
+                      <input
+                        type="number"
+                        value={barHeight === '' ? '' : barHeight}
+                        onChange={(e) =>
+                          setBarHeight(e.target.value === '' ? '' : Number(e.target.value))
+                        }
+                        placeholder="Bar height"
+                        className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Line Color</label>
+                      <input
+                        type="color"
+                        value={barLineColor}
+                        onChange={(e) => setBarLineColor(e.target.value)}
+                        className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Background</label>
+                      <input
+                        type="color"
+                        value={barBackground}
+                        onChange={(e) => setBarBackground(e.target.value)}
+                        className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Margin</label>
+                      <input
+                        type="number"
+                        value={barMargin === '' ? '' : barMargin}
+                        onChange={(e) =>
+                          setBarMargin(e.target.value === '' ? '' : Number(e.target.value))
+                        }
+                        placeholder="10"
+                        className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Text Size</label>
+                      <input
+                        type="number"
+                        value={barTextSize === '' ? '' : barTextSize}
+                        onChange={(e) =>
+                          setBarTextSize(e.target.value === '' ? '' : Number(e.target.value))
+                        }
+                        placeholder="14"
+                        className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Text Margin</label>
+                      <input
+                        type="number"
+                        value={barTextMargin === '' ? '' : barTextMargin}
+                        onChange={(e) =>
+                          setBarTextMargin(e.target.value === '' ? '' : Number(e.target.value))
+                        }
+                        placeholder="2"
+                        className="border-gray-300 mt-1 w-full rounded-lg border px-3 py-2"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={displayBarValue}
+                      onChange={(e) => setDisplayBarValue(e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    <label className="text-sm font-medium">Show value text</label>
+                  </div>
+                </>
+              )}
             </div>
           </Modal>
           {/* Export Sticker Button */}

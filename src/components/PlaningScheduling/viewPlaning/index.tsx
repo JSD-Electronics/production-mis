@@ -27,7 +27,7 @@ import {
   FiArchive,
   FiTrendingUp,
 } from "react-icons/fi";
-import { FiUsers, FiActivity, FiCheckCircle, FiXCircle } from "react-icons/fi";
+import { FiUsers, FiActivity, FiCheckCircle, FiXCircle, FiSearch, FiFilter } from "react-icons/fi";
 import { formatDate } from "@/lib/common";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -38,6 +38,7 @@ import ConfirmationPopup from "@/components/Confirmation/page";
 import { FiCodepen, FiEdit } from "react-icons/fi";
 import { Tab, Tabs, TabList, TabPanel } from "react-tabs";
 import "react-tabs/style/react-tabs.css";
+import CardDataStats from "@/components/CardDataStats";
 const DraggableGridItem = ({
   item,
   rowIndex,
@@ -58,6 +59,7 @@ const DraggableGridItem = ({
   assignedJigs,
   jigCategories,
   selectedProcess,
+  seatStatusFilter,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -123,7 +125,19 @@ const DraggableGridItem = ({
       <div className="mt-1">
         {assignedStages[coordinates] &&
           assignedStages[coordinates].length > 0 &&
-          assignedStages[coordinates].map((stage: any, stageIndex: number) => (
+          assignedStages[coordinates]
+            .filter((stage: any) => {
+              const status =
+                stage?.reserved
+                  ? "Reserved"
+                  : selectedProcess?.quantity > stage?.totalUPHA
+                  ? stage?.totalUPHA > 0
+                    ? "Active"
+                    : "Downtime"
+                  : "Completed";
+              return seatStatusFilter === "all" ? true : seatStatusFilter === status;
+            })
+            .map((stage: any, stageIndex: number) => (
             <div key={stageIndex}>
               <div className="flex items-center justify-between">
                 <strong className="text-gray-900 text-xs">
@@ -244,6 +258,34 @@ const ViewPlanSchedule = () => {
   const [lastStageOverallSummary, setStageOverallSummary] = useState(0);
   const [assignedCustomStages, setAssignedCustomStages] = useState([]);
   const [assignedCustomOperators, setAssignedCustomOperators] = useState([]);
+  const [seatStatusFilter, setSeatStatusFilter] = useState("all");
+  const [showOccupiedOnly, setShowOccupiedOnly] = useState(true);
+  const [seatSearch, setSeatSearch] = useState("");
+  const occupancyStats = React.useMemo(() => {
+    let active = 0;
+    let downtime = 0;
+    let completed = 0;
+    let reserved = 0;
+    Object.keys(assignedStages || {}).forEach((coord) => {
+      const arr = assignedStages[coord];
+      if (!arr || arr.length === 0) return;
+      const s = arr[0];
+      if (s?.reserved) {
+        reserved += 1;
+        return;
+      }
+      const status =
+        selectedProcess?.quantity > s?.totalUPHA
+          ? s?.totalUPHA > 0
+            ? "Active"
+            : "Downtime"
+          : "Completed";
+      if (status === "Active") active += 1;
+      else if (status === "Downtime") downtime += 1;
+      else completed += 1;
+    });
+    return { active, downtime, completed, reserved };
+  }, [assignedStages, selectedProcess]);
   const getCurrentDate = () => {
     const today = new Date();
     const yyyy = today.getFullYear();
@@ -280,6 +322,29 @@ const ViewPlanSchedule = () => {
   );
   const count = overallUPHData.filter((d) => d.value !== "").length;
   const avgUPH = count > 0 ? (total / count).toFixed(2) : 0;
+
+  const summaryData = React.useMemo(() => {
+    const required = parseInt(selectedProcess?.quantity) || 0;
+    const issued = parseInt(selectedProcess?.issuedKits) || 0;
+    const pending = Math.max(required - issued, 0);
+    const avg = parseInt(lastStageOverallSummary) || 0;
+    return { required, issued, pending, avg };
+  }, [selectedProcess, lastStageOverallSummary]);
+  const uphStats = React.useMemo(() => {
+    const pass = (completedKitsUPH || []).reduce(
+      (acc, row) => acc + (parseInt(row?.Pass) || 0),
+      0,
+    );
+    const ng = (completedKitsUPH || []).reduce(
+      (acc, row) => acc + (parseInt(row?.NG) || 0),
+      0,
+    );
+    const hoursWithData = (completedKitsUPH || []).filter(
+      (r) => r?.status !== "future",
+    ).length;
+    const avg = hoursWithData > 0 ? Math.round(pass / hoursWithData) : 0;
+    return { pass, ng, avg, hoursWithData };
+  }, [completedKitsUPH]);
 
   useEffect(() => {
     getOperators();
@@ -1120,6 +1185,62 @@ const ViewPlanSchedule = () => {
       return updatedStages;
     });
   };
+  const seatMatches = (rowIndex, seatIndex, seat) => {
+    const coordinates = `${rowIndex}-${seatIndex}`;
+    const arr = assignedStages[coordinates];
+    const occupied = arr && arr.length > 0;
+    if (showOccupiedOnly && !occupied) return false;
+    if (!occupied) return false;
+    const s = arr[0];
+    let status = "Empty";
+    if (s?.reserved) status = "Reserved";
+    else {
+      status =
+        selectedProcess?.quantity > s?.totalUPHA
+          ? s?.totalUPHA > 0
+            ? "Active"
+            : "Downtime"
+          : "Completed";
+    }
+    if (seatStatusFilter !== "all") {
+      const anyMatch = arr.some((stage: any) => {
+        const st =
+          stage?.reserved
+            ? "Reserved"
+            : selectedProcess?.quantity > stage?.totalUPHA
+            ? stage?.totalUPHA > 0
+              ? "Active"
+              : "Downtime"
+            : "Completed";
+        return st === seatStatusFilter;
+      });
+      if (!anyMatch) return false;
+    }
+    if (seatSearch) {
+      const q = seatSearch.toLowerCase();
+      const stageNames = arr.map((st) => String(st?.name || st?.stage || "")).join(" ").toLowerCase();
+      const ops = (assignedOperators[coordinates] || [])
+        .map((op) => String(op?.name || ""))
+        .join(" ")
+        .toLowerCase();
+      const seatLabel = `s${String(seat?.seatNumber || "").toLowerCase()}`;
+      if (
+        !stageNames.includes(q) &&
+        !ops.includes(q) &&
+        !seatLabel.includes(q)
+      ) {
+        return false;
+      }
+    }
+    return true;
+  };
+  const keyMatches = (key) => {
+    const [rowIndexStr, seatIndexStr] = String(key).split("-");
+    const rowIndex = parseInt(rowIndexStr, 10);
+    const seatIndex = parseInt(seatIndexStr, 10);
+    const seat = selectedRoom?.lines?.[rowIndex]?.seats?.[seatIndex];
+    return seatMatches(rowIndex, seatIndex, seat);
+  };
   const handleFilter = async () => {
     let processData;
     const singleProcess = process.find(
@@ -1346,6 +1467,21 @@ const ViewPlanSchedule = () => {
             <form action="#">
               <div className="p-6">
                 <div className="space-y-6">
+                  {/* Top Summary */}
+                  <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <CardDataStats title="Required Qty" total={`${summaryData.required}`} rate="" levelUp>
+                      <FiBox size={20} />
+                    </CardDataStats>
+                    <CardDataStats title="Issued Kits" total={`${summaryData.issued}`} rate="" levelUp>
+                      <FiPackage size={20} />
+                    </CardDataStats>
+                    <CardDataStats title="Pending Kits" total={`${summaryData.pending}`} rate="" levelDown>
+                      <FiClipboard size={20} />
+                    </CardDataStats>
+                    <CardDataStats title="Avg UPH (Last Stage)" total={`${summaryData.avg}`} rate="" levelUp>
+                      <FiTrendingUp size={20} />
+                    </CardDataStats>
+                  </div>
                   {/* Process Info */}
                   <div className="dark:bg-gray-800 rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-md">
                     <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-blue-600 dark:text-blue-400">
@@ -1560,9 +1696,23 @@ const ViewPlanSchedule = () => {
                       <h3 className="text-gray-900 text-2xl font-bold dark:text-white">
                         Room Overview
                       </h3>
-                      <button className="flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-danger">
-                        Consumed: {totalConsumedKits}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button className="flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-danger">
+                          Consumed: {totalConsumedKits}
+                        </button>
+                        <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                          Active: {occupancyStats.active}
+                        </span>
+                        <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700">
+                          Downtime: {occupancyStats.downtime}
+                        </span>
+                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                          Completed: {occupancyStats.completed}
+                        </span>
+                        <span className="rounded-full bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700">
+                          Reserved: {occupancyStats.reserved}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Tabs */}
@@ -1589,6 +1739,56 @@ const ViewPlanSchedule = () => {
                       {/* Floor View */}
                       <TabPanel>
                         <div className="mt-6 rounded-md border border-primary p-2 pt-3">
+                          <div className="mb-4 flex items-center gap-2 flex-nowrap overflow-x-auto">
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+                                Active
+                              </span>
+                              <span className="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-700">
+                                Downtime
+                              </span>
+                              <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                                Completed
+                              </span>
+                              <span className="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-700">
+                                Reserved
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
+                                <FiFilter size={14} />
+                                <select
+                                  value={seatStatusFilter}
+                                  onChange={(e) => setSeatStatusFilter(e.target.value)}
+                                  className="h-8 rounded bg-transparent px-2 outline-none"
+                                >
+                                  <option value="all">All</option>
+                                  <option value="Active">Active</option>
+                                  <option value="Downtime">Downtime</option>
+                                  <option value="Completed">Completed</option>
+                                  <option value="Reserved">Reserved</option>
+                                </select>
+                              </div>
+                              <label className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
+                                <input
+                                  type="checkbox"
+                                  checked={showOccupiedOnly}
+                                  onChange={(e) => setShowOccupiedOnly(e.target.checked)}
+                                />
+                                <span>Occupied only</span>
+                              </label>
+                              <div className="flex items-center gap-1 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
+                                <FiSearch size={14} />
+                                <input
+                                  type="text"
+                                  value={seatSearch}
+                                  onChange={(e) => setSeatSearch(e.target.value)}
+                                  placeholder="Search seat/stage/operator"
+                                  className="h-8 w-44 sm:w-56 bg-transparent px-2 outline-none"
+                                />
+                              </div>
+                            </div>
+                          </div>
                           {/* Assigned Custom Stages */}
                           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
                             {assignedCustomStages.length > 0 &&
@@ -1654,13 +1854,9 @@ const ViewPlanSchedule = () => {
                           {selectedRoom &&
                             selectedRoom.lines
                               .filter((row, rowIndex) =>
-                                row.seats?.some((_, seatIndex) => {
-                                  const coordinates = `${rowIndex}-${seatIndex}`;
-                                  return (
-                                    assignedStages[coordinates] &&
-                                    assignedStages[coordinates].length > 0
-                                  );
-                                }),
+                                row.seats?.some((seat, seatIndex) =>
+                                  seatMatches(rowIndex, seatIndex, seat),
+                                ),
                               )
                               .map((row, rowIndex) => (
                                 <div key={rowIndex} className="space-y-2">
@@ -1668,34 +1864,39 @@ const ViewPlanSchedule = () => {
                                     {row.rowName}
                                   </h4>
                                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                                    {row.seats?.map((seat, seatIndex) => (
-                                      <DraggableGridItem
-                                        key={`${rowIndex}-${seatIndex}`}
-                                        rowIndex={rowIndex}
-                                        seatIndex={seatIndex}
-                                        handleDrop={handleDrop}
-                                        handleDragOver={handleDragOver}
-                                        handleRemoveStage={handleRemoveStage}
-                                        item={seat}
-                                        assignedStages={assignedStages}
-                                        coordinates={`${rowIndex}-${seatIndex}`}
-                                        moveItem={moveItem}
-                                        operators={operators}
-                                        assignedOperators={assignedOperators}
-                                        setAssignedOperators={
-                                          setAssignedOperators
-                                        }
-                                        filteredOperators={filteredOperators}
-                                        setFilteredOperators={
-                                          setFilteredOperators
-                                        }
-                                        rowSeatLength={row.seats.length}
-                                        setAssignedJigs={setAssignedJigs}
-                                        assignedJigs={assignedJigs}
-                                        jigCategories={jigCategories}
-                                        selectedProcess={selectedProcess}
-                                      />
-                                    ))}
+                                    {row.seats
+                                      ?.filter((seat, seatIndex) =>
+                                        seatMatches(rowIndex, seatIndex, seat),
+                                      )
+                                      .map((seat, seatIndex) => (
+                                        <DraggableGridItem
+                                          key={`${rowIndex}-${seatIndex}`}
+                                          rowIndex={rowIndex}
+                                          seatIndex={seatIndex}
+                                          handleDrop={handleDrop}
+                                          handleDragOver={handleDragOver}
+                                          handleRemoveStage={handleRemoveStage}
+                                          item={seat}
+                                          assignedStages={assignedStages}
+                                          coordinates={`${rowIndex}-${seatIndex}`}
+                                          moveItem={moveItem}
+                                          operators={operators}
+                                          assignedOperators={assignedOperators}
+                                          setAssignedOperators={
+                                            setAssignedOperators
+                                          }
+                                          filteredOperators={filteredOperators}
+                                          setFilteredOperators={
+                                            setFilteredOperators
+                                          }
+                                          rowSeatLength={row.seats.length}
+                                          setAssignedJigs={setAssignedJigs}
+                                          assignedJigs={assignedJigs}
+                                          jigCategories={jigCategories}
+                                          selectedProcess={selectedProcess}
+                                          seatStatusFilter={seatStatusFilter}
+                                        />
+                                      ))}
                                   </div>
                                 </div>
                               ))}
@@ -1755,7 +1956,12 @@ const ViewPlanSchedule = () => {
                                 </tr>
                               </thead>
                               <tbody className="divide-gray-200 dark:divide-gray-700 divide-y">
-                                {rows.map((rowKeys, rowIndex) => (
+                                {rows
+                                  .map((rowKeys) =>
+                                    rowKeys.filter((key) => keyMatches(key)),
+                                  )
+                                  .filter((filtered) => filtered.length > 0)
+                                  .map((rowKeys, rowIndex) => (
                                   <tr
                                     key={rowIndex}
                                     className="hover:bg-gray-100 dark:hover:bg-gray-700 transition"
@@ -1765,51 +1971,85 @@ const ViewPlanSchedule = () => {
                                         key={colIndex}
                                         className="px-4 py-3 align-top"
                                       >
-                                        {assignedStages[key].map(
-                                          (stage, stageIndex) => (
-                                            <div
-                                              key={stageIndex}
-                                              className="dark:bg-gray-900 mb-2 rounded-lg bg-white p-3 shadow-sm"
-                                            >
-                                              <p className="text-xs font-medium">
-                                                <FiTrendingUp className="mr-1 inline-block" />
-                                                UPH Target: {stage.upha || 0}
-                                              </p>
-                                              <p className="text-xs">
-                                                Achieved:{" "}
-                                                {stage.achievedUph || 0}
-                                              </p>
-                                              <p className="text-xs">
-                                                WIP: {stage?.totalUPHA ?? "N/A"}
-                                              </p>
-                                              <p className="text-xs text-green-600">
-                                                Pass: {stage.passedDevice || 0}
-                                              </p>
-                                              <p className="text-red-600 text-xs">
-                                                NG: {stage.ngDevice || 0}
-                                              </p>
-                                              <p className="text-xs">
-                                                <strong>Status:</strong>{" "}
-                                                <span
-                                                  className={
-                                                    selectedProcess?.quantity >
+                                        {assignedStages[key] &&
+                                        assignedStages[key].length > 0 &&
+                                        assignedStages[key].filter((stage: any) => {
+                                          const status =
+                                            stage?.reserved
+                                              ? "Reserved"
+                                              : selectedProcess?.quantity >
+                                                stage?.totalUPHA
+                                              ? stage?.totalUPHA > 0
+                                                ? "Active"
+                                                : "Downtime"
+                                              : "Completed";
+                                          return seatStatusFilter === "all"
+                                            ? true
+                                            : seatStatusFilter === status;
+                                        }).length > 0 ? (
+                                          assignedStages[key]
+                                            .filter((stage: any) => {
+                                              const status =
+                                                stage?.reserved
+                                                  ? "Reserved"
+                                                  : selectedProcess?.quantity >
+                                                    stage?.totalUPHA
+                                                  ? stage?.totalUPHA > 0
+                                                    ? "Active"
+                                                    : "Downtime"
+                                                  : "Completed";
+                                              return seatStatusFilter === "all"
+                                                ? true
+                                                : seatStatusFilter === status;
+                                            })
+                                            .map((stage, stageIndex) => (
+                                              <div
+                                                key={stageIndex}
+                                                className="dark:bg-gray-900 mb-2 rounded-lg bg-white p-3 shadow-sm"
+                                              >
+                                                <p className="text-xs font-medium">
+                                                  <FiTrendingUp className="mr-1 inline-block" />
+                                                  UPH Target: {stage.upha || 0}
+                                                </p>
+                                                <p className="text-xs">
+                                                  Achieved:{" "}
+                                                  {stage.achievedUph || 0}
+                                                </p>
+                                                <p className="text-xs">
+                                                  WIP: {stage?.totalUPHA ?? "N/A"}
+                                                </p>
+                                                <p className="text-xs text-green-600">
+                                                  Pass: {stage.passedDevice || 0}
+                                                </p>
+                                                <p className="text-red-600 text-xs">
+                                                  NG: {stage.ngDevice || 0}
+                                                </p>
+                                                <p className="text-xs">
+                                                  <strong>Status:</strong>{" "}
+                                                  <span
+                                                    className={
+                                                      selectedProcess?.quantity >
+                                                      stage?.totalUPHA
+                                                        ? stage?.totalUPHA > 0
+                                                          ? "font-semibold text-orange-500"
+                                                          : "text-red-500 font-semibold"
+                                                        : "font-semibold text-green-600"
+                                                    }
+                                                  >
+                                                    {selectedProcess?.quantity >
                                                     stage?.totalUPHA
                                                       ? stage?.totalUPHA > 0
-                                                        ? "font-semibold text-orange-500"
-                                                        : "text-red-500 font-semibold"
-                                                      : "font-semibold text-green-600"
-                                                  }
-                                                >
-                                                  {selectedProcess?.quantity >
-                                                  stage?.totalUPHA
-                                                    ? stage?.totalUPHA > 0
-                                                      ? "Active"
-                                                      : "Downtime"
-                                                    : "Completed"}
-                                                </span>
-                                              </p>
-                                            </div>
-                                          ),
+                                                        ? "Active"
+                                                        : "Downtime"
+                                                      : "Completed"}
+                                                  </span>
+                                                </p>
+                                              </div>
+                                            ))
+                                        ) : (
+                                          <div className="mb-2 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-gray-900 dark:text-gray-300">
+                                            Empty
+                                          </div>
                                         )}
                                       </td>
                                     ))}
@@ -1840,13 +2080,13 @@ const ViewPlanSchedule = () => {
                   </h3>
                 </div>
                 <div>
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
                     <input
                       type="date"
                       value={filterDate}
                       onChange={(e) => setFilterDate(e.target.value)}
                       placeholder=""
-                      className="h-10 w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                      className="h-10 w-44 sm:w-56 rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
                     />
                     <button
                       onClick={handleFilter}
@@ -1857,6 +2097,18 @@ const ViewPlanSchedule = () => {
                     >
                       Apply
                     </button>
+                    <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                      Pass: {uphStats.pass}
+                    </span>
+                    <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+                      NG: {uphStats.ng}
+                    </span>
+                    <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                      Avg UPH: {uphStats.avg}
+                    </span>
+                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
+                      Hours: {uphStats.hoursWithData}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1917,6 +2169,30 @@ const ViewPlanSchedule = () => {
                                       >
                                         <strong>UPH:</strong>{" "}
                                         {val?.Pass + val?.NG}
+                                      </p>
+                                      <div className="mt-1 h-2 w-full rounded bg-gray-200">
+                                        <div
+                                          className="h-2 rounded bg-blue-500"
+                                          style={{
+                                            width: `${Math.min(
+                                              100,
+                                              Math.round(
+                                                (((val?.Pass || 0) + (val?.NG || 0)) /
+                                                  (val?.targetUPH || 1)) * 100,
+                                              ),
+                                            )}%`,
+                                          }}
+                                        ></div>
+                                      </div>
+                                      <p className="text-[10px] text-gray-500">
+                                        {Math.min(
+                                          100,
+                                          Math.round(
+                                            (((val?.Pass || 0) + (val?.NG || 0)) /
+                                              (val?.targetUPH || 1)) * 100,
+                                          ),
+                                        )}
+                                        % of target
                                       </p>
                                     </div>
                                   </td>

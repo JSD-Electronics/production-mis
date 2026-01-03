@@ -41,6 +41,7 @@ import {
 import Image from "next/image";
 import React, { useEffect, useState } from "react";
 import StickerGenerator from "../viewTask-old/StickerGenerator";
+import JigSection from "./components/JigSection";
 
 interface Cart {
   cartonSerial: string;
@@ -171,6 +172,7 @@ export default function DeviceTestComponent({
   const [cartonDevices, setCartonDevices] = useState<any[]>([]);
   const [loadingCartonDevices, setLoadingCartonDevices] = useState(false);
   const [showNGModal, setShowNGModal] = useState(false);
+  const [jigDecision, setJigDecision] = useState<"Pass" | "NG" | null>(null);
   const handlePrint = () => {
     setIsCartonBarCodePrinted(true);
     const printContents = document.getElementById("barcode-area")?.innerHTML;
@@ -476,6 +478,15 @@ export default function DeviceTestComponent({
     );
   };
 
+  const lastHistoryEntry =
+    Array.isArray(deviceHistory) && deviceHistory.length > 0
+      ? deviceHistory[deviceHistory.length - 1]
+      : null;
+
+  const shouldHideJigInterface =
+    lastHistoryEntry?.status === "NG" &&
+    (lastHistoryEntry?.assignedDeviceTo === "QC" ||
+      lastHistoryEntry?.assignedDeviceTo === "TRC");
 
   return (
     <>
@@ -858,7 +869,7 @@ export default function DeviceTestComponent({
                                     <div
                                       id="sticker-preview"
                                       key={`${subIndex}-${printerIndex}`}
-                                      className="bg-gray-100 mb-4 flex items-center justify-center rounded-xl border p-4 shadow-sm"
+                                      className="bg-white mb-4 flex items-center justify-center rounded-xl border p-4"
                                     >
                                       <StickerGenerator
                                         stickerData={printerField}
@@ -1182,10 +1193,94 @@ export default function DeviceTestComponent({
                           )}
                         </div>
                       )}
-                    {/* CASE 3: Normal Pass/NG */}
+                    {/* CASE 3: Jig Stage */}
+                    {processAssignUserStage?.subSteps?.some(
+                      (s: any) => s.stepType === "jig",
+                    ) && (
+                      !isdevicePassed && !shouldHideJigInterface && (
+                      <div className="py-6">
+                        {processAssignUserStage.subSteps.map(
+                          (subStep: any, index: number) => {
+                            if (subStep.stepType !== "jig") return null;
+                            return (
+                              <JigSection
+                                 key={index}
+                                 subStep={subStep}
+                                 onDataReceived={(data) => {
+                                   console.log("Jig Data:", data);
+                                 }}
+                                 onDecision={(status) => {
+                                    console.log("Jig Decision Received:", status);
+                                    setJigDecision(status);
+                                    if (status === "Pass") {
+                                        handleUpdateStatus("Pass", "");
+                                        // setSearchResult(""); // Removed auto-clear
+                                    } else {
+                                        // For NG, wait for user confirmation
+                                    }
+                                 }}
+                               />
+                            );
+                          },
+                        )}
+                         
+                         {/* Next/Reset Button after Jig Decision */}
+                         {jigDecision && (
+                             <div className="flex flex-col items-center gap-4 mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                <h4 className={`text-lg font-bold ${jigDecision === 'Pass' ? 'text-green-600' : 'text-red-600'}`}>
+                                    Test Result: {jigDecision}
+                                </h4>
+                                <button
+                                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-white shadow-lg hover:bg-blue-700 transition-all active:scale-95"
+                                    onClick={() => {
+                                        if (jigDecision === "Pass") {
+                                            setSearchResult(""); // Clear and reset
+                                            setJigDecision(null);
+                                        } else {
+                                            setShowNGModal(true); // Open NG flow
+                                            // Reset decision is handled after modal closes or manually if needed?
+                                            // Actually, opening modal is enough. When modal finishes, it clears search.
+                                            setJigDecision(null); 
+                                        }
+                                    }}
+                                >
+                                    <ArrowRightCircle className="h-5 w-5" />
+                                    {jigDecision === "Pass" ? "Next Device (Reset)" : "Process NG Report"}
+                                </button>
+                             </div>
+                         )}
+
+                         {/* Pass/NG Buttons for Jig Stage (Manual Override) */}
+                         {!jigDecision && isPassNGButtonShow && (
+                            <div className="flex justify-center gap-4 mt-4">
+                                <button
+                                    className="flex items-center gap-2 rounded-lg bg-success px-4 py-2 text-white shadow hover:bg-green-500"
+                                    onClick={() => {
+                                        handleUpdateStatus("Pass", "");
+                                        setJigDecision("Pass");
+                                    }}
+                                >
+                                    <CheckCircle className="h-5 w-5" />
+                                    Pass
+                                </button>
+                                <button
+                                    className="hover:bg-red-600 flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-white shadow"
+                                    onClick={() => {
+                                         setJigDecision("NG");
+                                    }}
+                                >
+                                    <XCircle className="h-5 w-5" />
+                                    NG
+                                </button>
+                            </div>
+                         )}
+                      </div>
+                      )
+                    )}
+                    {/* CASE 4: Normal Pass/NG */}
                     {canShowPassNGButtons(deviceHistory, processAssignUserStage?.stageName) && isPassNGButtonShow &&
                       !processAssignUserStage?.subSteps?.some(
-                        (s: any) => s.isPrinterEnable || s.isPackagingStatus,
+                        (s: any) => s.isPrinterEnable || s.isPackagingStatus || s.stepType === "jig",
                       ) && (
                         <div className="flex justify-center gap-4 p-6">
                           <button

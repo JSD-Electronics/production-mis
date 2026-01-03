@@ -1,4 +1,4 @@
-"use client";
+  "use client";
 import React, { useState, useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import {
@@ -16,6 +16,7 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -29,6 +30,7 @@ const GenerateSerialComponent = () => {
   const [lastSerialNo, setLastSerialNo] = useState("");
   const [isGenerateSerials, setIsGenerateSerials] = useState(false);
   const [enableZero, setEnabledZero] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const [form, setForm] = useState({
     prefix: "ABC-",
@@ -133,6 +135,7 @@ const GenerateSerialComponent = () => {
 
   const handlesubmit = async () => {
     try {
+      setSubmitting(true);
       let product = products.find((value) => value._id == productId);
       let stage = product?.stages[0]?.stageName || "";
 
@@ -155,6 +158,8 @@ const GenerateSerialComponent = () => {
       }
     } catch (error) {
       console.error("Error Creating Device:", error);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -315,9 +320,21 @@ const GenerateSerialComponent = () => {
             <button
               type="button"
               onClick={handlesubmit}
-              className="flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-green-500"
+              disabled={submitting}
+              className={`flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-medium text-white transition ${
+                submitting ? "bg-green-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-500"
+              }`}
             >
-              <CheckCircle2 className="h-4 w-4" /> Submit
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4" /> Submit
+                </>
+              )}
             </button>
           )}
         </div>

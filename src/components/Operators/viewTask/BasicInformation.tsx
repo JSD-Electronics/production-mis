@@ -45,6 +45,7 @@ interface BasicInformationProps {
   getPlaningAndScheduling?: PlaningAndScheduling | null;
   shift?: Shift | null;
   setStartTest: (v: boolean) => void;
+  processAssignUserStage: any[];
 }
 
 export default function BasicInformation({
@@ -53,6 +54,7 @@ export default function BasicInformation({
   getPlaningAndScheduling,
   shift,
   setStartTest,
+  processAssignUserStage,
 }: BasicInformationProps) {
   const handleStartTesting = () => setStartTest(true);
 
@@ -85,7 +87,7 @@ export default function BasicInformation({
             Process Details
           </h3>
 
-          <dl className="mt-3 grid gap-y-2 text-sm text-gray-700">
+          <dl className="text-gray-700 mt-3 grid gap-y-2 text-sm">
             <div>
               <dt className="font-medium">Process Name</dt>
               <dd>{product?.name ?? "--"}</dd>
@@ -94,11 +96,9 @@ export default function BasicInformation({
             <div>
               <dt className="font-medium">Stage Name</dt>
               <dd>
-                {(
-                  Array.isArray(assignUserStage)
-                    ? assignUserStage?.[0]?.name
-                    : (assignUserStage as any)?.name
-                ) ?? "--"}
+                {(Array.isArray(assignUserStage)
+                  ? assignUserStage?.[0]?.name
+                  : (assignUserStage as any)?.name) ?? "--"}
               </dd>
             </div>
 
@@ -115,7 +115,7 @@ export default function BasicInformation({
             <div className="flex items-center gap-3">
               <div>
                 <dt className="font-medium">Process ID</dt>
-                <dd className="truncate max-w-xs">
+                <dd className="max-w-xs truncate">
                   {String(product?.processID ?? "--")}
                 </dd>
               </div>
@@ -124,10 +124,12 @@ export default function BasicInformation({
               <button
                 type="button"
                 onClick={() =>
-                  navigator.clipboard?.writeText(String(product?.processID ?? ""))
+                  navigator.clipboard?.writeText(
+                    String(product?.processID ?? ""),
+                  )
                 }
                 aria-label="Copy process id"
-                className="ml-auto inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                className="text-gray-600 hover:bg-gray-50 ml-auto inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -143,7 +145,7 @@ export default function BasicInformation({
                     d="M8 16h8M8 12h8M8 8h8"
                   />
                 </svg>
-                  Copy
+                Copy
               </button>
             </div>
 
@@ -158,28 +160,25 @@ export default function BasicInformation({
           <h3 className="text-gray-800 border-b pb-2 text-lg font-semibold">
             Steps to Perform
           </h3>
-
-          <ul className="mt-3 max-h-60 space-y-3 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-200">
-            {assignUserStage?.subSteps?.length ? (
-              assignUserStage.subSteps.map((stage, index) => (
+          <ul className="scrollbar-thin scrollbar-thumb-gray-200 mt-3 max-h-60 space-y-3 overflow-y-auto pr-2">
+            {processAssignUserStage?.subSteps?.length ? (
+              processAssignUserStage?.subSteps?.map((stage, index) => (
                 <li key={index} className="bg-gray-50 rounded-lg border p-3">
                   <p className="text-gray-900 font-medium">
                     Step {index + 1}: {stage.stepName ?? "Unnamed"}
                   </p>
-
                   <div className="text-gray-600 mt-2 text-sm">
                     {stage.stepType === "manual" ? (
                       stage.stepFields?.validationType === "value" ? (
                         <div>
                           Value: <b>{stage.stepFields?.value ?? "--"}</b>
                         </div>
-                      ) : (
+                      ) : stage.stepFields?.rangeFrom ? (
                         <div>
-                          Range:{" "}
-                          <b>{stage.stepFields?.rangeFrom ?? "--"}</b> -{" "}
+                          Range: <b>{stage.stepFields?.rangeFrom ?? "--"}</b> -{" "}
                           <b>{stage.stepFields?.rangeTo ?? "--"}</b>
                         </div>
-                      )
+                      ) : null
                     ) : (
                       stage.jigFields?.map((jf, i) => (
                         <div key={i}>
@@ -218,7 +217,9 @@ export default function BasicInformation({
                     key={idx}
                     style={fallbackStyle}
                     className={`rounded-lg px-4 py-2 text-sm font-medium shadow ${
-                      isBreak ? "bg-red-600 text-white" : "bg-green-100 text-green-700"
+                      isBreak
+                        ? "bg-red-600 text-white"
+                        : "bg-green-100 text-green-700"
                     }`}
                   >
                     {isBreak
@@ -234,7 +235,7 @@ export default function BasicInformation({
 
       <section className="mt-6 rounded-xl bg-white p-6 shadow-md">
         <div className="flex items-center justify-between border-b pb-2">
-          <h3 className="text-gray-800 text-lg font-semibold flex items-center gap-3">
+          <h3 className="text-gray-800 flex items-center gap-3 text-lg font-semibold">
             {/* book/svg icon */}
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -245,7 +246,11 @@ export default function BasicInformation({
               strokeWidth={1.5}
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 20h9" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16 4H8a2 2 0 00-2 2v12" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M16 4H8a2 2 0 00-2 2v12"
+              />
             </svg>
             <span>Standard Operating Procedure (SOP)</span>
           </h3>
@@ -263,7 +268,7 @@ export default function BasicInformation({
               </h4>
 
               {product.sopFile.endsWith(".pdf") ? (
-                <div className="h-96 w-full rounded-lg border overflow-hidden">
+                <div className="h-96 w-full overflow-hidden rounded-lg border">
                   <iframe
                     src={product.sopFile}
                     title="SOP PDF Preview"
@@ -271,7 +276,7 @@ export default function BasicInformation({
                   />
                 </div>
               ) : product.sopFile.match(/\.(jpg|jpeg|png|gif)$/i) ? (
-                <div className="h-96 w-full rounded-lg border overflow-hidden flex items-center justify-center">
+                <div className="flex h-96 w-full items-center justify-center overflow-hidden rounded-lg border">
                   <Image
                     src={product.sopFile}
                     alt="SOP Preview"

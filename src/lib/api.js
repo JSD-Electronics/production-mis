@@ -1286,4 +1286,24 @@ export const getCartonsIntoStore = async (processId) => {
   }
 };
 
+export const authenticateJig = async (jigId) => {
+  try {
+    const response = await api.post("/jig/authenticate", { jigId });
+    return response.data;
+  } catch (error) {
+    console.error("Jig authentication failed:", error);
+    throw error;
+  }
+};
+
+export const syncJigData = async (data) => {
+  try {
+    const response = await api.post("/jig/data", data);
+    return response.data;
+  } catch (error) {
+    console.error("Failed to sync jig data:", error);
+    throw error;
+  }
+};
+
 export default api;

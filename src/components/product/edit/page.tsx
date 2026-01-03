@@ -1547,20 +1547,6 @@ const EditProduct = () => {
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="text-gray-800 mb-2 block text-sm font-semibold dark:text-white">
-                      UPHA (Units Per Hour Analysis)
-                    </label>
-                    <input
-                      type="number"
-                      value={stage.upha || ""}
-                      onChange={(e) => {
-                        handleCommonStageChange(index, e, "upha");
-                      }}
-                      placeholder="Enter UPHA"
-                      className="text-gray-800 w-full rounded-lg border border border-stroke bg-transparent px-4 py-3 text-sm outline-none transition-all focus:border-primary focus:ring-1 focus:ring-primary dark:border-strokedark dark:bg-form-input dark:text-white"
-                    />
-                  </div>
                 </div>
               ))}
             </div>

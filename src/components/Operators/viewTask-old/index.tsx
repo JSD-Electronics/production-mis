@@ -484,11 +484,18 @@ const ViewTaskDetailsComponent = ({
     setIsReportIssueModal(true);
   };
   const handlePrintSticker = () => {
-    const stickerElement = document.getElementById("sticker-preview");
+    const stickerElement = document.getElementById("sticker-preview") as HTMLElement | null;
+    if (!stickerElement) return;
+
+    const prevBg = stickerElement.style.backgroundColor;
+    const prevShadow = stickerElement.style.boxShadow;
+    stickerElement.style.backgroundColor = "#ffffff";
+    stickerElement.style.boxShadow = "none";
 
     html2canvas(stickerElement, {
       scale: window.devicePixelRatio,
       useCORS: true,
+      backgroundColor: "#ffffff",
     }).then((canvas) => {
       const imageData = canvas.toDataURL("image/png");
 
@@ -539,6 +546,9 @@ const ViewTaskDetailsComponent = ({
         </html>
       `);
       printWindow?.document.close();
+    }).finally(() => {
+      stickerElement.style.backgroundColor = prevBg;
+      stickerElement.style.boxShadow = prevShadow;
     });
     setIsPassNGButtonShow(!isPassNGButtonShow);
     setIsStickerPrinted(!isStickerPrinted);
