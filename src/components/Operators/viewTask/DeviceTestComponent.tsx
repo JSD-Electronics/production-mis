@@ -435,8 +435,8 @@ export default function DeviceTestComponent({
   };
 
   const handleNG = () => {
-    console.log('selectAssignDeviceDepartment ==>',selectAssignDeviceDepartment);
-    handleUpdateStatus("NG",selectAssignDeviceDepartment);
+    console.log('selectAssignDeviceDepartment ==>', selectAssignDeviceDepartment);
+    handleUpdateStatus("NG", selectAssignDeviceDepartment);
     setShowNGModal(false);
 
   };
@@ -577,9 +577,8 @@ export default function DeviceTestComponent({
 
             {/* Device Search Box */}
             <div
-              className={`${
-                isPaused && "blur-sm"
-              } border-gray-200 rounded-xl border bg-white p-4 shadow-sm`}
+              className={`${isPaused && "blur-sm"
+                } border-gray-200 rounded-xl border bg-white p-4 shadow-sm`}
             >
               {assignedTaskDetails.stageType == "common" ? (
                 <>
@@ -715,13 +714,12 @@ export default function DeviceTestComponent({
                                   {device.currentStage}
                                 </td>
                                 <td
-                                  className={`px-4 py-3 font-semibold ${
-                                    device.status === "Pass"
-                                      ? "text-green-600"
-                                      : device.status === "Fail"
-                                        ? "text-red-600"
-                                        : "text-gray-500"
-                                  }`}
+                                  className={`px-4 py-3 font-semibold ${device.status === "Pass"
+                                    ? "text-green-600"
+                                    : device.status === "Fail"
+                                      ? "text-red-600"
+                                      : "text-gray-500"
+                                    }`}
                                 >
                                   {device.status || "N/A"}
                                 </td>
@@ -730,7 +728,7 @@ export default function DeviceTestComponent({
                                 </td>
                                 <td className="px-4 py-3">
                                   {device.testRecords &&
-                                  device.testRecords.length > 0 ? (
+                                    device.testRecords.length > 0 ? (
                                     <div className="overflow-x-auto">
                                       <table className="w-full rounded-md border text-xs">
                                         <thead className="bg-gray-50 text-gray-600">
@@ -754,11 +752,10 @@ export default function DeviceTestComponent({
                                                   {record.stageName}
                                                 </td>
                                                 <td
-                                                  className={`px-2 py-1 font-semibold ${
-                                                    record.status === "Pass"
-                                                      ? "text-green-600"
-                                                      : "text-red-600"
-                                                  }`}
+                                                  className={`px-2 py-1 font-semibold ${record.status === "Pass"
+                                                    ? "text-green-600"
+                                                    : "text-red-600"
+                                                    }`}
                                                 >
                                                   {record.status}
                                                 </td>
@@ -833,13 +830,12 @@ export default function DeviceTestComponent({
                                 <td className="px-2 py-1">{value?.stageName}</td>
                                 <td className="px-2 py-1">{value?.assignedDeviceTo}</td>
                                 <td
-                                  className={`px-2 py-1 font-medium ${
-                                    value?.status === "Pass"
-                                      ? "text-green-600"
-                                      : value?.status === "NG"
-                                        ? "text-red-500"
-                                        : "text-gray-500"
-                                  }`}
+                                  className={`px-2 py-1 font-medium ${value?.status === "Pass"
+                                    ? "text-green-600"
+                                    : value?.status === "NG"
+                                      ? "text-red-500"
+                                      : "text-gray-500"
+                                    }`}
                                 >
                                   {value?.status}
                                 </td>
@@ -851,111 +847,111 @@ export default function DeviceTestComponent({
                     </div>
                   )}
                   <div className="my-3 w-full">
-                    
+
                     {/* CASE 1: Printing Stage */}
                     {processAssignUserStage?.subSteps?.some(
                       (s: any) => s.isPrinterEnable,
                     ) && (
-                      
-                      <>
-                        {/* Print Sticker */}
-                        {!isStickerPrinted && !isPassNGButtonShow && (
-                          <>
-                            {processAssignUserStage.subSteps.map(
-                              (subStep: any, subIndex: number) =>
-                                subStep.isPrinterEnable &&
-                                subStep.printerFields.map(
-                                  (printerField: any, printerIndex: number) => (
-                                    <div
-                                      id="sticker-preview"
-                                      key={`${subIndex}-${printerIndex}`}
-                                      className="bg-white mb-4 flex items-center justify-center rounded-xl border p-4"
-                                    >
-                                      <StickerGenerator
-                                        stickerData={printerField}
-                                        deviceData={deviceList.filter(
-                                          (d: any) =>
-                                            d.serialNo === searchResult,
-                                        )}
-                                      />
-                                    </div>
+
+                        <>
+                          {/* Print Sticker */}
+                          {!isStickerPrinted && !isPassNGButtonShow && (
+                            <>
+                              {processAssignUserStage.subSteps.map(
+                                (subStep: any, subIndex: number) =>
+                                  subStep.isPrinterEnable &&
+                                  subStep.printerFields.map(
+                                    (printerField: any, printerIndex: number) => (
+                                      <div
+                                        id="sticker-preview"
+                                        key={`${subIndex}-${printerIndex}`}
+                                        className="bg-white mb-4 flex items-center justify-center rounded-xl border p-4"
+                                      >
+                                        <StickerGenerator
+                                          stickerData={printerField}
+                                          deviceData={deviceList.filter(
+                                            (d: any) =>
+                                              d.serialNo === searchResult,
+                                          )}
+                                        />
+                                      </div>
+                                    ),
                                   ),
-                                ),
-                            )}
-                            <div className="flex justify-center">
-                              <button
-                                className="mx-2 my-2 flex items-center gap-2 rounded-lg bg-primary px-2.5 py-2 text-white shadow hover:bg-primary/80"
-                                onClick={handlePrintSticker}
-                              >
-                                <Printer className="h-5 w-5" />
-                                Print Sticker
-                              </button>
-                            </div>
-                          </>
-                        )}
-
-                        {/* Verify Sticker */}
-                        {!isVerifiedSticker &&
-                          isStickerPrinted &&
-                          !isPassNGButtonShow && (
-                            <div className="flex justify-center">
-                              <button
-                                type="button"
-                                className="my-2 flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2 text-white shadow hover:bg-green-700"
-                                onClick={handleVerifySticker}
-                              >
-                                <ScanLine className="h-5 w-5" />
-                                Verify Sticker
-                              </button>
-                              <Modal
-                                isOpen={isVerifyStickerModal}
-                                onSubmit={handleVerifyStickerModal}
-                                onClose={closeVerifyStickerModal}
-                                title="Verify Sticker"
-                              >
-                                <div className="space-y-4">
-                                  <label className="block text-sm font-medium text-black dark:text-white">
-                                    Enter / Scan Serial Number
-                                  </label>
-                                  <input
-                                    type="text"
-                                    name="serialNumber"
-                                    value={serialNumber || ""}
-                                    autoComplete="off"
-                                    onChange={(e) =>
-                                      setSerialNumber(e.target.value)
-                                    }
-                                    placeholder="Scan QR code or enter serial number"
-                                    className="border-gray-300 dark:border-gray-600 dark:bg-gray-800 w-full rounded-lg border p-2 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 dark:text-white"
-                                  />
-                                </div>
-                              </Modal>
-                            </div>
+                              )}
+                              <div className="flex justify-center">
+                                <button
+                                  className="mx-2 my-2 flex items-center gap-2 rounded-lg bg-primary px-2.5 py-2 text-white shadow hover:bg-primary/80"
+                                  onClick={handlePrintSticker}
+                                >
+                                  <Printer className="h-5 w-5" />
+                                  Print Sticker
+                                </button>
+                              </div>
+                            </>
                           )}
-                        {/* Pass / NG */}
 
-                        {!processAssignUserStage?.subSteps?.some(
-                          (subStep: any) => subStep.isPackagingStatus,
-                        ) && (
-                          <div className="flex justify-center gap-4 p-6">
-                            <button
-                              className="flex items-center gap-2 rounded-lg bg-success px-4 py-2 text-white shadow hover:bg-green-500"
-                              onClick={() => handleUpdateStatus("Pass")}
-                            >
-                              <CheckCircle className="h-5 w-5" />
-                              Pass
-                            </button>
-                            <button
-                              className="hover:bg-red-600 flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-white shadow"
-                              onClick={() => handleUpdateStatus("NG")}
-                            >
-                              <XCircle className="h-5 w-5" />
-                              NG
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    )}
+                          {/* Verify Sticker */}
+                          {!isVerifiedSticker &&
+                            isStickerPrinted &&
+                            !isPassNGButtonShow && (
+                              <div className="flex justify-center">
+                                <button
+                                  type="button"
+                                  className="my-2 flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2 text-white shadow hover:bg-green-700"
+                                  onClick={handleVerifySticker}
+                                >
+                                  <ScanLine className="h-5 w-5" />
+                                  Verify Sticker
+                                </button>
+                                <Modal
+                                  isOpen={isVerifyStickerModal}
+                                  onSubmit={handleVerifyStickerModal}
+                                  onClose={closeVerifyStickerModal}
+                                  title="Verify Sticker"
+                                >
+                                  <div className="space-y-4">
+                                    <label className="block text-sm font-medium text-black dark:text-white">
+                                      Enter / Scan Serial Number
+                                    </label>
+                                    <input
+                                      type="text"
+                                      name="serialNumber"
+                                      value={serialNumber || ""}
+                                      autoComplete="off"
+                                      onChange={(e) =>
+                                        setSerialNumber(e.target.value)
+                                      }
+                                      placeholder="Scan QR code or enter serial number"
+                                      className="border-gray-300 dark:border-gray-600 dark:bg-gray-800 w-full rounded-lg border p-2 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 dark:text-white"
+                                    />
+                                  </div>
+                                </Modal>
+                              </div>
+                            )}
+                          {/* Pass / NG */}
+
+                          {!processAssignUserStage?.subSteps?.some(
+                            (subStep: any) => subStep.isPackagingStatus,
+                          ) && (
+                              <div className="flex justify-center gap-4 p-6">
+                                <button
+                                  className="flex items-center gap-2 rounded-lg bg-success px-4 py-2 text-white shadow hover:bg-green-500"
+                                  onClick={() => handleUpdateStatus("Pass")}
+                                >
+                                  <CheckCircle className="h-5 w-5" />
+                                  Pass
+                                </button>
+                                <button
+                                  className="hover:bg-red-600 flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-white shadow"
+                                  onClick={() => handleUpdateStatus("NG")}
+                                >
+                                  <XCircle className="h-5 w-5" />
+                                  NG
+                                </button>
+                              </div>
+                            )}
+                        </>
+                      )}
                     {/* CASE 2: Packaging Stage */}
                     {isPassNGButtonShow &&
                       processAssignUserStage?.subSteps?.some(
@@ -1037,7 +1033,7 @@ export default function DeviceTestComponent({
                                           onClick={() =>
                                             handleUpdateStatus("NG")
                                           }
-                                        > 
+                                        >
                                           <XCircle className="h-5 w-5" />
                                           NG
                                         </button>
@@ -1064,7 +1060,7 @@ export default function DeviceTestComponent({
 
                                                 <ul className="dark:text-gray-300 list-disc pl-6 text-sm">
                                                   {carton.devices?.length >
-                                                  0 ? (
+                                                    0 ? (
                                                     carton.devices.map(
                                                       (
                                                         serial: string,
@@ -1101,45 +1097,45 @@ export default function DeviceTestComponent({
                                                       {qrCartons[
                                                         carton.cartonSerial
                                                       ] && (
-                                                        <>
-                                                          {" "}
-                                                          <div
-                                                            id="barcode-area"
-                                                            className="rounded-lg bg-white p-2 shadow"
-                                                          >
-                                                            <Canvas
-                                                              text={
-                                                                carton.cartonSerial
+                                                          <>
+                                                            {" "}
+                                                            <div
+                                                              id="barcode-area"
+                                                              className="rounded-lg bg-white p-2 shadow"
+                                                            >
+                                                              <Canvas
+                                                                text={
+                                                                  carton.cartonSerial
+                                                                }
+                                                                options={{
+                                                                  level: "M",
+                                                                  margin: 2,
+                                                                  scale: 4,
+                                                                  width: 180,
+                                                                  color: {
+                                                                    dark: "#000000",
+                                                                    light:
+                                                                      "#ffffff",
+                                                                  },
+                                                                }}
+                                                              />
+                                                              <p className="mt-2 text-center font-semibold">
+                                                                {
+                                                                  carton.cartonSerial
+                                                                }
+                                                              </p>
+                                                            </div>
+                                                            <button
+                                                              type="button"
+                                                              onClick={
+                                                                handlePrint
                                                               }
-                                                              options={{
-                                                                level: "M",
-                                                                margin: 2,
-                                                                scale: 4,
-                                                                width: 180,
-                                                                color: {
-                                                                  dark: "#000000",
-                                                                  light:
-                                                                    "#ffffff",
-                                                                },
-                                                              }}
-                                                            />
-                                                            <p className="mt-2 text-center font-semibold">
-                                                              {
-                                                                carton.cartonSerial
-                                                              }
-                                                            </p>
-                                                          </div>
-                                                          <button
-                                                            type="button"
-                                                            onClick={
-                                                              handlePrint
-                                                            }
-                                                            className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white shadow hover:bg-green-700"
-                                                          >
-                                                            🖨 Print Carton
-                                                          </button>
-                                                        </>
-                                                      )}
+                                                              className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white shadow hover:bg-green-700"
+                                                            >
+                                                              🖨 Print Carton
+                                                            </button>
+                                                          </>
+                                                        )}
                                                     </div>
                                                   )}
                                               </div>
@@ -1197,86 +1193,58 @@ export default function DeviceTestComponent({
                     {processAssignUserStage?.subSteps?.some(
                       (s: any) => s.stepType === "jig",
                     ) && (
-                      !isdevicePassed && !shouldHideJigInterface && (
-                      <div className="py-6">
-                        {processAssignUserStage.subSteps.map(
-                          (subStep: any, index: number) => {
-                            if (subStep.stepType !== "jig") return null;
-                            return (
-                              <JigSection
-                                 key={index}
-                                 subStep={subStep}
-                                 onDataReceived={(data) => {
-                                   console.log("Jig Data:", data);
-                                 }}
-                                 onDecision={(status) => {
-                                    console.log("Jig Decision Received:", status);
-                                    setJigDecision(status);
-                                    if (status === "Pass") {
+                        (!isdevicePassed || jigDecision) && !shouldHideJigInterface && (
+                          <div className="py-6">
+                            {processAssignUserStage.subSteps.map(
+                              (subStep: any, index: number) => {
+                                if (subStep.stepType !== "jig") return null;
+                                return (
+                                  <JigSection
+                                    key={index}
+                                    subStep={subStep}
+                                    onDataReceived={(data) => {
+                                      //  console.log("Jig Data:", data);
+                                    }}
+                                    onDecision={(status) => {
+                                      console.log("Jig Decision Received:", status);
+                                      setJigDecision(status);
+                                      if (status === "Pass") {
                                         handleUpdateStatus("Pass", "");
-                                        // setSearchResult(""); // Removed auto-clear
-                                    } else {
-                                        // For NG, wait for user confirmation
-                                    }
-                                 }}
-                               />
-                            );
-                          },
-                        )}
-                         
-                         {/* Next/Reset Button after Jig Decision */}
-                         {jigDecision && (
-                             <div className="flex flex-col items-center gap-4 mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                      } else if (status === "NG") {
+                                        setShowNGModal(true);
+                                      }
+                                    }}
+                                  />
+                                );
+                              },
+                            )}
+
+                            {/* Next/Reset Button after Jig Decision */}
+                            {jigDecision && (
+                              <div className="flex flex-col items-center gap-4 mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                                 <h4 className={`text-lg font-bold ${jigDecision === 'Pass' ? 'text-green-600' : 'text-red-600'}`}>
-                                    Test Result: {jigDecision}
+                                  Test Result: {jigDecision}
                                 </h4>
                                 <button
-                                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-white shadow-lg hover:bg-blue-700 transition-all active:scale-95"
-                                    onClick={() => {
-                                        if (jigDecision === "Pass") {
-                                            setSearchResult(""); // Clear and reset
-                                            setJigDecision(null);
-                                        } else {
-                                            setShowNGModal(true); // Open NG flow
-                                            // Reset decision is handled after modal closes or manually if needed?
-                                            // Actually, opening modal is enough. When modal finishes, it clears search.
-                                            setJigDecision(null); 
-                                        }
-                                    }}
+                                  className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-white shadow-lg hover:bg-blue-700 transition-all active:scale-95"
+                                  onClick={() => {
+                                    setSearchResult("");
+                                    setSearchQuery("");
+                                    setJigDecision(null);
+                                    window.scrollTo(0, 0); // Optional: scroll to top for new scan
+                                  }}
                                 >
-                                    <ArrowRightCircle className="h-5 w-5" />
-                                    {jigDecision === "Pass" ? "Next Device (Reset)" : "Process NG Report"}
+                                  <ArrowRightCircle className="h-5 w-5" />
+                                  Move to Next Device
                                 </button>
-                             </div>
-                         )}
+                              </div>
+                            )}
 
-                         {/* Pass/NG Buttons for Jig Stage (Manual Override) */}
-                         {!jigDecision && isPassNGButtonShow && (
-                            <div className="flex justify-center gap-4 mt-4">
-                                <button
-                                    className="flex items-center gap-2 rounded-lg bg-success px-4 py-2 text-white shadow hover:bg-green-500"
-                                    onClick={() => {
-                                        handleUpdateStatus("Pass", "");
-                                        setJigDecision("Pass");
-                                    }}
-                                >
-                                    <CheckCircle className="h-5 w-5" />
-                                    Pass
-                                </button>
-                                <button
-                                    className="hover:bg-red-600 flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-white shadow"
-                                    onClick={() => {
-                                         setJigDecision("NG");
-                                    }}
-                                >
-                                    <XCircle className="h-5 w-5" />
-                                    NG
-                                </button>
-                            </div>
-                         )}
-                      </div>
-                      )
-                    )}
+                            {/* Pass/NG Buttons for Jig Stage (Manual Override) */}
+
+                          </div>
+                        )
+                      )}
                     {/* CASE 4: Normal Pass/NG */}
                     {canShowPassNGButtons(deviceHistory, processAssignUserStage?.stageName) && isPassNGButtonShow &&
                       !processAssignUserStage?.subSteps?.some(
@@ -1285,7 +1253,7 @@ export default function DeviceTestComponent({
                         <div className="flex justify-center gap-4 p-6">
                           <button
                             className="flex items-center gap-2 rounded-lg bg-success px-4 py-2 text-white shadow hover:bg-green-500"
-                            onClick={() => handleUpdateStatus("Pass","")}
+                            onClick={() => handleUpdateStatus("Pass", "")}
                           >
                             <CheckCircle className="h-5 w-5" />
                             Pass
@@ -1415,13 +1383,12 @@ export default function DeviceTestComponent({
                             <td className="px-2 py-1">{row?.stageName}</td>
                             <td className="px-2 py-1">{row?.assignedDeviceTo}</td>
                             <td
-                              className={`px-2 py-1 font-medium ${
-                                row?.status === "Pass"
-                                  ? "text-green-600"
-                                  : row?.status === "NG"
-                                    ? "text-red-500"
-                                    : "text-gray-500"
-                              }`}
+                              className={`px-2 py-1 font-medium ${row?.status === "Pass"
+                                ? "text-green-600"
+                                : row?.status === "NG"
+                                  ? "text-red-500"
+                                  : "text-gray-500"
+                                }`}
                             >
                               {row?.status}
                             </td>
@@ -1445,55 +1412,55 @@ export default function DeviceTestComponent({
               {processAssignUserStage?.subSteps?.some(
                 (s: any) => s.isPackagingStatus,
               ) && (
-                <div className="border-gray-200 rounded-xl border bg-white p-5 py-2 shadow-sm">
-                  {console.log("processCartons.cartonDetails ==> ", processCartons.cartonDetails)}
-                  <h3 className="bg-gray-100 text-gray-700 sticky top-0 flex items-center justify-center gap-2 rounded-t-xl py-2 text-center text-sm font-bold">
-                    <ListChecks className="h-4 w-4 text-indigo-600" />
-                    Carton Details
-                  </h3>
-                  <div className="max-h-[247px] overflow-y-auto">
-                    <table className="w-full text-xs">
-                      <thead className="bg-gray-50 text-gray-600">
-                        <tr>
-                          <th className="px-2 py-1">Serial</th>
-                          <th className="px-2 py-1">Status</th>
-                          <th className="px-2 py-1">Time</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {processCartons?.cartonDetails?.length > 0 ? (
-                          processCartons.cartonDetails.map((row, rowIndex) => (
-                            <tr
-                              key={rowIndex}
-                              className="hover:bg-gray-50 border-t text-center"
-                            >
-                              <td className="px-2 py-1">{row?.cartonSerial}</td>
-                              <td className="px-2 py-1">{row?.status}</td>
-                              <td className="px-2 py-1">{row?.createdAt}</td>
-                            </tr>
-                          ))
-                        ) : (
+                  <div className="border-gray-200 rounded-xl border bg-white p-5 py-2 shadow-sm">
+                    {console.log("processCartons.cartonDetails ==> ", processCartons.cartonDetails)}
+                    <h3 className="bg-gray-100 text-gray-700 sticky top-0 flex items-center justify-center gap-2 rounded-t-xl py-2 text-center text-sm font-bold">
+                      <ListChecks className="h-4 w-4 text-indigo-600" />
+                      Carton Details
+                    </h3>
+                    <div className="max-h-[247px] overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50 text-gray-600">
                           <tr>
-                            <td colSpan="3" className="py-2 text-center">
-                              No Result Found
-                            </td>
+                            <th className="px-2 py-1">Serial</th>
+                            <th className="px-2 py-1">Status</th>
+                            <th className="px-2 py-1">Time</th>
                           </tr>
-                        )}
-                      </tbody>
-                    </table>
-                    {processCartons?.cartonDetails?.length > 0 && (
-                      <div className="flex items-end justify-end py-2">
-                        <button
-                          className="flex items-center gap-2 rounded-lg bg-[#0FADCF] px-4 py-2 text-sm font-semibold text-white shadow"
-                          onClick={handleShiftToPDI}
-                        >
-                          Shift To PDI
-                        </button>
-                      </div>
-                    )}
+                        </thead>
+                        <tbody>
+                          {processCartons?.cartonDetails?.length > 0 ? (
+                            processCartons.cartonDetails.map((row, rowIndex) => (
+                              <tr
+                                key={rowIndex}
+                                className="hover:bg-gray-50 border-t text-center"
+                              >
+                                <td className="px-2 py-1">{row?.cartonSerial}</td>
+                                <td className="px-2 py-1">{row?.status}</td>
+                                <td className="px-2 py-1">{row?.createdAt}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan="3" className="py-2 text-center">
+                                No Result Found
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                      {processCartons?.cartonDetails?.length > 0 && (
+                        <div className="flex items-end justify-end py-2">
+                          <button
+                            className="flex items-center gap-2 rounded-lg bg-[#0FADCF] px-4 py-2 text-sm font-semibold text-white shadow"
+                            onClick={handleShiftToPDI}
+                          >
+                            Shift To PDI
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </div>
           )}
         </div>

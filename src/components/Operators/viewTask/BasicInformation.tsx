@@ -182,10 +182,39 @@ export default function BasicInformation({
                     ) : (
                       stage.jigFields?.map((jf, i) => (
                         <div key={i}>
-                          <b>{jf.jigName ?? "Jig"}:</b> {jf.value ?? "--"}
+                          <b>{jf.jigName ?? "Jig"}:</b>{" "}
+                          {jf.validationType === "value" ? (
+                            <b>{jf.value ?? "--"}</b>
+                          ) : jf.validationType === "range" ? (
+                            <>
+                              <b>{jf.rangeFrom ?? "--"}</b> -{" "}
+                              <b>{jf.rangeTo ?? "--"}</b>
+                            </>
+                          ) : (
+                            "--"
+                          )}
                         </div>
                       ))
                     )}
+
+                    {/* {stage.stepType === "manual" ? (
+                      stage.stepFields?.validationType === "value" ? (
+                        <div>
+                          Value: <b>{stage.stepFields?.value ?? "--"}</b>
+                        </div>
+                      ) : stage.stepFields?.rangeFrom ? (
+                        <div>
+                          Range: <b>{stage.stepFields?.rangeFrom ?? "--"}</b> -{" "}
+                          <b>{stage.stepFields?.rangeTo ?? "--"}</b>
+                        </div>
+                      ) : null
+                    ) : (
+                      stage.jigFields?.map((jf, i) => (
+                        <div key={i}>
+                          <b>{jf.jigName ?? "Jig"}:</b> {jf.value ?? "--"}
+                        </div>
+                      ))
+                    )} */}
                   </div>
                 </li>
               ))
@@ -216,11 +245,10 @@ export default function BasicInformation({
                   <div
                     key={idx}
                     style={fallbackStyle}
-                    className={`rounded-lg px-4 py-2 text-sm font-medium shadow ${
-                      isBreak
-                        ? "bg-red-600 text-white"
-                        : "bg-green-100 text-green-700"
-                    }`}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium shadow ${isBreak
+                      ? "bg-red-600 text-white"
+                      : "bg-green-100 text-green-700"
+                      }`}
                   >
                     {isBreak
                       ? `Break: ${interval.startTime ?? "--"} - ${interval.endTime ?? "--"}`

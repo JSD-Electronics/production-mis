@@ -34,7 +34,41 @@ const parseKeyValue = (key: string, source: string): string | null => {
   return match ? match[1].trim() : null;
 };
 
-// --- Custom Hook for Serial Logic ---
+const parseJigOutput = (text: string) => {
+  const lines = text.split('\n');
+  const result: any = {};
+  let currentSection = "PARAMETERS";
+
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    if (trimmed.endsWith(':') && !trimmed.includes(' ')) {
+      currentSection = trimmed.replace(':', '');
+      if (!result[currentSection]) result[currentSection] = {};
+      return;
+    }
+
+    if (!result[currentSection]) result[currentSection] = {};
+
+    const segments = trimmed.split(/   +|  |, /);
+    let lastKey: string | null = null;
+
+    segments.forEach(segment => {
+      const colonIndex = segment.indexOf(':');
+      if (colonIndex !== -1) {
+        const key = segment.substring(0, colonIndex).trim();
+        const value = segment.substring(colonIndex + 1).trim();
+        result[currentSection][key] = value;
+        lastKey = key;
+      } else if (lastKey && result[currentSection][lastKey]) {
+        result[currentSection][lastKey] += " " + segment.trim();
+      }
+    });
+  });
+
+  return [result];
+};
 
 const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps) => {
   const [isConnected, setIsConnected] = useState(false);
@@ -60,41 +94,91 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
       accumulatedDataRef.current += text + "\n";
       const newData = accumulatedDataRef.current;
 
+      const parsedArray = parseJigOutput(newData);
+      const parsedData = parsedArray[0];
+
       if (!subStep?.jigFields) return;
 
       let matchCount = 0;
       let allPassed = true;
       const requiredFieldsCount = subStep.jigFields.length;
 
+      if (Object.keys(parsedData).length > 0) {
+      }
+
       subStep.jigFields.forEach((field: any) => {
-        const receivedValueString = parseKeyValue(field.jigName, newData);
+        let receivedValueString: string | null = null;
+        if (parsedData[field.jigName]) {
+          receivedValueString = parsedData[field.jigName];
+        } else {
+          for (const sectionKey in parsedData) {
+            if (typeof parsedData[sectionKey] === 'object' && parsedData[sectionKey][field.jigName]) {
+              receivedValueString = parsedData[sectionKey][field.jigName];
+              break;
+            }
+          }
+        }
 
-        if (receivedValueString !== null) {
+        if (receivedValueString !== null && receivedValueString !== undefined) {
           matchCount++;
-          if (field.value && field.value.trim() !== "") {
-            const receivedValue = parseFloat(receivedValueString);
-            const expectedValue = parseFloat(field.value);
 
-            if (!isNaN(expectedValue) && !isNaN(receivedValue)) {
-              if (Math.abs(receivedValue - expectedValue) > 0.1) allPassed = false;
-            } else {
-              if (receivedValueString.toLowerCase() !== field.value.toLowerCase()) {
+          if (field.validationType === 'range') {
+            const val = parseFloat(receivedValueString);
+            if (!isNaN(val)) {
+              const min = field.rangeFrom !== null ? parseFloat(field.rangeFrom) : -Infinity;
+              const max = field.rangeTo !== null ? parseFloat(field.rangeTo) : Infinity;
+
+              if (val < min || val > max) {
                 allPassed = false;
+              }
+            } else {
+              allPassed = false;
+            }
+          } else if (field.validationType === 'value') {
+            if (field.value && field.value.trim() !== "") {
+              const expected = field.value.trim();
+              const received = receivedValueString.toString().trim();
+
+              if (expected !== received) {
+                const numExp = parseFloat(expected);
+                const numRec = parseFloat(received);
+                if (!isNaN(numExp) && !isNaN(numRec)) {
+                  if (Math.abs(numExp - numRec) > 0.1) allPassed = false;
+                } else {
+                  allPassed = false;
+                }
               }
             }
           }
         }
       });
+      console.log(`Matches: ${matchCount} / ${requiredFieldsCount}. AllPassed: ${allPassed}`);
+
+      if (matchCount < requiredFieldsCount) {
+        const missing = subStep.jigFields.filter((field: any) => {
+          let found = false;
+          if (parsedData[field.jigName]) found = true;
+          else {
+            for (const sectionKey in parsedData) {
+              if (typeof parsedData[sectionKey] === 'object' && parsedData[sectionKey][field.jigName]) {
+                found = true;
+                break;
+              }
+            }
+          }
+          return !found;
+        }).map((f: any) => f.jigName);
+        if (missing.length > 0) console.log("Waiting for fields:", missing);
+      }
 
       if (matchCount > 0 && onDecision) {
         if (matchCount >= requiredFieldsCount) {
           const status = allPassed ? "Pass" : "NG";
+          console.log("status ===>", status);
           addLog(`Decision: ${status}`, allPassed ? "success" : "error");
           onDecision(status);
-          
-          // Reset for next test
           disconnectJig();
-          accumulatedDataRef.current = ""; 
+          accumulatedDataRef.current = "";
         }
       }
     },
@@ -127,7 +211,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
         addLog(`Send failed: ${e?.message || e}`, "error");
         try {
           if (writerRef.current) writerRef.current.releaseLock();
-        } catch {}
+        } catch { }
         writerRef.current = null;
         return false;
       }
@@ -146,38 +230,37 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
       while (!stopRequestedRef.current) {
         const { value, done } = await reader.read();
         if (done || stopRequestedRef.current) break;
-        
+
         const chunk = decoder.decode(value, { stream: true });
         buffer += chunk;
-        
         // Find last newline to process complete lines
         let processIndex = -1;
         for (let i = buffer.length - 1; i >= 0; i--) {
-            if (buffer[i] === '\n' || buffer[i] === '\r') {
-                processIndex = i;
-                break;
-            }
+          if (buffer[i] === '\n' || buffer[i] === '\r') {
+            processIndex = i;
+            break;
+          }
         }
 
         if (processIndex !== -1) {
-             const completeData = buffer.substring(0, processIndex + 1);
-             buffer = buffer.substring(processIndex + 1);
-             const lines = completeData.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-             
-             for (const line of lines) {
-                  const trimmedLine = line.trim();
-                  if (trimmedLine.length === 0) continue;
-                  addLog(trimmedLine, "data");
-                  if (onDataReceived) onDataReceived(trimmedLine);
-                  processData(trimmedLine);
-             }
+          const completeData = buffer.substring(0, processIndex + 1);
+          buffer = buffer.substring(processIndex + 1);
+          const lines = completeData.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+          console.log("completeData ==>", completeData);
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.length === 0) continue;
+            addLog(trimmedLine, "data");
+            if (onDataReceived) onDataReceived(trimmedLine);
+            processData(trimmedLine);
+          }
         }
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
     } catch (error) {
       if (!stopRequestedRef.current) console.error("Read error:", error);
     } finally {
-      try { reader.releaseLock(); } catch {}
+      try { reader.releaseLock(); } catch { }
       if (readerRef.current === reader) readerRef.current = null;
     }
   };
@@ -185,21 +268,21 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
   const disconnectJig = useCallback(async () => {
     stopRequestedRef.current = true;
     if (readerRef.current?.cancel) {
-        try { await readerRef.current.cancel(); } catch (e) { console.warn(e); }
+      try { await readerRef.current.cancel(); } catch (e) { console.warn(e); }
     }
     try {
       if (writerRef.current) {
         writerRef.current.releaseLock();
       }
-    } catch {}
+    } catch { }
     writerRef.current = null;
     if (readingPromiseRef.current) {
-        try { await readingPromiseRef.current; } catch (e) { console.warn(e); }
-        readingPromiseRef.current = null;
+      try { await readingPromiseRef.current; } catch (e) { console.warn(e); }
+      readingPromiseRef.current = null;
     }
     if (portRef.current) {
-        try { await portRef.current.close(); } catch (e) { console.error(e); }
-        portRef.current = null;
+      try { await portRef.current.close(); } catch (e) { console.error(e); }
+      portRef.current = null;
     }
     setIsConnected(false);
     addLog("System Disconnected", "info");
@@ -214,11 +297,11 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
         return;
       }
       */
-      
+
       if (!(navigator as any).serial) {
-          addLog("Web Serial API is not supported in this browser.", "error");
-          alert("Web Serial API is not supported in this browser.");
-          return;
+        addLog("Web Serial API is not supported in this browser.", "error");
+        alert("Web Serial API is not supported in this browser.");
+        return;
       }
 
       if (portRef.current || isConnected) await disconnectJig();
@@ -230,7 +313,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
       stopRequestedRef.current = false;
       setIsConnected(true);
       addLog("Port Connected (115200 baud)", "success");
-      
+
       readingPromiseRef.current = startReading(port);
     } catch (error: any) {
       console.error("Connection failed:", error);
@@ -277,9 +360,9 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
     (readerRef as any).current = { cancel: () => clearInterval(interval) };
   }, [subStep, addLog, onDataReceived, processData]);
   */
-  
+
   // Dummy function to satisfy types
-  const simulateJigConnection = useCallback(() => {}, []);
+  const simulateJigConnection = useCallback(() => { }, []);
 
   const downloadLogs = useCallback(() => {
     if (logs.length === 0) return;
@@ -303,25 +386,24 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
 const Header = ({ isConnected, onConnect, onDisconnect, onSimulate }: any) => (
   <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-4 dark:border-gray-800 dark:bg-gray-800/50">
     <div className="flex items-center gap-4">
-      <div className={`flex h-10 w-10 items-center justify-center rounded-xl shadow-sm transition-all ${
-        isConnected ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-      }`}>
+      <div className={`flex h-10 w-10 items-center justify-center rounded-xl shadow-sm transition-all ${isConnected ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+        }`}>
         <Cable className="h-6 w-6" />
       </div>
       <div>
         <h3 className="text-base font-bold text-gray-900 dark:text-white">Jig Interface</h3>
         <div className="flex items-center gap-2">
-           <span className={`relative flex h-2 w-2`}>
-              <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${isConnected ? 'bg-green-400' : 'hidden'}`}></span>
-              <span className={`relative inline-flex h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-           </span>
-           <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
-             {isConnected ? 'Device Connected' : 'Ready to Connect'}
-           </p>
+          <span className={`relative flex h-2 w-2`}>
+            <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${isConnected ? 'bg-green-400' : 'hidden'}`}></span>
+            <span className={`relative inline-flex h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+          </span>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            {isConnected ? 'Device Connected' : 'Ready to Connect'}
+          </p>
         </div>
       </div>
     </div>
-    
+
     <div className="flex gap-3">
       {!isConnected ? (
         <>
@@ -350,7 +432,7 @@ const TerminalOutput = ({ logs, onClear, onDownload, onSend, connected }: { logs
   const scrollRef = useRef<HTMLDivElement>(null);
   const [cmd, setCmd] = useState("");
   const [eol, setEol] = useState<"CRLF" | "LF" | "CR" | "NONE">("CRLF");
-  
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -365,23 +447,23 @@ const TerminalOutput = ({ logs, onClear, onDownload, onSend, connected }: { logs
           <span>SERIAL CONSOLE</span>
         </div>
         <div className="flex gap-2">
-           <button onClick={onClear} className="rounded p-1 text-gray-400 hover:bg-gray-700 hover:text-white" title="Clear Console">
-             <Trash2 className="h-3.5 w-3.5" />
-           </button>
-           <button onClick={onDownload} className="rounded p-1 text-gray-400 hover:bg-gray-700 hover:text-white" title="Download Logs">
-             <Download className="h-3.5 w-3.5" />
-           </button>
+          <button onClick={onClear} className="rounded p-1 text-gray-400 hover:bg-gray-700 hover:text-white" title="Clear Console">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={onDownload} className="rounded p-1 text-gray-400 hover:bg-gray-700 hover:text-white" title="Download Logs">
+            <Download className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
-      
+
       <div className="flex items-center gap-2 border-t border-gray-800 bg-[#252526] px-3 py-2">
-         <input
-           value={cmd}
-           onChange={(e) => setCmd(e.target.value)}
-           placeholder="Enter command"
-           className="flex-1 rounded bg-[#1e1e1e] px-3 py-2 text-xs text-white outline-none ring-1 ring-gray-700 focus:ring-blue-500"
-         />
-         <select
+        <input
+          value={cmd}
+          onChange={(e) => setCmd(e.target.value)}
+          placeholder="Enter command"
+          className="flex-1 rounded bg-[#1e1e1e] px-3 py-2 text-xs text-white outline-none ring-1 ring-gray-700 focus:ring-blue-500"
+        />
+        {/* <select
            value={eol}
            onChange={(e) => setEol(e.target.value as any)}
            className="rounded bg-[#1e1e1e] px-2 py-2 text-xs text-gray-200 ring-1 ring-gray-700 focus:ring-blue-500"
@@ -391,17 +473,17 @@ const TerminalOutput = ({ logs, onClear, onDownload, onSend, connected }: { logs
            <option value="LF">LF</option>
            <option value="CR">CR</option>
            <option value="NONE">NONE</option>
-         </select>
-         <button
-           onClick={() => onSend(cmd, eol)}
-           disabled={!connected || !cmd.trim()}
-           className={`rounded px-4 py-2 text-xs font-bold ${connected && cmd.trim() ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-700 text-gray-400'}`}
-         >
-           Send
-         </button>
+         </select> */}
+        <button
+          onClick={() => onSend(cmd, eol)}
+          disabled={!connected || !cmd.trim()}
+          className={`rounded px-4 py-2 text-xs font-bold ${connected && cmd.trim() ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-700 text-gray-400'}`}
+        >
+          Send
+        </button>
       </div>
-      
-      <div 
+
+      <div
         ref={scrollRef}
         className="h-80 overflow-y-auto p-4 font-mono text-xs leading-relaxed 
           scrollbar-thin scrollbar-track-[#1e1e1e] scrollbar-thumb-[#424242] scrollbar-thumb-rounded-full
@@ -419,22 +501,21 @@ const TerminalOutput = ({ logs, onClear, onDownload, onSend, connected }: { logs
           logs.map((log, i) => (
             <div key={i} className="flex gap-3 hover:bg-white/5">
               <span className="shrink-0 select-none text-gray-400 font-medium">[{log.timestamp}]</span>
-              <span className={`break-all tracking-wide ${
-                log.type === 'error' ? 'text-red-400 font-bold' :
+              <span className={`break-all tracking-wide ${log.type === 'error' ? 'text-red-400 font-bold' :
                 log.type === 'success' ? 'text-green-400 font-bold' :
-                log.type === 'info' ? 'text-cyan-400 font-semibold' :
-                'text-white font-semibold'
-              }`}>
+                  log.type === 'info' ? 'text-cyan-400 font-semibold' :
+                    'text-white font-semibold'
+                }`}>
                 {log.message}
               </span>
             </div>
           ))
         )}
       </div>
-      
+
       <div className="flex items-center justify-between border-t border-gray-800 bg-[#252526] px-3 py-1 text-[10px] text-gray-500">
-         <span>Ln {logs.length}, Col 1</span>
-         <span>UTF-8</span>
+        <span>Ln {logs.length}, Col 1</span>
+        <span>UTF-8</span>
       </div>
     </div>
   );
@@ -447,10 +528,10 @@ export default function JigSection(props: JigSectionProps) {
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl transition-all dark:bg-gray-900 dark:border-gray-800">
-      <Header 
-        isConnected={isConnected} 
-        onConnect={connectToJig} 
-        onDisconnect={disconnectJig} 
+      <Header
+        isConnected={isConnected}
+        onConnect={connectToJig}
+        onDisconnect={disconnectJig}
         onSimulate={simulateJigConnection}
       />
       <TerminalOutput logs={logs} onClear={clearLogs} onDownload={downloadLogs} onSend={sendCommand} connected={isConnected} />

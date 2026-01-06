@@ -24,6 +24,8 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("userDetails");
       window.location.href = "/";
     }
     return Promise.reject(error);
@@ -796,10 +798,10 @@ export const fetchJigsById = async (id) => {
 };
 export const fetchJigByJigId = async (id) => {
   try {
-    let response  = await api.get(`/fetchJigByJigId/${id}`);
+    let response = await api.get(`/fetchJigByJigId/${id}`);
     return response?.data;
-  } catch (error){ 
-    throw error?.response?.data || {message:`Error Fetching Jig By ID`};
+  } catch (error) {
+    throw error?.response?.data || { message: `Error Fetching Jig By ID` };
   }
 }
 export const createDevice = async (formData) => {

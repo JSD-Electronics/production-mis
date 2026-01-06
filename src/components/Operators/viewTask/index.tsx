@@ -104,7 +104,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const [isVerifiedSticker, setIsVerifiedSticker] = useState(false);
   const [processCartons, setProcessCartons] = useState([]);
   const [isdevicePassed, setIsDevicePassed] = useState(false);
-  const [processStagesName,setProcessStageName] = useState<string[]>([]);
+  const [processStagesName, setProcessStageName] = useState<string[]>([]);
   const [selectAssignDeviceDepartment, setAsssignDeviceDepartment] =
     useState<string>("");
   const { SVG } = useQRCode();
@@ -172,7 +172,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       let deviceHistory = [];
       let ngCount = 0;
       let completedCount = 0;
-      const updatedDeviceHistory = devices.map((value:any) => {
+      const updatedDeviceHistory = devices.map((value: any) => {
         if (value.status === "NG") {
           ngCount += 1;
         } else if (value.status === "Pass" || value.status === "Completed") {
@@ -220,7 +220,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           device.currentStage === assignStageToUser[0]?.name &&
           device.status !== "Pass" &&
           device.assignDeviceTo !== "TRC" &&
-          device.assignDeviceTo !== "QC" 
+          device.assignDeviceTo !== "QC"
       );
       console.log("Filtered Device List:", filteredDeviceList);
       // set filtered list
@@ -420,13 +420,13 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const handleChoosenDevice = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setChoosenDevice(event.target.value);
   };
-  const handleUpdateStatus = async (status: string,deviceDepartment: string) => {
+  const handleUpdateStatus = async (status: string, deviceDepartment: string) => {
     try {
       let deviceInfo = deviceList.filter((device: any) => device.serialNo === searchResult);
-       // Find current stage index
-       const stageData = Array.isArray(assignUserStage)
-         ? assignUserStage[0]
-         : assignUserStage;
+      // Find current stage index
+      const stageData = Array.isArray(assignUserStage)
+        ? assignUserStage[0]
+        : assignUserStage;
 
       if (status === "Pass") {
         // setIsPassNGButtonShow(false);
@@ -749,7 +749,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
               {Math.max(
                 0,
                 parseInt(getPlaningAndScheduling?.processQuantity) -
-                  getPlaningAndScheduling?.assignedIssuedKits,
+                getPlaningAndScheduling?.assignedIssuedKits,
               )}
             </p>
           </div>
@@ -794,7 +794,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           setDevicePause={setDevicePause}
           deviceDisplay={deviceDisplay}
           deviceList={deviceList}
-           checkedDevice={checkedDevice}
+          checkedDevice={checkedDevice}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           handleNoResults={handleNoResults}
