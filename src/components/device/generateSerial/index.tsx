@@ -1,4 +1,4 @@
-"use client";
+  "use client";
 import React, { useState, useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import {
@@ -7,30 +7,40 @@ import {
   createDevice,
   getLastEntryBasedUponPrefixAndSuffix,
 } from "@/lib/api";
+import {
+  Package,
+  Workflow,
+  Hash,
+  PlusSquare,
+  XCircle,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertTriangle,
+  Loader2,
+} from "lucide-react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+
 const GenerateSerialComponent = () => {
   const [products, setProduct] = useState([]);
   const [processes, setProcesses] = useState([]);
   const [productId, setProductId] = useState("");
   const [processId, setProcessId] = useState("");
-  const [csvData, setCsvData] = useState([]);
-  const [selectedProduct, setSelectedProduct] = useState("");
-  const [selectedProcess, setSelectedProcess] = useState("");
-  const [showProcessType, setShowProcessType] = useState(false);
-  const [enableZero, setEnabledZero] = useState<boolean>(false);
-  const [isGenerateSerials, setIsGenerateSerials] = useState(false);
+  const [serials, setSerials] = useState<string[]>([]);
   const [lastSerialNo, setLastSerialNo] = useState("");
-  const [serials, setSerials] = useState([]);
+  const [isGenerateSerials, setIsGenerateSerials] = useState(false);
+  const [enableZero, setEnabledZero] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
   const [form, setForm] = useState({
     prefix: "ABC-",
     noOfSerialRequired: 0,
     suffix: "-X",
     noOfZeroRequired: 0,
   });
+
   useEffect(() => {
     const pathParts = window.location.pathname.split("/");
-
     if (pathParts.length >= 5) {
       setProductId(pathParts[3]);
       setProcessId(pathParts[4]);
@@ -38,6 +48,7 @@ const GenerateSerialComponent = () => {
     getProcess(pathParts[3]);
     getProduct();
   }, []);
+
   const getProcess = async (id) => {
     try {
       let result = await viewProcessByProductId(id);
@@ -46,6 +57,7 @@ const GenerateSerialComponent = () => {
       console.error(`Error Fetching Process: ${error?.message}`);
     }
   };
+
   const getProduct = async () => {
     try {
       let result = await viewProduct();
@@ -54,35 +66,27 @@ const GenerateSerialComponent = () => {
       console.error(`Error Fetching Products: ${error}`);
     }
   };
-  const handleChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >,
-  ) => {
-    const { name, type, value, checked } = e.target;
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, type, value, checked } = e.target;
     let val = type === "checkbox" ? checked : value;
     const numericVal = parseInt(val as string, 10);
-    if (name === "noOfSerialRequired") {
-      if (numericVal > 5000) {
-        val = "5000";
-        toast.error("Value should be below 5000");
-      }
+
+    if (name === "noOfSerialRequired" && numericVal > 5000) {
+      val = "5000";
+      toast.error("Value should be below 5000");
     }
     if (name === "noOfZeroRequired") {
-      if(!enableZero){
-        val = 0
-      }
+      if (!enableZero) val = 0;
       if (numericVal > 10) {
         val = "10";
         toast.error("Value should be below 10");
       }
     }
-    setForm((prevForm) => ({
-      ...prevForm,
-      [name]: val,
-    }));
+
+    setForm((prevForm) => ({ ...prevForm, [name]: val }));
   };
+
   const getLastEntry = async (prefix: any, suffix: any) => {
     try {
       let response = await getLastEntryBasedUponPrefixAndSuffix(prefix, suffix);
@@ -91,13 +95,12 @@ const GenerateSerialComponent = () => {
       console.error("Error Creating Device:", error);
     }
   };
+
   async function generateSerials(
-    prefix: any,
+    prefix: string,
     noOfSerialRequired: number,
-    suffix: any,
-    noOfZeroRequired,
-    stepBy = 1,
-    repeatTimes = 1,
+    suffix: string,
+    noOfZeroRequired: number,
   ) {
     let start = 1;
     const lastEntry = await getLastEntry(prefix, suffix);
@@ -106,259 +109,398 @@ const GenerateSerialComponent = () => {
       noOfSerialRequired += start;
       setLastSerialNo(lastEntry.serialNo);
     }
-    const serials: string[] = [];
-    for (let i = start; i < noOfSerialRequired; i += stepBy) {
+    const generatedSerials: string[] = [];
+    for (let i = start; i < noOfSerialRequired; i++) {
       const paddedNumber = enableZero
         ? String(i).padStart(noOfZeroRequired, "0")
         : i;
-      for (let r = 0; r < repeatTimes; r++) {
-        serials.push(`${prefix}${paddedNumber}${suffix}`);
-      }
+      generatedSerials.push(`${prefix}${paddedNumber}${suffix}`);
     }
-    if (serials) {
-      setSerials(serials);
-    }
-    // return serials;
+    setSerials(generatedSerials);
   }
+
   const handleGenerateSerials = async () => {
-    if(form.noOfSerialRequired != 0){
+    if (form.noOfSerialRequired > 0) {
       generateSerials(
         form.prefix,
-        parseInt(form.noOfSerialRequired),
+        parseInt(form.noOfSerialRequired as any),
         form.suffix,
         form.noOfZeroRequired,
       );
       setIsGenerateSerials(true);
     } else {
-      toast.error("No of serial is required!!");
+      toast.error("Number of serials is required!");
     }
-
   };
 
   const handlesubmit = async () => {
     try {
-      let product = products.filter((value) => value._id == productId);
-      console.log("product ===>", product);
-      console.log("enableZero ===>", enableZero);
-      let stage = product[0].stages[0].stageName;
-      let formData = new FormData();
+      setSubmitting(true);
+      let product = products.find((value) => value._id == productId);
+      let stage = product?.stages[0]?.stageName || "";
 
+      let formData = new FormData();
       formData.append("selectedProduct", productId);
       formData.append("prefix", form.prefix);
-      formData.append("noOfSerialRequired", form.noOfSerialRequired);
+      formData.append("noOfSerialRequired", form.noOfSerialRequired.toString());
       formData.append("lastSerialNo", lastSerialNo);
       formData.append("suffix", form.suffix);
-      if(enableZero){
-        formData.append("noOfZeroRequired", form.noOfZeroRequired);
-      }else {
-        formData.append("noOfZeroRequired", form.noOfZeroRequired);
-      }
-      formData.append("enableZero", enableZero);
+      formData.append("noOfZeroRequired", form.noOfZeroRequired.toString());
+      formData.append("enableZero", enableZero.toString());
       formData.append("processId", processId);
       formData.append("currentStage", stage);
+
       let result = await createDevice(formData);
-      if (result && result?.status === 200) {
-        toast.success(result?.message || "Device Created Successfully !!");
+      if (result?.status === 200) {
+        toast.success(result?.message || "Device Created Successfully!");
       } else {
         throw new Error(result?.message || "Failed to create Device");
       }
     } catch (error) {
       console.error("Error Creating Device:", error);
+    } finally {
+      setSubmitting(false);
     }
   };
+
   return (
     <>
-      <ToastContainer
-        position="top-center"
-        closeOnClick
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-      />
-      <Breadcrumb pageName="Generate Serials" parentName="Device Maangement " />
-      <div className="grid grid-cols-1 bg-white shadow-lg dark:bg-boxdark sm:grid-cols-1">
-        <div className="border-b border-stroke px-6.5 py-4 dark:border-strokedark">
-          <div className="py-4">
-            <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-              Product Type
+      <ToastContainer position="top-center" />
+      <Breadcrumb pageName="Generate Serials" parentName="Device Management" />
+
+      <div className="mt-6 rounded-2xl bg-white p-6 shadow-lg dark:bg-boxdark">
+        {/* Product & Process */}
+        <div className="grid gap-6 sm:grid-cols-2">
+          <div>
+            <label className="text-gray-700 mb-2 flex items-center gap-2 text-sm font-semibold dark:text-bodydark">
+              <Package className="h-4 w-4 text-primary" /> Product Type
             </label>
             <select
               value={productId || ""}
-              //   onChange={(e) => handleSelectedProduct(e.target.value)}
-              className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-              disabled={true}
+              disabled
+              className="border-gray-300 bg-gray-100 w-full rounded-lg border px-4 py-2 text-sm shadow-sm focus:border-primary focus:ring focus:ring-primary/30 disabled:cursor-not-allowed dark:border-form-strokedark dark:bg-form-input"
             >
               <option value="">Please Select</option>
               {products?.map((product, index) => (
-                <>
-                  <option
-                    key={index}
-                    value={product?._id}
-                    className="text-body dark:text-bodydark"
-                  >
-                    {product?.name}
-                  </option>
-                </>
-              ))}
-            </select>
-          </div>
-          <div className="py-4">
-            <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-              Process Type
-            </label>
-            <select
-              value={processId || ""}
-              disabled={true}
-              className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-            >
-              <option value="">Please Select</option>
-              {processes?.map((process) => (
-                <option
-                  key={process._id}
-                  value={process._id}
-                  className="text-body dark:text-bodydark"
-                >
-                  {process.name}
+                <option key={index} value={product._id}>
+                  {product.name}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <div>
-              <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                Prefix Code:
-              </label>
-              <input
-                name="prefix"
-                value={form.prefix}
-                onChange={handleChange}
-                className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-              />
-            </div>
-
-            <div className="flex gap-4 py-3">
-              {/* <div className="flex-1">
-                <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                  Sequence No. From:
-                </label>
-                <input
-                  type="number"
-                  name="sequenceFrom"
-                  value={form.sequenceFrom}
-                  onChange={handleChange}
-                  className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-                />
-              </div> */}
-              <div className="flex-1">
-                <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                  No of Serial Required
-                </label>
-                <input
-                  type="number"
-                  name="noOfSerialRequired"
-                  max={"5000"}
-                  value={form.noOfSerialRequired}
-                  onChange={handleChange}
-                  className="dark:bg-form-input1 relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark"
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2 py-3">
-              <div>
-                <label
-                  htmlFor="toggle1"
-                  className="flex cursor-pointer select-none items-center gap-3"
-                >
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      id="toggle1"
-                      className="sr-only"
-                      checked={enableZero}
-                      onChange={() => {
-                        setEnabledZero(!enableZero);
-
-                      }}
-                    />
-                    <div className="block h-8 w-14 rounded-full bg-meta-9 dark:bg-[#5A616B]"></div>
-                    <div
-                      className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white transition ${
-                        enableZero &&
-                        "!right-1 !translate-x-full !bg-primary dark:!bg-white"
-                      }`}
-                    ></div>
-                  </div>
-                  Add "0" to Number:
-                </label>
-              </div>
-              {enableZero && (
-                <div className="flex-1">
-                  <input
-                    type="number"
-                    name="noOfZeroRequired"
-                    max={"10"}
-                    value={form.noOfZeroRequired}
-                    onChange={handleChange}
-                    className="dark:bg-form-input1 relative z-20 w-20 appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark"
-                  />
-                </div>
-              )}
-            </div>
-            <div className="py-3">
-              <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                Suffix Code:
-              </label>
-              <input
-                name="suffix"
-                value={form.suffix}
-                onChange={handleChange}
-                className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-              />
-            </div>
+            <label className="text-gray-700 mb-2 flex items-center gap-2 text-sm font-semibold dark:text-bodydark">
+              <Workflow className="h-4 w-4 text-primary" /> Process Type
+            </label>
+            <select
+              value={processId || ""}
+              disabled
+              className="border-gray-300 bg-gray-100 w-full rounded-lg border px-4 py-2 text-sm shadow-sm focus:border-primary focus:ring focus:ring-primary/30 disabled:cursor-not-allowed dark:border-form-strokedark dark:bg-form-input"
+            >
+              <option value="">Please Select</option>
+              {processes?.map((process) => (
+                <option key={process._id} value={process._id}>
+                  {process.name}
+                </option>
+              ))}
+            </select>
           </div>
-          <div className="bg-gray-100 rounded py-4">
-            <h2 className="mb-2 font-semibold">Serial Report:</h2>
-            {serials.length > 0 ? (
-              <ul className="grid h-64 grid-cols-6 overflow-x-auto pl-6">
+        </div>
+
+        {/* Prefix, Suffix & Serial Inputs */}
+        <div className="mt-6 grid gap-6 sm:grid-cols-2">
+          <div>
+            <label className="text-gray-700 mb-2 flex items-center gap-2 text-sm font-semibold dark:text-bodydark">
+              <Hash className="h-4 w-4 text-primary" /> Prefix Code
+            </label>
+            <input
+              name="prefix"
+              value={form.prefix}
+              onChange={handleChange}
+              className="border-gray-300 w-full rounded-lg border px-4 py-2 text-sm shadow-sm focus:border-primary focus:ring focus:ring-primary/30 dark:border-form-strokedark dark:bg-form-input"
+            />
+          </div>
+
+          <div>
+            <label className="text-gray-700 mb-2 flex items-center gap-2 text-sm font-semibold dark:text-bodydark">
+              <PlusSquare className="h-4 w-4 text-primary" /> No. of Serials
+              Required
+            </label>
+            <input
+              type="number"
+              name="noOfSerialRequired"
+              max={5000}
+              value={form.noOfSerialRequired}
+              onChange={handleChange}
+              className="border-gray-300 w-full rounded-lg border px-4 py-2 text-sm shadow-sm focus:border-primary focus:ring focus:ring-primary/30 dark:border-form-strokedark dark:bg-form-input"
+            />
+          </div>
+        </div>
+
+        {/* Zero Toggle & Suffix */}
+        <div className="mt-6 flex items-center gap-4">
+          <label className="text-gray-700 flex cursor-pointer items-center gap-2 text-sm font-semibold dark:text-bodydark">
+            <input
+              type="checkbox"
+              checked={enableZero}
+              onChange={() => setEnabledZero(!enableZero)}
+              className="border-gray-300 h-4 w-4 rounded text-primary focus:ring-primary"
+            />
+            Add Leading Zeros
+          </label>
+          {enableZero && (
+            <input
+              type="number"
+              name="noOfZeroRequired"
+              max={10}
+              value={form.noOfZeroRequired}
+              onChange={handleChange}
+              className="border-gray-300 w-20 rounded-lg border px-3 py-2 text-sm shadow-sm focus:border-primary focus:ring focus:ring-primary/30 dark:border-form-strokedark dark:bg-form-input"
+            />
+          )}
+        </div>
+
+        <div className="mt-6">
+          <label className="text-gray-700 mb-2 flex items-center gap-2 text-sm font-semibold dark:text-bodydark">
+            <Hash className="h-4 w-4 text-primary" /> Suffix Code
+          </label>
+          <input
+            name="suffix"
+            value={form.suffix}
+            onChange={handleChange}
+            className="border-gray-300 w-full rounded-lg border px-4 py-2 text-sm shadow-sm focus:border-primary focus:ring focus:ring-primary/30 dark:border-form-strokedark dark:bg-form-input"
+          />
+        </div>
+
+        {/* Serial Report */}
+        <div className="bg-gray-50 dark:bg-gray-800 mt-8 rounded-lg p-4 shadow-inner">
+          <h2 className="text-gray-800 mb-3 flex items-center gap-2 text-base font-semibold dark:text-white">
+            <FileSpreadsheet className="h-4 w-4 text-primary" /> Serial Report
+          </h2>
+          {serials.length > 0 ? (
+            <div className="border-gray-200 dark:border-gray-700 dark:bg-gray-900 h-64 overflow-y-auto rounded-lg border bg-white p-3 text-sm">
+              <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
                 {serials.map((serial, index) => (
-                  <li key={index}>{serial}</li>
+                  <li
+                    key={index}
+                    className="bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200 rounded-md px-2 py-1 text-center text-xs font-medium"
+                  >
+                    {serial}
+                  </li>
                 ))}
               </ul>
-            ) : (
-              <p>No serials generated yet.</p>
-            )}
-          </div>
-          <div className="flex justify-end gap-4 pt-4 text-right">
+            </div>
+          ) : (
+            <p className="text-gray-500 flex items-center gap-2 text-sm">
+              <AlertTriangle className="h-4 w-4 text-danger" /> No serials
+              generated yet.
+            </p>
+          )}
+        </div>
+
+        {/* Buttons */}
+        <div className="mt-6 flex justify-end gap-4">
+          <button
+            type="button"
+            onClick={() => setIsGenerateSerials(false)}
+            className="bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-medium transition"
+          >
+            <XCircle className="h-4 w-4" /> Cancel
+          </button>
+          {!isGenerateSerials ? (
             <button
               type="button"
-              className="w-40 rounded-lg bg-graydark px-2 py-2 text-sm text-white hover:bg-graydark"
-              onClick={() => {setIsGenerateSerials(false);}}
+              onClick={handleGenerateSerials}
+              className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-white transition hover:bg-primary/90"
             >
-              Cancel
+              <PlusSquare className="h-4 w-4" /> Generate Serials
             </button>
-            {!isGenerateSerials && (
-              <button
-                type="button"
-                className="w-40 rounded-lg bg-blue-500 px-2 py-2 text-sm text-white hover:bg-blue-400"
-                onClick={handleGenerateSerials}
-              >
-                Generate Serials
-              </button>
-            )}
-            {isGenerateSerials && (
-              <button
-                type="button"
-                className="w-40 rounded-lg bg-blue-500 px-2 py-2 text-sm text-white hover:bg-blue-400"
-                onClick={handlesubmit}
-              >
-                Submit
-              </button>
-            )}
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handlesubmit}
+              disabled={submitting}
+              className={`flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-medium text-white transition ${
+                submitting ? "bg-green-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-500"
+              }`}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4" /> Submit
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </>
+
+    // <>
+    //   <ToastContainer position="top-center" />
+    //   <Breadcrumb pageName="Generate Serials" parentName="Device Management" />
+
+    //   <div className="rounded-lg bg-white p-6 mt-6 shadow-md dark:bg-boxdark">
+    //     {/* Product & Process */}
+    //     <div className="grid gap-6 sm:grid-cols-2">
+    //       <div>
+    //         <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-bodydark">
+    //           Product Type
+    //         </label>
+    //         <select
+    //           value={productId || ""}
+    //           disabled
+    //           className="w-full rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 disabled:cursor-not-allowed dark:border-form-strokedark dark:bg-form-input"
+    //         >
+    //           <option value="">Please Select</option>
+    //           {products?.map((product, index) => (
+    //             <option key={index} value={product._id}>
+    //               {product.name}
+    //             </option>
+    //           ))}
+    //         </select>
+    //       </div>
+
+    //       <div>
+    //         <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-bodydark">
+    //           Process Type
+    //         </label>
+    //         <select
+    //           value={processId || ""}
+    //           disabled
+    //           className="w-full rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 disabled:cursor-not-allowed dark:border-form-strokedark dark:bg-form-input"
+    //         >
+    //           <option value="">Please Select</option>
+    //           {processes?.map((process) => (
+    //             <option key={process._id} value={process._id}>
+    //               {process.name}
+    //             </option>
+    //           ))}
+    //         </select>
+    //       </div>
+    //     </div>
+
+    //     {/* Prefix, Suffix & Serial Inputs */}
+    //     <div className="mt-6 grid gap-6 sm:grid-cols-2">
+    //       <div>
+    //         <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-bodydark">
+    //           Prefix Code
+    //         </label>
+    //         <input
+    //           name="prefix"
+    //           value={form.prefix}
+    //           onChange={handleChange}
+    //           className="w-full rounded-md border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 dark:border-form-strokedark dark:bg-form-input"
+    //         />
+    //       </div>
+
+    //       <div>
+    //         <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-bodydark">
+    //           No. of Serials Required
+    //         </label>
+    //         <input
+    //           type="number"
+    //           name="noOfSerialRequired"
+    //           max={5000}
+    //           value={form.noOfSerialRequired}
+    //           onChange={handleChange}
+    //           className="w-full rounded-md border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 dark:border-form-strokedark dark:bg-form-input"
+    //         />
+    //       </div>
+    //     </div>
+
+    //     {/* Zero Toggle & Suffix */}
+    //     <div className="mt-6 flex items-center gap-4">
+    //       <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-gray-700 dark:text-bodydark">
+    //         <input
+    //           type="checkbox"
+    //           checked={enableZero}
+    //           onChange={() => setEnabledZero(!enableZero)}
+    //           className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+    //         />
+    //         Add Leading Zeros
+    //       </label>
+    //       {enableZero && (
+    //         <input
+    //           type="number"
+    //           name="noOfZeroRequired"
+    //           max={10}
+    //           value={form.noOfZeroRequired}
+    //           onChange={handleChange}
+    //           className="w-20 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 dark:border-form-strokedark dark:bg-form-input"
+    //         />
+    //       )}
+    //     </div>
+
+    //     <div className="mt-6">
+    //       <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-bodydark">
+    //         Suffix Code
+    //       </label>
+    //       <input
+    //         name="suffix"
+    //         value={form.suffix}
+    //         onChange={handleChange}
+    //         className="w-full rounded-md border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 dark:border-form-strokedark dark:bg-form-input"
+    //       />
+    //     </div>
+
+    //     {/* Serial Report */}
+    //     <div className="mt-8 rounded-md bg-gray-50 p-4 shadow-inner dark:bg-gray-800">
+    //       <h2 className="mb-3 text-base font-semibold text-gray-800 dark:text-white">
+    //         Serial Report
+    //       </h2>
+    //       {serials.length > 0 ? (
+    //         <div className="h-64 overflow-y-auto rounded-md border border-gray-200 bg-white p-3 text-sm dark:border-gray-700 dark:bg-gray-900">
+    //           <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+    //             {serials.map((serial, index) => (
+    //               <li
+    //                 key={index}
+    //                 className="rounded-md bg-gray-100 px-2 py-1 text-center text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200"
+    //               >
+    //                 {serial}
+    //               </li>
+    //             ))}
+    //           </ul>
+    //         </div>
+    //       ) : (
+    //         <p className="text-sm text-gray-500">No serials generated yet.</p>
+    //       )}
+    //     </div>
+
+    //     {/* Buttons */}
+    //     <div className="mt-6 flex justify-end gap-4">
+    //       <button
+    //         type="button"
+    //         onClick={() => setIsGenerateSerials(false)}
+    //         className="rounded-md bg-gray-200 px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+    //       >
+    //         Cancel
+    //       </button>
+    //       {!isGenerateSerials ? (
+    //         <button
+    //           type="button"
+    //           onClick={handleGenerateSerials}
+    //           className="rounded-md bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-500"
+    //         >
+    //           Generate Serials
+    //         </button>
+    //       ) : (
+    //         <button
+    //           type="button"
+    //           onClick={handlesubmit}
+    //           className="rounded-md bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-500"
+    //         >
+    //           Submit
+    //         </button>
+    //       )}
+    //     </div>
+    //   </div>
+    // </>
   );
 };
 

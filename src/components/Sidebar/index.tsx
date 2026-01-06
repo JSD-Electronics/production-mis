@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { getUseTypeByType,getAllMenus } from "../../lib/api";
+import { getUseTypeByType, getAllMenus } from "../../lib/api";
 import Image from "next/image";
 import SidebarItem from "@/components/Sidebar/SidebarItem";
 import ClickOutside from "@/components/ClickOutside";
@@ -12,21 +12,22 @@ interface SidebarProps {
   setSidebarOpen: (arg: boolean) => void;
 }
 const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
-  const[menuGroups,setMenuGroups] = useState([
-      {
-        name: "MENU",
-        menuItems: [],
-      }]);
+  const [menuGroups, setMenuGroups] = useState([
+    {
+      name: "MENU",
+      menuItems: [],
+    },
+  ]);
   const pathname = usePathname();
-  const [userType,setUserType] = useState("");
-  const [permission,setPermission] = useState([]); 
+  const [userType, setUserType] = useState("");
+  const [permission, setPermission] = useState([]);
   const [pageName, setPageName] = useLocalStorage("selectedMenu", "dashboard");
   React.useEffect(() => {
     const userDetails = JSON.parse(localStorage.getItem("userDetails"));
     getAccessPermission(userDetails.userType);
     getMenus(userDetails);
-  }, []);   
-  const getMenus = async (user:any) =>{
+  }, []);
+  const getMenus = async (user: any) => {
     try {
       let result = await getAllMenus();
       const menuItems = [];
@@ -35,10 +36,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
           if (group.name === "MENU") {
             return {
               ...group,
-              menuItems: [
-                ...menuItems,
-                ...result.getMenu[0].menus,
-              ],
+              menuItems: [...menuItems, ...result.getMenu[0].menus],
             };
           }
           return group;
@@ -54,24 +52,23 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
       setPermission([]);
       let result = await getUseTypeByType();
       setUserType(userType);
-      setPermission(result.userType[0].roles); 
+      setPermission(result.userType[0].roles);
     } catch (error) {
       console.error("Failed to fetch room plan:", error);
     }
   };
   return (
     <ClickOutside onClick={() => setSidebarOpen(false)}>
-      
       <aside
-        className={`fixed left-0 top-0 z-9999 flex h-screen w-72.5 flex-col overflow-y-hidden bg-black duration-300 ease-linear dark:bg-boxdark lg:translate-x-0 ${
+        className={`fixed left-0 top-0 z-9999 flex h-screen w-72.5 flex-col overflow-y-hidden bg-gradient-to-b from-[#0f2a3d] to-[#0b1d2b] shadow-xl ring-1 ring-white/5 duration-300 ease-linear dark:from-[#0f2a3d] dark:to-[#0b1d2b] lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* <!-- SIDEBAR HEADER --> */}
-        <div className="flex items-center justify-center gap-2 px-6 py-5.5 lg:py-6.5">
+        <div className="flex items-center justify-center gap-2 px-6 py-5 lg:py-6">
           <Link
             href="/"
-            className="flex items-center gap-2 text-2xl font-medium text-gray"
+            className="flex items-center gap-2 text-2xl font-semibold text-white"
           >
             <Image
               width={32}
@@ -80,7 +77,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
               alt="Logo"
               priority
             />
-            Production MIS
+            <span className="tracking-tight">Production MIS</span>
           </Link>
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -88,7 +85,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
             className="block lg:hidden"
           >
             <svg
-              className="fill-current"
+              className="fill-white/80"
               width="20"
               height="18"
               viewBox="0 0 20 18"
@@ -106,20 +103,23 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
           <nav className="mt-1 px-4 py-4 lg:mt-1 lg:px-6">
             {menuGroups.map((group, groupIndex) => (
               <div key={groupIndex}>
-                <h3 className="mb-4 ml-4 text-sm font-semibold text-bodydark2">
+                <h3 className="mb-3 ml-4 text-xs font-semibold uppercase tracking-wider text-white/60">
                   {group.name}
                 </h3>
                 <ul className="mb-6 flex flex-col gap-1.5">
-                {group.menuItems.map((menuItem, menuIndex) => {
-                    const transformedLabel = menuItem.label.replace(/\s+/g, '_').toLowerCase();
-                    const hasPermission = permission[transformedLabel]?.[userType.toLowerCase()];
+                  {group.menuItems.map((menuItem, menuIndex) => {
+                    const transformedLabel = menuItem.label
+                      .replace(/\s+/g, "_")
+                      .toLowerCase();
+                    const hasPermission =
+                      permission[transformedLabel]?.[userType.toLowerCase()];
                     return (
                       hasPermission && (
                         <SidebarItem
                           key={menuIndex}
                           item={menuItem}
                           pageName={pageName}
-                          permission ={permission}
+                          permission={permission}
                           userType={userType}
                           setPageName={setPageName}
                         />
@@ -132,6 +132,12 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
           </nav>
         </div>
       </aside>
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-[9998] bg-black/30 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
     </ClickOutside>
   );
 };

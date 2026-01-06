@@ -15,11 +15,13 @@ import Modal from "@/components/Modal/page";
 import { useRouter } from "next/navigation";
 import { Tooltip } from "react-tooltip";
 import { FiEdit, FiEye, FiPlus, FiTrash } from "react-icons/fi";
+import { Search, Trash2, XCircle, Activity, CheckCircle, Clock, PauseCircle, Truck, PackageCheck } from "lucide-react";
 import { BallTriangle } from "react-loader-spinner";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import "./process.css";
+import CardDataStats from "@/components/CardDataStats";
 const ViewProcess = () => {
   const [showMarkAsCompletePopup, setShowMarkAsCompletePopup] =
     React.useState(false);
@@ -34,6 +36,7 @@ const ViewProcess = () => {
   const [id, setID] = useState("");
   const [orderConfirmationNo, setOrderConfirmationNo] = useState("");
   const [ocNoArr, setOcNoArr] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const closeAddQuantityModel = () => {
     setIsAddQuantityModel(false);
   };
@@ -70,7 +73,6 @@ const ViewProcess = () => {
       getProcess();
       toast.success("Process deleted successfully!");
       setShowPopup(false);
-      
     } catch (error) {
       console.error("Error deleting Process:", error);
     }
@@ -110,6 +112,7 @@ const ViewProcess = () => {
     try {
       let formData = new FormData();
       formData.append("quantity", addMoreQuantity);
+      formData.append("status" , 'partially_issued');
       let response = await updateQuantity(formData, id);
       let userDetails = JSON.parse(localStorage.getItem("userDetails"));
       const formData3 = new FormData();
@@ -172,15 +175,10 @@ const ViewProcess = () => {
     }
   };
   const handleSubmitFilter = async () => {
-    let data = shiftData.filter((value, index) => {
-      value.orderConfirmationNo != orderConfirmationNo;
-    });
-    setShiftData(data);
+    return;
   };
   const handleClearFilter = async () => {
     setOrderConfirmationNo("");
-    setShiftData([]);
-    getProcess();
   };
 
   const columns = [
@@ -221,7 +219,7 @@ const ViewProcess = () => {
           <>
             <button
               onClick={() => handleViewPlaning(row.planing._id)}
-              className="rounded bg-blue-500 px-3 py-1 text-white"
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1 text-white shadow-sm transition hover:bg-primary/90"
               data-tooltip-id="view-planing-tooltip"
               data-tooltip-content="View Planning"
             >
@@ -233,7 +231,7 @@ const ViewProcess = () => {
           <>
             <button
               onClick={() => handleAddPlaning(row?._id)}
-              className="rounded bg-blue-500 px-3 py-1 text-white"
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1 text-white shadow-sm transition hover:bg-primary/90"
               data-tooltip-id="add-planing-tooltip"
               data-tooltip-content="Add Planning"
             >
@@ -261,34 +259,30 @@ const ViewProcess = () => {
     },
     {
       name: "Dispatch Status",
-      selector: (row: Shifts) => (
-        <span
-          className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-normal break-words ${
-            row?.dispatchStatus === "dispatched"
-              ? "text-green-100"
-              : "text-danger"
-          }`}
-        >
-          {row?.dispatchStatus}
-        </span>
-      ),
+      selector: (row: Shifts) => {
+        const dispatched = row?.dispatchStatus === "dispatched";
+        const cls = dispatched ? "bg-green-500 text-white" : "bg-danger text-white";
+        return (
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${cls}`}>
+            <Truck size={12} /> {row?.dispatchStatus}
+          </span>
+        );
+      },
       sortable: true,
     },
     {
       name: "Delivery Status",
-      selector: (row: Shifts) => (
-        <span
-          className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-normal break-words ${
-            row?.deliverStatus === "delivered"
-              ? "text-green-100"
-              : "text-yellow-700"
-          }`}
-        >
-          {row?.deliverStatus}
-        </span>
-      ),
+      selector: (row: Shifts) => {
+        const delivered = row?.deliverStatus === "delivered";
+        const cls = delivered ? "bg-green-500 text-white" : "bg-yellow-500 text-white";
+        return (
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${cls}`}>
+            <PackageCheck size={12} /> {row?.deliverStatus}
+          </span>
+        );
+      },
       sortable: true,
-    }, 
+    },
     {
       name: "Mark As Complete",
       selector: (row: Shifts) =>
@@ -296,7 +290,7 @@ const ViewProcess = () => {
           <button
             type="button"
             onClick={() => handleMarkAsCompleteButton(row?._id)}
-            className="flex items-center justify-between gap-1 rounded-md bg-green-500 px-3 py-1 text-white transition hover:bg-green-500"
+            className="flex items-center justify-between gap-1 rounded-md bg-green-600 px-3 py-1 text-white transition hover:bg-green-700"
           >
             <svg
               width="15px"
@@ -334,7 +328,7 @@ const ViewProcess = () => {
           <button
             type="button"
             onClick={() => handleAddQuantity(row._id)}
-            className="flex items-center justify-between gap-1 rounded-md bg-blue-700 px-3 py-1 text-white transition hover:bg-blue-600"
+            className="flex items-center justify-between gap-1 rounded-md bg-primary px-3 py-1 text-white transition hover:bg-primary/90"
           >
             <svg
               fill="#ffffff"
@@ -362,53 +356,31 @@ const ViewProcess = () => {
       selector: (row: Shifts) => row?.status,
       sortable: true,
       cell: (row: Inventory) => {
-        const statusStyles = {
-          waiting_schedule: {
-            label: "Waiting Schedule",
-            backgroundColor: "#f39c12",
-          },
-          Waiting_Kits_allocation: {
-            label: "Waiting Kits Allocation",
-            backgroundColor: "#6c757d",
-          },
-          Waiting_Kits_approval: {
-            label: "Waiting Kits Approval",
-            backgroundColor: "#17a2b8",
-          },
-          active: {
-            label: "Active",
-            backgroundColor: "#ffc107",
-          },
-          down_time_hold: {
-            label: "Down Time Hold",
-            backgroundColor: "#dc3545",
-          },
-          completed: {
-            label: "Completed",
-            backgroundColor: "#248f0d",
-          },
-          default: {
-            label: "Process Created",
-            backgroundColor: "#343a40",
-          },
-        };
+        const statusClasses = {
+          waiting_schedule: "bg-orange-500",
+          Waiting_Kits_allocation: "bg-gray-600",
+          Waiting_Kits_approval: "bg-sky-600",
+          active: "bg-amber-500",
+          down_time_hold: "bg-red-600",
+          completed: "bg-green-600",
+          default: "bg-gray-800",
+        } as Record<string, string>;
 
         const status = row?.status;
-        const { label, backgroundColor } =
-          statusStyles[status] || statusStyles.default;
+        const labelMap = {
+          waiting_schedule: "Waiting Schedule",
+          Waiting_Kits_allocation: "Waiting Kits Allocation",
+          Waiting_Kits_approval: "Waiting Kits Approval",
+          active: "Active",
+          down_time_hold: "Down Time Hold",
+          completed: "Completed",
+          default: "Process Created",
+        } as Record<string, string>;
+        const cls = statusClasses[status] || statusClasses.default;
+        const label = labelMap[status] || labelMap.default;
 
         return (
-          <span
-            style={{
-              backgroundColor,
-              color: "#fff",
-              padding: "5px 5px",
-              borderRadius: "5px",
-              fontSize: "11px",
-              fontWeight: "bold",
-              textAlign: "center",
-            }}
-          >
+          <span className={`inline-block rounded px-2.5 py-1 text-[11px] font-semibold text-white ${cls}`}>
             {label}
           </span>
         );
@@ -417,28 +389,30 @@ const ViewProcess = () => {
     {
       name: "Actions",
       cell: (row: Shifts) => (
-        <div className="flex items-center space-x-1">
-          {/* Edit Button */}
+        <div className="flex items-center gap-1">
+          {/* Logs Button */}
           <button
             type="button"
             onClick={() => handleLogs(row._id)}
-            className="bg-blue hover:bg-blue flex transform items-center justify-center rounded-full p-2 text-white shadow-lg transition-transform hover:scale-105"
+            className="flex items-center justify-center rounded-full bg-blue-600 p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
           >
-            <svg width="14px" height="14px" viewBox="0 0 16 16" fill="none">
-              <g fill="#000000">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="#000">
+              <g fill="currentColor">
                 <path d="M5.314 1.256a.75.75 0 01-.07 1.058L3.889 3.5l1.355 1.186a.75.75 0 11-.988 1.128l-2-1.75a.75.75 0 010-1.128l2-1.75a.75.75 0 011.058.07zM7.186 1.256a.75.75 0 00.07 1.058L8.611 3.5 7.256 4.686a.75.75 0 10.988 1.128l2-1.75a.75.75 0 000-1.128l-2-1.75a.75.75 0 00-1.058.07zM2.75 7.5a.75.75 0 000 1.5h10.5a.75.75 0 000-1.5H2.75zM2 11.25a.75.75 0 01.75-.75h10.5a.75.75 0 010 1.5H2.75a.75.75 0 01-.75-.75zM2.75 13.5a.75.75 0 000 1.5h6.5a.75.75 0 000-1.5h-6.5z" />
               </g>
             </svg>
           </button>
-          {row?.status != "completed" && (
+
+          {row?.status !== "completed" && (
             <>
+              {/* Edit Button */}
               <button
                 onClick={() => handleEdit(row._id)}
-                className="transform rounded-full bg-blue-500 p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
+                className="flex items-center justify-center rounded-full bg-blue-500 p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
                 data-tooltip-id="edit-process-tooltip"
                 data-tooltip-content="Edit Process"
               >
-                <FiEdit size={16} />
+                <FiEdit size={12} />
               </button>
               <Tooltip id="edit-process-tooltip" place="top" />
 
@@ -447,190 +421,470 @@ const ViewProcess = () => {
                 onClick={() => handlepopup(row._id)}
                 data-tooltip-id="delete-process-tooltip"
                 data-tooltip-content="Delete Process"
-                className="transform rounded-full bg-danger p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-danger"
+                className="hover:bg-red-700 flex items-center justify-center rounded-full bg-danger p-2 text-white shadow-lg transition-transform hover:scale-105"
               >
-                <FiTrash size={16} />
+                <FiTrash size={12} />
               </button>
+              <Tooltip id="delete-process-tooltip" place="top" />
             </>
           )}
-          <Tooltip id="delete-process-tooltip" place="top" />
         </div>
       ),
     },
   ];
 
+  const displayData = React.useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return shiftData
+      .filter((row: any) =>
+        orderConfirmationNo
+          ? String(row?.orderConfirmationNo) === String(orderConfirmationNo)
+          : true,
+      )
+      .filter((row: any) => {
+        if (!q) return true;
+        const fields = [
+          row?.orderConfirmationNo,
+          row?.processID,
+          row?.productName,
+          row?.name,
+        ];
+        return fields.some((f) =>
+          f ? String(f).toLowerCase().includes(q) : false,
+        );
+      });
+  }, [shiftData, searchQuery, orderConfirmationNo]);
+
+  const summary = React.useMemo(() => {
+    const s = {
+      active: 0,
+      completed: 0,
+      waiting_schedule: 0,
+      down_time_hold: 0,
+    };
+    shiftData.forEach((r: any) => {
+      if (r?.status === "active") s.active++;
+      else if (r?.status === "completed") s.completed++;
+      else if (r?.status === "waiting_schedule") s.waiting_schedule++;
+      else if (r?.status === "down_time_hold") s.down_time_hold++;
+    });
+    return s;
+  }, [shiftData]);
+
   return (
-    <div className="bg-gray-100 min-h-screen p-6">
+    <div className="bg-gray-50 min-h-screen">
+      {/* Breadcrumb */}
       <Breadcrumb pageName="View Process" parentName="Process" />
-      <div className="mt-6 rounded-lg bg-white p-6 shadow-lg">
-        <ToastContainer
-          position="top-center"
-          closeOnClick
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-        />
+
+      {/* Main Card */}
+      <div className="mt-6 rounded-xl bg-white p-5 shadow-xl ring-1 ring-black/5 md:p-6">
+        <ToastContainer position="top-center" closeOnClick pauseOnHover />
+
         {loading ? (
-          <div className="flex justify-center">
-            <BallTriangle
-              height={100}
-              width={100}
-              color="#4fa94d"
-              ariaLabel="loading"
-            />
+          <div className="flex justify-center py-12">
+            <BallTriangle height={80} width={80} color="#3B82F6" />
           </div>
         ) : (
           <>
-            <div className="flex justify-between">
-              <div className="my-1 flex items-center justify-center gap-2">
+            {/* 🔹 Top Action Bar */}
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              {/* Left: Filter */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <select
                   value={orderConfirmationNo || ""}
                   onChange={(e) => setOrderConfirmationNo(e.target.value)}
-                  className="h-10 w-full rounded-lg border border-stroke bg-transparent px-4 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
+                  className="h-10 w-full rounded-lg border border-stroke bg-white px-4 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30 shadow-sm dark:border-strokedark dark:bg-form-input sm:w-56"
                 >
-                  <option value="" className="text-body dark:text-bodydark">
-                    Please Select
-                  </option>
+                  <option value="">Please Select</option>
                   {ocNoArr.map((oc, index) => (
-                    <option
-                      key={index}
-                      value={oc?.orderConfirmationNo}
-                      className="text-body dark:text-bodydark"
-                    >
+                    <option key={index} value={oc?.orderConfirmationNo}>
                       {oc?.orderConfirmationNo}
                     </option>
                   ))}
                 </select>
-                <button
-                  onClick={handleSubmitFilter}
-                  className={`h-8 rounded bg-primary px-3 font-semibold text-white`}
-                >
-                  <svg
-                    width="15px"
-                    height="15px"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="#ffffff"
-                  >
-                    <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                    <g
-                      id="SVGRepo_tracerCarrier"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    ></g>
-                    <g id="SVGRepo_iconCarrier">
-                      {" "}
-                      <path
-                        d="M15.7955 15.8111L21 21M18 10.5C18 14.6421 14.6421 18 10.5 18C6.35786 18 3 14.6421 3 10.5C3 6.35786 6.35786 3 10.5 3C14.6421 3 18 6.35786 18 10.5Z"
-                        stroke="#ffffff"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      ></path>{" "}
-                    </g>
-                  </svg>
-                </button>
-                {orderConfirmationNo != "" && (
+
+                {/* Search + Clear */}
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={handleClearFilter}
-                    className="h-8 rounded px-2 font-semibold text-info underline"
+                    onClick={handleSubmitFilter}
+                    className="flex h-9 items-center justify-center rounded bg-primary px-3 text-white shadow-sm transition hover:bg-primary/90"
                   >
-                    clear
+                    <Search size={16} />
                   </button>
+
+                  {/* {orderConfirmationNo && (
+                    <button
+                      onClick={handleClearFilter}
+                      className="text-info flex items-center gap-1 text-sm font-semibold hover:underline"
+                    >
+                      <XCircle size={16} /> Clear
+                    </button>
+                  )} */}
+                </div>
+                {(orderConfirmationNo || searchQuery) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {orderConfirmationNo && (
+                      <span className="group inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary ring-1 ring-primary/30 shadow-sm">
+                        OC: {orderConfirmationNo}
+                        <button
+                          onClick={() => setOrderConfirmationNo("")}
+                          className="rounded-full bg-primary/20 p-0.5 text-primary transition group-hover:bg-primary/30"
+                          aria-label="Clear OC filter"
+                        >
+                          <XCircle size={14} />
+                        </button>
+                      </span>
+                    )}
+                    {searchQuery && (
+                      <span className="group inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700 ring-1 ring-gray-300 shadow-sm">
+                        Search: {searchQuery}
+                        <button
+                          onClick={() => setSearchQuery("")}
+                          className="rounded-full bg-gray-200 p-0.5 text-gray-700 transition group-hover:bg-gray-300"
+                          aria-label="Clear search"
+                        >
+                          <XCircle size={14} />
+                        </button>
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
-              <div className="mb-4 mt-4 text-right">
+
+              {/* Right: Delete */}
+              <div className="text-right">
                 <button
                   onClick={handleMultipleRowsDelete}
                   disabled={selectedRows.length === 0}
-                  className={`rounded bg-danger px-4 py-2 font-semibold text-white ${
+                  className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white transition ${
                     selectedRows.length === 0
-                      ? "cursor-not-allowed opacity-50"
-                      : "hover:bg-red-700"
+                      ? "cursor-not-allowed bg-danger/50"
+                      : "bg-danger hover:bg-danger/90"
                   }`}
                 >
-                  Delete
+                  <Trash2 size={16} /> Delete
                 </button>
               </div>
             </div>
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <CardDataStats title="Active Processes" total={`${summary.active}`} rate="">
+                <Activity className="text-primary" size={22} />
+              </CardDataStats>
+              <CardDataStats title="Completed" total={`${summary.completed}`} rate="">
+                <CheckCircle className="text-green-600" size={22} />
+              </CardDataStats>
+              <CardDataStats title="Waiting Schedule" total={`${summary.waiting_schedule}`} rate="">
+                <Clock className="text-amber-500" size={22} />
+              </CardDataStats>
+              <CardDataStats title="On Hold" total={`${summary.down_time_hold}`} rate="">
+                <PauseCircle className="text-red-600" size={22} />
+              </CardDataStats>
+            </div>
 
-            <DataTable
-              className="dark:bg-bodyDark"
-              columns={columns}
-              data={shiftData}
-              pagination
-              selectableRows
-              onSelectedRowsChange={handleRowSelected}
-              highlightOnHover
-              pointerOnHover
-              customStyles={{
-                headCells: {
-                  style: {
-                    fontWeight: "bold",
-                    backgroundColor: "#f8f9fa",
-                    padding: "12px",
-                  },
-                },
-                rows: {
-                  style: {
-                    minHeight: "72px",
-                    "&:hover": {
-                      backgroundColor: "#f1f5f9",
+            {/* 🔹 Table */}
+            <div className="mt-6 overflow-x-auto rounded-xl border border-gray-200 bg-white custom-scroll">
+              <DataTable
+                className="min-w-full text-sm"
+                columns={columns}
+                data={displayData}
+                pagination
+                paginationRowsPerPageOptions={[10, 25, 50, 100]}
+                selectableRows
+                selectableRowsHighlight
+                onSelectedRowsChange={handleRowSelected}
+                highlightOnHover
+                pointerOnHover
+                striped
+                dense
+                fixedHeader
+                fixedHeaderScrollHeight="500px"
+                subHeader
+                subHeaderAlign="left"
+                subHeaderWrap
+                subHeaderComponent={
+                  <div className="flex w-full items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-2">
+                    <div className="relative w-64">
+                      <input
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search..."
+                        className="h-9 w-full rounded-lg border border-stroke bg-white pl-9 pr-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30 shadow-sm"
+                      />
+                      <Search
+                        size={16}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-gradient-to-r from-amber-100 to-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200 shadow-sm">
+                        Active: {summary.active}
+                      </span>
+                      <span className="rounded-full bg-gradient-to-r from-green-100 to-green-50 px-3 py-1 text-xs font-semibold text-green-700 ring-1 ring-green-200 shadow-sm">
+                        Completed: {summary.completed}
+                      </span>
+                      <span className="rounded-full bg-gradient-to-r from-orange-100 to-orange-50 px-3 py-1 text-xs font-semibold text-orange-700 ring-1 ring-orange-200 shadow-sm">
+                        Waiting: {summary.waiting_schedule}
+                      </span>
+                      <span className="rounded-full bg-gradient-to-r from-red-100 to-red-50 px-3 py-1 text-xs font-semibold text-red-700 ring-1 ring-red-200 shadow-sm">
+                        Hold: {summary.down_time_hold}
+                      </span>
+                    </div>
+                  </div>
+                }
+                customStyles={{
+                  headCells: {
+                    style: {
+                      fontWeight: "600",
+                      backgroundColor: "#f9fafb",
+                      color: "#111827",
+                      padding: "12px",
+                      borderBottom: "1px solid #e5e7eb",
+                      boxShadow: "inset 0 -1px 0 0 rgba(229,231,235,1)",
                     },
                   },
-                },
-                cells: {
-                  style: {
-                    wordBreak: "break-word",
-                    overflowWrap: "break-word",
-                    whiteSpace: "normal",
-                    lineHeight: "1.4",
-                    maxWidth: "200px",
+                  rows: {
+                    style: {
+                      minHeight: "54px",
+                      borderBottom: "1px solid #f3f4f6",
+                      "&:hover": {
+                        backgroundColor: "#f8fafc",
+                      },
+                    },
                   },
-                },
-              }}
-            />
+                  cells: {
+                    style: {
+                      wordBreak: "break-word",
+                      whiteSpace: "normal",
+                      lineHeight: "1.4",
+                      maxWidth: "220px",
+                      padding: "12px",
+                    },
+                  },
+                }}
+                conditionalRowStyles={[
+                  {
+                    when: (row: any) => row?.status === "completed",
+                    style: { backgroundColor: "#f0fdf4", borderLeft: "3px solid #22c55e" },
+                  },
+                  {
+                    when: (row: any) => row?.status === "active",
+                    style: { backgroundColor: "#fffbeb", borderLeft: "3px solid #f59e0b" },
+                  },
+                  {
+                    when: (row: any) => row?.status === "down_time_hold",
+                    style: { backgroundColor: "#fef2f2", borderLeft: "3px solid #ef4444" },
+                  },
+                ]}
+              />
+            </div>
           </>
         )}
+
+        {/* 🔹 Popups */}
         {showMarkAsCompletePopup && (
           <ConfirmationPopup
-            message="Are you sure you want to Mark as Completed this Process?"
-            onConfirm={() => handleSubmitMarkAsCompleted()}
+            message="Are you sure you want to mark this process as completed?"
+            onConfirm={handleSubmitMarkAsCompleted}
             onCancel={() => setShowMarkAsCompletePopup(false)}
           />
         )}
         {showPopup && (
           <ConfirmationPopup
             message="Are you sure you want to delete this item?"
-            onConfirm={() => handleDelete()}
+            onConfirm={handleDelete}
             onCancel={() => setShowPopup(false)}
           />
         )}
       </div>
+
+      {/* 🔹 Modal: Add Quantity */}
       <Modal
         isOpen={isAddQuantityModel}
         onSubmit={handleSubmitQuantity}
         onClose={closeAddQuantityModel}
-        title={"ADD Quantity Production"}
+        title="Add Quantity Production"
       >
         <div className="pb-3">
-          <div className="justify-between">
-            <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-              Quantity
-            </label>
-            <div className="flex items-center  gap-3">
-              <input
-                type="number"
-                value={addMoreQuantity}
-                onChange={(e) => setMoreQuantity(e.target.value)}
-                placeholder="Enter Quantity"
-                className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-              />
-            </div>
-          </div>
+          <label className="text-gray-800 mb-2 block text-sm font-medium dark:text-white">
+            Quantity
+          </label>
+          <input
+            type="number"
+            value={addMoreQuantity}
+            onChange={(e) => setMoreQuantity(e.target.value)}
+            placeholder="Enter Quantity"
+            className="w-full rounded-lg border border-stroke px-4 py-2 outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+          />
         </div>
       </Modal>
     </div>
+    // <div className="bg-gray-100 min-h-screen p-4 md:p-6">
+    //   <Breadcrumb pageName="View Process" parentName="Process" />
+
+    //   <div className="mt-6 rounded-lg bg-white p-4 shadow-lg md:p-6">
+    //     <ToastContainer
+    //       position="top-center"
+    //       closeOnClick
+    //       pauseOnFocusLoss
+    //       draggable
+    //       pauseOnHover
+    //     />
+
+    //     {loading ? (
+    //       <div className="flex justify-center">
+    //         <BallTriangle
+    //           height={100}
+    //           width={100}
+    //           color="#4fa94d"
+    //           ariaLabel="loading"
+    //         />
+    //       </div>
+    //     ) : (
+    //       <>
+    //         {/* 🔹 Filter + Action Bar */}
+    //         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    //           {/* Left: Select + Filter */}
+    //           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+    //             <select
+    //               value={orderConfirmationNo || ""}
+    //               onChange={(e) => setOrderConfirmationNo(e.target.value)}
+    //               className="h-10 w-full rounded-lg border border-stroke bg-white px-4 text-sm outline-none transition focus:border-primary dark:border-strokedark dark:bg-form-input sm:w-56"
+    //             >
+    //               <option value="">Please Select</option>
+    //               {ocNoArr.map((oc, index) => (
+    //                 <option key={index} value={oc?.orderConfirmationNo}>
+    //                   {oc?.orderConfirmationNo}
+    //                 </option>
+    //               ))}
+    //             </select>
+
+    //             <div className="flex items-center gap-2">
+    //               <button
+    //                 onClick={handleSubmitFilter}
+    //                 className="flex h-9 items-center justify-center rounded bg-primary px-3 text-white hover:bg-primary/90"
+    //               >
+    //                 <svg
+    //                   width="16"
+    //                   height="16"
+    //                   viewBox="0 0 24 24"
+    //                   fill="none"
+    //                   stroke="currentColor"
+    //                 >
+    //                   <path
+    //                     d="M15.7955 15.8111L21 21M18 10.5C18 14.6421 14.6421 18 10.5 18C6.35786 18 3 14.6421 3 10.5C3 6.35786 6.35786 3 10.5 3C14.6421 3 18 6.35786 18 10.5Z"
+    //                     strokeWidth="2"
+    //                     strokeLinecap="round"
+    //                     strokeLinejoin="round"
+    //                   />
+    //                 </svg>
+    //               </button>
+
+    //               {orderConfirmationNo && (
+    //                 <button
+    //                   onClick={handleClearFilter}
+    //                   className="text-info text-sm font-semibold underline"
+    //                 >
+    //                   Clear
+    //                 </button>
+    //               )}
+    //             </div>
+    //           </div>
+
+    //           {/* Right: Delete Button */}
+    //           <div className="text-right">
+    //             <button
+    //               onClick={handleMultipleRowsDelete}
+    //               disabled={selectedRows.length === 0}
+    //               className={`rounded px-4 py-2 text-sm font-semibold text-white transition ${
+    //                 selectedRows.length === 0
+    //                   ? "cursor-not-allowed bg-danger/50"
+    //                   : "hover:bg-red-700 bg-danger"
+    //               }`}
+    //             >
+    //               Delete
+    //             </button>
+    //           </div>
+    //         </div>
+
+    //         {/* 🔹 Table */}
+    //         <div className="mt-6 overflow-x-auto rounded-md">
+    //           <DataTable
+    //             className="min-w-full text-sm"
+    //             columns={columns}
+    //             data={shiftData}
+    //             pagination
+    //             selectableRows
+    //             onSelectedRowsChange={handleRowSelected}
+    //             highlightOnHover
+    //             pointerOnHover
+    //             customStyles={{
+    //               headCells: {
+    //                 style: {
+    //                   fontWeight: "bold",
+    //                   backgroundColor: "#f8f9fa",
+    //                   padding: "12px",
+    //                 },
+    //               },
+    //               rows: {
+    //                 style: {
+    //                   minHeight: "60px",
+    //                   "&:hover": {
+    //                     backgroundColor: "#f1f5f9",
+    //                   },
+    //                 },
+    //               },
+    //               cells: {
+    //                 style: {
+    //                   wordBreak: "break-word",
+    //                   whiteSpace: "normal",
+    //                   lineHeight: "1.4",
+    //                   maxWidth: "200px",
+    //                 },
+    //               },
+    //             }}
+    //           />
+    //         </div>
+    //       </>
+    //     )}
+
+    //     {/* 🔹 Popups */}
+    //     {showMarkAsCompletePopup && (
+    //       <ConfirmationPopup
+    //         message="Are you sure you want to Mark as Completed this Process?"
+    //         onConfirm={() => handleSubmitMarkAsCompleted()}
+    //         onCancel={() => setShowMarkAsCompletePopup(false)}
+    //       />
+    //     )}
+    //     {showPopup && (
+    //       <ConfirmationPopup
+    //         message="Are you sure you want to delete this item?"
+    //         onConfirm={() => handleDelete()}
+    //         onCancel={() => setShowPopup(false)}
+    //       />
+    //     )}
+    //   </div>
+
+    //   {/* 🔹 Modal */}
+    //   <Modal
+    //     isOpen={isAddQuantityModel}
+    //     onSubmit={handleSubmitQuantity}
+    //     onClose={closeAddQuantityModel}
+    //     title="Add Quantity Production"
+    //   >
+    //     <div className="pb-3">
+    //       <label className="text-gray-800 mb-2 block text-sm font-medium dark:text-white">
+    //         Quantity
+    //       </label>
+    //       <input
+    //         type="number"
+    //         value={addMoreQuantity}
+    //         onChange={(e) => setMoreQuantity(e.target.value)}
+    //         placeholder="Enter Quantity"
+    //         className="w-full rounded-lg border border-stroke px-4 py-2 outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+    //       />
+    //     </div>
+    //   </Modal>
+    // </div>
   );
 };
 

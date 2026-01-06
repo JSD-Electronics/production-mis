@@ -34,7 +34,7 @@ const DropdownUser = () => {
     <ClickOutside onClick={() => setDropdownOpen(false)} className="relative">
       <Link
         onClick={() => setDropdownOpen(!dropdownOpen)}
-        className="flex items-center gap-4"
+        className="flex items-center gap-4 hover:opacity-90"
         href="#"
       >
         <span className="hidden text-right lg:block">
@@ -44,7 +44,7 @@ const DropdownUser = () => {
           <span className="block text-xs">{userDetails.department}</span>
         </span>
 
-        <span className="h-12 w-12 overflow-hidden rounded-full">
+        <span className="h-12 w-12 overflow-hidden rounded-full ring-1 ring-white/30 dark:ring-white/20">
           <Image
             width={112}
             height={112}
@@ -58,7 +58,7 @@ const DropdownUser = () => {
           />
         </span>
         <svg
-          className="hidden fill-current sm:block"
+          className="hidden fill-current text-white/90 dark:text-white sm:block"
           width="12"
           height="8"
           viewBox="0 0 12 8"
@@ -74,19 +74,18 @@ const DropdownUser = () => {
         </svg>
       </Link>
 
-      {/* <!-- Dropdown Start --> */}
       {dropdownOpen && (
         <div
-          className={`absolute right-0 mt-4 flex w-62.5 flex-col rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark`}
+          className={`absolute right-0 mt-4 flex w-62.5 flex-col rounded-lg border border-stroke bg-white/90 backdrop-blur-md shadow-2xl ring-1 ring-black/5 dark:border-strokedark dark:bg-boxdark/90 dark:ring-white/10`}
         >
-          <ul className="flex flex-col gap-5 border-b border-stroke px-6 py-6 dark:border-strokedark">
+          <ul className="flex flex-col gap-4 border-b border-stroke px-6 py-6 dark:border-strokedark">
             <li>
               <Link
                 href={`/profile/${userDetails._id}`}
-                className="flex items-center gap-3.5 text-sm font-medium duration-300 ease-in-out hover:text-primary lg:text-base"
+                className="group flex items-center gap-3.5 text-sm font-medium duration-300 ease-in-out hover:text-primary lg:text-base"
               >
                 <svg
-                  className="fill-current"
+                  className="fill-current text-gray-600 dark:text-gray-300 group-hover:text-primary"
                   width="22"
                   height="22"
                   viewBox="0 0 22 22"
@@ -108,10 +107,10 @@ const DropdownUser = () => {
             <li>
               <Link
                 href="/settings"
-                className="flex items-center gap-3.5 text-sm font-medium duration-300 ease-in-out hover:text-primary lg:text-base"
+                className="group flex items-center gap-3.5 text-sm font-medium duration-300 ease-in-out hover:text-primary lg:text-base"
               >
                 <svg
-                  className="fill-current"
+                  className="fill-current text-gray-600 dark:text-gray-300 group-hover:text-primary"
                   width="22"
                   height="22"
                   viewBox="0 0 22 22"
@@ -132,11 +131,11 @@ const DropdownUser = () => {
             </li>
           </ul>
           <button
-            className="flex items-center gap-3.5 px-6 py-4 text-sm font-medium duration-300 ease-in-out hover:text-primary lg:text-base"
+            className="group flex items-center gap-3.5 px-6 py-4 text-sm font-medium duration-300 ease-in-out hover:text-primary lg:text-base"
             onClick={handleLogout}
           >
             <svg
-              className="fill-current"
+              className="fill-current text-gray-600 dark:text-gray-300 group-hover:text-primary"
               width="22"
               height="22"
               viewBox="0 0 22 22"

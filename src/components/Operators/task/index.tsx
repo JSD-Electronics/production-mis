@@ -13,10 +13,10 @@ const TaskComponent = () => {
   const [taskList, setTaskList] = useState([]);
   const [isOperatorAssignedKitModel, setOperatorAssignedKitModel] =
     useState(false);
-  const [selectRecievedId,setSelectedRecievedId] = useState("");
-  const [selectedProcessId,setSelectedProcessId] = useState("");
+  const [selectRecievedId, setSelectedRecievedId] = useState("");
+  const [selectedProcessId, setSelectedProcessId] = useState("");
   const [seatDetails, setSeatDetails] = useState({});
-  const [assignTaskDetails,setAssignTaskDetails] = useState({});
+  const [assignTaskDetails, setAssignTaskDetails] = useState({});
 
   useEffect(() => {
     const userDetails = JSON.parse(localStorage.getItem("userDetails"));
@@ -42,12 +42,42 @@ const TaskComponent = () => {
   const closeOperatorAssignedKit = () => {
     setOperatorAssignedKitModel(false);
   };
+  // const updateStatusRecievedKits = async (id, status) => {
+  //   try {
+  //     // 🔁 Override rejected status
+  //     const finalStatus =
+  //       status === "rejected" ? "waiting_for_line_feeding" : status;
+
+  //     let formData = new FormData();
+  //     formData.append("status", finalStatus);
+  //     formData.append("processId", selectedProcessId);
+  //     formData.append("processStatus", "active");
+
+  //     let result = await updateStatusRecivedKitToLine(id, formData);
+
+  //     if (result && result.status === 200) {
+  //       toast.success("Task Updated Successfully!");
+  //       setOperatorAssignedKitModel(false);
+
+  //       const userDetails = JSON.parse(localStorage.getItem("userDetails"));
+  //       getOperatorTask(userDetails._id);
+  //     }
+  //   } catch (error) {
+  //     console.log("error Update Recieved Kit Status :", error?.message);
+  //   }
+  // };  
+
   const updateStatusRecievedKits = async (id, status) => {
     try {
       let formData = new FormData();
       formData.append("status", status);
       formData.append("processId", selectedProcessId);
-      formData.append('processStatus', 'active')
+      if(status === "CONFIRM"){
+        formData.append('processStatus', 'active');
+      } else {
+        formData.append("issuedKitsStatus", "REJECTED")
+        formData.append('processStatus', 'waiting_for_line_feeding');
+      }
       let result = await updateStatusRecivedKitToLine(id, formData);
       if (result && result.status == 200) {
         toast.success("Task Updated Successfully!");
@@ -116,11 +146,7 @@ const TaskComponent = () => {
     },
     {
       name: "Issued Kits to Operator",
-      selector: (row: taskList) => (
-        <div>
-          {row?.assignedKitsToOperator}        
-        </div>
-      ),
+      selector: (row: taskList) => <div>{row?.assignedKitsToOperator}</div>,
       sortable: true,
     },
     {
@@ -142,13 +168,16 @@ const TaskComponent = () => {
           ISSUED: "#28a745",
           PARTIALLY_ISSUED: "#ffc107",
           NOT_ISSUED: "#dc3545",
+          REJECTED: "#ff5733",
         };
         const labelMap: Record<string, string> = {
           ISSUED: "Issued",
           PARTIALLY_ISSUED: "Partially Issued",
           NOT_ISSUED: "Not Issued",
+          REJECTED : "Rejected",
         };
-        const backgroundColor = statusColorMap[row.issuedKitsStatus] || "#6c757d";
+        const backgroundColor =
+          statusColorMap[row.issuedKitsStatus] || "#6c757d";
         const displayLabel = labelMap[row.issuedKitsStatus] || "Unknown";
         return (
           <span
@@ -211,7 +240,7 @@ const TaskComponent = () => {
             label: "Process Created",
             backgroundColor: "#95a5a6",
           },
-        };  
+        };
 
         const status = row?.status;
         const { label, backgroundColor } =
@@ -238,7 +267,8 @@ const TaskComponent = () => {
     {
       name: "Actions",
       cell: (row: taskList) => {
-        return row.status != "Completed" && row.kitRecievedConfirmationStatus != "ASSIGN_TO_OPERATOR" ? (
+        return row.status != "Completed" &&
+          row.kitRecievedConfirmationStatus != "ASSIGN_TO_OPERATOR" &&  row.kitRecievedConfirmationStatus != "REJECT" ? (
           <div className="flex items-center space-x-3.5">
             <button
               onClick={() => handleViewProcess(row.planId)}
@@ -249,12 +279,59 @@ const TaskComponent = () => {
           </div>
         ) : (
           <div className="flex space-x-1">
+            {row.kitRecievedConfirmationStatus != "REJECT" && (
             <button
               onClick={() => handleOperatorRecievedKit(row)}
               className="transform rounded-full bg-blue-500 p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
             >
-              <svg fill="#ffffff" width="15px" height="15px" viewBox="0 0 36 36" version="1.1" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" stroke="#ffffff"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <title>assign-user-solid</title> <circle cx="17.99" cy="10.36" r="6.81" className="clr-i-solid clr-i-solid-path-1"></circle><path d="M12,26.65a2.8,2.8,0,0,1,4.85-1.8L20.71,29l6.84-7.63A16.81,16.81,0,0,0,18,18.55,16.13,16.13,0,0,0,5.5,24a1,1,0,0,0-.2.61V30a2,2,0,0,0,1.94,2h8.57l-3.07-3.3A2.81,2.81,0,0,1,12,26.65Z" className="clr-i-solid clr-i-solid-path-2"></path><path d="M28.76,32a2,2,0,0,0,1.94-2V26.24L25.57,32Z" className="clr-i-solid clr-i-solid-path-3"></path><path d="M33.77,18.62a1,1,0,0,0-1.42.08l-11.62,13-5.2-5.59A1,1,0,0,0,14.12,26a1,1,0,0,0,0,1.42l6.68,7.2L33.84,20A1,1,0,0,0,33.77,18.62Z" className="clr-i-solid clr-i-solid-path-4"></path> <rect x="0" y="0" width="36" height="36" fill-opacity="0"></rect> </g></svg>
+              <svg
+                fill="#ffffff"
+                width="15px"
+                height="15px"
+                viewBox="0 0 36 36"
+                version="1.1"
+                preserveAspectRatio="xMidYMid meet"
+                xmlns="http://www.w3.org/2000/svg"
+                stroke="#ffffff"
+              >
+                <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                <g
+                  id="SVGRepo_tracerCarrier"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                ></g>
+                <g id="SVGRepo_iconCarrier">
+                  {" "}
+                  <title>assign-user-solid</title>{" "}
+                  <circle
+                    cx="17.99"
+                    cy="10.36"
+                    r="6.81"
+                    className="clr-i-solid clr-i-solid-path-1"
+                  ></circle>
+                  <path
+                    d="M12,26.65a2.8,2.8,0,0,1,4.85-1.8L20.71,29l6.84-7.63A16.81,16.81,0,0,0,18,18.55,16.13,16.13,0,0,0,5.5,24a1,1,0,0,0-.2.61V30a2,2,0,0,0,1.94,2h8.57l-3.07-3.3A2.81,2.81,0,0,1,12,26.65Z"
+                    className="clr-i-solid clr-i-solid-path-2"
+                  ></path>
+                  <path
+                    d="M28.76,32a2,2,0,0,0,1.94-2V26.24L25.57,32Z"
+                    className="clr-i-solid clr-i-solid-path-3"
+                  ></path>
+                  <path
+                    d="M33.77,18.62a1,1,0,0,0-1.42.08l-11.62,13-5.2-5.59A1,1,0,0,0,14.12,26a1,1,0,0,0,0,1.42l6.68,7.2L33.84,20A1,1,0,0,0,33.77,18.62Z"
+                    className="clr-i-solid clr-i-solid-path-4"
+                  ></path>{" "}
+                  <rect
+                    x="0"
+                    y="0"
+                    width="36"
+                    height="36"
+                    fill-opacity="0"
+                  ></rect>{" "}
+                </g>
+              </svg>
             </button>
+            )}
           </div>
         );
       },
@@ -320,33 +397,30 @@ const TaskComponent = () => {
               </div>
               <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
                 <strong className="font-medium">Kits Shortage :</strong>{" "}
-                {assignTaskDetails.requiredKits -  seatDetails?.issuedKits}
+                {assignTaskDetails.requiredKits - seatDetails?.issuedKits}
               </div>
             </div>
             <div className="flex items-center justify-center gap-2">
-                <button
-                  onClick={() =>
-                    updateStatusRecievedKits(
-                      selectRecievedId,
-                      "CONFIRM",
-                    )
-                  }
-                  className="flex items-center transform rounded-md bg-blue-500 p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
-                >
-                  <FiCheck size={16} /> Accept
-                </button>
-                <button
-                  onClick={() =>
-                    updateStatusRecievedKits(
-                      row.kitRecievedConfirmationId,
-                      "REJECT",
-                    )
-                  }
-                  className="flex items-center transform rounded-md bg-danger p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-danger"
-                >
-                  <FiX size={16} /> Reject
-                </button>
-              </div>
+              <button
+                onClick={() =>
+                  updateStatusRecievedKits(selectRecievedId, "CONFIRM")
+                }
+                className="flex transform items-center rounded-md bg-blue-500 p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
+              >
+                <FiCheck size={16} /> Accept
+              </button>
+              <button
+                onClick={() =>
+                  updateStatusRecievedKits(
+                    selectRecievedId,
+                    "REJECT",
+                  )
+                }
+                className="flex transform items-center rounded-md bg-danger p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-danger"
+              >
+                <FiX size={16} /> Reject
+              </button>
+            </div>
           </Modal>
         </div>
       </div>

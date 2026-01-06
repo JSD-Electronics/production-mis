@@ -1,19 +1,23 @@
 "use client";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
-import { createJig, viewJigCategory } from "@/lib/api";
+import { createJig, viewJigCategory, fetchJigByJigId } from "@/lib/api";
 import React, { useState } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 const AddJig = () => {
   const [name, setName] = useState("");
-  const [jigCategory, setJigCategory] = useState("");
+  const [jigCategoryId, setJigCategoryID] = useState("");
+  const [id, setID] = useState("");
   const [submitDisabled, setSubmitDisabled] = useState(false);
   const [jigCategoryData, setJigCategoryData] = useState([]);
   const validateForm = () => {
     return true;
   };
   React.useEffect(() => {
+    const pathname = window.location.pathname;
+    const id = pathname.split("/").pop();
+    getJigCategoryById(id);
     getJigCategory();
   }, []);
   const getJigCategory = async () => {
@@ -24,14 +28,28 @@ const AddJig = () => {
       console.error("Error fetching stages:", error);
     }
   };
+  const getJigCategoryById = async (id: any) => {
+    try {
+      let result = await fetchJigByJigId(id);
+      let JigsModel = result.Jigs;
+
+      setName(JigsModel?.name);
+      setJigCategoryID(JigsModel?.jigCategory);
+      //setJigCategoryData(result.JigCategories);
+    } catch (error) {
+      console.error("Error fetching stages:", error);
+    }
+  };
   const handlesubmit = async () => {
-    // if (validateForm()) {
     setSubmitDisabled(true);
-
     const formData = new FormData();
+    const pathname = window.location.pathname;
+    const id = pathname.split("/").pop();
+    if (id) {
+      formData.append("id", id);
+    }
     formData.append("name", name);
-    formData.append("jigCategory", jigCategory);
-
+    formData.append("jigCategory", jigCategoryId);
     try {
       const result = await createJig(formData);
       if (result && result.status === 200) {
@@ -45,7 +63,6 @@ const AddJig = () => {
       );
       setSubmitDisabled(false);
     }
-    //   }
   };
   return (
     <>
@@ -85,21 +102,20 @@ const AddJig = () => {
                     Jig Categories
                   </label>
                   <select
-                    value={jigCategory}
-                    onChange={(e) => setJigCategory(e.target.value)}
-                    className={`relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
+                    value={jigCategoryId}
+                    onChange={(e) => setJigCategoryID(e.target.value)}
+                    className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
                   >
-                    <option
-                      value=""
-                      className="text-body dark:text-bodydark"
-                    ></option>
-                    {jigCategoryData?.map((jigCategory: any, index: any) => (
+                    <option value="" className="text-body dark:text-bodydark">
+                      Select Jig Category
+                    </option>
+                    {jigCategoryData?.map((jigCategory, index) => (
                       <option
                         key={index}
                         value={jigCategory._id}
                         className="text-body dark:text-bodydark"
                       >
-                        {jigCategory.name}{" "}
+                        {jigCategory.name}
                       </option>
                     ))}
                   </select>

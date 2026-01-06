@@ -45,7 +45,7 @@ const ViewJig = () => {
     }
   };
   const handleEdit = (id: string) => {
-    router.push(`/product/edit/${id}`);
+    router.push(`/jig/edit/${id}`);
   };
   const handleMultipleRowsDelete = async () => {
     try {

@@ -95,7 +95,9 @@ const SeatAvailabilityDatePicker = ({
   return (
     <div className="datepicker-container">
       <DatePicker
-        className="bgx-custom-datepicker d-block border-stroke bg-transparent w-full rounded-md border px-2 py-3 transition duration-150 ease-in-out focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="border-gray-300 text-gray-900 dark:border-gray-600 dark:bg-gray-700 w-full rounded-xl border bg-white py-3 pl-10 pr-4 
+             shadow-sm transition focus:border-primary focus:ring focus:ring-primary/30 
+             dark:text-white"
         selected={selectedDate}
         onChange={handleDateChange}
         minDate={today}

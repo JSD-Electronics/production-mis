@@ -24,6 +24,8 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("userDetails");
       window.location.href = "/";
     }
     return Promise.reject(error);
@@ -794,6 +796,14 @@ export const fetchJigsById = async (id) => {
     throw error?.response?.data || { message: `Error Fetching Jigs By ID` };
   }
 };
+export const fetchJigByJigId = async (id) => {
+  try {
+    let response = await api.get(`/fetchJigByJigId/${id}`);
+    return response?.data;
+  } catch (error) {
+    throw error?.response?.data || { message: `Error Fetching Jig By ID` };
+  }
+}
 export const createDevice = async (formData) => {
   try {
     let response = await api.post(`/devices/create`, formData);
@@ -1231,6 +1241,7 @@ export const fetchCartonByProcessID = async (processID) => {
 export const fetchCartons = async (processID) => {
   try {
     let response = await api.get(`/cartons/${processID}`);
+    console.log("response ===>", response);
     return response.data;
   } catch (error) {
     console.log("Error Fetxhing Cartons :", error.message);
@@ -1258,6 +1269,42 @@ export const getFGInventoryToShift = async () => {
     return result.data;
   } catch (error) {
     console.error("Error Fetching FG Inventory", error.message);
+  }
+};
+export const getPDICartonByProcessId = async (processId) => {
+  try {
+    let result = await api.get(`/cartonsProcessId/${processId}`);
+    return result.data;
+  } catch (error) {
+    console.error("Error Fetching Carton Shift: ", error.message);
+  }
+};
+export const getCartonsIntoStore = async (processId) => {
+  try {
+    let result = await api.get(`/cartonsIntoStore/${processId}`);
+    return result.data;
+  } catch (error) {
+    console.error("Error Fetching Carton Shift: ", error.message);
+  }
+};
+
+export const authenticateJig = async (jigId) => {
+  try {
+    const response = await api.post("/jig/authenticate", { jigId });
+    return response.data;
+  } catch (error) {
+    console.error("Jig authentication failed:", error);
+    throw error;
+  }
+};
+
+export const syncJigData = async (data) => {
+  try {
+    const response = await api.post("/jig/data", data);
+    return response.data;
+  } catch (error) {
+    console.error("Failed to sync jig data:", error);
+    throw error;
   }
 };
 

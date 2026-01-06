@@ -31,6 +31,7 @@ import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import Modal from "@/components/Modal/page";
 import ConfirmationPopup from "@/components/Confirmation/page";
+import { Clock } from "lucide-react";
 
 const EditPlanSchedule = () => {
   const [shiftTime, setShiftTime] = useState(0);
@@ -553,7 +554,7 @@ const EditPlanSchedule = () => {
           {
             name: currentStage.stageName,
             upha: currentStage.upha,
-            requiredSkill:currentStage.requiredSkill,
+            requiredSkill: currentStage.requiredSkill,
             totalUPHA,
             passedDevice: 0,
             ngDevice: 0,
@@ -660,6 +661,8 @@ const EditPlanSchedule = () => {
         name: stage.stageName,
         upha: stage.upha,
         substepName: substep ? [substep.stepName] : null,
+        requiredSkill: stage.requiredSkill,
+        managedBy: stage.managedBy,
       };
       event.dataTransfer.setData("text/plain", JSON.stringify(data));
     };
@@ -1070,9 +1073,13 @@ const EditPlanSchedule = () => {
   const openCustomStagesModal = (stage, index) => {
     const requiredSkill = stage.requiredSkill?.toLowerCase().trim();
     const requiredUserType = stage.managedBy;
-    const assignedOperatorIds = Object.values(assignedOperators)
-      .flat()
-      .map((operator) => operator._id);
+    const assignedOperatorIds = Object.values(assignedOperators || {})
+      .flat() // flatten values
+      .filter(
+        (op): op is { _id: string } => op && typeof op._id !== "undefined",
+      ) // keep only valid
+      .map((op) => op._id);
+
     const compatibleOperators = operators.filter((operator) => {
       const normalizedSkills = operator.skills.map((skill) =>
         skill.toLowerCase().trim(),
@@ -1145,7 +1152,7 @@ const EditPlanSchedule = () => {
       <div className="container mx-auto grid grid-cols-1 gap-9 p-6 sm:grid-cols-1">
         <div className="flex flex-col gap-9">
           <div className="rounded-lg border border-stroke bg-white p-6 shadow-lg dark:border-strokedark dark:bg-boxdark">
-            <div className="flex items-center justify-between border-b border-stroke px-6 py-4 dark:border-strokedark">
+            <div className="flex items-center justify-between border-b border-stroke py-4 dark:border-strokedark">
               <h3 className="text-xl font-semibold text-black dark:text-white">
                 Edit Planning & Scheduling
               </h3>
@@ -1320,7 +1327,7 @@ const EditPlanSchedule = () => {
               </Modal>
             </div>
             <form action="#">
-              <div className="p-6">
+              <div className="mt-4 p-2">
                 {/* FormComponent 1 */}
                 <FormComponent
                   shifts={shifts}
@@ -1361,7 +1368,54 @@ const EditPlanSchedule = () => {
                   inventoryData={inventoryData}
                 />
                 {/* end FormComponent 1 */}
-                {totalTimeEstimation && (
+                <div className="my-3">
+                  {/* {totalTimeEstimation && ( */}
+                    <div className="dark:bg-gray-800 border-gray-300 dark:border-gray-700 mt-6 rounded-xl border bg-white p-6 shadow-lg transition-all duration-300">
+                      <h3 className="text-gray-800 mb-5 flex items-center gap-2 text-xl font-semibold dark:text-white">
+                        <Clock className="h-5 w-5 text-primary" />
+                        Time & Production Estimation
+                      </h3>
+
+                      <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-3">
+                        {/* Estimated Completion Date */}
+                        <div className="bg-gray-50 dark:bg-gray-700 flex flex-col gap-2 rounded-lg p-4 shadow-sm">
+                          <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
+                            Estimated Completion Date
+                          </span>
+                          <span className="text-md text-gray-900 font-semibold dark:text-white">
+                            {estimatedEndDate}
+                          </span>
+                        </div>
+
+                        {/* Total Time Estimation */}
+                        <div className="bg-gray-50 dark:bg-gray-700 flex flex-col gap-2 rounded-lg p-4 shadow-sm">
+                          <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
+                            Total Time Estimation
+                          </span>
+                          <span className="text-md text-gray-900 font-semibold dark:text-white">
+                            {totalTimeEstimation} Days
+                          </span>
+                        </div>
+
+                        {/* Units Processed Per Hour */}
+                        <div className="bg-gray-50 dark:bg-gray-700 flex flex-col gap-2 rounded-lg p-4 shadow-sm">
+                          <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
+                            Units Processed Per Hour
+                          </span>
+                          <span className="text-md text-gray-900 font-semibold dark:text-white">
+                            {(
+                              shiftTime -
+                              parseInt(selectedShift?.totalBreakTime || "0") /
+                                60
+                            ).toFixed(2)}{" "}
+                            -Hour Day: {totalUPHA}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  {/* )} */}
+                </div>
+                {/* {totalTimeEstimation && (
                   <div className="grid w-full justify-center">
                     <p>
                       Estimated Completed Date :{" "}
@@ -1373,223 +1427,193 @@ const EditPlanSchedule = () => {
                     </p>
                     <p>
                       Units Processed Per{" "}
-                      {(shiftTime - selectedShift?.totalBreakTime / 60).toFixed(2)}-Hour Day:{" "}
-                      {totalUPHA || "Not calculated yet"}
+                      {(shiftTime - selectedShift?.totalBreakTime / 60).toFixed(
+                        2,
+                      )}
+                      -Hour Day: {totalUPHA || "Not calculated yet"}
                     </p>
                   </div>
-                )}
+                )} */}
                 {/* component 2 */}
-                <div className="flex gap-10">
-                  <div className="mb-2">
-                    <h3 className="text-lg font-semibold text-black dark:text-white">
+                <div className="flex flex-col gap-6 pt-4 lg:flex-row">
+                  {/* Stages List */}
+                  <div className="mb-4 w-full lg:mb-0 lg:w-1/4">
+                    <h3 className="mb-2 text-lg font-semibold text-black dark:text-white">
                       Stages
                     </h3>
-                    <div className="custom-scroll flex-wrap gap-4 overflow-x-auto pt-1 pt-4">
+                    <div className="custom-scroll flex flex-wrap gap-3 overflow-x-auto p-1">
                       {stages?.map((stage, index) => (
-                        <div className="mb-2" key={index}>
-                          <button
-                            className="w-40 rounded-lg bg-blue-500 px-2 py-2 text-sm text-white hover:bg-blue-400"
-                            type="button"
-                            draggable
-                            onDragStart={handleDragStart(stage)}
-                          >
-                            {stage.stageName}
-                          </button>
+                        <button
+                          key={index}
+                          className="w-36 rounded-lg bg-blue-500 px-3 py-2 text-sm text-white transition-all duration-200 hover:bg-blue-400 sm:w-40"
+                          type="button"
+                          draggable
+                          onDragStart={handleDragStart(stage)}
+                        >
+                          {stage.stageName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Room Section */}
+                  <div className="w-full lg:w-3/4">
+                    <h3 className="mb-2 text-lg font-semibold text-black dark:text-white">
+                      Room
+                    </h3>
+                    <div className="bg-gray-50 dark:bg-gray-800 max-h-[70vh] overflow-x-auto rounded-lg p-4 shadow-inner">
+                      {selectedRoom?.lines?.map((row, rowIndex) => (
+                        <div key={rowIndex} className="mb-6">
+                          <div className="text-md text-gray-800 dark:text-gray-200 mb-2 font-bold">
+                            {row.rowName}
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                            {row.seats?.map((seat, seatIndex) => (
+                              <DraggableGridItem
+                                key={`${rowIndex}-${seatIndex}`}
+                                rowIndex={rowIndex}
+                                seatIndex={seatIndex}
+                                handleDrop={handleDrop}
+                                handleDragOver={handleDragOver}
+                                handleRemoveStage={handleRemoveStage}
+                                item={seat}
+                                assignedStages={assignedStages}
+                                coordinates={`${rowIndex}-${seatIndex}`}
+                                moveItem={moveItem}
+                                operators={operators}
+                                assignedOperators={assignedOperators}
+                                setAssignedOperators={setAssignedOperators}
+                                filteredOperators={filteredOperators}
+                                setFilteredOperators={setFilteredOperators}
+                                rowSeatLength={row.seats.length}
+                                setAssignedJigs={setAssignedJigs}
+                                assignedJigs={assignedJigs}
+                                jigCategories={jigCategories}
+                                handlePlaningSubmit={handlePlaningSubmit}
+                              />
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>
-                  </div>
-                  <div className="w-[200%]">
-                    <h3 className="text-lg font-semibold text-black dark:text-white">
-                      Room
-                    </h3>
-                    <div
-                      className="bg-gray-50 mt-4 grid h-screen gap-6 overflow-x-auto rounded-lg p-4 shadow-inner"
-                      style={{ position: "relative", width: "auto" }}
-                    >
-                      {selectedRoom &&
-                        selectedRoom.lines?.map((row, rowIndex) => (
-                          <div key={rowIndex} className="mb-4">
-                            <div className="text-md mb-2 font-bold">
-                              {row.rowName}
-                            </div>
-                            <div className="grid grid-cols-4 gap-3">
-                              {row.seats?.map((seat, seatIndex) => {
-                                return (
-                                  <DraggableGridItem
-                                    key={`${rowIndex}-${seatIndex}`}
-                                    rowIndex={rowIndex}
-                                    seatIndex={seatIndex}
-                                    handleDrop={handleDrop}
-                                    handleDragOver={handleDragOver}
-                                    handleRemoveStage={handleRemoveStage}
-                                    item={seat}
-                                    assignedStages={assignedStages}
-                                    coordinates={`${rowIndex}-${seatIndex}`}
-                                    moveItem={moveItem}
-                                    operators={operators}
-                                    assignedOperators={assignedOperators}
-                                    setAssignedOperators={setAssignedOperators}
-                                    filteredOperators={filteredOperators}
-                                    setFilteredOperators={setFilteredOperators}
-                                    rowSeatLength={row.seats.length}
-                                    setAssignedJigs={setAssignedJigs}
-                                    assignedJigs={assignedJigs}
-                                    jigCategories={jigCategories}
-                                    handlePlaningSubmit={handlePlaningSubmit}
-                                  />
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                    </div>
+
+                    {/* Other Stages */}
                     <div className="mt-4">
-                      <h3 className="text-md font-semibold text-black dark:text-white">
+                      <h3 className="text-md mb-2 font-semibold text-black dark:text-white">
                         Other Stages
                       </h3>
-                    </div>
-                    <div className="grid grid-cols-4 gap-4 overflow-x-auto pt-4">
-                      {commonStages?.map((value, index) => (
-                        <>
+                      <div className="grid grid-cols-1 gap-4 overflow-x-auto sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                        {commonStages?.map((value, index) => (
                           <div
                             key={index}
-                            className="border-gray-300 mb-4 mt-4 flex flex-col rounded-lg border-2 border-green-500 bg-green-200 p-2 transition-all duration-300 hover:shadow-lg"
+                            className="rounded-lg border-2 border-green-500 bg-green-200 p-3 transition-all duration-300 hover:shadow-lg dark:border-green-400 dark:bg-green-700"
                             title="Drop Stage Here"
                           >
-                            <span className="text-gray-800 flex items-center justify-between text-xs font-bold">
-                              <p className="text-sm font-bold">
-                                {" "}
-                                {value?.stageName}
-                              </p>
-                            </span>
-                            <div className="mt-1">
-                              <div>
-                                <div className="flex items-center justify-end ">
-                                  {assignedCustomOperators[index] &&
-                                    assignedCustomOperators[index].length >
-                                      0 && (
-                                      <div className="flex gap-2">
-                                        {assignedCustomOperators[index].map(
-                                          (op, i) => (
-                                            <>
-                                              <div className="flex">
-                                                <p
-                                                  key={i}
-                                                  className="text-gray-700 text-sm"
-                                                >
-                                                  {op.name}
-                                                </p>
-                                                <button
-                                                  type="button"
-                                                  className="h-5 rounded-full p-1 transition-all duration-200"
-                                                  onClick={() =>
-                                                    handleRemoveAssignCustomOperator(
-                                                      index,
-                                                      op?._id,
-                                                    )
-                                                  }
-                                                >
-                                                  <svg
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    strokeWidth="2"
-                                                    stroke="currentColor"
-                                                    className="h-3 pt-0.5"
-                                                  >
-                                                    <path
-                                                      strokeLinecap="round"
-                                                      strokeLinejoin="round"
-                                                      d="M6 18L18 6M6 6l12 12"
-                                                    />
-                                                  </svg>
-                                                </button>
-                                              </div>
-                                            </>
-                                          ),
-                                        )}
-                                      </div>
-                                    )}
-                                  {!assignedCustomOperators[index] && (
-                                    <div className="mt-2 flex justify-end">
-                                      <button
-                                        type="button"
-                                        className="text-dark ml-3 h-6 rounded-full bg-gray p-1.5 transition-all duration-200"
-                                        onClick={() =>
-                                          openCustomStagesModal(value, index)
-                                        }
+                            <p className="text-gray-800 mb-1 text-sm font-bold dark:text-white">
+                              {value?.stageName}
+                            </p>
+
+                            {assignedCustomOperators[index]?.length > 0 ? (
+                              <div className="mt-1 flex flex-wrap gap-2">
+                                {assignedCustomOperators[index].map((op, i) => (
+                                  <div
+                                    key={i}
+                                    className="flex items-center gap-1 rounded-full px-2 py-1 text-xs shadow-sm"
+                                  >
+                                    <span className="text-gray-700 dark:text-gray-200">
+                                      {op.name}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="hover:bg-gray-300 dark:hover:bg-gray-500 flex h-4 w-4 items-center justify-center rounded-full"
+                                      onClick={() =>
+                                        handleRemoveAssignCustomOperator(
+                                          index,
+                                          op?._id,
+                                        )
+                                      }
+                                    >
+                                      <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        strokeWidth="2"
+                                        stroke="currentColor"
+                                        className="h-3 w-3"
                                       >
-                                        <svg
-                                          fill="#000000"
-                                          version="1.1"
-                                          id="Capa_1"
-                                          xmlns="http://www.w3.org/2000/svg"
-                                          width="10px"
-                                          height="10px"
-                                          viewBox="0 0 45.402 45.402"
-                                          stroke="#000000"
-                                        >
-                                          <g
-                                            id="SVGRepo_bgCarrier"
-                                            strokeWidth="0"
-                                          ></g>
-                                          <g
-                                            id="SVGRepo_tracerCarrier"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                          ></g>
-                                          <g id="SVGRepo_iconCarrier">
-                                            <path d="M41.267,18.557H26.832V4.134C26.832,1.851,24.99,0,22.707,0c-2.283,0-4.124,1.851-4.124,4.135v14.432H4.141 c-2.283,0-4.139,1.851-4.138,4.135c-0.001,1.141,0.46,2.187,1.207,2.934c0.748,0.749,1.78,1.222,2.92,1.222h14.453V41.27 c0,1.142,0.453,2.176,1.201,2.922c0.748,0.748,1.777,1.211,2.919,1.211c2.282,0,4.129-1.851,4.129-4.133V26.857h14.435 c2.283,0,4.134-1.867,4.133-4.15C45.399,20.425,43.548,18.557,41.267,18.557z"></path>
-                                          </g>
-                                        </svg>
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          d="M6 18L18 6M6 6l12 12"
+                                        />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                ))}
                               </div>
-                            </div>
+                            ) : (
+                              <div className="mt-2 flex justify-end">
+                                <button
+                                  type="button"
+                                  className="bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 flex h-6 w-6 items-center justify-center rounded-full text-black transition-all duration-200 dark:text-white"
+                                  onClick={() =>
+                                    openCustomStagesModal(value, index)
+                                  }
+                                >
+                                  <svg
+                                    fill="#000000"
+                                    viewBox="0 0 45.402 45.402"
+                                    width="12"
+                                    height="12"
+                                  >
+                                    <path d="M41.267,18.557H26.832V4.134C26.832,1.851,24.99,0,22.707,0c-2.283,0-4.124,1.851-4.124,4.135v14.432H4.141 c-2.283,0-4.139,1.851-4.138,4.135c-0.001,1.141,0.46,2.187,1.207,2.934c0.748,0.749,1.78,1.222,2.92,1.222h14.453V41.27 c0,1.142,0.453,2.176,1.201,2.922c0.748,0.748,1.777,1.211,2.919,1.211c2.282,0,4.129-1.851,4.129-4.133V26.857h14.435 c2.283,0,4.134-1.867,4.133-4.15C45.399,20.425,43.548,18.557,41.267,18.557z" />
+                                  </svg>
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        </>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
+
+                  {/* Assign Operators Modal */}
+                  <Modal
+                    isOpen={isCustomStagesModalOpen}
+                    onSubmit={handleCustomStagesubmitOperator}
+                    onClose={closeCustomStagesModal}
+                    title="Assign Operators"
+                  >
+                    <div>
+                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                        Operators
+                      </label>
+                      <select
+                        onChange={(e) => handleOperator(e.target.value)}
+                        className="relative z-20 w-full rounded border border-stroke bg-transparent px-4 py-2 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+                      >
+                        <option value="">Please Select</option>
+                        {customStagesCompatibleOperator?.map(
+                          (operator, index) => (
+                            <option
+                              key={index}
+                              value={operator?._id}
+                              disabled={isOperatorAssignedToAnySeat(
+                                operator?.stageName,
+                              )}
+                            >
+                              {operator.name}
+                              {isOperatorAssignedToAnySeat(
+                                operator?.stageName,
+                              ) && " (Assigned)"}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </div>
+                  </Modal>
                 </div>
-                <Modal
-                  isOpen={isCustomStagesModalOpen}
-                  onSubmit={handleCustomStagesubmitOperator}
-                  onClose={closeCustomStagesModal}
-                  title="Assign Operators"
-                >
-                  <div>
-                    <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                      Operators
-                    </label>
-                    <select
-                      onChange={(e) => handleOperator(e.target.value)}
-                      className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-                    >
-                      <option value="">Please Select</option>
-                      {customStagesCompatibleOperator?.map(
-                        (operator, index) => (
-                          <option
-                            key={index}
-                            value={operator?._id}
-                            className="text-body dark:text-bodydark"
-                            disabled={isOperatorAssignedToAnySeat(
-                              operator?.stageName,
-                            )}
-                          >
-                            cv
-                            {operator.name}
-                            {isOperatorAssignedToAnySeat(operator?.stageName) &&
-                              "(Assigned)"}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                  </div>
-                </Modal>
+
                 {/* end component 2 */}
               </div>
               <div className="flex justify-end gap-2 p-6">

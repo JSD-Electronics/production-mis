@@ -11,6 +11,14 @@ import {
 } from "../../lib/api";
 import Modal from "@/components/Modal/page";
 import { ToastContainer, toast } from "react-toastify";
+import {
+  User,
+  ClipboardList,
+  BarChart3,
+  Paperclip,
+  Box,
+  Loader2,
+} from "lucide-react";
 import "react-toastify/dist/ReactToastify.css";
 import {
   faMinus,
@@ -243,6 +251,7 @@ const AddProduct = () => {
           throw new Error(result.message || "Failed to create stage");
         }
       } catch (error) {
+        console.error("error: ", error);
         toast.error(
           error?.message || "An error occurred while creating the stage.",
         );
@@ -256,7 +265,6 @@ const AddProduct = () => {
     setStages(newStages);
   };
   const handleCommonStageChange = (index: any, event: any, param: any) => {
-    
     const newStages = [...commonStages];
     newStages[index][param] = event?.target.value;
     setCommonStages(newStages);
@@ -539,6 +547,22 @@ const AddProduct = () => {
     setStages(updatedStages);
   };
   const closeModal = () => setIsModalOpen(false);
+  const stats = React.useMemo(() => {
+    const stageCount = stages.length;
+    const substepCount = stages.reduce(
+      (acc, s) => acc + (s.subSteps?.length || 0),
+      0,
+    );
+    const printerEnabled = stages.reduce(
+      (acc, s) => acc + s.subSteps.filter((ss) => ss.isPrinterEnable).length,
+      0,
+    );
+    const packagingEnabled = stages.reduce(
+      (acc, s) => acc + s.subSteps.filter((ss) => ss.isPackagingStatus).length,
+      0,
+    );
+    return { stageCount, substepCount, printerEnabled, packagingEnabled };
+  }, [stages]);
   return (
     <DndProvider backend={HTML5Backend}>
       <>
@@ -551,19 +575,78 @@ const AddProduct = () => {
             draggable
             pauseOnHover
           />
-          <div className="mr-5 flex justify-end text-right">
-            <button
-              type="button"
-              className="mt-4 flex items-center rounded-lg bg-boxdark p-2.5 text-sm text-white"
-              onClick={openModal}
-            >
-              Clone Settings
-            </button>
+          <div className="flex items-center justify-between px-10 pt-6">
+            <h3 className="text-gray-900 text-lg font-semibold dark:text-white">
+              Configure Product
+            </h3>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="flex items-center rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary/90"
+                onClick={openModal}
+              >
+                Clone Settings
+              </button>
+            </div>
           </div>
           <form action="#">
             <div className="flex flex-col space-y-5 px-10 py-5">
+              <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-sm border border-stroke bg-white px-5 py-4 shadow-default dark:border-strokedark dark:bg-boxdark">
+                  <div className="text-gray-500 dark:text-gray-300 text-sm font-medium">
+                    Stages
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <div className="text-title-md font-bold text-black dark:text-white">
+                      {stats.stageCount}
+                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-meta-2 dark:bg-meta-4">
+                      <ClipboardList className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-sm border border-stroke bg-white px-5 py-4 shadow-default dark:border-strokedark dark:bg-boxdark">
+                  <div className="text-gray-500 dark:text-gray-300 text-sm font-medium">
+                    Sub-steps
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <div className="text-title-md font-bold text-black dark:text-white">
+                      {stats.substepCount}
+                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-meta-2 dark:bg-meta-4">
+                      <BarChart3 className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-sm border border-stroke bg-white px-5 py-4 shadow-default dark:border-strokedark dark:bg-boxdark">
+                  <div className="text-gray-500 dark:text-gray-300 text-sm font-medium">
+                    Printer Enabled
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <div className="text-title-md font-bold text-black dark:text-white">
+                      {stats.printerEnabled}
+                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-meta-2 dark:bg-meta-4">
+                      <Paperclip className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-sm border border-stroke bg-white px-5 py-4 shadow-default dark:border-strokedark dark:bg-boxdark">
+                  <div className="text-gray-500 dark:text-gray-300 text-sm font-medium">
+                    Packaging Enabled
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <div className="text-title-md font-bold text-black dark:text-white">
+                      {stats.packagingEnabled}
+                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-meta-2 dark:bg-meta-4">
+                      <Box className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+              </div>
               <div className="bg-gray-100 px-1 py-6 dark:bg-boxdark">
-                <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
                   Product Name
                 </label>
                 <input
@@ -572,7 +655,7 @@ const AddProduct = () => {
                   onChange={(e) => setName(e.target.value)}
                   style={{ borderColor: errors?.name ? "red" : "" }}
                   placeholder="Enter Product Name"
-                  className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                  className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
                 />
               </div>
               {stages.map((stage, index) => (
@@ -580,9 +663,10 @@ const AddProduct = () => {
                   key={index}
                   className="bg-gray-50 space-y-4 border border-[#eee] p-6 shadow-lg dark:border-form-strokedark dark:bg-boxdark"
                 >
-                  <div className="grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-2">
                     <h3 className="text-gray-900 block text-lg font-semibold dark:text-white">
-                      Stage {index + 1} {stage?.stageName}
+                      Stage {index + 1} :{" "}
+                      <span className="text-primary">{stage?.stageName}</span>
                     </h3>
                     <div className="text-right">
                       <button
@@ -598,10 +682,12 @@ const AddProduct = () => {
                   </div>
                   {stage.isExpanded && (
                     <>
-                      <div className="grid gap-5">
+                      <div className="grid gap-6 rounded-xl shadow-sm  dark:bg-boxdark">
+                        {/* Stage Name */}
                         <div>
-                          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                            Name
+                          <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
+                            <ClipboardList className="h-4 w-4 text-primary" />
+                            Stage Name
                           </label>
                           <input
                             type="text"
@@ -613,61 +699,98 @@ const AddProduct = () => {
                               handleStageChange(index, e, "stageName")
                             }
                             placeholder={`Stage Name ${index + 1}`}
-                            className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                            className="border-gray-300 bg-gray-50 text-gray-800 w-full rounded-lg border-[1.5px] px-5 py-3 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
                           />
+                          {errors?.stages[index] && (
+                            <p className="text-red-500 mt-1 text-xs">
+                              Stage name is required
+                            </p>
+                          )}
                         </div>
+                        {/* Managed By */}
                         <div>
-                          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                          <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
+                            <User className="h-4 w-4 text-primary" />
                             Managed By
                           </label>
                           <select
                             value={stage.managedBy || ""}
-                            onChange={(e) => {
-                              handleStageChange(index, e, "managedBy");
-                            }}
-                            className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
+                            onChange={(e) =>
+                              handleStageChange(index, e, "managedBy")
+                            }
+                            className="border-gray-300 bg-gray-50 text-gray-800 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-strokedark dark:bg-form-input dark:text-white"
                           >
                             <option
                               value=""
-                              className="text-body dark:text-bodydark"
+                              className="text-gray-400 dark:text-gray-500"
                             >
                               Please Select
                             </option>
-                            {userType.map((user, index) => (
+                            {userType.map((user, idx) => (
                               <option
-                                key={index}
+                                key={idx}
                                 value={user?.name}
-                                className="text-body dark:text-bodydark"
-                                // disabled={skills.includes(skill?.name) ? true : false}
+                                className="text-gray-700 dark:text-white"
                               >
                                 {user?.name}
                               </option>
                             ))}
                           </select>
                         </div>
+                        {/* UPHA */}
                         <div>
-                          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                          <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
+                            <BarChart3 className="h-4 w-4 text-primary" />
                             UPHA (Units Per Hour Analysis)
                           </label>
                           <input
-                            type="text"
+                            type="number"
                             value={stage.upha}
                             onChange={(e) =>
                               handleStageChange(index, e, "upha")
                             }
-                            placeholder={`UPHA`}
-                            className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                            placeholder="Enter UPHA"
+                            className="border-gray-300 bg-gray-50 text-gray-800 w-full rounded-lg border-[1.5px] px-5 py-3 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
                           />
+                        </div>
+                        <div>
+                          <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
+                            <Paperclip className="h-4 w-4 text-primary" />
+                            Attach SOP
+                          </label>
+                          <input
+                            type="file"
+                            value={stage.sopFile}
+                            onChange={(e) =>
+                              handleStageChange(index, e, "sopFile")
+                            }
+                            className="
+                              border-gray-300 bg-gray-50 text-gray-600 w-full cursor-pointer rounded-lg border-[1.5px] px-3 
+                              py-2 text-sm outline-none transition
+                              file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-white
+                              hover:file:bg-primary/90
+                              focus:border-primary focus:ring-1 focus:ring-primary
+                              dark:border-form-strokedark dark:bg-form-input dark:text-white 
+                              dark:file:bg-primary dark:file:text-white
+                            "
+                          />
+                          <p className="text-gray-500 dark:text-gray-400 mt-1 text-xs">
+                            Upload PDF or DOC (Max 5MB)
+                          </p>
                         </div>
                       </div>
                       {stage.subSteps.map((subStep, subIndex) => (
                         <div
                           key={subIndex}
-                          className="rounded-lg border border-[#eee] p-2 p-5 dark:border-form-strokedark"
+                          className="border-gray-200 rounded-lg border p-2 p-5 dark:border-form-strokedark dark:border-strokedark"
                         >
-                          <div className="grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
+                          <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-2">
                             <h5 className="text-gray-900 text-md block font-semibold dark:text-white">
-                              Step {subIndex + 1} {subStep?.stepName}
+                              Step {subIndex + 1}{" "}
+                              <span className="text-primary">
+                                {" "}
+                                {subStep?.stepName}{" "}
+                              </span>
                             </h5>
                             <div className="text-right">
                               <button
@@ -689,129 +812,107 @@ const AddProduct = () => {
                           </div>
                           {subStep.isSubExpand && (
                             <>
-                              <div className="mt-3 grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
-                                <div>
-                                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                    Name
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={subStep.stepName}
-                                    style={{
-                                      borderColor: errors?.stages[index]
-                                        ?.subSteps[subIndex]
-                                        ? "red"
-                                        : "",
-                                    }}
-                                    onChange={(e) =>
-                                      handleSubStepChange(
-                                        index,
-                                        subIndex,
-                                        e,
-                                        "stepName",
-                                      )
-                                    }
-                                    placeholder={`Name`}
-                                    className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                    Required Skill
-                                  </label>
-                                  <select
-                                    value={stage.requiredSkill || ""}
-                                    onChange={(e) => {
-                                      handleStageChange(
-                                        index,
-                                        e,
-                                        "requiredSkill",
-                                      );
-                                    }}
-                                    className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
-                                  >
-                                    <option
-                                      value=""
-                                      className="text-body dark:text-bodydark"
-                                    >
-                                      Please Select
-                                    </option>
-                                    {skillData.map((skill, index) => (
-                                      <option
-                                        key={index}
-                                        value={skill?.name}
-                                        className="text-body dark:text-bodydark"
-                                        // disabled={skills.includes(skill?.name) ? true : false}
-                                      >
-                                        {skill?.name}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div>
-                                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                    Step Type
-                                  </label>
-                                  <select
-                                    value={subStep.stepType}
-                                    onChange={(e) =>
-                                      handlestepTypeChange(index, subIndex, e)
-                                    }
-                                    className={`relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
-                                  >
-                                    <option
-                                      value="jig"
-                                      className="text-body dark:text-bodydark"
-                                    >
-                                      Jig
-                                    </option>
-                                    <option
-                                      value="manual"
-                                      className="text-body dark:text-bodydark"
-                                    >
-                                      Manual
-                                    </option>
-                                  </select>
-                                </div>
+                              <div className="mt-6 rounded-xl dark:bg-boxdark">
+                                {/* Grid Layout */}
+                                <div className="grid gap-6 sm:grid-cols-2">
+                                  {/* Step Name */}
+                                  <div>
+                                    <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                      Step Name
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={subStep.stepName}
+                                      onChange={(e) =>
+                                        handleSubStepChange(
+                                          index,
+                                          subIndex,
+                                          e,
+                                          "stepName",
+                                        )
+                                      }
+                                      placeholder="Enter step name"
+                                      className={`w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white ${
+                                        errors?.stages[index]?.subSteps[
+                                          subIndex
+                                        ]
+                                          ? "border-red-500"
+                                          : ""
+                                      }`}
+                                    />
+                                  </div>
 
-                                {subStep.stepType == "manual" && (
-                                  <>
-                                    <div>
-                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                        Validation Type
-                                      </label>
-                                      <select
-                                        value={
-                                          subStep.stepFields.validationType
-                                        }
-                                        onChange={(e) =>
-                                          handleValidationTypeChange(
-                                            index,
-                                            subIndex,
-                                            e,
-                                          )
-                                        }
-                                        className={`relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
-                                      >
-                                        <option
-                                          value="value"
-                                          className="text-body dark:text-bodydark"
-                                        >
-                                          Value
+                                  {/* Required Skill */}
+                                  <div>
+                                    <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                      Required Skill
+                                    </label>
+                                    <select
+                                      value={stage.requiredSkill || ""}
+                                      onChange={(e) =>
+                                        handleStageChange(
+                                          index,
+                                          e,
+                                          "requiredSkill",
+                                        )
+                                      }
+                                      className="border-gray-300 bg-gray-50 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                    >
+                                      <option value="">Please Select</option>
+                                      {skillData.map((skill, idx) => (
+                                        <option key={idx} value={skill?.name}>
+                                          {skill?.name}
                                         </option>
-                                        <option
-                                          value="range"
-                                          className="text-body dark:text-bodydark"
+                                      ))}
+                                    </select>
+                                  </div>
+
+                                  {/* Step Type */}
+                                  <div>
+                                    <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                      Step Type
+                                    </label>
+                                    <select
+                                      value={subStep.stepType}
+                                      onChange={(e) =>
+                                        handlestepTypeChange(index, subIndex, e)
+                                      }
+                                      className="border-gray-300 bg-gray-50 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                    >
+                                      <option value="jig">Jig</option>
+                                      <option value="manual">Manual</option>
+                                    </select>
+                                  </div>
+
+                                  {/* Validation (only for manual) */}
+                                  {subStep.stepType === "manual" && (
+                                    <>
+                                      <div>
+                                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                          Validation Type
+                                        </label>
+                                        <select
+                                          value={
+                                            subStep.stepFields.validationType
+                                          }
+                                          onChange={(e) =>
+                                            handleValidationTypeChange(
+                                              index,
+                                              subIndex,
+                                              e,
+                                            )
+                                          }
+                                          className="border-gray-300 bg-gray-50 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
                                         >
-                                          Range
-                                        </option>
-                                      </select>
-                                    </div>
-                                    {subStep.stepFields.validationType ===
-                                      "value" && (
-                                      <>
+                                          <option value="value">Value</option>
+                                          <option value="range">Range</option>
+                                        </select>
+                                      </div>
+
+                                      {subStep.stepFields.validationType ===
+                                        "value" && (
                                         <div>
-                                          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                          <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
                                             Validation Value
                                           </label>
                                           <input
@@ -825,61 +926,64 @@ const AddProduct = () => {
                                                 "value",
                                               )
                                             }
-                                            placeholder={`Validation Value`}
-                                            className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                            placeholder="Enter value"
+                                            className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
                                           />
                                         </div>
-                                      </>
-                                    )}
-                                    {subStep.stepFields.validationType ===
-                                      "range" && (
-                                      <>
-                                        <div>
-                                          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                            Range From
-                                          </label>
-                                          <input
-                                            type="number"
-                                            value={subStep.stepFields.rangeFrom}
-                                            onChange={(e) =>
-                                              handleSubStepFieldChange(
-                                                index,
-                                                subIndex,
-                                                e,
-                                                "rangeFrom",
-                                              )
-                                            }
-                                            placeholder={`min`}
-                                            className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                            Range To
-                                          </label>
-                                          <input
-                                            type="number"
-                                            value={subStep.stepFields.rangeTo}
-                                            onChange={(e) =>
-                                              handleSubStepFieldChange(
-                                                index,
-                                                subIndex,
-                                                e,
-                                                "rangeTo",
-                                              )
-                                            }
-                                            placeholder={`max`}
-                                            className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                          />
-                                        </div>
-                                      </>
-                                    )}
-                                  </>
-                                )}
-                                {subStep?.isPackagingStatus && (
-                                  <div className="rounded-lg">
-                                    <div className="gap-4 rounded-lg">
-                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                      )}
+
+                                      {subStep.stepFields.validationType ===
+                                        "range" && (
+                                        <>
+                                          <div>
+                                            <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                              Range From
+                                            </label>
+                                            <input
+                                              type="number"
+                                              value={
+                                                subStep.stepFields.rangeFrom
+                                              }
+                                              onChange={(e) =>
+                                                handleSubStepFieldChange(
+                                                  index,
+                                                  subIndex,
+                                                  e,
+                                                  "rangeFrom",
+                                                )
+                                              }
+                                              placeholder="Min"
+                                              className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                              Range To
+                                            </label>
+                                            <input
+                                              type="number"
+                                              value={subStep.stepFields.rangeTo}
+                                              onChange={(e) =>
+                                                handleSubStepFieldChange(
+                                                  index,
+                                                  subIndex,
+                                                  e,
+                                                  "rangeTo",
+                                                )
+                                              }
+                                              placeholder="Max"
+                                              className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                            />
+                                          </div>
+                                        </>
+                                      )}
+                                    </>
+                                  )}
+
+                                  {/* Packaging Stage */}
+                                  {subStep?.isPackagingStatus && (
+                                    <div>
+                                      <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
                                         Packaging Type
                                       </label>
                                       <select
@@ -893,74 +997,184 @@ const AddProduct = () => {
                                             e.target.value,
                                           )
                                         }
-                                        className={`relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
+                                        className="border-gray-300 bg-gray-50 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
                                       >
                                         <option value="">Select</option>
                                         <option value="Single">Single</option>
                                         <option value="Carton">Carton</option>
                                       </select>
                                     </div>
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex gap-9">
-                                <div className="mt-6.5 flex items-center space-x-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={subStep?.isPrinterEnable || false}
-                                    onChange={(e) =>
-                                      handleCheckboxPrinter(
-                                        index,
-                                        subIndex,
-                                        e.target.value,
-                                      )
-                                    }
-                                    className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
-                                  />
-                                  <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
-                                    Enable Printing Option
-                                  </label>
+                                  )}
                                 </div>
-                                <div className="mt-6.5 flex items-center space-x-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={
-                                      subStep?.isCheckboxNGStatus || false
-                                    }
-                                    onChange={(e) =>
-                                      handleCheckboxNGStatus(
-                                        index,
-                                        subIndex,
-                                        e.target.value,
-                                      )
-                                    }
-                                    className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
-                                  />
-                                  <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
-                                    Mark As NG
+
+                                {/* Checkboxes */}
+                                <div className="mt-6 flex flex-wrap gap-6">
+                                  <label className="text-gray-700 dark:text-gray-300 flex items-center gap-2 text-sm">
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        subStep?.isPrinterEnable || false
+                                      }
+                                      onChange={(e) =>
+                                        handleCheckboxPrinter(
+                                          index,
+                                          subIndex,
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 h-4 w-4 rounded text-primary focus:ring-primary"
+                                    />
+                                    Enable Printing
                                   </label>
-                                </div>
-                                <div className="mt-6.5 flex items-center space-x-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={
-                                      subStep?.isPackagingStatus || false
-                                    }
-                                    onChange={(e) =>
-                                      handlePackagingStatus(
-                                        index,
-                                        subIndex,
-                                        e.target.value,
-                                      )
-                                    }
-                                    className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
-                                  />
-                                  <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+
+                                  <label className="text-gray-700 dark:text-gray-300 flex items-center gap-2 text-sm">
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        subStep?.isCheckboxNGStatus || false
+                                      }
+                                      onChange={(e) =>
+                                        handleCheckboxNGStatus(
+                                          index,
+                                          subIndex,
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 h-4 w-4 rounded text-primary focus:ring-primary"
+                                    />
+                                    Mark as NG
+                                  </label>
+
+                                  <label className="text-gray-700 dark:text-gray-300 flex items-center gap-2 text-sm">
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        subStep?.isPackagingStatus || false
+                                      }
+                                      onChange={(e) =>
+                                        handlePackagingStatus(
+                                          index,
+                                          subIndex,
+                                          e.target.value,
+                                        )
+                                      }
+                                      className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 h-4 w-4 rounded text-primary focus:ring-primary"
+                                    />
                                     Packaging Stage
                                   </label>
                                 </div>
                               </div>
                               {subStep?.isPackagingStatus &&
+                                subStep?.packagingData.packagingType ===
+                                  "Carton" && (
+                                  <div className="border-gray-200 dark:bg-gray-800 mt-6 rounded-xl border bg-white p-6 shadow-sm dark:border-strokedark">
+                                    <div className="mb-4 flex items-center gap-2">
+                                      <Box className="h-5 w-5 text-primary" />
+                                      <h3 className="text-gray-800 dark:text-gray-100 text-lg font-semibold">
+                                        Carton Details
+                                      </h3>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                                      {/* Carton Width */}
+                                      <div>
+                                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                          Carton Width (mm)
+                                        </label>
+                                        <input
+                                          type="number"
+                                          value={
+                                            subStep?.packagingData
+                                              ?.cartonWidth || ""
+                                          }
+                                          onChange={(e) =>
+                                            handleCartonInputs(
+                                              index,
+                                              subIndex,
+                                              e.target.value,
+                                              "cartonWidth",
+                                            )
+                                          }
+                                          placeholder="Enter width"
+                                          className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                        />
+                                      </div>
+
+                                      {/* Carton Height */}
+                                      <div>
+                                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                          Carton Height (mm)
+                                        </label>
+                                        <input
+                                          type="number"
+                                          value={
+                                            subStep?.packagingData
+                                              ?.cartonHeight || ""
+                                          }
+                                          onChange={(e) =>
+                                            handleCartonInputs(
+                                              index,
+                                              subIndex,
+                                              e.target.value,
+                                              "cartonHeight",
+                                            )
+                                          }
+                                          placeholder="Enter height"
+                                          className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                        />
+                                      </div>
+
+                                      {/* Max Capacity */}
+                                      <div>
+                                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                          Max Capacity
+                                        </label>
+                                        <input
+                                          type="number"
+                                          value={
+                                            subStep?.packagingData
+                                              ?.maxCapacity || ""
+                                          }
+                                          onChange={(e) =>
+                                            handleCartonInputs(
+                                              index,
+                                              subIndex,
+                                              e.target.value,
+                                              "maxCapacity",
+                                            )
+                                          }
+                                          placeholder="Enter max capacity"
+                                          className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                        />
+                                      </div>
+
+                                      {/* Carton Weight */}
+                                      <div>
+                                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                          Carton Weight (Kg)
+                                        </label>
+                                        <input
+                                          type="number"
+                                          value={
+                                            subStep?.packagingData
+                                              ?.cartonWeight || ""
+                                          }
+                                          onChange={(e) =>
+                                            handleCartonInputs(
+                                              index,
+                                              subIndex,
+                                              e.target.value,
+                                              "cartonWeight",
+                                            )
+                                          }
+                                          placeholder="Enter weight"
+                                          className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              {/* {subStep?.isPackagingStatus &&
                                 subStep?.packagingData.packagingType ==
                                   "Carton" && (
                                   <>
@@ -1057,8 +1271,7 @@ const AddProduct = () => {
                                       </div>
                                     </div>
                                   </>
-                                )}
-
+                                )} */}
                               {subStep?.isCheckboxNGStatus && (
                                 <div className="mt-6.5 rounded-lg border border-[#eee] px-3">
                                   <div className="flex justify-center pt-2">
@@ -1212,6 +1425,27 @@ const AddProduct = () => {
                                               </div>
                                               <div>
                                                 <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                  Unit
+                                                </label>
+                                                <input
+                                                  type="text"
+                                                  value={jigField?.unit}
+                                                  onChange={(e) =>
+                                                    handleJigSubStepChange(
+                                                      index,
+                                                      subIndex,
+                                                      jigIndex,
+                                                      e,
+                                                      "unit",
+                                                    )
+                                                  }
+                                                  placeholder={`Unit (Leave Blank if not need to add unit)`}
+                                                  className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                />
+                                              </div>
+
+                                              <div>
+                                                <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
                                                   Validation Type
                                                 </label>
                                                 <select
@@ -1241,6 +1475,34 @@ const AddProduct = () => {
                                                     Range
                                                   </option>
                                                 </select>
+                                              </div>
+
+                                              <div className="mt-3 items-center gap-3 ">
+                                                {jigField.validationType ===
+                                                  "value" && (
+                                                  <>
+                                                    <div>
+                                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                        Validation Value
+                                                      </label>
+                                                      <input
+                                                        type="text"
+                                                        value={jigField.value}
+                                                        onChange={(e) =>
+                                                          handleJigSubStepChange(
+                                                            index,
+                                                            subIndex,
+                                                            jigIndex,
+                                                            e,
+                                                            "value",
+                                                          )
+                                                        }
+                                                        placeholder={`Validation Value`}
+                                                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                      />
+                                                    </div>
+                                                  </>
+                                                )}
                                               </div>
                                               {jigField.validationType ===
                                                 "range" && (
@@ -1288,33 +1550,7 @@ const AddProduct = () => {
                                                 </>
                                               )}
                                             </div>
-                                            <div className="mt-3 grid grid-cols-1 items-center gap-3 sm:grid-cols-1">
-                                              {jigField.validationType ===
-                                                "value" && (
-                                                <>
-                                                  <div>
-                                                    <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                      Validation Value
-                                                    </label>
-                                                    <input
-                                                      type="text"
-                                                      value={jigField.value}
-                                                      onChange={(e) =>
-                                                        handleJigSubStepChange(
-                                                          index,
-                                                          subIndex,
-                                                          jigIndex,
-                                                          e,
-                                                          "value",
-                                                        )
-                                                      }
-                                                      placeholder={`Validation Value`}
-                                                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                    />
-                                                  </div>
-                                                </>
-                                              )}
-                                            </div>
+
                                             <div className="col-span-12 flex justify-end">
                                               <button
                                                 type="button"
@@ -1341,7 +1577,6 @@ const AddProduct = () => {
                                   )}
                                 </>
                               )}
-
                               <div className="col-span-12 flex justify-end gap-3">
                                 {subStep.isSubExpand &&
                                   subStep.stepType == "jig" && (
@@ -1378,18 +1613,6 @@ const AddProduct = () => {
                         </div>
                       ))}
                     </>
-                  )}
-                  {stage.isExpanded && (
-                    <div>
-                      <label className="text-gray-800 mb-3 block text-sm font-medium  dark:text-bodydark">
-                        Attach SOP
-                      </label>
-                      <input
-                        value={stage.sopFile}
-                        type="file"
-                        className="w-full cursor-pointer rounded-lg border-[1.5px] border-stroke bg-transparent outline-none transition file:mr-5 file:border-collapse file:cursor-pointer file:border-0 file:border-r file:border-solid file:border-stroke file:bg-whiter file:px-5 file:py-3 file:hover:bg-primary file:hover:bg-opacity-10 focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:file:border-form-strokedark dark:file:bg-white/30 dark:file:text-bodydark dark:focus:border-primary"
-                      />
-                    </div>
                   )}
                   <div className="col-span-12 flex justify-end gap-5">
                     {stage.isExpanded && (
@@ -1433,80 +1656,74 @@ const AddProduct = () => {
                 {commonStages.map((stage, index) => (
                   <div
                     key={index}
-                    className="mb-6 grid gap-6 rounded-xl border border-[#eee] bg-white p-4 shadow-md dark:bg-boxdark"
+                    className="border-gray-200 rounded-2xl border bg-white p-6 shadow-md transition hover:shadow-lg dark:border-strokedark dark:bg-boxdark"
                   >
-                    <div>
-                      <p className="text-gray-700 mb-2 block text-sm font-semibold dark:text-white">
-                        Stage: {stage?.stageName}
-                      </p>
+                    {/* Stage Header */}
+                    <div className="border-gray-100 mb-4 flex items-center justify-between border-b pb-3 dark:border-strokedark">
+                      <h3 className="text-gray-800 text-lg font-semibold dark:text-white">
+                        Stage {index + 1}:{" "}
+                        <span className="text-primary">{stage?.stageName}</span>
+                      </h3>
                     </div>
-                    <div>
-                      <label className="text-gray-800 mb-2 block text-sm font-semibold dark:text-white">
-                        Managed By
-                      </label>
-                      <select
-                        value={stage.managedBy || ""}
-                        onChange={(e) => {
-                          handleCommonStageChange(index, e, "managedBy");
-                        }}
-                        className="text-gray-800 w-full rounded-lg border border border-stroke bg-transparent px-4 py-3 text-sm outline-none transition-all focus:border-primary focus:ring-1 focus:ring-primary dark:border-strokedark dark:bg-form-input dark:text-white"
-                      >
-                        <option className="text-gray-400 dark:text-gray-500">
-                          Please Select
-                        </option>
-                        {userType.map((user, idx) => (
-                          <option
-                            key={idx}
-                            value={user?.name}
-                            className="text-gray-700 dark:text-white"
-                          >
-                            {user?.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                        Required Skill
-                      </label>
-                      <select
-                        value={stage.requiredSkill || ""}
-                        onChange={(e) => {
-                          handleCommonStageChange(index, e, "requiredSkill");
-                        }}
-                        className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
-                      >
-                        <option
-                          value=""
-                          className="text-body dark:text-bodydark"
+
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      {/* Managed By */}
+                      <div>
+                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                          Managed By
+                        </label>
+                        <select
+                          value={stage.managedBy || ""}
+                          onChange={(e) =>
+                            handleCommonStageChange(index, e, "managedBy")
+                          }
+                          className="border-gray-300 bg-gray-50 text-gray-800 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/50 dark:border-strokedark dark:bg-form-input dark:text-white"
                         >
-                          Please Select
-                        </option>
-                        {skillData.map((skill, index) => (
-                          <option
-                            key={index}
-                            value={skill?.name}
-                            className="text-body dark:text-bodydark"
-                            // disabled={skills.includes(skill?.name) ? true : false}
-                          >
-                            {skill?.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-gray-800 mb-2 block text-sm font-semibold dark:text-white">
-                        UPHA (Units Per Hour Analysis)
-                      </label>
-                      <input
-                        type="number"
-                        value={stage.upha || ""}
-                        onChange={(e) => {
-                          handleCommonStageChange(index, e, "upha");
-                        }}
-                        placeholder="Enter UPHA"
-                        className="text-gray-800 w-full rounded-lg border border border-stroke bg-transparent px-4 py-3 text-sm outline-none transition-all focus:border-primary focus:ring-1 focus:ring-primary dark:border-strokedark dark:bg-form-input dark:text-white"
-                      />
+                          <option value="">Please Select</option>
+                          {userType.map((user, idx) => (
+                            <option key={idx} value={user?.name}>
+                              {user?.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Required Skill */}
+                      <div>
+                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                          Required Skill
+                        </label>
+                        <select
+                          value={stage.requiredSkill || ""}
+                          onChange={(e) =>
+                            handleCommonStageChange(index, e, "requiredSkill")
+                          }
+                          className="border-gray-300 bg-gray-50 text-gray-800 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/50 dark:border-strokedark dark:bg-form-input dark:text-white"
+                        >
+                          <option value="">Please Select</option>
+                          {skillData.map((skill, idx) => (
+                            <option key={idx} value={skill?.name}>
+                              {skill?.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* UPHA */}
+                      {/* <div className="sm:col-span-2">
+                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                          UPHA (Units Per Hour Analysis)
+                        </label>
+                        <input
+                          type="number"
+                          value={stage.upha || ""}
+                          onChange={(e) =>
+                            handleCommonStageChange(index, e, "upha")
+                          }
+                          placeholder="Enter UPHA"
+                          className="border-gray-300 bg-gray-50 text-gray-800 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/50 dark:border-strokedark dark:bg-form-input dark:text-white"
+                        />
+                      </div> */}
                     </div>
                   </div>
                 ))}
@@ -1514,11 +1731,22 @@ const AddProduct = () => {
               <div className="col-span-12 flex justify-end gap-5">
                 <button
                   type="button"
-                  className="mt-4 flex items-center rounded-md bg-[#34D399] px-4 py-2 text-white"
+                  className={`mt-4 flex items-center gap-2 rounded-md px-4 py-2 text-white ${
+                    submitDisabled
+                      ? "cursor-not-allowed bg-[#34D399]/70"
+                      : "bg-[#34D399]"
+                  }`}
                   onClick={submitStageForm}
                   disabled={submitDisabled}
                 >
-                  {submitDisabled ? "Submitting..." : "Submit"}
+                  {submitDisabled ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>Submit</>
+                  )}
                 </button>
               </div>
             </div>

@@ -24,6 +24,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import Modal from "@/components/Modal/page";
+import { Clock } from "lucide-react";
 
 const ADDPlanSchedule = () => {
   const [shiftTime, setShiftTime] = useState(0);
@@ -272,7 +273,6 @@ const ADDPlanSchedule = () => {
     stageIndex,
     rowSeatLength,
   ) => {
-    alert("hello");
     setAssignedStages((prev) => {
       const updatedStages = { ...prev };
       const currentKey = `${rowIndex}-${seatIndex}`;
@@ -351,7 +351,7 @@ const ADDPlanSchedule = () => {
       throw new Error("Invalid start or end time format");
     }
     const differenceInMilliseconds = endDate - startDate;
-    console.log()
+    console.log();
     const totalMinutes = Math.floor(differenceInMilliseconds / (1000 * 60));
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
@@ -543,86 +543,209 @@ const ADDPlanSchedule = () => {
     return (totalMinutes / 60).toFixed(0);
   };
   const handleCalculation = async () => {
-    if (!selectedProcess || !selectedProduct) {
-      return;
-    }
-    let totalQuantity = parseInt(selectedProcess?.quantity);
-    if (isNaN(totalQuantity) || totalQuantity <= 0) {
-      return;
-    }
+    try {
+      if (!selectedProcess || !selectedProduct) {
+        console.warn("Missing selected process or product");
+        return;
+      }
 
-    const uphaValues = selectedProduct?.stages?.map((stage: any) =>
-      parseInt(stage.upha, 10),
-    );
-    const leastUpha = Math.min(...uphaValues);
-    const breakSlots = selectedShift?.intervals?.filter(
-      (slot) => slot.breakTime,
-    );
-    const formattedBreaks = breakSlots.map((slot) => ({
-      start: slot.startTime,
-      end: slot.endTime,
-    }));
-    const totalBreakTime = calculateTotalBreakHours(breakSlots);
-    const breakTime = totalBreakTime || 0;
-    const adjustedShiftTime = shiftTime - breakTime / 60;
-    const unitsPer8HourDay = leastUpha * adjustedShiftTime * repeatCount;
-    const totalTimeEstimationInDays = totalQuantity / unitsPer8HourDay;
+      let totalQuantity = parseInt(selectedProcess?.quantity, 10);
+      if (isNaN(totalQuantity) || totalQuantity <= 0) {
+        console.warn("Invalid or missing process quantity");
+        return;
+      }
+      const uphaValues = selectedProduct?.stages
+        ?.map((stage: any) => parseInt(stage.upha, 10))
+        .filter((val: number) => !isNaN(val));
+      console.log("uphaValues ==>", uphaValues);
+      if (!uphaValues?.length) {
+        console.warn("No valid UPHA values found");
+        return;
+      }
 
-    console.log(
-      "shiftTime ===>",
-      shiftTime,
-      " === adjustedShiftTime ==>",
-      adjustedShiftTime,
-      " === leastUpha ==>",
-      leastUpha,
-      " === unitsPer8HourDay ===> ",
-      unitsPer8HourDay,
-    );
-    // return false;
-    const expectedEndDate = await calculateEstimatedEndDate(
-      totalTimeEstimationInDays,
-    );
-    const reservedSeats = await checkSeatAvailability(
-      selectedRoom,
-      selectedShift,
-      startDate,
-      expectedEndDate,
-    );
-    const assignedStages = allocateStagesToSeats(
-      stages,
-      selectedRoom,
-      repeatCount,
-      reservedSeats,
-    );
-    if (!assignedStages) {
-      return;
+      const leastUpha = Math.min(...uphaValues);
+      const breakSlots =
+        selectedShift?.intervals?.filter((slot: any) => slot.breakTime) || [];
+
+      const formattedBreaks = breakSlots.map((slot: any) => ({
+        start: slot.startTime,
+        end: slot.endTime,
+      }));
+      let totalBreakTime = 0;
+      try {
+        totalBreakTime = calculateTotalBreakHours(breakSlots) || 0;
+      } catch (err) {
+        console.error("Error calculating total break hours:", err);
+      }
+      const breakTime = totalBreakTime || 0;
+      const adjustedShiftTime = shiftTime - breakTime / 60;
+
+      if (adjustedShiftTime <= 0) {
+        console.error("Adjusted shift time is invalid:", adjustedShiftTime);
+        return;
+      }
+
+      const unitsPer8HourDay = leastUpha * adjustedShiftTime * repeatCount;
+      console.log("leastUpha =>", leastUpha);
+      console.log("unitsPer8HourDay ==>", unitsPer8HourDay);
+      if (unitsPer8HourDay <= 0) {
+        console.error("Units per 8-hour day calculation failed");
+        return;
+      }
+
+      const totalTimeEstimationInDays = totalQuantity / unitsPer8HourDay;
+
+      let expectedEndDate: string | null = null;
+      try {
+        expectedEndDate = await calculateEstimatedEndDate(
+          totalTimeEstimationInDays,
+        );
+      } catch (err) {
+        console.error("Error calculating estimated end date:", err);
+        return;
+      }
+
+      console.log("expectedEndDate ===>", expectedEndDate);
+      let reservedSeats = [];
+      try {
+        reservedSeats = await checkSeatAvailability(
+          selectedRoom,
+          selectedShift,
+          startDate,
+          expectedEndDate,
+        );
+      } catch (err) {
+        console.error("Error checking seat availability:", err);
+      }
+
+      let assignedStages = {};
+      try {
+        assignedStages = allocateStagesToSeats(
+          stages,
+          selectedRoom,
+          repeatCount,
+          reservedSeats,
+        );
+      } catch (err) {
+        console.error("Error allocating stages to seats:", err);
+        return;
+      }
+
+      if (!assignedStages || Object.keys(assignedStages).length === 0) {
+        console.warn("No assigned stages found");
+        return;
+      }
+      const uniqueAssignedStages = new Set<string>();
+      const seatCountPerStage: Record<string, number> = {};
+
+      for (let key in assignedStages) {
+        assignedStages[key].forEach((stage: any) => {
+          uniqueAssignedStages.add(stage.name);
+          seatCountPerStage[stage.name] =
+            (seatCountPerStage[stage.name] || 0) + 1;
+        });
+      }
+      setEstimatedEndDate(expectedEndDate);
+      setTotalTimeEstimation(totalTimeEstimationInDays.toFixed(2));
+      setTotalUPHA(unitsPer8HourDay.toFixed(2));
+      setIsPlaningAndSchedulingShow(true);
+    } catch (error: any) {
+      console.error(
+        "Unexpected error in handleCalculation:",
+        error.message || error,
+      );
     }
-    const uniqueAssignedStages = new Set();
-    const seatCountPerStage = {};
-
-    for (let key in assignedStages) {
-      assignedStages[key].forEach((stage) => {
-        uniqueAssignedStages.add(stage.name);
-        seatCountPerStage[stage.name] =
-          (seatCountPerStage[stage.name] || 0) + 1;
-      });
-    }
-
-    setEstimatedEndDate(expectedEndDate);
-    setTotalTimeEstimation(totalTimeEstimationInDays.toFixed(2));
-    setTotalUPHA(unitsPer8HourDay.toFixed(2));
-    setIsPlaningAndSchedulingShow(true);
   };
-  const calculateEstimatedEndDate = async (totalDays: any) => {
-    const [datePart, timePart] = startDate.split(" ");
+
+  // const handleCalculation = async () => {
+  //   if (!selectedProcess || !selectedProduct) {
+  //     return;
+  //   }
+  //   let totalQuantity = parseInt(selectedProcess?.quantity);
+  //   if (isNaN(totalQuantity) || totalQuantity <= 0) {
+  //     return;
+  //   }
+
+  //   const uphaValues = selectedProduct?.stages?.map((stage: any) =>
+  //     parseInt(stage.upha, 10),
+  //   );
+  //   const leastUpha = Math.min(...uphaValues);
+  //   const breakSlots = selectedShift?.intervals?.filter(
+  //     (slot) => slot.breakTime,
+  //   );
+  //   const formattedBreaks = breakSlots.map((slot) => ({
+  //     start: slot.startTime,
+  //     end: slot.endTime,
+  //   }));
+  //   const totalBreakTime = calculateTotalBreakHours(breakSlots);
+
+  //   const breakTime = totalBreakTime || 0;
+  //   const adjustedShiftTime = shiftTime - breakTime / 60;
+  //   const unitsPer8HourDay = leastUpha * adjustedShiftTime * repeatCount;
+  //   const totalTimeEstimationInDays = totalQuantity / unitsPer8HourDay;
+
+  //   const expectedEndDate = await calculateEstimatedEndDate(
+  //     totalTimeEstimationInDays,
+  //   );
+
+  //   console.log("expectedEndDate ===>", expectedEndDate);
+  //   // const reservedSeats = await checkSeatAvailability(
+  //   //   selectedRoom,
+  //   //   selectedShift,
+  //   //   startDate,
+  //   //   expectedEndDate,
+  //   // );
+  //   // const assignedStages = allocateStagesToSeats(
+  //   //   stages,
+  //   //   selectedRoom,
+  //   //   repeatCount,
+  //   //   reservedSeats,
+  //   // );
+  //   if (!assignedStages) {
+  //     return;
+  //   }
+  //   const uniqueAssignedStages = new Set();
+  //   const seatCountPerStage = {};
+
+  //   for (let key in assignedStages) {
+  //     assignedStages[key].forEach((stage) => {
+  //       uniqueAssignedStages.add(stage.name);
+  //       seatCountPerStage[stage.name] =
+  //         (seatCountPerStage[stage.name] || 0) + 1;
+  //     });
+  //   }
+
+  //   setEstimatedEndDate(expectedEndDate);
+  //   setTotalTimeEstimation(totalTimeEstimationInDays.toFixed(2));
+  //   setTotalUPHA(unitsPer8HourDay.toFixed(2));
+  //   setIsPlaningAndSchedulingShow(true);
+  // };
+  let holidayCache: Set<string> | null = null;
+
+  const calculateEstimatedEndDate = async (totalDays: number) => {
+    if (!startDate || !totalDays || totalDays <= 0) {
+      console.warn("Invalid input: startDate or totalDays missing");
+      return null;
+    }
+
+    const [datePart] = startDate.split(" ");
     const [day, month, year] = datePart.split("/").map(Number);
     const fullYear = year < 100 ? 2000 + year : year;
+
     let start = new Date(fullYear, month - 1, day);
 
-    let holidayList = await getHolidayList();
-    const holidays = holidayList.map((holiday: any) =>
-      new Date(holiday.holidayDate).toDateString(),
-    );
+    // ✅ Cache holidays so API isn’t called every time
+    // if (!holidayCache) {
+    //   try {
+    //     // const holidayList = await getHolidayList();
+    //     // holidayCache = new Set(
+    //     //   holidayList.map((h: any) => new Date(h.holidayDate).toDateString()),
+    //     // );
+    //   } catch (err) {
+    //     console.error("Failed to fetch holidays:", err);
+    //     holidayCache = new Set();
+    //   }
+    // }
 
     let remainingDays = totalDays;
     while (remainingDays > 0) {
@@ -630,9 +753,9 @@ const ADDPlanSchedule = () => {
 
       const currentDate = start.toDateString();
       const isWeekend = start.getDay() === 0 || start.getDay() === 6;
-      const isHoliday = holidays.includes(currentDate);
+      // const isHoliday = holidayCache.has(currentDate);
 
-      if (!isWeekend && !isHoliday) {
+      if (!isWeekend) {
         remainingDays -= 1;
       }
     }
@@ -645,18 +768,57 @@ const ADDPlanSchedule = () => {
       start.getSeconds(),
     ).padStart(2, "0")}`;
 
+    console.log("formattedEndDate ==>", formattedEndDate);
     return formattedEndDate;
   };
-  const handleDragStart =
-    (stage: any, substep = null) =>
-    (event: any) => {
-      const data = {
-        name: stage.stageName,
-        upha: stage.upha,
-        substepName: substep ? [substep.stepName] : null,
-      };
-      event.dataTransfer.setData("text/plain", JSON.stringify(data));
+
+  // const calculateEstimatedEndDate = async (totalDays: any) => {
+  //   const [datePart, timePart] = startDate.split(" ");
+  //   const [day, month, year] = datePart.split("/").map(Number);
+  //   const fullYear = year < 100 ? 2000 + year : year;
+  //   let start = new Date(fullYear, month - 1, day);
+
+  //   // let holidayList = await getHolidayList();
+  //   // console.log("holidayList =>>", holidayList);
+  //   // const holidays = holidayList.map((holiday: any) =>
+  //   //   new Date(holiday.holidayDate).toDateString(),
+  //   // );
+
+  //   let remainingDays = totalDays;
+  //   while (remainingDays > 0) {
+  //     start.setDate(start.getDate() + 1);
+
+  //     const currentDate = start.toDateString();
+  //     const isWeekend = start.getDay() === 0 || start.getDay() === 6;
+  //     //const isHoliday = holidays.includes(currentDate);
+
+  //     // if (!isWeekend && !isHoliday) {
+  //     if (!isWeekend) {
+  //       remainingDays -= 1;
+  //     }
+  //   }
+
+  //   const formattedEndDate = `${String(start.getDate()).padStart(2, "0")}/${String(
+  //     start.getMonth() + 1,
+  //   ).padStart(2, "0")}/${String(start.getFullYear()).slice(-2)} ${String(
+  //     start.getHours(),
+  //   ).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}:${String(
+  //     start.getSeconds(),
+  //   ).padStart(2, "0")}`;
+  //   console.log("formattedEndDate ==>", formattedEndDate);
+  //   return false;
+  //   return formattedEndDate;
+  // };
+  const handleDragStart =(stage: any, substep = null) => (event: any) => {
+    const data = {
+      name: stage.stageName,
+      upha: stage.upha,
+      substepName: substep ? [substep.stepName] : null,
+      requiredSkill: stage.requiredSkill,
+      managedBy: stage.managedBy,
     };
+    event.dataTransfer.setData("text/plain", JSON.stringify(data));
+  };
   const moveItem = (fromCoordinates: any, toCoordinates: any) => {
     setAssignedStages((prevStages) => {
       const updatedStages = { ...prevStages };
@@ -1031,49 +1193,51 @@ const ADDPlanSchedule = () => {
       <div className="container mx-auto grid grid-cols-1 gap-9 p-6 sm:grid-cols-1">
         <div className="flex flex-col gap-9">
           <div className="rounded-lg border border-stroke bg-white p-6 shadow-lg dark:border-strokedark dark:bg-boxdark">
-            <div className="flex justify-between border-b border-stroke px-6 py-4 dark:border-strokedark">
-              <h3 className="text-xl font-semibold text-black dark:text-white">
+            <div className="flex flex-col items-center justify-between border-b border-stroke px-6 py-4 dark:border-strokedark sm:flex-row">
+              <h3 className="mb-2 text-xl font-semibold text-black dark:text-white sm:mb-0">
                 Add Planning & Scheduling
               </h3>
+
+              {/* Clone Planning Button */}
               <button
                 type="button"
-                className="rounded-lg bg-boxdark px-2 py-2 text-xs text-white"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white shadow-sm transition-all duration-200 hover:bg-blue-500"
                 onClick={() => setIsClonePlaningModel(true)}
               >
-                {" "}
-                Clone Planing
+                Clone Planning
               </button>
+
+              {/* Clone Planning Modal */}
               <Modal
                 isOpen={isClonePlaningModel}
                 onSubmit={handleSubmitClonePlaning}
                 onClose={closeClonePlaningModal}
-                title="Clone Planing"
+                title="Clone Planning"
               >
-                <div>
-                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                    Choose Planing Model
+                <div className="flex flex-col gap-4">
+                  <label className="text-gray-800 dark:text-gray-200 mb-1 block text-sm font-medium">
+                    Choose Planning Model
                   </label>
                   <select
                     value={selectedClonePlaning?._id || ""}
                     onChange={(e) => handlePlaningModel(e.target.value)}
-                    className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
+                    className="dark:bg-gray-700 text-gray-900 w-full rounded-lg border border-stroke bg-white px-4 py-2 outline-none transition focus:border-primary focus:ring focus:ring-primary/20 dark:text-white"
                   >
                     <option value="">Please Select</option>
-                    {getSavedPlaning?.map((planing, index) => (
-                      <>
-                        <option
-                          key={index}
-                          value={planing?._id}
-                          className="text-body dark:text-bodydark"
-                        >
-                          {planing?.processName}
-                        </option>
-                      </>
+                    {getSavedPlaning?.map((planing) => (
+                      <option
+                        key={planing._id}
+                        value={planing._id}
+                        className="text-gray-900 dark:text-gray-100"
+                      >
+                        {planing?.processName}
+                      </option>
                     ))}
                   </select>
                 </div>
               </Modal>
             </div>
+
             <form action="#">
               <div className="p-6">
                 <FormComponent
@@ -1102,23 +1266,55 @@ const ADDPlanSchedule = () => {
                   inventoryData={inventoryData}
                 />
                 {/* end FormComponent 1 */}
-                {totalTimeEstimation != "" && (
-                  <div className="grid w-full justify-center">
-                    <p>Estimated Completed Date : {estimatedEndDate}</p>
-                    <p>
-                      Total Time Estimation (in days): {totalTimeEstimation}
-                    </p>
-                    <p>
-                      Units Processed Per{" "}
-                      {shiftTime - parseInt(selectedShift?.totalBreakTime) / 60}
-                      -Hour Day: {totalUPHA}
-                    </p>
+                {totalTimeEstimation && (
+                  <div className="dark:bg-gray-800 border-gray-300 dark:border-gray-700 mt-6 rounded-xl border bg-white p-6 shadow-lg transition-all duration-300">
+                    <h3 className="text-gray-800 mb-5 flex items-center gap-2 text-xl font-semibold dark:text-white">
+                      <Clock className="h-5 w-5 text-primary" />
+                      Time & Production Estimation
+                    </h3>
+
+                    <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-3">
+                      {/* Estimated Completion Date */}
+                      <div className="bg-gray-50 dark:bg-gray-700 flex flex-col gap-2 rounded-lg p-4 shadow-sm">
+                        <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
+                          Estimated Completion Date
+                        </span>
+                        <span className="text-md text-gray-900 font-semibold dark:text-white">
+                          {estimatedEndDate}
+                        </span>
+                      </div>
+
+                      {/* Total Time Estimation */}
+                      <div className="bg-gray-50 dark:bg-gray-700 flex flex-col gap-2 rounded-lg p-4 shadow-sm">
+                        <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
+                          Total Time Estimation
+                        </span>
+                        <span className="text-md text-gray-900 font-semibold dark:text-white">
+                          {totalTimeEstimation} Days
+                        </span>
+                      </div>
+
+                      {/* Units Processed Per Hour */}
+                      <div className="bg-gray-50 dark:bg-gray-700 flex flex-col gap-2 rounded-lg p-4 shadow-sm">
+                        <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
+                          Units Processed Per Hour
+                        </span>
+                        <span className="text-md text-gray-900 font-semibold dark:text-white">
+                          {(
+                            shiftTime -
+                            parseInt(selectedShift?.totalBreakTime || "0") / 60
+                          ).toFixed(2)}{" "}
+                          -Hour Day: {totalUPHA}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 )}
+
                 {isPlaningAndSchedulingShow && (
                   <div>
                     {/* Component 2 */}
-                    <div className="flex gap-10">
+                    <div className="mt-4 flex gap-10">
                       <div className="mb-2">
                         <h3 className="text-lg font-semibold text-black dark:text-white">
                           Stages

@@ -3,13 +3,26 @@
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import { useState } from "react";
 import { createShift } from "../../../lib/api";
-import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  DropResult,
+} from "react-beautiful-dnd";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import CheckboxOne from "@/components/Checkboxes/CheckboxOne";
+import {
+  Clock,
+  FileText,
+  CalendarDays,
+  PlusCircle,
+  Trash2,
+} from "lucide-react";
+
 const AddShiftManagement = () => {
   const [name, setName] = useState("");
-  const [descripition, setDescripition] = useState("");
+  const [description, setDescription] = useState("");
   const [weekDays, setWeekDays] = useState({
     sun: false,
     mon: false,
@@ -22,8 +35,10 @@ const AddShiftManagement = () => {
   const [intervals, setIntervals] = useState([
     { startTime: "00:00", endTime: "00:00", breakTime: false },
   ]);
+  const [errors, setErrors] = useState<any>({});
 
-  const onDragEnd = (result: any) => {
+  // Dragging handler
+  const onDragEnd = (result: DropResult) => {
     if (!result.destination) return;
     const reordered = Array.from(intervals);
     const [moved] = reordered.splice(result.source.index, 1);
@@ -31,30 +46,73 @@ const AddShiftManagement = () => {
     setIntervals(reordered);
   };
 
+  // Handle week day checkbox
   const handleCheckboxChange = (day: string) => {
-    setWeekDays((prevDays) => ({
-      ...prevDays,
-      [day]: !prevDays[day],
+    setWeekDays((prev) => ({
+      ...prev,
+      [day]: !prev[day],
     }));
   };
 
+  // Time difference (in minutes)
   const calculateTimeDifference = (start: string, end: string) => {
-    const [startHours, startMinutes] = start.split(":").map(Number);
-    const [endHours, endMinutes] = end.split(":").map(Number);
-    return endHours * 60 + endMinutes - (startHours * 60 + startMinutes);
+    const [sh, sm] = start.split(":").map(Number);
+    const [eh, em] = end.split(":").map(Number);
+    return eh * 60 + em - (sh * 60 + sm);
   };
 
+  // Validation logic
+  const validateForm = () => {
+    const newErrors: any = {};
+
+    if (!name.trim()) newErrors.name = "Shift name is required";
+    if (!description.trim()) newErrors.description = "Description is required";
+
+    if (!Object.values(weekDays).includes(true)) {
+      newErrors.weekDays = "Select at least one working day";
+    }
+
+    if (intervals.length === 0) {
+      newErrors.intervals = "At least one interval is required";
+    } else {
+      intervals.forEach((interval, i) => {
+        if (!interval.startTime || !interval.endTime) {
+          newErrors[`interval-${i}`] = "Start & End time are required";
+        } else if (interval.startTime >= interval.endTime) {
+          newErrors[`interval-${i}`] =
+            "Start time must be earlier than end time";
+        }
+
+        if (i > 0) {
+          const prevEnd = intervals[i - 1].endTime;
+          if (interval.startTime < prevEnd) {
+            newErrors[`interval-${i}`] = "Intervals must not overlap";
+          }
+        }
+      });
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Handle form submit
   const handleSubmit = async (e: any) => {
     e.preventDefault();
+    if (!validateForm()) {
+      toast.error("Please fix form errors before submitting");
+      return;
+    }
+
     try {
-      // sort intervals
+      // Sort intervals
       const sortedIntervals = intervals.sort((a, b) => {
-        const [aHours, aMinutes] = a.startTime.split(":").map(Number);
-        const [bHours, bMinutes] = b.startTime.split(":").map(Number);
-        return aHours * 60 + aMinutes - (bHours * 60 + bMinutes);
+        const [ah, am] = a.startTime.split(":").map(Number);
+        const [bh, bm] = b.startTime.split(":").map(Number);
+        return ah * 60 + am - (bh * 60 + bm);
       });
 
-      // find shift start (skip leading breaks)
+      // Find shift start
       let shiftStartTime = sortedIntervals[0].startTime;
       for (let i = 0; i < sortedIntervals.length; i++) {
         if (!sortedIntervals[i].breakTime) {
@@ -65,7 +123,7 @@ const AddShiftManagement = () => {
         }
       }
 
-      // find shift end (skip trailing breaks)
+      // Find shift end
       let shiftEndTime = sortedIntervals[sortedIntervals.length - 1].endTime;
       for (let i = sortedIntervals.length - 1; i >= 0; i--) {
         if (!sortedIntervals[i].breakTime) {
@@ -74,18 +132,14 @@ const AddShiftManagement = () => {
         }
       }
 
-      // total break time
+      // Calculate break time
       const totalBreakTime = sortedIntervals
         .filter((interval) => interval.breakTime)
-        .reduce((total, breakInterval) => {
-          return (
-            total +
-            calculateTimeDifference(
-              breakInterval.startTime,
-              breakInterval.endTime,
-            )
-          );
-        }, 0);
+        .reduce(
+          (total, br) =>
+            total + calculateTimeDifference(br.startTime, br.endTime),
+          0,
+        );
 
       const formData = {
         name,
@@ -93,16 +147,16 @@ const AddShiftManagement = () => {
         endTime: shiftEndTime,
         totalBreakTime,
         intervals: sortedIntervals,
-        descripition,
+        description,
         weekDays,
       };
 
       await createShift(formData);
       toast.success("Shift created successfully!");
 
-      // reset form
+      // Reset form
       setName("");
-      setDescripition("");
+      setDescription("");
       setIntervals([
         { startTime: "00:00", endTime: "00:00", breakTime: false },
       ]);
@@ -115,10 +169,23 @@ const AddShiftManagement = () => {
         fri: false,
         sat: false,
       });
-    } catch (error) {
-      console.error("Error creating shift:", error);
+      setErrors({});
+      window.location.href ="/shift-management/view";
+    } catch (err) {
+      console.error("Error creating shift:", err);
       toast.error("Failed to create shift. Please try again.");
     }
+  };
+
+  // Interval handlers
+  const handleIntervalChange = (
+    index: number,
+    field: string,
+    value: string,
+  ) => {
+    const updated = [...intervals];
+    updated[index][field] = value;
+    setIntervals(updated);
   };
 
   const handleCheckboxBreakTime = (
@@ -126,40 +193,13 @@ const AddShiftManagement = () => {
     field: string,
     value: boolean,
   ) => {
-    const updatedIntervals = [...intervals];
-    updatedIntervals[index][field] = value;
-    setIntervals(updatedIntervals);
-  };
-
-  const handleIntervalChange = (
-    index: number,
-    field: string,
-    value: string,
-  ) => {
-    const updatedIntervals = [...intervals];
-    updatedIntervals[index][field] = value;
-
-    const start = updatedIntervals[index].startTime;
-    const end = updatedIntervals[index].endTime;
-    // if (start && end && start >= end) {
-    //   toast.error("Start time must be before End time");
-    //   return;
-    // }
-
-    if (index > 0) {
-      const prevEnd = updatedIntervals[index - 1].endTime;
-      if (prevEnd && start < prevEnd) {
-        toast.error("Intervals must not overlap");
-        return;
-      }
-    }
-
-    setIntervals(updatedIntervals);
+    const updated = [...intervals];
+    updated[index][field] = value;
+    setIntervals(updated);
   };
 
   const removeInterval = (index: number) => {
-    const updatedIntervals = intervals.filter((_, i) => i !== index);
-    setIntervals(updatedIntervals);
+    setIntervals(intervals.filter((_, i) => i !== index));
   };
 
   const addInterval = () => {
@@ -175,67 +215,83 @@ const AddShiftManagement = () => {
       <div className="grid gap-9">
         <ToastContainer position="top-center" />
         <div className="flex flex-col gap-9">
-          <div className="rounded-sm border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark">
+          <div className="rounded-lg border border-stroke bg-white shadow-md dark:border-strokedark dark:bg-boxdark">
             <div className="border-b border-stroke px-6.5 py-4 dark:border-strokedark">
-              <h3 className="font-medium text-black dark:text-white">
-                Create Shift
+              <h3 className="flex items-center gap-2 font-medium text-black dark:text-white">
+                <Clock size={18} /> Create Shift
               </h3>
             </div>
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} className="space-y-6">
               {/* Name */}
-              <div className="grid gap-6 px-8 pr-8 pt-4 sm:grid-cols-1">
-                <div>
-                  <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                    Name
-                  </label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter Shift Name"
-                    className="w-full rounded-lg border px-5 py-3 text-black dark:bg-form-input dark:text-white"
-                  />
-                </div>
+              <div className="px-8 pt-4">
+                <label className="mb-2 block text-sm font-medium text-black dark:text-white">
+                  <FileText size={16} className="mr-1 inline-block" /> Name
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Enter Shift Name"
+                  className="w-full rounded-lg border px-5 py-3 text-black dark:bg-form-input dark:text-white"
+                />
+                {errors.name && (
+                  <p className="text-danger mt-1 text-sm">{errors.name}</p>
+                )}
               </div>
 
               {/* Description */}
-              <div className="px-8 pr-8 pt-4">
-                <label className="mb-3 block text-sm font-medium text-black dark:text-white">
+              <div className="px-8">
+                <label className="mb-2 block text-sm font-medium text-black dark:text-white">
+                  <FileText size={16} className="mr-1 inline-block" />{" "}
                   Description
                 </label>
                 <textarea
-                  rows={6}
-                  value={descripition}
-                  onChange={(e) => setDescripition(e.target.value)}
+                  rows={4}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                   placeholder="Description"
                   className="w-full rounded-lg border px-5 py-3 text-black dark:bg-form-input dark:text-white"
                 />
+                {errors.description && (
+                  <p className="text-danger mt-1 text-sm">
+                    {errors.description}
+                  </p>
+                )}
               </div>
 
               {/* Week Days */}
-              <div className="px-8 pr-8 pt-4">
-                <label className="text-gray-900 mb-2 block text-sm font-medium dark:text-white">
-                  Days Of Week
+              <div className="px-8">
+                <label className="mb-2 block text-sm font-medium text-black dark:text-white">
+                  <CalendarDays size={16} className="mr-1 inline-block" /> Days
+                  of Week
                 </label>
-              </div>
-              <div className="grid gap-2 px-8 pr-8 pt-4 sm:grid-cols-12">
-                {Object.keys(weekDays).map((day) => (
-                  <CheckboxOne
-                    key={day}
-                    id={day}
-                    value={day}
-                    checked={weekDays[day]}
-                    setValue={() => handleCheckboxChange(day)}
-                    label={day.charAt(0).toUpperCase() + day.slice(1)}
-                  />
-                ))}
+                <div className="grid grid-cols-7 gap-2">
+                  {Object.keys(weekDays).map((day) => (
+                    <CheckboxOne
+                      key={day}
+                      id={day}
+                      value={day}
+                      checked={weekDays[day]}
+                      setValue={() => handleCheckboxChange(day)}
+                      label={day.charAt(0).toUpperCase() + day.slice(1)}
+                    />
+                  ))}
+                </div>
+                {errors.weekDays && (
+                  <p className="text-danger mt-1 text-sm">{errors.weekDays}</p>
+                )}
               </div>
 
               {/* Intervals */}
-              <div className="px-8 pt-4">
+              <div className="px-8">
                 <h3 className="mb-2 font-medium text-black dark:text-white">
                   Shift Intervals
                 </h3>
+                {errors.intervals && (
+                  <p className="text-danger mb-2 text-sm">
+                    {errors.intervals}
+                  </p>
+                )}
                 <DragDropContext onDragEnd={onDragEnd}>
                   <Droppable droppableId="intervals">
                     {(provided) => (
@@ -305,9 +361,9 @@ const AddShiftManagement = () => {
                                 <button
                                   type="button"
                                   onClick={() => removeInterval(index)}
-                                  className="ml-auto rounded bg-danger px-3 py-1 text-sm text-white"
+                                  className="bg-red-600 hover:bg-red-700 ml-auto flex items-center gap-1 rounded px-3 py-1 text-sm text-white"
                                 >
-                                  Remove
+                                  <Trash2 size={14} /> Remove
                                 </button>
                               </div>
                             )}
@@ -318,19 +374,26 @@ const AddShiftManagement = () => {
                     )}
                   </Droppable>
                 </DragDropContext>
+                {intervals.map((_, i) =>
+                  errors[`interval-${i}`] ? (
+                    <p key={i} className="text-danger mt-1 text-sm">
+                      {errors[`interval-${i}`]}
+                    </p>
+                  ) : null,
+                )}
                 <div className="mt-3 flex justify-end">
                   <button
                     type="button"
                     onClick={addInterval}
-                    className="rounded bg-blue-600 px-3 py-1 text-sm text-white"
+                    className="flex items-center gap-1 rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700"
                   >
-                    + Add Interval
+                    <PlusCircle size={14} /> Add Interval
                   </button>
                 </div>
               </div>
 
               {/* Submit */}
-              <div className="col-span-2 flex justify-end p-8 pr-8">
+              <div className="flex justify-end px-8 pb-6">
                 <button
                   type="submit"
                   className="rounded-md bg-green-700 px-4 py-2 text-white hover:bg-green-800"

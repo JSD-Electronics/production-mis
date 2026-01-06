@@ -12,6 +12,7 @@ interface SearchableInputProps {
   setIsPassNGButtonShow: any;
   setIsStickerPrinted: any;
   checkIsPrintEnable: any;
+  setIsDevicePassed:any;
 }
 
 const SearchableInput = ({
@@ -25,6 +26,7 @@ const SearchableInput = ({
   setIsPassNGButtonShow,
   setIsStickerPrinted,
   checkIsPrintEnable,
+  setIsDevicePassed,
 }: SearchableInputProps) => {
   const [filteredOptions, setFilteredOptions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -56,17 +58,22 @@ const SearchableInput = ({
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
+      e.preventDefault();
       if (filteredOptions.length > 0) {
         getDeviceById(filteredOptions[0]._id);
         setSearchResult(filteredOptions[0].serialNo);
         setSearchQuery(filteredOptions[0].serialNo);
+
       } else {
         setSearchResult("");
         setSearchQuery(e.target.value);
       }
+      setIsDevicePassed(false);
       setIsStickerPrinted(false);
       if (!checkIsPrintEnable) {
         setIsPassNGButtonShow(true);
+      }else {
+        setIsPassNGButtonShow(false);
       }
       setShowSuggestions(false);
     }
