@@ -1,12 +1,21 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Cable, Square, Terminal, Trash2, Download, Play, Activity } from "lucide-react";
+import { updateStageBySerialNo } from "@/lib/api";
+import { toast } from "react-toastify";
 
 // --- Types ---
 
 interface JigSectionProps {
   subStep: any;
   onDataReceived?: (data: string) => void;
-  onDecision?: (status: "Pass" | "NG") => void;
+  onDecision?: (status: "Pass" | "NG", reason?: string, data?: any, isImmediate?: boolean) => void;
+  isLastStep?: boolean;
+  onDisconnect?: (fn: () => void) => void;
+  onConnectionChange?: (connected: boolean) => void;
+  searchQuery: any;
+  finalResult?: "Pass" | "NG" | null;
+  finalReason?: string | null;
+  onStatusUpdate?: (reason: string) => void;
 }
 
 interface LogEntry {
@@ -35,6 +44,7 @@ const parseKeyValue = (key: string, source: string): string | null => {
 };
 
 const parseJigOutput = (text: string) => {
+
   const lines = text.split('\n');
   const result: any = {};
   let currentSection = "PARAMETERS";
@@ -70,8 +80,14 @@ const parseJigOutput = (text: string) => {
   return [result];
 };
 
-const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps) => {
+const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisconnect, onConnectionChange, searchQuery, finalResult, finalReason, onStatusUpdate }: JigSectionProps) => {
   const [isConnected, setIsConnected] = useState(false);
+
+  // Notify parent of connection status changes
+  useEffect(() => {
+    if (onConnectionChange) onConnectionChange(isConnected);
+  }, [isConnected, onConnectionChange]);
+
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const portRef = useRef<any>(null);
   const readerRef = useRef<any>(null);
@@ -80,14 +96,117 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
   const accumulatedDataRef = useRef<string>("");
   const writerRef = useRef<any>(null);
 
+  const subStepRef = useRef(subStep);
+  const onDecisionRef = useRef(onDecision);
+  const isLastStepRef = useRef(isLastStep);
+  const searchQueryRef = useRef(searchQuery);
+  const onStatusUpdateRef = useRef(onStatusUpdate);
+  const isCommandBusyRef = useRef(false);
+  const persistentLogsRef = useRef<LogEntry[]>([]);
+
+
+
+  useEffect(() => {
+    subStepRef.current = subStep;
+  }, [subStep]);
+
+  useEffect(() => {
+    onDecisionRef.current = onDecision;
+  }, [onDecision]);
+
+  useEffect(() => {
+    isLastStepRef.current = isLastStep;
+  }, [isLastStep]);
+
+  useEffect(() => {
+    searchQueryRef.current = searchQuery;
+  }, [searchQuery]);
+
+  useEffect(() => {
+    onStatusUpdateRef.current = onStatusUpdate;
+  }, [onStatusUpdate]);
+
   const addLog = useCallback((message: string, type: LogEntry["type"] = "data") => {
+    const newEntry = { timestamp: formatTimestamp(), message, type };
+    persistentLogsRef.current.push(newEntry);
     setLogs((prev) => {
-      const newLogs = [...prev, { timestamp: formatTimestamp(), message, type }];
+      const newLogs = [...prev, newEntry];
       return newLogs.length > 100 ? newLogs.slice(-100) : newLogs;
     });
   }, []);
 
+  // No longer clearing logs on subStep change to preserve history for download
+  useEffect(() => {
+    accumulatedDataRef.current = "";
+    if (subStep) {
+      const stepName = subStep.stepName || subStep.name || "Unknown Step";
+      const actionType = subStep.stepFields?.actionType || "Process";
+      addLog(`--- STARTING STEP: ${stepName} (${actionType}) ---`, "info");
+
+      // Also log expected values/ranges if they exist
+      if (subStep.jigFields && Array.isArray(subStep.jigFields)) {
+        subStep.jigFields.forEach((f: any) => {
+          if (f.validationType === 'range') {
+            addLog(`Config: ${f.jigName} (Range: ${f.rangeFrom} to ${f.rangeTo})`, "info");
+          } else if (f.validationType === 'value') {
+            addLog(`Config: ${f.jigName} (Expected: ${f.value})`, "info");
+          }
+        });
+      }
+    }
+  }, [subStep, addLog]);
+
+  // Log final decisions from parent
+  useEffect(() => {
+    const actionType = subStepRef.current?.stepFields?.actionType;
+    if (finalResult === "Pass") {
+      addLog(`Decision: Pass${actionType ? ` (${actionType})` : ""}`, "success");
+    } else if (finalResult === "NG") {
+      const msg = finalReason ? `Decision: NG (${finalReason}${actionType ? ` - ${actionType}` : ""})` : `Decision: NG${actionType ? ` (${actionType})` : ""}`;
+      addLog(msg, "error");
+    }
+  }, [finalResult, finalReason, addLog]);
+
+
   const clearLogs = useCallback(() => setLogs([]), []);
+
+  const disconnectJig = useCallback(async () => {
+    stopRequestedRef.current = true;
+    if (readerRef.current?.cancel) {
+      try { await readerRef.current.cancel(); } catch (e) { console.warn(e); }
+    }
+    try {
+      if (writerRef.current) {
+        writerRef.current.releaseLock();
+      }
+    } catch { }
+    writerRef.current = null;
+    if (readingPromiseRef.current) {
+      try { await readingPromiseRef.current; } catch (e) { console.warn(e); }
+      readingPromiseRef.current = null;
+    }
+    if (portRef.current) {
+      try { await portRef.current.close(); } catch (e) { console.error(e); }
+      portRef.current = null;
+    }
+    setIsConnected(false);
+    addLog("System Disconnected", "info");
+  }, [addLog]);
+
+
+  // Supply disconnect function to parent (moved to fix TDZ)
+  useEffect(() => {
+    if (onDisconnect) {
+      onDisconnect(() => disconnectJig());
+    }
+  }, [onDisconnect, disconnectJig]);
+
+  // Handle automatic disconnection on unmount (moved to fix TDZ)
+  useEffect(() => {
+    return () => {
+      disconnectJig();
+    };
+  }, [disconnectJig]);
 
   const processData = useCallback(
     (text: string) => {
@@ -97,16 +216,16 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
       const parsedArray = parseJigOutput(newData);
       const parsedData = parsedArray[0];
 
-      if (!subStep?.jigFields) return;
+      const currentSubStep = subStepRef.current;
+      if (!currentSubStep?.jigFields) return;
 
       let matchCount = 0;
       let allPassed = true;
-      const requiredFieldsCount = subStep.jigFields.length;
+      const requiredFieldsCount = currentSubStep.jigFields.length;
 
-      if (Object.keys(parsedData).length > 0) {
-      }
+      const failedFields: string[] = [];
 
-      subStep.jigFields.forEach((field: any) => {
+      currentSubStep.jigFields.forEach((field: any) => {
         let receivedValueString: string | null = null;
         if (parsedData[field.jigName]) {
           receivedValueString = parsedData[field.jigName];
@@ -130,9 +249,11 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
 
               if (val < min || val > max) {
                 allPassed = false;
+                failedFields.push(`${field.jigName} (${receivedValueString} out of range ${min}-${max})`);
               }
             } else {
               allPassed = false;
+              failedFields.push(`${field.jigName} (Invalid numeric value: ${receivedValueString})`);
             }
           } else if (field.validationType === 'value') {
             if (field.value && field.value.trim() !== "") {
@@ -143,9 +264,13 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
                 const numExp = parseFloat(expected);
                 const numRec = parseFloat(received);
                 if (!isNaN(numExp) && !isNaN(numRec)) {
-                  if (Math.abs(numExp - numRec) > 0.1) allPassed = false;
+                  if (Math.abs(numExp - numRec) > 0.1) {
+                    allPassed = false;
+                    failedFields.push(`${field.jigName} (Expected: ${expected}, Got: ${received})`);
+                  }
                 } else {
                   allPassed = false;
+                  failedFields.push(`${field.jigName} (Expected: ${expected}, Got: ${received})`);
                 }
               }
             }
@@ -155,7 +280,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
       console.log(`Matches: ${matchCount} / ${requiredFieldsCount}. AllPassed: ${allPassed}`);
 
       if (matchCount < requiredFieldsCount) {
-        const missing = subStep.jigFields.filter((field: any) => {
+        const missing = currentSubStep.jigFields.filter((field: any) => {
           let found = false;
           if (parsedData[field.jigName]) found = true;
           else {
@@ -168,22 +293,101 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
           }
           return !found;
         }).map((f: any) => f.jigName);
-        if (missing.length > 0) console.log("Waiting for fields:", missing);
+        if (missing.length > 0) {
+          console.log("Waiting for fields:", missing);
+        }
+
+        // --- NEW: Report current status to parent for better timeout reasons ---
+        let currentStatusNote = "";
+        if (failedFields.length > 0) {
+          currentStatusNote = `Failed: ${failedFields.join(", ")}`;
+        }
+        if (missing.length > 0) {
+          const missingNote = `Missing: ${missing.join(", ")}`;
+          currentStatusNote = currentStatusNote ? `${currentStatusNote} | ${missingNote}` : missingNote;
+        }
+
+        if (currentStatusNote && onStatusUpdateRef.current) {
+          onStatusUpdateRef.current(currentStatusNote);
+        }
       }
 
-      if (matchCount > 0 && onDecision) {
+      if (matchCount > 0 && onDecisionRef.current) {
         if (matchCount >= requiredFieldsCount) {
+          if (isCommandBusyRef.current) {
+            console.log("[JigSection] Waiting for command execution completion...");
+            // Optionally add a small status message to notify the user
+            if (onStatusUpdateRef.current) onStatusUpdateRef.current("Waiting for command completion...");
+            return;
+          }
+
           const status = allPassed ? "Pass" : "NG";
-          console.log("status ===>", status);
-          addLog(`Decision: ${status}`, allPassed ? "success" : "error");
-          onDecision(status);
-          disconnectJig();
+          const reasonStr = !allPassed ? failedFields.join(", ") : undefined;
+
+          if (!allPassed) {
+            addLog(`NG Reason: ${reasonStr}`, "error");
+          }
+
+          // Handle Store to DB
+          const collectedData: any = {};
+          if (currentSubStep.stepFields?.actionType === "Store to DB" && currentSubStep.jigFields) {
+            currentSubStep.jigFields.forEach((field: any) => {
+              const fieldName = field.jigName;
+              let val = parsedData[fieldName];
+              if (val === undefined) {
+                for (const sectionKey in parsedData) {
+                  if (typeof parsedData[sectionKey] === 'object' && parsedData[sectionKey][fieldName]) {
+                    val = parsedData[sectionKey][fieldName];
+                    break;
+                  }
+                }
+              }
+              if (val !== undefined) {
+                collectedData[fieldName] = val;
+                addLog(`Stored Field [${fieldName}]: ${val}`, "info");
+              }
+            });
+            updateCustomFieldsDataIntoDB(collectedData, searchQueryRef.current);
+          }
+
+          // For the new requirement: Pass is immediate, NG waits for timeout (isImmediate: false)
+          // Include complete terminal logs in the data
+          const dataWithLogs = {
+            ...collectedData,
+            terminalLogs: persistentLogsRef.current.map(log => ({
+              timestamp: log.timestamp,
+              message: log.message,
+              type: log.type
+            })),
+            parsedData: parsedData
+          };
+
+          onDecisionRef.current(status, reasonStr, dataWithLogs, allPassed);
+
+          if (allPassed && isLastStepRef.current) {
+            disconnectJig();
+          }
           accumulatedDataRef.current = "";
         }
       }
     },
-    [subStep, onDecision, addLog]
+    [addLog, disconnectJig]
   );
+
+  const updateCustomFieldsDataIntoDB = async (collectedData: any, searchQuery: any) => {
+    try {
+      const pathname = window.location.pathname;
+      const id = searchQuery;
+      const formData = new FormData();
+      formData.append("customFields", JSON.stringify(collectedData));
+
+      const result = await updateStageBySerialNo(id, formData);
+      // toast.success("User details submitted successfully!");
+    } catch (error) {
+      console.error("Error submitting form:");
+      toast.error("Failed to submit user details. Please try again.");
+    }
+  }
 
   const sendCommand = useCallback(
     async (command: string, eol: "CRLF" | "LF" | "CR" | "NONE" = "CRLF") => {
@@ -219,102 +423,117 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
     [isConnected, addLog]
   );
 
+  // Automatic Command Sending logic
+  const lastSentCommandStepRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isConnected) {
+      lastSentCommandStepRef.current = null;
+      return;
+    }
+
+    const currentStepId = subStep?._id || subStep?.stepName || subStep?.name;
+    const actionType = subStep?.stepFields?.actionType;
+    const command = subStep?.stepFields?.command;
+
+    if (isConnected && (actionType === "Command" || actionType === "Custom Fields") && command && lastSentCommandStepRef.current !== currentStepId) {
+      console.log(`[JigSection] Auto-sending command for step ${currentStepId} (${actionType}): ${command}`);
+      isCommandBusyRef.current = true;
+      sendCommand(command).then(() => {
+        // Wait for 1.5s after command is sent to allow jig to process/respond fully
+        setTimeout(() => {
+          isCommandBusyRef.current = false;
+        }, 1500);
+      });
+      lastSentCommandStepRef.current = currentStepId;
+    }
+  }, [isConnected, subStep, sendCommand]);
+
+
   const startReading = async (port: any) => {
     if (!port?.readable) return;
     const decoder = new TextDecoder();
-    const reader = port.readable.getReader();
-    readerRef.current = reader;
     let buffer = "";
 
-    try {
-      while (!stopRequestedRef.current) {
-        const { value, done } = await reader.read();
-        if (done || stopRequestedRef.current) break;
+    while (!stopRequestedRef.current && port.readable) {
+      const reader = port.readable.getReader();
+      readerRef.current = reader;
 
-        const chunk = decoder.decode(value, { stream: true });
-        buffer += chunk;
-        // Find last newline to process complete lines
-        let processIndex = -1;
-        for (let i = buffer.length - 1; i >= 0; i--) {
-          if (buffer[i] === '\n' || buffer[i] === '\r') {
-            processIndex = i;
-            break;
+      try {
+        while (!stopRequestedRef.current) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          buffer += chunk;
+
+          let processIndex = -1;
+          for (let i = buffer.length - 1; i >= 0; i--) {
+            if (buffer[i] === '\n' || buffer[i] === '\r') {
+              processIndex = i;
+              break;
+            }
+          }
+
+          if (processIndex !== -1) {
+            const completeData = buffer.substring(0, processIndex + 1);
+            buffer = buffer.substring(processIndex + 1);
+            const lines = completeData.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+            for (const line of lines) {
+              const trimmedLine = line.trim();
+              if (trimmedLine.length === 0) continue;
+              addLog(trimmedLine, "data");
+              if (onDataReceived) onDataReceived(trimmedLine);
+              processData(trimmedLine);
+            }
           }
         }
+      } catch (error: any) {
+        if (stopRequestedRef.current) break;
 
-        if (processIndex !== -1) {
-          const completeData = buffer.substring(0, processIndex + 1);
-          buffer = buffer.substring(processIndex + 1);
-          const lines = completeData.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-          console.log("completeData ==>", completeData);
-          for (const line of lines) {
-            const trimmedLine = line.trim();
-            if (trimmedLine.length === 0) continue;
-            addLog(trimmedLine, "data");
-            if (onDataReceived) onDataReceived(trimmedLine);
-            processData(trimmedLine);
-          }
+        // FramingErrors and other stream errors close the reader.
+        if (error.name === 'FramingError' || error.name === 'ParityError' || error.name === 'BufferOverrunError') {
+          console.warn(`Serial Stream Error: ${error.name}. Restarting reader...`);
+          addLog(`Stream Error (${error.name}), recovering...`, "info");
+          await new Promise(r => setTimeout(r, 100));
+          continue;
         }
-        await new Promise((resolve) => setTimeout(resolve, 10));
+
+        console.error("Fatal Read error:", error);
+        addLog(`Fatal Read error: ${error.message || error}`, "error");
+        break;
+      } finally {
+        try { reader.releaseLock(); } catch { }
+        if (readerRef.current === reader) readerRef.current = null;
       }
-    } catch (error) {
-      if (!stopRequestedRef.current) console.error("Read error:", error);
-    } finally {
-      try { reader.releaseLock(); } catch { }
-      if (readerRef.current === reader) readerRef.current = null;
     }
   };
 
-  const disconnectJig = useCallback(async () => {
-    stopRequestedRef.current = true;
-    if (readerRef.current?.cancel) {
-      try { await readerRef.current.cancel(); } catch (e) { console.warn(e); }
-    }
-    try {
-      if (writerRef.current) {
-        writerRef.current.releaseLock();
-      }
-    } catch { }
-    writerRef.current = null;
-    if (readingPromiseRef.current) {
-      try { await readingPromiseRef.current; } catch (e) { console.warn(e); }
-      readingPromiseRef.current = null;
-    }
-    if (portRef.current) {
-      try { await portRef.current.close(); } catch (e) { console.error(e); }
-      portRef.current = null;
-    }
-    setIsConnected(false);
-    addLog("System Disconnected", "info");
-  }, [addLog]);
 
-  const connectToJig = async () => {
-    try {
-      /* Simulation Mode Disabled
-      if (!(navigator as any).serial) {
-        addLog("Web Serial API not supported. Starting simulation...", "info");
-        simulateJigConnection();
-        return;
-      }
-      */
 
+  const connectToJig = async (existingPort?: any) => {
+    try {
       if (!(navigator as any).serial) {
         addLog("Web Serial API is not supported in this browser.", "error");
-        alert("Web Serial API is not supported in this browser.");
         return;
       }
 
       if (portRef.current || isConnected) await disconnectJig();
 
-      const port = await (navigator as any).serial.requestPort();
+      let port = (existingPort && typeof existingPort.open === "function") ? existingPort : null;
+      if (!port) {
+        port = await (navigator as any).serial.requestPort();
+      }
+
       await port.open({ baudRate: 115200 });
 
       portRef.current = port;
       stopRequestedRef.current = false;
       setIsConnected(true);
-      addLog("Port Connected (115200 baud)", "success");
+      addLog(`Port Connected ${existingPort ? '(Auto)' : ''} (115200 baud)`, "success");
 
       readingPromiseRef.current = startReading(port);
+
     } catch (error: any) {
       console.error("Connection failed:", error);
       let msg = "Connection Failed: ";
@@ -322,9 +541,11 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
       else if (error.name === "NotFoundError") msg += "No device selected.";
       else msg += error.message;
       addLog(msg, "error");
-      alert(msg);
+      if (!existingPort) alert(msg);
     }
   };
+
+
 
   /* Simulation Mode Disabled
   const simulateJigConnection = useCallback(() => {
@@ -365,9 +586,20 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
   const simulateJigConnection = useCallback(() => { }, []);
 
   const downloadLogs = useCallback(() => {
-    if (logs.length === 0) return;
-    const content = logs.map(l => `[${l.timestamp}] [${l.type || 'data'}] ${l.message}`).join('\n');
+    if (persistentLogsRef.current.length === 0) {
+      if (logs.length === 0) return;
+      // Fallback if persistent is somehow empty but state isn't
+      const content = logs.map(l => `[${l.timestamp}] [${l.type || 'data'}] ${l.message}`).join('\n');
+      const blob = new Blob([content], { type: 'text/plain' });
+      triggerDownload(blob);
+      return;
+    }
+    const content = persistentLogsRef.current.map(l => `[${l.timestamp}] [${l.type || 'data'}] ${l.message}`).join('\n');
     const blob = new Blob([content], { type: 'text/plain' });
+    triggerDownload(blob);
+  }, [logs]);
+
+  const triggerDownload = (blob: Blob) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -376,7 +608,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision }: JigSectionProps)
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [logs]);
+  };
 
   return { isConnected, connectToJig, disconnectJig, simulateJigConnection, logs, clearLogs, downloadLogs, sendCommand };
 };

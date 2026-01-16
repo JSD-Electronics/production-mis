@@ -840,9 +840,9 @@ export const getDeviceByProductId = async (id) => {
     throw error?.response?.data || { message: `Error Fetching Devices` };
   }
 };
-export const createDeviceTestEntry = async (formData) => {
+export const createDeviceTestEntry = async (data) => {
   try {
-    let response = await api.post(`/deviceRecord/create`, formData);
+    let response = await api.post(`/deviceRecord/create`, data);
     return response.data;
   } catch (error) {
     console.log(`Error Creating Device Test Entry`, error);
@@ -899,6 +899,15 @@ export const updateStageByDeviceId = async (id, formData) => {
     throw error?.response?.data || { message: `Error Updating Device status` };
   }
 };
+export const updateStageBySerialNo = async (id, formData) => {
+  try {
+    let response = await api.patch(`/updateStageBySerialNo/${id}`, formData);
+    return response.data;
+  } catch (error) {
+    console.log(`Error Updating Device status`, error);
+    throw error?.response?.data || { message: `Error Updating Device status` };
+  }
+}
 export const createReport = async (formData) => {
   try {
     let response = await api.post(`/createReport`, formData);

@@ -207,22 +207,24 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     try {
       const result = await getDeviceByProductId(id);
       // result?.data contains product devices
+      // console.log("result ===>", result?.data);
       const existingDevices = await getDeviceTestEntryOverall();
       const existingSerials = new Set(
         (existingDevices || [])
-          .filter((device: any) => device.processId === pId)
+          .filter((device: any) => device.processId === pId && device.stageName === (assignStageToUser?.[0]?.name || assignStageToUser?.name))
           .map((device: any) => device.serialNo),
       );
-      console.log("Existing Serials:", existingSerials);
+      // console.log("Existing Serials:", existingSerials);
+      // console.log("assignStageToUser?.[0]?.name  ==>", assignStageToUser?.[0]?.name);
       const filteredDeviceList = result?.data.filter(
         (device: any) =>
           !existingDevices.includes(device.serialNo) &&
-          device.currentStage === assignStageToUser[0]?.name &&
-          device.status !== "Pass" &&
+          device.currentStage === (assignStageToUser?.[0]?.name || assignStageToUser?.name) &&
+          // device.status !== "Pass" &&
           device.assignDeviceTo !== "TRC" &&
           device.assignDeviceTo !== "QC"
       );
-      console.log("Filtered Device List:", filteredDeviceList);
+      // console.log("Filtered Device List:", filteredDeviceList);
       // set filtered list
       setDeviceList(filteredDeviceList);
     } catch (error) {
@@ -377,7 +379,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         assignOperator = JSON.parse(result?.assignedOperators || "{}");
         assignStage = JSON.parse(result?.assignedStages || "{}");
       }
-      console.log("assignStage from function ==>", assignStage);
+      // console.log("assignStage from function ==>", assignStage);
       const currentUserName = user;
       const keys = Object.keys(assignOperator || {});
       const keysAssignStages = Object.keys(assignStage || {});
@@ -420,8 +422,11 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const handleChoosenDevice = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setChoosenDevice(event.target.value);
   };
-  const handleUpdateStatus = async (status: string, deviceDepartment: string) => {
+  const handleUpdateStatus = async (status: string, deviceDepartment: string, subStepResults?: any) => {
     try {
+      // const stageData = Array.isArray(processAssignUserStage)
+      //   ? processAssignUserStage[0]
+      //   : processAssignUserStage;
       let deviceInfo = deviceList.filter((device: any) => device.serialNo === searchResult);
       // Find current stage index
       const stageData = Array.isArray(assignUserStage)
@@ -461,37 +466,131 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         await updateStageByDeviceId(deviceInfo[0]._id, formData1);
       }
       // Save device test entry
-      let formData = new FormData();
       const pathname = window.location.pathname;
       const id = pathname.split("/").pop();
 
       const userDetails = getCurrentUser();
-      formData.append("deviceId", String(deviceInfo[0]._id || ""));
-      formData.append("processId", String(selectedProcess || ""));
-      formData.append("planId", String(id || ""));
-      formData.append("productId", String(selectedProduct?.product?._id || ""));
-      formData.append("operatorId", String(userDetails?._id || ""));
-      formData.append("serialNo", String(deviceInfo[0].serialNo || ""));
-      formData.append(
-        "seatNumber",
-        operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber,
-      );
-      if (status == "NG") {
-        formData.append("assignedDeviceTo", String(selectAssignDeviceDepartment || ""));
+
+      // Construct logs array if subStepResults exist
+      let logs: any[] = [];
+      if (subStepResults) {
+        // Filter steps to match the indexing used in DeviceTestComponent
+        const processStageData = Array.isArray(processAssignUserStage)
+          ? processAssignUserStage[0]
+          : processAssignUserStage;
+        const testSteps = processStageData?.subSteps?.filter(
+          (s: any) => s.stepType === "jig" || s.stepType === "manual"
+        ) || [];
+
+        // console.log("testSteps ==>", testSteps);
+
+        // Construct logs array based on new schema
+        logs = Object.keys(subStepResults).map((key) => {
+          const index = Number(key);
+          const result = subStepResults[key]; // { status, reason, data, timeTaken }
+          const stepDef = testSteps[index];
+
+          // Optimize terminal logs to reduce payload size
+          let terminalLogs = result.data?.terminalLogs || [];
+          if (terminalLogs.length > 0) {
+            // Keep only important logs: errors, success, info (config/decisions), and sample data
+            const importantLogs = terminalLogs.filter((log: any) =>
+              log.type === 'error' ||
+              log.type === 'success' ||
+              log.type === 'info' ||
+              log.message.includes('Decision:') ||
+              log.message.includes('Config:') ||
+              log.message.includes('STARTING STEP')
+            );
+
+            // If we filtered too much, keep some data logs as samples
+            if (importantLogs.length < 10 && terminalLogs.length > importantLogs.length) {
+              const dataLogs = terminalLogs.filter((log: any) => log.type === 'data');
+              // Add first and last few data logs
+              const sampleDataLogs = [
+                ...dataLogs.slice(0, 3),
+                ...dataLogs.slice(-3)
+              ];
+              terminalLogs = [...importantLogs, ...sampleDataLogs]
+                .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+            } else {
+              terminalLogs = importantLogs;
+            }
+
+            // Limit to max 50 logs per step
+            if (terminalLogs.length > 50) {
+              terminalLogs = [
+                ...terminalLogs.slice(0, 25),
+                { timestamp: '...', message: `[${terminalLogs.length - 50} logs omitted]`, type: 'info' },
+                ...terminalLogs.slice(-25)
+              ];
+            }
+          }
+
+          return {
+            stepName: stepDef?.stepName || stepDef?.name || "Unknown Step",
+            stepType: stepDef?.stepType || "unknown",
+            logData: {
+              // Include optimized terminal logs
+              terminalLogs: terminalLogs,
+              // Include parsed data (already compact)
+              parsedData: result.data?.parsedData,
+              // Include other essential data
+              reason: result.reason,
+              timeTaken: result.timeTaken,
+            },
+            status: result.status,
+            createdAt: new Date().toISOString(),
+          };
+        });
+
+
+        console.log("[ViewTask index] Submitting logs (converted from subStepResults) to DB:");
+        console.log("  - Number of steps:", logs.length);
+        let totalOriginalLogs = 0;
+        let totalOptimizedLogs = 0;
+        logs.forEach((log, idx) => {
+          const originalCount = subStepResults[idx]?.data?.terminalLogs?.length || 0;
+          const optimizedCount = log.logData?.terminalLogs?.length || 0;
+          totalOriginalLogs += originalCount;
+          totalOptimizedLogs += optimizedCount;
+          console.log(`  - Step ${idx + 1} (${log.stepName}):`, {
+            stepType: log.stepType,
+            status: log.status,
+            terminalLogs: `${optimizedCount} / ${originalCount} (${originalCount > 0 ? Math.round((1 - optimizedCount / originalCount) * 100) : 0}% reduced)`,
+            hasParsedData: !!log.logData?.parsedData
+          });
+        });
+        console.log(`  - Total logs: ${totalOptimizedLogs} / ${totalOriginalLogs} (${totalOriginalLogs > 0 ? Math.round((1 - totalOptimizedLogs / totalOriginalLogs) * 100) : 0}% reduction)`);
       }
-      // Append safely
-      formData.append("stageName", String(stageData?.name ?? ""));
 
-      formData.append("status", String(status));
-      formData.append("timeConsumed", String(deviceDisplay));
+      // Build JSON payload
+      const payload: any = {
+        deviceId: deviceInfo?.[0]?._id || "",
+        processId: selectedProcess || "",
+        planId: id || "",
+        productId: selectedProduct?.product?._id || "",
+        operatorId: userDetails?._id || "",
+        serialNo: deviceInfo?.[0]?.serialNo || "",
+        seatNumber: operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber,
+        stageName: stageData?.name ?? "",
+        status: status,
+        timeConsumed: deviceDisplay,
+        logs: logs,
+      };
 
-      let result = await createDeviceTestEntry(formData);
+      if (status === "NG") {
+        // Use the passed argument 'deviceDepartment' which contains the selected NG assignment (QC, TRC, Previous Stage)
+        payload.assignedDeviceTo = deviceDepartment || selectAssignDeviceDepartment || "";
+      }
+
+      let result = await createDeviceTestEntry(payload);
 
       if (result && result.status === 200) {
         setCheckedDevice((prev) => [
           ...prev,
           {
-            deviceInfo: deviceInfo[0],
+            deviceInfo: deviceInfo?.[0] || { serialNo: searchResult }, // Fallback if deviceInfo is missing
             stageName: stageData?.name,
             status,
             timeTaken: deviceDisplay,
@@ -503,14 +602,23 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         } else {
           setTotalCompleted((prev) => prev + 1);
         }
+
+        // Robustly remove the device from the searchable list
+        // This ensures that for Pass AND NG (assigned to QC, TRC, etc.), the device is removed.
+        const serialToRemove = deviceInfo?.[0]?.serialNo || searchResult;
+        if (serialToRemove) {
+          setDeviceList((prev) => prev.filter((device: any) => device.serialNo !== serialToRemove));
+        }
+
+        // Reset UI for next device
         setElapsedDevicetime(0);
         setDeviceisplay("00:00:00");
-        // setSearchQuery("");
-        getPlaningAndSchedulingByID(id);
-        getDevices(result?.selectedProduct, assignUserStage, id);
-        getDeviceById(deviceInfo[0]._id);
-        setIsPassNGButtonShow(false);
         setSearchQuery("");
+        setNotFoundError("");
+        setSearchResult("");
+        setIsPassNGButtonShow(false);
+        setIsDevicePassed(false);
+
         toast.success(result.message || `Device ${status} Successfully!!`);
       } else {
         toast.error(result?.message || "Error creating device test entry");
@@ -698,7 +806,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       // createCatron
       setIsVerifyStickerModal(false);
       setMoveToPackaging(true);
-    } catch (error) {
+    } catch (error: any) {
       console.log(`Error Creating Carton`, error?.message);
     }
   };
@@ -794,6 +902,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           setDevicePause={setDevicePause}
           deviceDisplay={deviceDisplay}
           deviceList={deviceList}
+          setDeviceList={setDeviceList}
           checkedDevice={checkedDevice}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
