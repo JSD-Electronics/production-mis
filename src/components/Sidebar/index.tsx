@@ -60,9 +60,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
   return (
     <ClickOutside onClick={() => setSidebarOpen(false)}>
       <aside
-        className={`fixed left-0 top-0 z-9999 flex h-screen w-72.5 flex-col overflow-y-hidden bg-gradient-to-b from-[#0f2a3d] to-[#0b1d2b] shadow-xl ring-1 ring-white/5 duration-300 ease-linear dark:from-[#0f2a3d] dark:to-[#0b1d2b] lg:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed left-0 top-0 z-9999 flex h-screen w-72.5 flex-col overflow-y-hidden bg-gradient-to-b from-[#0f2a3d] to-[#0b1d2b] shadow-xl ring-1 ring-white/5 duration-300 ease-linear dark:from-[#0f2a3d] dark:to-[#0b1d2b] lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         {/* <!-- SIDEBAR HEADER --> */}
         <div className="flex items-center justify-center gap-2 px-6 py-5 lg:py-6">

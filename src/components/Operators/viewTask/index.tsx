@@ -102,11 +102,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const [cartons, setCartons] = useState<any[]>([]);
   const [isCartonBarcodePrinted, setIsCartonBarCodePrinted] = useState(false);
   const [isVerifiedSticker, setIsVerifiedSticker] = useState(false);
-  const [processCartons, setProcessCartons] = useState([]);
+  const [isAddedToCart, setIsAddedToCart] = useState(false);
+  const [isVerifiedPackaging, setIsVerifiedPackaging] = useState(false);
+  const [isVerifyPackagingModal, setIsVerifyPackagingModal] = useState(false);
+  const [processCartons, setProcessCartons] = useState<any>([]);
   const [isdevicePassed, setIsDevicePassed] = useState(false);
   const [processStagesName, setProcessStageName] = useState<string[]>([]);
   const [selectAssignDeviceDepartment, setAsssignDeviceDepartment] =
     useState<string>("");
+  const isSubmitting = React.useRef(false);
   const { SVG } = useQRCode();
 
   useEffect(() => {
@@ -224,7 +228,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           device.assignDeviceTo !== "TRC" &&
           device.assignDeviceTo !== "QC"
       );
-      // console.log("Filtered Device List:", filteredDeviceList);
+      console.log("Filtered Device List:", filteredDeviceList);
       // set filtered list
       setDeviceList(filteredDeviceList);
     } catch (error) {
@@ -291,7 +295,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         setSearchResult("");
         setSearchQuery("");
         setIsPassNGButtonShow(false);
-        setIsVerifiedSticker(true);
+        setIsVerifiedSticker(false);
+        setIsStickerPrinted(false);
         return false;
       }
     } catch (error: any) {
@@ -423,6 +428,11 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     setChoosenDevice(event.target.value);
   };
   const handleUpdateStatus = async (status: string, deviceDepartment: string, subStepResults?: any) => {
+    if (isSubmitting.current) {
+      console.log("[handleUpdateStatus] Submission already in progress, ignoring duplicate call.");
+      return;
+    }
+    isSubmitting.current = true;
     try {
       // const stageData = Array.isArray(processAssignUserStage)
       //   ? processAssignUserStage[0]
@@ -436,6 +446,9 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       if (status === "Pass") {
         // setIsPassNGButtonShow(false);
         setIsStickerPrinted(false);
+        setIsVerifiedSticker(false);
+        setIsAddedToCart(false);
+        setIsVerifiedPackaging(false);
         setIsDevicePassed(true);
         let formData1 = new FormData();
 
@@ -618,6 +631,10 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         setSearchResult("");
         setIsPassNGButtonShow(false);
         setIsDevicePassed(false);
+        setIsStickerPrinted(false);
+        setIsVerifiedSticker(false);
+        setIsAddedToCart(false);
+        setIsVerifiedPackaging(false);
 
         toast.success(result.message || `Device ${status} Successfully!!`);
       } else {
@@ -626,8 +643,73 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     } catch (error: any) {
       console.log("error Creating Device Test Entry", error?.message ?? error);
       toast.error(error?.message || "Error creating device test entry");
+    } finally {
+      isSubmitting.current = false;
     }
   };
+  const handlePrintCartonSticker = () => {
+    const stickerElement = document.getElementById("carton-sticker-preview");
+    if (!stickerElement) {
+      toast.error("Carton sticker preview not found");
+      return;
+    }
+    html2canvas(stickerElement as HTMLElement, {
+      scale: window.devicePixelRatio,
+      useCORS: true,
+    }).then((canvas) => {
+      const imageData = canvas.toDataURL("image/png");
+
+      const stickerWidthMM = 100; // Larger for carton
+      const stickerHeightMM = 60;
+
+      const printWindow = window.open("", "_blank");
+      printWindow?.document.write(`
+        <html>
+          <head>
+            <title>Print Carton Sticker</title>
+            <style>
+              @media print {
+                @page {
+                  size: ${stickerWidthMM}mm ${stickerHeightMM}mm;
+                  margin: 0;
+                }
+                body {
+                  margin: 0;
+                  display: flex;
+                  justify-content: center;
+                  align-items: center;
+                  width: ${stickerWidthMM}mm;
+                  height: ${stickerHeightMM}mm;
+                  background-color: white;
+                }
+                img {
+                  width: ${stickerWidthMM}mm;
+                  height: ${stickerHeightMM}mm;
+                  object-fit: contain;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <img src="${imageData}" alt="Sticker">
+            <script>
+              window.onload = function() {
+                setTimeout(() => {
+                  window.print();
+                  window.onafterprint = function() {
+                    window.close();
+                  };
+                }, 500);
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow?.document.close();
+      setIsCartonBarCodePrinted(true);
+    });
+  };
+
   const handleNoResults = (query: string) => {
     setNotFoundError(`No results found for: ${query}`);
     setSearchedSerialNo(query);
@@ -707,7 +789,14 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   };
   const handleVerifySticker = () => {
     setSerialNumber("");
-    setIsVerifyStickerModal(!isVerifyStickerModal);
+    setIsVerifyStickerModal(true);
+  };
+  const handleVerifyPackaging = () => {
+    setSerialNumber("");
+    setIsVerifyPackagingModal(true);
+  };
+  const closeVerifyPackagingModal = () => {
+    setIsVerifyPackagingModal(false);
   };
   const handleVerifyStickerModal = () => {
     const matchedDevice = deviceList.find(
@@ -716,8 +805,22 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
 
     if (matchedDevice && matchedDevice.serialNo === searchResult) {
       toast.success("Sticker verified successfully!");
-      setIsPassNGButtonShow(true); // now show Pass/NG buttons
+      setIsVerifiedSticker(true);
       setIsVerifyStickerModal(false);
+    } else {
+      toast.error("Serial number does not match. Try again.");
+    }
+  };
+
+  const handleVerifyPackagingModal = () => {
+    const matchedDevice = deviceList.find(
+      (d: any) => d.serialNo?.toLowerCase() === serialNumber.toLowerCase(),
+    );
+
+    if (matchedDevice && matchedDevice.serialNo === searchResult) {
+      toast.success("Packaging verified successfully!");
+      setIsVerifiedPackaging(true);
+      setIsVerifyPackagingModal(false);
     } else {
       toast.error("Serial number does not match. Try again.");
     }
@@ -846,7 +949,17 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           <h3 className="text-lg font-bold text-blue-700">Issued Kits</h3>
           <div className="mt-2 space-y-1 text-sm text-blue-900">
             <p>
-              <b>WIP Kits:</b> {parseInt(String(assignUserStage?.[0]?.totalUPHA || 0))}
+              <b>WIP Kits:</b>{" "}
+              {Math.max(
+                0,
+                parseInt(
+                  String(
+                    (Array.isArray(assignUserStage)
+                      ? assignUserStage[0]?.totalUPHA
+                      : assignUserStage?.totalUPHA) || 0,
+                  ),
+                ) - totalAttempts,
+              )}
             </p>
             <p>
               <b>Line Issued Kits:</b>{" "}
@@ -876,7 +989,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             <b>Process:</b>{" "}
             {calculateEfficiency(
               overallTotalAttempts,
-              assignUserStage?.upha,
+              (Array.isArray(assignUserStage) ? assignUserStage[0]?.upha : assignUserStage?.upha) || 0,
               timeDifference,
             )}
             %
@@ -885,7 +998,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             <b>Today:</b>{" "}
             {calculateEfficiency(
               totalAttempts,
-              assignUserStage?.upha,
+              (Array.isArray(assignUserStage) ? assignUserStage[0]?.upha : assignUserStage?.upha) || 0,
               timeDifference,
             )}
             %
@@ -922,6 +1035,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           setIssueDescription={setIssueDescription}
           processAssignUserStage={processAssignUserStage}
           isStickerPrinted={isStickerPrinted}
+          isVerifiedSticker={isVerifiedSticker}
+          setIsVerifiedSticker={setIsVerifiedSticker}
           isPassNGButtonShow={isPassNGButtonShow}
           handlePrintSticker={handlePrintSticker}
           handleVerifySticker={handleVerifySticker}
@@ -934,7 +1049,6 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           processData={processData}
           setCartons={setCartons}
           cartons={cartons}
-          isVerifiedSticker={isVerifiedSticker}
           setIsCartonBarCodePrinted={setIsCartonBarCodePrinted}
           isCartonBarcodePrinted={isCartonBarcodePrinted}
           setProcessCartons={setProcessCartons}
@@ -946,6 +1060,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           setAsssignDeviceDepartment={setAsssignDeviceDepartment}
           selectAssignDeviceDepartment={selectAssignDeviceDepartment}
           processStagesName={processStagesName}
+          isAddedToCart={isAddedToCart}
+          setIsAddedToCart={setIsAddedToCart}
+          isVerifiedPackaging={isVerifiedPackaging}
+          setIsVerifiedPackaging={setIsVerifiedPackaging}
+          isVerifyPackagingModal={isVerifyPackagingModal}
+          handleVerifyPackaging={handleVerifyPackaging}
+          handleVerifyPackagingModal={handleVerifyPackagingModal}
+          closeVerifyPackagingModal={closeVerifyPackagingModal}
+          handlePrintCartonSticker={handlePrintCartonSticker}
         />
       ) : (
         <BasicInformation

@@ -109,9 +109,9 @@ const ProductionManagerDashboard: React.FC = () => {
                   <li className="ml-2 py-3">
                     <div>
                       <a href={`/operators/task/${value?.planId}`}>
-                      <span className="text-sm font-medium">
-                       {value?.planDetails?.processName} process is scheduled from {value?.ProcessShiftMappings?.startTime} to {value?.ProcessShiftMappings?.endTime} in Room {value?.roomDetails?.floorName}, located on Row {value?.seatDetails?.rowNumber}, Seat {value?.seatDetails?.seatNumber}.
-                      </span>
+                        <span className="text-sm font-medium">
+                          {value?.planDetails?.processName} process is scheduled from {value?.ProcessShiftMappings?.startTime} to {value?.ProcessShiftMappings?.endTime} in Room {value?.roomDetails?.floorName}, located on Row {value?.seatDetails?.rowNumber}, Seat {value?.seatDetails?.seatNumber}.
+                        </span>
                       </a>
                     </div>
                   </li>

@@ -174,10 +174,14 @@ const PlaningAndSchedulingLogsComponent = () => {
                   },
                   cells: {
                     style: {
-                      whiteSpace: "normal",
-                      wordWrap: "break-word",
-                      overflowWrap: "break-word",
                       maxWidth: "220px",
+                      "& > div:first-child": {
+                        whiteSpace: "break-spaces",
+                        overflow: "hidden",
+                        textOverflow: "inherit",
+                        wordWrap: "break-word",
+                        overflowWrap: "break-word",
+                      },
                     },
                   },
                   pagination: {

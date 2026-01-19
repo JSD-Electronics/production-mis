@@ -170,11 +170,10 @@ const ViewShift = () => {
               <button
                 onClick={handleMultipleDelete}
                 disabled={selectedRows.length === 0}
-                className={`rounded bg-red-600 px-4 py-2 font-semibold text-white ${
-                  selectedRows.length === 0
-                    ? "cursor-not-allowed opacity-50"
-                    : "hover:bg-red-700"
-                }`}
+                className={`rounded bg-red-600 px-4 py-2 font-semibold text-white ${selectedRows.length === 0
+                  ? "cursor-not-allowed opacity-50"
+                  : "hover:bg-red-700"
+                  }`}
               >
                 Delete Selected
               </button>
@@ -209,6 +208,16 @@ const ViewShift = () => {
                   style: {
                     padding: "12px",
                     border: "none",
+                  },
+                },
+                cells: {
+                  style: {
+                    padding: "12px",
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
                   },
                 },
               }}

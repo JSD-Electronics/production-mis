@@ -23,10 +23,10 @@ const ViewReturnedKits = () => {
   const [selectedRows, setSelectedRows] = React.useState([]);
   const [packagingData, setPackagingData] = useState([]);
   const [isReturnedKitModel, setReturnedKitModel] = useState(false);
-  const [kitsRecieved,setKitRecieved] = useState(0);
-  const [cartonRecieved,setCartonRecieved] = useState(0);
+  const [kitsRecieved, setKitRecieved] = useState(0);
+  const [cartonRecieved, setCartonRecieved] = useState(0);
   const [processName, setProcessName] = React.useState("");
-  const [processDetails,setProcessDetails] = useState({});
+  const [processDetails, setProcessDetails] = useState({});
   const closeReturnedKitModel = () => {
     setReturnedKitModel(false);
   }
@@ -103,10 +103,10 @@ const ViewReturnedKits = () => {
         return;
       }
       let form = new FormData();
-      form.append("processID",processDetails.pID);
+      form.append("processID", processDetails.pID);
       form.append("selectedProduct", processDetails.selectedProduct);
-      form.append("returnedKits",kitsRecieved);
-      form.append("returnedCarton",cartonRecieved);
+      form.append("returnedKits", kitsRecieved);
+      form.append("returnedCarton", cartonRecieved);
       form.append("userId", userDetails._id);
       form.append("status", "RECIVED");
       let result = await updateKitsEntry(form, processDetails._id);
@@ -124,7 +124,7 @@ const ViewReturnedKits = () => {
   const handleReturnedKitsModel = (data: any) => {
     setProcessDetails(data);
     setReturnedKitModel(true);
-  } 
+  }
 
   const columns = [
     {
@@ -253,6 +253,16 @@ const ViewReturnedKits = () => {
                     border: "none",
                   },
                 },
+                cells: {
+                  style: {
+                    padding: "12px",
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
+                  },
+                },
               }}
             />
             <Modal
@@ -287,17 +297,17 @@ const ViewReturnedKits = () => {
                     <strong className="font-medium">Kits Shortage :</strong>{" "}
                     {Math.abs(
                       inventoryDetails?.processQuantity -
-                        inventoryDetails?.issuedKits,
+                      inventoryDetails?.issuedKits,
                     )}
                   </div>
                   <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
                     <strong className="font-medium">Surplus Kits :</strong>{" "}
                     {inventoryDetails?.issuedKits >
-                    inventoryDetails?.processQuantity
+                      inventoryDetails?.processQuantity
                       ? Math.abs(
-                          inventoryDetails?.inventoryQuantity -
-                            inventoryDetails?.processQuantity,
-                        )
+                        inventoryDetails?.inventoryQuantity -
+                        inventoryDetails?.processQuantity,
+                      )
                       : 0}
                   </div>
                 </div>
@@ -320,8 +330,8 @@ const ViewReturnedKits = () => {
                         </strong>{" "}
                         {Math.abs(
                           parseInt(inventoryDetails?.processQuantity) /
-                            packagingData[0]?.packagingData?.maxCapacity -
-                            inventoryDetails?.cartonQuantity,
+                          packagingData[0]?.packagingData?.maxCapacity -
+                          inventoryDetails?.cartonQuantity,
                         )}
                       </div>
                       <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
@@ -329,13 +339,13 @@ const ViewReturnedKits = () => {
                           Surplus Cartons :
                         </strong>{" "}
                         {inventoryDetails?.cartonQuantity >
-                        inventoryDetails?.processQuantity /
+                          inventoryDetails?.processQuantity /
                           packagingData[0]?.packagingData?.maxCapacity
                           ? Math.abs(
-                              parseInt(inventoryDetails?.processQuantity) /
-                                packagingData[0]?.packagingData?.maxCapacity -
-                                inventoryDetails?.cartonQuantity,
-                            )
+                            parseInt(inventoryDetails?.processQuantity) /
+                            packagingData[0]?.packagingData?.maxCapacity -
+                            inventoryDetails?.cartonQuantity,
+                          )
                           : 0}
                       </div>
                       <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">

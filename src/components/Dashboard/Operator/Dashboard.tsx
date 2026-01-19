@@ -112,7 +112,7 @@ const OperatorDashboard: React.FC = () => {
                     <div>
                       <a href={`/operators/task/${value?.planId}`}>
                         <span className="text-sm font-medium">
-                         {value?.planDetails?.processName} process is scheduled from {value?.ProcessShiftMappings?.startTime} to {value?.ProcessShiftMappings?.endTime} in Room {value?.roomDetails?.floorName}, located on Row {value?.seatDetails?.rowNumber}, Seat {value?.seatDetails?.seatNumber}.
+                          {value?.planDetails?.processName} process is scheduled from {value?.ProcessShiftMappings?.startTime} to {value?.ProcessShiftMappings?.endTime} in Room {value?.roomDetails?.floorName}, located on Row {value?.seatDetails?.rowNumber}, Seat {value?.seatDetails?.seatNumber}.
                         </span>
                       </a>
                     </div>

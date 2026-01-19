@@ -24,7 +24,7 @@ const ViewOrderNumber = () => {
   const [orderConfirmationData, setOrderConfirmationData] = React.useState<
     Stages[]
   >([]);
-  const [orderConfirmationId,setOrderConfirmationID] = React.useState();
+  const [orderConfirmationId, setOrderConfirmationID] = React.useState();
   const [loading, setLoading] = React.useState(true);
   const [selectedRows, setSelectedRows] = React.useState([]);
   const [isOrderConfirmationModel, setIsOrderConfirmationModel] =
@@ -97,9 +97,9 @@ const ViewOrderNumber = () => {
   const handleSubmitOrderConfirmationNumber = async () => {
     try {
       let formData = new FormData();
-      if(orderConfirmationId){
+      if (orderConfirmationId) {
         formData.append("id", orderConfirmationId);
-      }else{
+      } else {
         formData.append("id", "");
       }
       formData.append("orderConfirmationNo", ocno);
@@ -110,9 +110,9 @@ const ViewOrderNumber = () => {
         console.error(result.message);
         toast.error(result.message);
       }
-      setIsOrderConfirmationModel(false); 
+      setIsOrderConfirmationModel(false);
     } catch (error) {
-      
+
       console.error("Error deleting stage:", error);
     }
   };
@@ -219,6 +219,16 @@ const ViewOrderNumber = () => {
                   style: {
                     padding: "12px",
                     border: "none",
+                  },
+                },
+                cells: {
+                  style: {
+                    padding: "12px",
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
                   },
                 },
               }}

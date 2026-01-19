@@ -3,6 +3,7 @@ import React from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import { viewIMEI, deleteIMEI, deleteMultipleIMEI } from "@/lib/api";
+import { PlaningData } from "@/types/planning";
 import { useRouter } from "next/navigation";
 import { FiEdit, FiTrash } from "react-icons/fi";
 import { BallTriangle } from "react-loader-spinner";
@@ -12,9 +13,9 @@ import "react-toastify/dist/ReactToastify.css";
 const ViewImei = () => {
   const [showPopup, setShowPopup] = React.useState(false);
   const [productId, setProductId] = React.useState("");
-  const [planingData, setPlaningData] = React.useState([]);
+  const [planingData, setPlaningData] = React.useState<PlaningData[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [selectedRows, setSelectedRows] = React.useState([]);
+  const [selectedRows, setSelectedRows] = React.useState<PlaningData[]>([]);
   const handleRowSelected = (state: any) => {
     setSelectedRows(state.selectedRows);
   };
@@ -49,7 +50,7 @@ const ViewImei = () => {
 
   const handleMultipleRowsDelete = async () => {
     try {
-      const selectedIds = selectedRows.map((row) => row._id);
+      const selectedIds = selectedRows.map((row: PlaningData) => row._id);
       await deleteMultipleIMEI(selectedIds);
       setSelectedRows([]);
       toast.success("IMEI(s) Deleted Successfully!!");
@@ -65,22 +66,22 @@ const ViewImei = () => {
   const columns = [
     {
       name: "ID",
-      selector: (row: planingData, index: number) => index + 1,
+      selector: (row: any, index?: number) => (index ?? 0) + 1,
       sortable: true,
     },
     {
       name: "Product Name",
-      selector: (row: planingData) => row?.productName,
+      selector: (row: PlaningData) => row?.productName,
       sortable: true,
     },
     {
       name: "IMEI",
-      selector: (row: planingData) => row?.imeiNo,
+      selector: (row: PlaningData) => row?.imeiNo,
       sortable: true,
     },
     {
       name: "Status",
-      cell: (row: planingData) =>
+      cell: (row: PlaningData) =>
         row?.status == "Active" ? (
           <span
             style={{
@@ -112,7 +113,7 @@ const ViewImei = () => {
     },
     {
       name: "Actions",
-      cell: (row: planingData) => (
+      cell: (row: PlaningData) => (
         <div className="flex items-center space-x-3.5">
           <button
             type="button"
@@ -153,18 +154,17 @@ const ViewImei = () => {
               <button
                 onClick={handleMultipleRowsDelete}
                 disabled={selectedRows.length === 0}
-                className={`rounded bg-danger px-4 py-2 font-semibold text-white ${
-                  selectedRows.length === 0
-                    ? "cursor-not-allowed opacity-50"
-                    : "hover:bg-red-700"
-                }`}
+                className={`rounded bg-danger px-4 py-2 font-semibold text-white ${selectedRows.length === 0
+                  ? "cursor-not-allowed opacity-50"
+                  : "hover:bg-red-700"
+                  }`}
               >
                 Delete
               </button>
             </div>
             <DataTable
               className="dark:bg-bodyDark"
-              columns={columns}
+              columns={columns as any}
               data={planingData}
               pagination
               selectableRows
@@ -191,6 +191,15 @@ const ViewImei = () => {
                   style: {
                     padding: "12px",
                     border: "none",
+                  },
+                },
+                cells: {
+                  style: {
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
                   },
                 },
               }}

@@ -1,3 +1,4 @@
+"use client";
 import React from "react";
 import { RotateCcw, ArrowRight } from "lucide-react";
 
@@ -26,7 +27,12 @@ export default function NGModal({
 }: NGModalProps) {
   const [showAssignment, setShowAssignment] = React.useState(false);
 
-  if (!showNGModal) return null;
+  // Reset state when modal closes
+  React.useEffect(() => {
+    if (!showNGModal) {
+      setShowAssignment(false);
+    }
+  }, [showNGModal]);
 
   const handleRetryClick = () => {
     if (onRetry) {
@@ -50,12 +56,7 @@ export default function NGModal({
     setShowAssignment(false);
   };
 
-  // Reset state when modal closes
-  React.useEffect(() => {
-    if (!showNGModal) {
-      setShowAssignment(false);
-    }
-  }, [showNGModal]);
+  if (!showNGModal) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -112,7 +113,7 @@ export default function NGModal({
               </button>
               <button
                 onClick={handleConfirmAssignment}
-                className="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+                className="rounded-lg bg-danger px-4 py-2 text-white hover:bg-danger"
                 disabled={!selectAssignDeviceDepartment}
               >
                 Confirm NG

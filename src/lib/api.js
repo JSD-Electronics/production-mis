@@ -1272,6 +1272,16 @@ export const shiftToNextCommonStage = async (processId, formData) => {
     console.log("Error Carton Shift To Common Stage :", error.message);
   }
 };
+
+export const keepCartonInStore = async (processId, formData) => {
+  try {
+    let response = await api.post(`/cartons/${processId}/keep-in-store`, formData);
+    return response.data;
+  } catch (error) {
+    console.log("Error Keeping Carton In Store :", error.message);
+    throw error;
+  }
+};
 export const getFGInventoryToShift = async () => {
   try {
     let result = await api.get(`/process/getFGInventory`);

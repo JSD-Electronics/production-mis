@@ -1,3 +1,4 @@
+"use client";
 import React, { useState } from "react";
 import { Search, XCircle } from "lucide-react";
 
@@ -11,6 +12,7 @@ interface SearchableInputProps {
   getDeviceById: any;
   setIsPassNGButtonShow: any;
   setIsStickerPrinted: any;
+  setIsVerifiedSticker: any;
   checkIsPrintEnable: any;
   setIsDevicePassed: any;
 }
@@ -25,6 +27,7 @@ const SearchableInput = ({
   getDeviceById,
   setIsPassNGButtonShow,
   setIsStickerPrinted,
+  setIsVerifiedSticker,
   checkIsPrintEnable,
   setIsDevicePassed,
 }: SearchableInputProps) => {
@@ -62,6 +65,9 @@ const SearchableInput = ({
     getDeviceById(option._id);
     setSearchQuery(option?.serialNo);
     setSearchResult(option?.serialNo);
+    setIsStickerPrinted(false);
+    setIsVerifiedSticker(false);
+    setIsDevicePassed(false);
     setShowSuggestions(false);
   };
 
@@ -79,6 +85,7 @@ const SearchableInput = ({
       }
       setIsDevicePassed(false);
       setIsStickerPrinted(false);
+      setIsVerifiedSticker(false);
       if (!checkIsPrintEnable) {
         setIsPassNGButtonShow(true);
       } else {

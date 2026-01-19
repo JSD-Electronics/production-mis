@@ -10,6 +10,7 @@ import {
   updateIssueKit,
   updateIssueCarton
 } from "@/lib/api";
+import { Inventory } from "@/types/inventory";
 import { useRouter } from "next/navigation";
 import { FiEye, FiTrash } from "react-icons/fi";
 import { BallTriangle } from "react-loader-spinner";
@@ -20,22 +21,22 @@ import "react-toastify/dist/ReactToastify.css";
 const ViewProcessInventory = () => {
   const [showPopup, setShowPopup] = React.useState(false);
   const [productId, setProductId] = React.useState("");
-  const [inventoryData, setInventoryData] = React.useState([]);
+  const [inventoryData, setInventoryData] = React.useState<Inventory[]>([]);
   const [isInventoryModel, setIsInventoryModel] = React.useState(false);
-  const [inventoryDetails, setInventoryDetails] = React.useState({});
+  const [inventoryDetails, setInventoryDetails] = React.useState<any>({});
   const [inventoryID, setInventoryID] = useState("");
   const [updatedQuantity, setUpdatedQuantity] = React.useState(0);
   const [updatedCartonQuantity, setUpdatedCartonQuantity] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
-  const [selectedRows, setSelectedRows] = React.useState([]);
-  const [processes, setProcesses] = React.useState([]);
+  const [selectedRows, setSelectedRows] = React.useState<Inventory[]>([]);
+  const [processes, setProcesses] = React.useState<any[]>([]);
   const [productName, setProductName] = React.useState("");
-  const [packagingData, setPackagingData] = useState([]);
+  const [packagingData, setPackagingData] = useState<any[]>([]);
   const [processName, setProcessName] = React.useState("");
   const [isIssueKitModel, setIsIssueKitModel] = React.useState(false);
   const [isIssueCartonModel, setIsIssueCartonModel] = React.useState(false);
   const [selectedProcess, setSelectedProcess] = React.useState("");
-  const [selectedProcessDetails, setSelectedProcessDetails] = React.useState(
+  const [selectedProcessDetails, setSelectedProcessDetails] = React.useState<any>(
     {},
   );
   const [issueKitProcess, setIssueKitProcess] = React.useState("");
@@ -82,12 +83,13 @@ const ViewProcessInventory = () => {
     setIsInventoryModel(true);
     setUpdatedQuantity(0);
     setUpdatedCartonQuantity(0);
-    inventoryData.map((value, index) => {
+    setPackagingData([]);
+    inventoryData.forEach((value: Inventory) => {
       if (value._id === process._id) {
-        value?.productDetails?.stages.map((stage, index) => {
+        value?.productDetails?.stages.forEach((stage: any) => {
           stage?.subSteps
-            .filter((value1) => value1.isPackagingStatus)
-            .forEach((value1) => {
+            .filter((value1: any) => value1.isPackagingStatus)
+            .forEach((value1: any) => {
               setPackagingData((prev) => [...prev, value1]);
             });
         });
@@ -105,24 +107,24 @@ const ViewProcessInventory = () => {
       }
 
       const existingItem = inventoryData.find(
-        (value) => value._id === inventoryID,
+        (value: Inventory) => value._id === inventoryID,
       );
       const currentQuantity = existingItem
-        ? parseInt(existingItem.quantity) || 0
+        ? parseInt(String(existingItem.processQuantity)) || 0
         : 0;
       const currentCartonQuantity = existingItem
-        ? parseInt(existingItem.cartonQuantity) || 0
+        ? parseInt(String(existingItem.cartonQuantity)) || 0
         : 0;
-      const additionalQuantity = parseInt(updatedQuantity) || 0;
-      const additionalCartonQuantity = parseInt(updatedCartonQuantity) || 0;
+      const additionalQuantity = parseInt(String(updatedQuantity)) || 0;
+      const additionalCartonQuantity = parseInt(String(updatedCartonQuantity)) || 0;
 
       const finalCartonQuantity =
         currentCartonQuantity + additionalCartonQuantity;
       const finalQuantity = currentQuantity + additionalQuantity;
 
       let formData = new FormData();
-      formData.append("quantity", finalQuantity);
-      formData.append("cartonQuantity", finalCartonQuantity);
+      formData.append("quantity", String(finalQuantity));
+      formData.append("cartonQuantity", String(finalCartonQuantity));
 
       if (finalQuantity > 0) {
         formData.append("status", "In Stock");
@@ -314,7 +316,7 @@ const ViewProcessInventory = () => {
             label: "Process Created",
             backgroundColor: "#95a5a6",
           },
-        }; 
+        };
         const status = row?.status;
         const { label, backgroundColor } = statusStyles[status] || statusStyles.default;
         return (
@@ -476,6 +478,15 @@ const ViewProcessInventory = () => {
                     border: "none",
                   },
                 },
+                cells: {
+                  style: {
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
+                  },
+                },
               }}
             />
             <Modal
@@ -629,10 +640,10 @@ const ViewProcessInventory = () => {
                             {issueKitProcess &&
                               (parseInt(issueKitProcess) < 1 ||
                                 parseInt(issueKitProcess) >
-                                  parseInt(selectedProcessDetails?.quantity) -
-                                    parseInt(
-                                      selectedProcessDetails?.issuedKits,
-                                    )) && (
+                                parseInt(selectedProcessDetails?.quantity) -
+                                parseInt(
+                                  selectedProcessDetails?.issuedKits,
+                                )) && (
                                 <p className="text-red-500 mt-1 text-sm">
                                   Invalid quantity. Please enter a value between
                                   1 and{" "}
@@ -686,17 +697,17 @@ const ViewProcessInventory = () => {
                     <strong className="font-medium">Kits Shortage :</strong>{" "}
                     {Math.abs(
                       inventoryDetails?.processQuantity -
-                        inventoryDetails?.issuedKits,
+                      inventoryDetails?.issuedKits,
                     )}
                   </div>
                   <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
                     <strong className="font-medium">Surplus Kits :</strong>{" "}
                     {inventoryDetails?.issuedKits >
-                    inventoryDetails?.processQuantity
+                      inventoryDetails?.processQuantity
                       ? Math.abs(
-                          inventoryDetails?.inventoryQuantity -
-                            inventoryDetails?.processQuantity,
-                        )
+                        inventoryDetails?.inventoryQuantity -
+                        inventoryDetails?.processQuantity,
+                      )
                       : 0}
                   </div>
                 </div>
@@ -719,8 +730,8 @@ const ViewProcessInventory = () => {
                         </strong>{" "}
                         {Math.abs(
                           parseInt(inventoryDetails?.processQuantity) /
-                            packagingData[0]?.packagingData?.maxCapacity -
-                            inventoryDetails?.cartonQuantity,
+                          packagingData[0]?.packagingData?.maxCapacity -
+                          inventoryDetails?.cartonQuantity,
                         )}
                       </div>
                       <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
@@ -728,13 +739,13 @@ const ViewProcessInventory = () => {
                           Surplus Cartons :
                         </strong>{" "}
                         {inventoryDetails?.cartonQuantity >
-                        inventoryDetails?.processQuantity /
+                          inventoryDetails?.processQuantity /
                           packagingData[0]?.packagingData?.maxCapacity
                           ? Math.abs(
-                              parseInt(inventoryDetails?.processQuantity) /
-                                packagingData[0]?.packagingData?.maxCapacity -
-                                inventoryDetails?.cartonQuantity,
-                            )
+                            parseInt(inventoryDetails?.processQuantity) /
+                            packagingData[0]?.packagingData?.maxCapacity -
+                            inventoryDetails?.cartonQuantity,
+                          )
                           : 0}
                       </div>
                       <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">

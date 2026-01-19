@@ -19,7 +19,7 @@ import "react-toastify/dist/ReactToastify.css";
 const ViewJigCategory = () => {
   const [showPopup, setShowPopup] = React.useState(false);
   const [productId, setProductId] = React.useState("");
-  const [categoryId,setCategoryId] = React.useState('');
+  const [categoryId, setCategoryId] = React.useState('');
   const [jigCategoryData, setJigCategoryData] = React.useState<Stages[]>([]);
   const [categoryModelName, setCategoryModelName] =
     React.useState("Add Jig Category");
@@ -27,7 +27,7 @@ const ViewJigCategory = () => {
   const [status, setStatus] = React.useState("1");
   const [isModalOpen, setModalOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
-  const [selectedRows, setSelectedRows] = React.useState([]);
+  const [selectedRows, setSelectedRows] = React.useState<Stages[]>([]);
   const handleRowSelected = (state: any) => {
     setSelectedRows(state.selectedRows);
   };
@@ -61,7 +61,7 @@ const ViewJigCategory = () => {
       console.error("Error deleting stage:", error);
     }
   };
-  const handleEdit = (row: any[]) => {
+  const handleEdit = (row: Stages) => {
     setModalOpen(true);
     setCategoryId(row?._id);
     setName(row?.name);
@@ -70,7 +70,7 @@ const ViewJigCategory = () => {
   };
   const handleMultipleRowsDelete = async () => {
     try {
-      const selectedIds = selectedRows.map((row) => row._id);
+      const selectedIds = selectedRows.map((row: Stages) => row._id);
       await deleteMultipleJigCategories(selectedIds);
       setSelectedRows([]);
       toast.success("Jig Category deleted successfully!");
@@ -89,7 +89,7 @@ const ViewJigCategory = () => {
   const columns = [
     {
       name: "ID",
-      selector: (row: Stages, index: number) => index + 1,
+      selector: (row: any, index?: number) => (index ?? 0) + 1,
       sortable: true,
     },
     {
@@ -158,11 +158,10 @@ const ViewJigCategory = () => {
               <button
                 onClick={handleMultipleRowsDelete}
                 disabled={selectedRows.length === 0}
-                className={`rounded bg-danger px-4 py-2 font-semibold text-white ${
-                  selectedRows.length === 0
-                    ? "cursor-not-allowed opacity-50"
-                    : "hover:bg-red-700"
-                }`}
+                className={`rounded bg-danger px-4 py-2 font-semibold text-white ${selectedRows.length === 0
+                  ? "cursor-not-allowed opacity-50"
+                  : "hover:bg-red-700"
+                  }`}
               >
                 Delete
               </button>
@@ -217,6 +216,15 @@ const ViewJigCategory = () => {
                   style: {
                     padding: "12px",
                     border: "none",
+                  },
+                },
+                cells: {
+                  style: {
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
                   },
                 },
               }}

@@ -92,7 +92,7 @@ const DraggableGridItem = ({
   });
   const [, drop] = useDrop({
     accept: "Test",
-    hover: () => {},
+    hover: () => { },
     drop: (draggedItem) => {
       if (draggedItem.coordinates !== coordinates) {
         moveItem(draggedItem.coordinates, coordinates);
@@ -103,13 +103,12 @@ const DraggableGridItem = ({
   return (
     <div
       key={seatIndex}
-      className={`flex flex-col rounded-lg border-2 p-2 transition-all duration-300 ${
-        assignedStages[coordinates] && assignedStages[coordinates].length > 0
-          ? !assignedStages[coordinates][0]?.reserved
-            ? "border-green-500 bg-green-200 shadow-xl"
-            : "border-danger bg-[#fbc0c0] shadow-xl"
-          : "hidden"
-      }`}
+      className={`flex flex-col rounded-lg border-2 p-2 transition-all duration-300 ${assignedStages[coordinates] && assignedStages[coordinates].length > 0
+        ? !assignedStages[coordinates][0]?.reserved
+          ? "border-green-500 bg-green-200 shadow-xl"
+          : "border-danger bg-[#fbc0c0] shadow-xl"
+        : "hidden"
+        }`}
       title={
         assignedStages[coordinates] &&
         assignedStages[coordinates].length > 0 &&
@@ -131,85 +130,85 @@ const DraggableGridItem = ({
                 stage?.reserved
                   ? "Reserved"
                   : selectedProcess?.quantity > stage?.totalUPHA
-                  ? stage?.totalUPHA > 0
-                    ? "Active"
-                    : "Downtime"
-                  : "Completed";
+                    ? stage?.totalUPHA > 0
+                      ? "Active"
+                      : "Downtime"
+                    : "Completed";
               return seatStatusFilter === "all" ? true : seatStatusFilter === status;
             })
             .map((stage: any, stageIndex: number) => (
-            <div key={stageIndex}>
-              <div className="flex items-center justify-between">
-                <strong className="text-gray-900 text-xs">
-                  {stage.name}
-                  {stage.name === "Reserved" ? (
-                    <>
-                      <p>Process Name : {stage?.processName}</p>
-                      <p>Process Id : {stage?.pId}</p>
-                    </>
-                  ) : (
-                    <>
-                      <p>UPH Target: {stage.upha}</p>
-                      <p>Achieved UPH:</p>
-                      <div className="my-2">
-                        {stage?.totalUPHA != null && (
-                          <p>WIP : {String(stage?.totalUPHA)}</p>
-                        )}
-                        <p>Pass : {stage.passedDevice || 0}</p>
-                        <p>NG : {stage.ngDevice || 0}</p>
-                        <p>
-                          Status :{" "}
-                          <span
-                            className={
-                              selectedProcess?.quantity > stage?.totalUPHA
+              <div key={stageIndex}>
+                <div className="flex items-center justify-between">
+                  <strong className="text-gray-900 text-xs">
+                    {stage.name}
+                    {stage.name === "Reserved" ? (
+                      <>
+                        <p>Process Name : {stage?.processName}</p>
+                        <p>Process Id : {stage?.pId}</p>
+                      </>
+                    ) : (
+                      <>
+                        <p>UPH Target: {stage.upha}</p>
+                        <p>Achieved UPH:</p>
+                        <div className="my-2">
+                          {stage?.totalUPHA != null && (
+                            <p>WIP : {String(stage?.totalUPHA)}</p>
+                          )}
+                          <p>Pass : {stage.passedDevice || 0}</p>
+                          <p>NG : {stage.ngDevice || 0}</p>
+                          <p>
+                            Status :{" "}
+                            <span
+                              className={
+                                selectedProcess?.quantity > stage?.totalUPHA
+                                  ? stage?.totalUPHA > 0
+                                    ? "font-semibold text-orange-500"
+                                    : "font-semibold text-danger"
+                                  : "font-semibold text-green-600"
+                              }
+                            >
+                              {selectedProcess?.quantity > stage?.totalUPHA
                                 ? stage?.totalUPHA > 0
-                                  ? "font-semibold text-orange-500"
-                                  : "font-semibold text-danger"
-                                : "font-semibold text-green-600"
-                            }
-                          >
-                            {selectedProcess?.quantity > stage?.totalUPHA
-                              ? stage?.totalUPHA > 0
-                                ? "Active"
-                                : "Downtime"
-                              : "Completed"}
-                          </span>
-                        </p>
-                      </div>
-                    </>
-                  )}
-                </strong>
-              </div>
+                                  ? "Active"
+                                  : "Downtime"
+                                : "Completed"}
+                            </span>
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </strong>
+                </div>
 
-              {/* Assigned Operators */}
-              {assignedOperators[coordinates]?.map(
-                (operator: any, index1: number) => (
+                {/* Assigned Operators */}
+                {assignedOperators[coordinates]?.map(
+                  (operator: any, index1: number) => (
+                    <p
+                      key={`${coordinates}-${operator._id || index1}`}
+                      className="flex items-center justify-end pr-1 text-xs"
+                    >
+                      <span>
+                        <strong>Operator : </strong>
+                        {operator.name}
+                      </span>
+                    </p>
+                  ),
+                )}
+
+                {/* Assigned Jigs */}
+                {assignedJigs[coordinates]?.map((jig: any, index: number) => (
                   <p
-                    key={`${coordinates}-${operator._id || index1}`}
-                    className="flex items-center justify-end pr-1 text-xs"
+                    key={index}
+                    className="flex items-center justify-end text-xs"
                   >
                     <span>
-                      <strong>Operator : </strong>
-                      {operator.name}
+                      <strong>Jig : </strong>
+                      {jig?.name}
                     </span>
                   </p>
-                ),
-              )}
-
-              {/* Assigned Jigs */}
-              {assignedJigs[coordinates]?.map((jig: any, index: number) => (
-                <p
-                  key={index}
-                  className="flex items-center justify-end text-xs"
-                >
-                  <span>
-                    <strong>Jig : </strong>
-                    {jig?.name}
-                  </span>
-                </p>
-              ))}
-            </div>
-          ))}
+                ))}
+              </div>
+            ))}
       </div>
     </div>
   );
@@ -324,11 +323,14 @@ const ViewPlanSchedule = () => {
   const avgUPH = count > 0 ? (total / count).toFixed(2) : 0;
 
   const summaryData = React.useMemo(() => {
-    const required = parseInt(selectedProcess?.quantity) || 0;
-    const issued = parseInt(selectedProcess?.issuedKits) || 0;
-    const pending = Math.max(required - issued, 0);
+    const sp = selectedProcess as any;
+    const required = parseInt(sp?.quantity) || 0;
+    const issued = parseInt(sp?.issuedKits) || 0;
+    const consumed = parseInt(sp?.consumedKits) || 0;
+    const pending = Math.max(required - consumed, 0);
+    const wip = Math.max(issued - consumed, 0);
     const avg = parseInt(lastStageOverallSummary) || 0;
-    return { required, issued, pending, avg };
+    return { required, issued, consumed, pending, wip, avg };
   }, [selectedProcess, lastStageOverallSummary]);
   const uphStats = React.useMemo(() => {
     const pass = (completedKitsUPH || []).reduce(
@@ -630,7 +632,7 @@ const ViewPlanSchedule = () => {
       setShiftChangedFromDate(result?.ProcessShiftMappings?.formattedShiftDate);
       setEndTime(result?.ProcessShiftMappings?.endTime);
       setStartTime(result?.ProcessShiftMappings?.startTime);
-      setTotalConsumedkits(result?.consumedKit);
+      setTotalConsumedkits(singleProcess?.consumedKits || 0);
       let reservedSeats = await checkSeatAvailability(
         room,
         Shift,
@@ -1113,14 +1115,14 @@ const ViewPlanSchedule = () => {
   };
   const handleDragStart =
     (stage: any, substep = null) =>
-    (event: any) => {
-      const data = {
-        name: stage.stageName,
-        upha: stage.upha,
-        substepName: substep ? [substep.stepName] : null,
+      (event: any) => {
+        const data = {
+          name: stage.stageName,
+          upha: stage.upha,
+          substepName: substep ? [substep.stepName] : null,
+        };
+        event.dataTransfer.setData("text/plain", JSON.stringify(data));
       };
-      event.dataTransfer.setData("text/plain", JSON.stringify(data));
-    };
   const moveItem = (fromCoordinates, toCoordinates) => {
     setAssignedStages((prevStages) => {
       const updatedStages = { ...prevStages };
@@ -1208,10 +1210,10 @@ const ViewPlanSchedule = () => {
           stage?.reserved
             ? "Reserved"
             : selectedProcess?.quantity > stage?.totalUPHA
-            ? stage?.totalUPHA > 0
-              ? "Active"
-              : "Downtime"
-            : "Completed";
+              ? stage?.totalUPHA > 0
+                ? "Active"
+                : "Downtime"
+              : "Completed";
         return st === seatStatusFilter;
       });
       if (!anyMatch) return false;
@@ -1475,8 +1477,8 @@ const ViewPlanSchedule = () => {
                     <CardDataStats title="Issued Kits" total={`${summaryData.issued}`} rate="" levelUp>
                       <FiPackage size={20} />
                     </CardDataStats>
-                    <CardDataStats title="Pending Kits" total={`${summaryData.pending}`} rate="" levelDown>
-                      <FiClipboard size={20} />
+                    <CardDataStats title="Consumed Kits" total={`${totalConsumedKits}`} rate="" levelUp>
+                      <FiCheckCircle size={20} />
                     </CardDataStats>
                     <CardDataStats title="Avg UPH (Last Stage)" total={`${summaryData.avg}`} rate="" levelUp>
                       <FiTrendingUp size={20} />
@@ -1549,32 +1551,30 @@ const ViewPlanSchedule = () => {
                           <strong>Available:</strong> {inventoryData?.quantity}
                         </div>
                         <div>
-                          <strong>Issued:</strong> {selectedProcess?.issuedKits}
+                          <strong>Issued:</strong> {summaryData.issued}
+                        </div>
+                        <div>
+                          <strong>Consumed:</strong> {summaryData.consumed}
+                        </div>
+                        <div>
+                          <strong>WIP:</strong> {summaryData.wip}
+                        </div>
+                        <div>
+                          <strong>Pending:</strong> {summaryData.pending}
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="bg-red-100 text-red-600 rounded-full px-2 py-0.5 text-xs font-medium">
-                            Short:{" "}
-                            {Math.max(
-                              0,
-                              selectedProcess?.quantity -
-                                selectedProcess?.issuedKits,
-                            )}
+                            Short: {Math.max(0, summaryData.required - summaryData.issued)}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
-                            Surplus:{" "}
-                            {Math.max(
-                              0,
-                              selectedProcess?.issuedKits -
-                                selectedProcess?.quantity,
-                            )}
+                            Surplus: {Math.max(0, summaryData.issued - summaryData.required)}
                           </span>
                         </div>
                         <div>
-                          <strong>Total:</strong>{" "}
-                          {inventoryData?.quantity +
-                            selectedProcess?.issuedKits}
+                          <strong>Total Store Stock:</strong>{" "}
+                          {(inventoryData?.quantity || 0) + summaryData.issued}
                         </div>
                       </div>
                     </div>
@@ -1583,7 +1583,7 @@ const ViewPlanSchedule = () => {
                   {/* Cartons */}
                   {packagingData.length > 0 &&
                     packagingData[0].packagingData.packagingType ===
-                      "Carton" && (
+                    "Carton" && (
                       <div className="dark:bg-gray-800 rounded-lg border-l-4 border-orange-500 bg-white p-4 shadow-md">
                         <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-orange-600 dark:text-orange-400">
                           <FiArchive /> Cartons
@@ -1607,7 +1607,7 @@ const ViewPlanSchedule = () => {
                                 0,
                                 (
                                   selectedProcess?.quantity /
-                                    packagingData[0].packagingData.maxCapacity -
+                                  packagingData[0].packagingData.maxCapacity -
                                   selectedProcess?.issuedCartons
                                 ).toFixed(0),
                               )}
@@ -1621,7 +1621,7 @@ const ViewPlanSchedule = () => {
                                 (
                                   selectedProcess?.issuedCartons -
                                   selectedProcess?.quantity /
-                                    packagingData[0].packagingData.maxCapacity
+                                  packagingData[0].packagingData.maxCapacity
                                 ).toFixed(0),
                               )}
                             </span>
@@ -1644,11 +1644,10 @@ const ViewPlanSchedule = () => {
                       {selectedShift?.intervals?.map((interval, i) => (
                         <span
                           key={i}
-                          className={`rounded-full px-3 py-1 text-xs font-medium ${
-                            interval.breakTime
-                              ? "bg-[#fbc0c0] text-danger dark:bg-danger dark:text-danger"
-                              : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-                          }`}
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${interval.breakTime
+                            ? "bg-[#fbc0c0] text-danger dark:bg-danger dark:text-danger"
+                            : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+                            }`}
                         >
                           {interval.breakTime
                             ? `Break: ${interval.startTime} - ${interval.endTime}`
@@ -1724,10 +1723,9 @@ const ViewPlanSchedule = () => {
                             className={({ selected }) =>
                               `inline-flex items-center justify-center rounded-lg px-6 py-2 text-sm font-semibold transition-all duration-200
                               focus:outline-none focus:ring-2 focus:ring-offset-1
-                              ${
-                                selected
-                                  ? "bg-blue-600 text-white shadow-md hover:bg-blue-700 focus:ring-blue-600"
-                                  : "bg-gray-200 text-gray-800 hover:bg-gray-300 border-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:border-gray-600 border"
+                              ${selected
+                                ? "bg-blue-600 text-white shadow-md hover:bg-blue-700 focus:ring-blue-600"
+                                : "bg-gray-200 text-gray-800 hover:bg-gray-300 border-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:border-gray-600 border"
                               }`
                             }
                           >
@@ -1962,99 +1960,99 @@ const ViewPlanSchedule = () => {
                                   )
                                   .filter((filtered) => filtered.length > 0)
                                   .map((rowKeys, rowIndex) => (
-                                  <tr
-                                    key={rowIndex}
-                                    className="hover:bg-gray-100 dark:hover:bg-gray-700 transition"
-                                  >
-                                    {rowKeys.map((key, colIndex) => (
-                                      <td
-                                        key={colIndex}
-                                        className="px-4 py-3 align-top"
-                                      >
-                                        {assignedStages[key] &&
-                                        assignedStages[key].length > 0 &&
-                                        assignedStages[key].filter((stage: any) => {
-                                          const status =
-                                            stage?.reserved
-                                              ? "Reserved"
-                                              : selectedProcess?.quantity >
-                                                stage?.totalUPHA
-                                              ? stage?.totalUPHA > 0
-                                                ? "Active"
-                                                : "Downtime"
-                                              : "Completed";
-                                          return seatStatusFilter === "all"
-                                            ? true
-                                            : seatStatusFilter === status;
-                                        }).length > 0 ? (
-                                          assignedStages[key]
-                                            .filter((stage: any) => {
+                                    <tr
+                                      key={rowIndex}
+                                      className="hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                                    >
+                                      {rowKeys.map((key, colIndex) => (
+                                        <td
+                                          key={colIndex}
+                                          className="px-4 py-3 align-top"
+                                        >
+                                          {assignedStages[key] &&
+                                            assignedStages[key].length > 0 &&
+                                            assignedStages[key].filter((stage: any) => {
                                               const status =
                                                 stage?.reserved
                                                   ? "Reserved"
                                                   : selectedProcess?.quantity >
                                                     stage?.totalUPHA
-                                                  ? stage?.totalUPHA > 0
-                                                    ? "Active"
-                                                    : "Downtime"
-                                                  : "Completed";
+                                                    ? stage?.totalUPHA > 0
+                                                      ? "Active"
+                                                      : "Downtime"
+                                                    : "Completed";
                                               return seatStatusFilter === "all"
                                                 ? true
                                                 : seatStatusFilter === status;
-                                            })
-                                            .map((stage, stageIndex) => (
-                                              <div
-                                                key={stageIndex}
-                                                className="dark:bg-gray-900 mb-2 rounded-lg bg-white p-3 shadow-sm"
-                                              >
-                                                <p className="text-xs font-medium">
-                                                  <FiTrendingUp className="mr-1 inline-block" />
-                                                  UPH Target: {stage.upha || 0}
-                                                </p>
-                                                <p className="text-xs">
-                                                  Achieved:{" "}
-                                                  {stage.achievedUph || 0}
-                                                </p>
-                                                <p className="text-xs">
-                                                  WIP: {stage?.totalUPHA ?? "N/A"}
-                                                </p>
-                                                <p className="text-xs text-green-600">
-                                                  Pass: {stage.passedDevice || 0}
-                                                </p>
-                                                <p className="text-red-600 text-xs">
-                                                  NG: {stage.ngDevice || 0}
-                                                </p>
-                                                <p className="text-xs">
-                                                  <strong>Status:</strong>{" "}
-                                                  <span
-                                                    className={
-                                                      selectedProcess?.quantity >
+                                            }).length > 0 ? (
+                                            assignedStages[key]
+                                              .filter((stage: any) => {
+                                                const status =
+                                                  stage?.reserved
+                                                    ? "Reserved"
+                                                    : selectedProcess?.quantity >
                                                       stage?.totalUPHA
-                                                        ? stage?.totalUPHA > 0
-                                                          ? "font-semibold text-orange-500"
-                                                          : "text-red-500 font-semibold"
-                                                        : "font-semibold text-green-600"
-                                                    }
-                                                  >
-                                                    {selectedProcess?.quantity >
-                                                    stage?.totalUPHA
                                                       ? stage?.totalUPHA > 0
                                                         ? "Active"
                                                         : "Downtime"
-                                                      : "Completed"}
-                                                  </span>
-                                                </p>
-                                              </div>
-                                            ))
-                                        ) : (
-                                          <div className="mb-2 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-gray-900 dark:text-gray-300">
-                                            Empty
-                                          </div>
-                                        )}
-                                      </td>
-                                    ))}
-                                  </tr>
-                                ))}
+                                                      : "Completed";
+                                                return seatStatusFilter === "all"
+                                                  ? true
+                                                  : seatStatusFilter === status;
+                                              })
+                                              .map((stage, stageIndex) => (
+                                                <div
+                                                  key={stageIndex}
+                                                  className="dark:bg-gray-900 mb-2 rounded-lg bg-white p-3 shadow-sm"
+                                                >
+                                                  <p className="text-xs font-medium">
+                                                    <FiTrendingUp className="mr-1 inline-block" />
+                                                    UPH Target: {stage.upha || 0}
+                                                  </p>
+                                                  <p className="text-xs">
+                                                    Achieved:{" "}
+                                                    {stage.achievedUph || 0}
+                                                  </p>
+                                                  <p className="text-xs">
+                                                    WIP: {stage?.totalUPHA ?? "N/A"}
+                                                  </p>
+                                                  <p className="text-xs text-green-600">
+                                                    Pass: {stage.passedDevice || 0}
+                                                  </p>
+                                                  <p className="text-red-600 text-xs">
+                                                    NG: {stage.ngDevice || 0}
+                                                  </p>
+                                                  <p className="text-xs">
+                                                    <strong>Status:</strong>{" "}
+                                                    <span
+                                                      className={
+                                                        selectedProcess?.quantity >
+                                                          stage?.totalUPHA
+                                                          ? stage?.totalUPHA > 0
+                                                            ? "font-semibold text-orange-500"
+                                                            : "text-red-500 font-semibold"
+                                                          : "font-semibold text-green-600"
+                                                      }
+                                                    >
+                                                      {selectedProcess?.quantity >
+                                                        stage?.totalUPHA
+                                                        ? stage?.totalUPHA > 0
+                                                          ? "Active"
+                                                          : "Downtime"
+                                                        : "Completed"}
+                                                    </span>
+                                                  </p>
+                                                </div>
+                                              ))
+                                          ) : (
+                                            <div className="mb-2 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-gray-900 dark:text-gray-300">
+                                              Empty
+                                            </div>
+                                          )}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
                               </tbody>
                             </table>
                           </div>
@@ -2150,69 +2148,69 @@ const ViewPlanSchedule = () => {
                               {row.hour}
                             </td>
                             {row.hour !== "Total Count" &&
-                            row.hour !== "Avg UPH"
+                              row.hour !== "Avg UPH"
                               ? row?.values?.map((val, i) => (
-                                  <td key={i} className="border p-2">
-                                    <div className="text-xs">
-                                      <p className="text-left">
-                                        <strong>Pass:</strong> {val?.Pass},
-                                      </p>
-                                      <p className="text-left">
-                                        <strong>NG:</strong> {val?.NG},
-                                      </p>
-                                      <p className="text-left">
-                                        <strong>Target UPH:</strong>{" "}
-                                        {val?.targetUPH}
-                                      </p>
-                                      <p
-                                        className={`text-left ${val?.Pass + val?.NG <= val?.targetUPH && row?.status !== "future" ? "text-danger" : "text-grey"}`}
-                                      >
-                                        <strong>UPH:</strong>{" "}
-                                        {val?.Pass + val?.NG}
-                                      </p>
-                                      <div className="mt-1 h-2 w-full rounded bg-gray-200">
-                                        <div
-                                          className="h-2 rounded bg-blue-500"
-                                          style={{
-                                            width: `${Math.min(
-                                              100,
-                                              Math.round(
-                                                (((val?.Pass || 0) + (val?.NG || 0)) /
-                                                  (val?.targetUPH || 1)) * 100,
-                                              ),
-                                            )}%`,
-                                          }}
-                                        ></div>
-                                      </div>
-                                      <p className="text-[10px] text-gray-500">
-                                        {Math.min(
-                                          100,
-                                          Math.round(
-                                            (((val?.Pass || 0) + (val?.NG || 0)) /
-                                              (val?.targetUPH || 1)) * 100,
-                                          ),
-                                        )}
-                                        % of target
-                                      </p>
+                                <td key={i} className="border p-2">
+                                  <div className="text-xs">
+                                    <p className="text-left">
+                                      <strong>Pass:</strong> {val?.Pass},
+                                    </p>
+                                    <p className="text-left">
+                                      <strong>NG:</strong> {val?.NG},
+                                    </p>
+                                    <p className="text-left">
+                                      <strong>Target UPH:</strong>{" "}
+                                      {val?.targetUPH}
+                                    </p>
+                                    <p
+                                      className={`text-left ${val?.Pass + val?.NG <= val?.targetUPH && row?.status !== "future" ? "text-danger" : "text-grey"}`}
+                                    >
+                                      <strong>UPH:</strong>{" "}
+                                      {val?.Pass + val?.NG}
+                                    </p>
+                                    <div className="mt-1 h-2 w-full rounded bg-gray-200">
+                                      <div
+                                        className="h-2 rounded bg-blue-500"
+                                        style={{
+                                          width: `${Math.min(
+                                            100,
+                                            Math.round(
+                                              (((val?.Pass || 0) + (val?.NG || 0)) /
+                                                (val?.targetUPH || 1)) * 100,
+                                            ),
+                                          )}%`,
+                                        }}
+                                      ></div>
                                     </div>
-                                  </td>
-                                ))
+                                    <p className="text-[10px] text-gray-500">
+                                      {Math.min(
+                                        100,
+                                        Math.round(
+                                          (((val?.Pass || 0) + (val?.NG || 0)) /
+                                            (val?.targetUPH || 1)) * 100,
+                                        ),
+                                      )}
+                                      % of target
+                                    </p>
+                                  </div>
+                                </td>
+                              ))
                               : row?.values?.map((val, i) => (
-                                  <td key={i} className="border p-2">
-                                    <div className="text-xs">
-                                      <p className="text-left">
-                                        <strong>Pass:</strong> {val?.Pass},
-                                      </p>
-                                      <p className="text-left">
-                                        <strong>NG:</strong> {val?.NG},
-                                      </p>
-                                      <p className="text-left">
-                                        <strong>UPH:</strong>{" "}
-                                        {val?.Pass + val?.NG}
-                                      </p>
-                                    </div>
-                                  </td>
-                                ))}
+                                <td key={i} className="border p-2">
+                                  <div className="text-xs">
+                                    <p className="text-left">
+                                      <strong>Pass:</strong> {val?.Pass},
+                                    </p>
+                                    <p className="text-left">
+                                      <strong>NG:</strong> {val?.NG},
+                                    </p>
+                                    <p className="text-left">
+                                      <strong>UPH:</strong>{" "}
+                                      {val?.Pass + val?.NG}
+                                    </p>
+                                  </div>
+                                </td>
+                              ))}
                           </tr>
                         );
                       })}
@@ -2278,3 +2276,5 @@ const ViewPlanSchedule = () => {
 };
 
 export default ViewPlanSchedule;
+
+

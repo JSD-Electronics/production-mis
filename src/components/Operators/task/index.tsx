@@ -367,10 +367,13 @@ const TaskComponent = () => {
                   },
                 },
               },
-              pagination: {
+              cells: {
                 style: {
-                  padding: "12px",
-                  border: "none",
+                  "& > div:first-child": {
+                    whiteSpace: "break-spaces",
+                    overflow: "hidden",
+                    textOverflow: "inherit",
+                  },
                 },
               },
             }}

@@ -8,6 +8,9 @@ import {
   deleteMultipleJig,
   getFGInventoryToShift,
 } from "@/lib/api";
+import { Stages } from "@/types/stage";
+import { Shifts } from "@/types/shift";
+import { Inventory } from "@/types/inventory";
 import { useRouter } from "next/navigation";
 import { FiEye, FiTrash, FiX } from "react-icons/fi";
 import { BallTriangle } from "react-loader-spinner";
@@ -18,9 +21,9 @@ import Modal from "@/components/Modal/page";
 const ViewFGToStore = () => {
   const [showPopup, setShowPopup] = React.useState(false);
   const [productId, setProductId] = React.useState("");
-  const [fgToStore, setFGToStore] = React.useState([]);
+  const [fgToStore, setFGToStore] = React.useState<Shifts[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [selectedRows, setSelectedRows] = React.useState([]);
+  const [selectedRows, setSelectedRows] = React.useState<Shifts[]>([]);
   const handleRowSelected = (state: any) => {
     setSelectedRows(state.selectedRows);
   };
@@ -55,7 +58,7 @@ const ViewFGToStore = () => {
       await deleteJig(productId);
       toast.success("Jig Deleted Successfully!!");
       setShowPopup(false);
-      getJig();
+      getFgToStore();
     } catch (error) {
       console.error("Error deleting stage:", error);
     }
@@ -65,11 +68,11 @@ const ViewFGToStore = () => {
   };
   const handleMultipleRowsDelete = async () => {
     try {
-      const selectedIds = selectedRows.map((row) => row._id);
+      const selectedIds = selectedRows.map((row: Shifts) => row._id);
       await deleteMultipleJig(selectedIds);
       setSelectedRows([]);
       toast.success("Jig deleted successfully!");
-      getJig();
+      getFgToStore();
     } catch (error) {
       console.error("Error deleting stage:", error);
     }
@@ -84,12 +87,12 @@ const ViewFGToStore = () => {
   const columns = [
     {
       name: "ID",
-      selector: (row: Stages, index: number) => index + 1,
+      selector: (row: any, index?: number) => (index ?? 0) + 1,
       sortable: true,
     },
     {
       name: "Name",
-      selector: (row: Stages) => row.name,
+      selector: (row: any) => row.name,
       sortable: true,
     },
     {
@@ -100,22 +103,22 @@ const ViewFGToStore = () => {
     {
       name: "Total Device Received",
       selector: (row: Shifts) =>
-        row?.cartons?.length > 0
-          ? row?.cartons?.length * parseInt(row?.cartons[0]?.maxCapacity || 0)
+        (row?.cartons?.length ?? 0) > 0
+          ? (row?.cartons?.length ?? 0) * parseInt(String(row?.cartons?.[0]?.maxCapacity || 0))
           : 0,
       sortable: true,
     },
 
     {
       name: "Created At",
-      selector: (row: Stages) => new Date(row.createdAt).toLocaleDateString(),
+      selector: (row: any) => new Date(row.createdAt).toLocaleDateString(),
       sortable: true,
     },
     {
       name: "Status",
       selector: (row: Shifts) => row?.status,
       sortable: true,
-      cell: (row: Inventory) => {
+      cell: (row: any) => {
         const statusStyles = {
           waiting_schedule: {
             label: "Waiting Schedule",
@@ -147,9 +150,9 @@ const ViewFGToStore = () => {
           },
         };
 
-        const status = row?.status;
+        const status = row?.status || "default";
         const { label, backgroundColor } =
-          statusStyles[status] || statusStyles.default;
+          (statusStyles as any)[status] || statusStyles.default;
 
         return (
           <span
@@ -170,7 +173,7 @@ const ViewFGToStore = () => {
     },
     {
       name: "Actions",
-      cell: (row) => (
+      cell: (row: Shifts) => (
         <div className="flex items-center space-x-3.5">
           <button
             onClick={() => handleView(row.cartons)} // pass cartons
@@ -191,98 +194,97 @@ const ViewFGToStore = () => {
 
         <Modal
           isOpen={isOpenViewFGDetails}
+          onSubmit={() => { }}
           onClose={handleClose}
           title="FG Items"
         >
           {/* Header */}
-            {/* Scrollable Content */}
-            <div className="mt-6 max-h-[65vh] space-y-6 overflow-y-auto pr-2">
-              {selectedCarton?.map((carton: any) => (
-                <div
-                  key={carton._id}
-                  className="border-gray-200 rounded-lg border bg-white p-5 shadow-sm transition hover:shadow-md"
-                >
-                  {/* Carton Header */}
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-gray-700 text-lg font-semibold">
-                      {carton.cartonSerial}
-                    </h3>
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-medium ${
-                        carton.cartonStatus === "FG_TO_STORE"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-600"
+          {/* Scrollable Content */}
+          <div className="mt-6 max-h-[65vh] space-y-6 overflow-y-auto pr-2">
+            {selectedCarton?.map((carton: any) => (
+              <div
+                key={carton._id}
+                className="border-gray-200 rounded-lg border bg-white p-5 shadow-sm transition hover:shadow-md"
+              >
+                {/* Carton Header */}
+                <div className="flex items-center justify-between">
+                  <h3 className="text-gray-700 text-lg font-semibold">
+                    {carton.cartonSerial}
+                  </h3>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-medium ${carton.cartonStatus === "FG_TO_STORE"
+                      ? "bg-green-100 text-green-700"
+                      : "bg-gray-100 text-gray-600"
                       }`}
-                    >
-                      {carton.cartonStatus}
-                    </span>
-                  </div>
-                  <p className="text-gray-500 mt-1 text-sm">
-                    Capacity:{" "}
-                    <span className="text-gray-700 font-medium">
-                      {carton.maxCapacity}
-                    </span>
-                  </p>
-
-                  {/* Devices Table */}
-                  <div className="mt-4 overflow-x-auto rounded-lg border">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-gray-50 text-gray-700 sticky top-0">
-                        <tr>
-                          <th className="px-4 py-2 text-left font-medium">
-                            Serial No
-                          </th>
-                          <th className="px-4 py-2 text-left font-medium">
-                            IMEI
-                          </th>
-                          <th className="px-4 py-2 text-left font-medium">
-                            Model
-                          </th>
-                          <th className="px-4 py-2 text-left font-medium">
-                            Stage
-                          </th>
-                          <th className="px-4 py-2 text-left font-medium">
-                            Status
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-gray-200 divide-y">
-                        {carton.devices.map((device: any) => (
-                          <tr
-                            key={device._id}
-                            className="hover:bg-gray-50 transition-colors"
-                          >
-                            <td className="px-4 py-2">{device.serialNo}</td>
-                            <td className="px-4 py-2">
-                              {device.imeiNo || (
-                                <span className="text-gray-400">N/A</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-2">
-                              {device.modelName || (
-                                <span className="text-gray-400">N/A</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-2">{device.currentStage}</td>
-                            <td
-                              className={`px-4 py-2 font-medium ${
-                                device.status === "Pass"
-                                  ? "text-green-600"
-                                  : device.status === "Fail"
-                                    ? "text-red-600"
-                                    : "text-gray-500"
-                              }`}
-                            >
-                              {device.status || "Pending"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  >
+                    {carton.cartonStatus}
+                  </span>
                 </div>
-              ))}
-            </div>
+                <p className="text-gray-500 mt-1 text-sm">
+                  Capacity:{" "}
+                  <span className="text-gray-700 font-medium">
+                    {carton.maxCapacity}
+                  </span>
+                </p>
+
+                {/* Devices Table */}
+                <div className="mt-4 overflow-x-auto rounded-lg border">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50 text-gray-700 sticky top-0">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-medium">
+                          Serial No
+                        </th>
+                        <th className="px-4 py-2 text-left font-medium">
+                          IMEI
+                        </th>
+                        <th className="px-4 py-2 text-left font-medium">
+                          Model
+                        </th>
+                        <th className="px-4 py-2 text-left font-medium">
+                          Stage
+                        </th>
+                        <th className="px-4 py-2 text-left font-medium">
+                          Status
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-gray-200 divide-y">
+                      {carton.devices.map((device: any) => (
+                        <tr
+                          key={device._id}
+                          className="hover:bg-gray-50 transition-colors"
+                        >
+                          <td className="px-4 py-2">{device.serialNo}</td>
+                          <td className="px-4 py-2">
+                            {device.imeiNo || (
+                              <span className="text-gray-400">N/A</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2">
+                            {device.modelName || (
+                              <span className="text-gray-400">N/A</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2">{device.currentStage}</td>
+                          <td
+                            className={`px-4 py-2 font-medium ${device.status === "Pass"
+                              ? "text-green-600"
+                              : device.status === "Fail"
+                                ? "text-red-600"
+                                : "text-gray-500"
+                              }`}
+                          >
+                            {device.status || "Pending"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
         </Modal>
       </div>
       <ToastContainer
@@ -311,7 +313,7 @@ const ViewFGToStore = () => {
           <>
             <DataTable
               className="dark:bg-bodyDark"
-              columns={columns}
+              columns={columns as any}
               data={fgToStore}
               pagination
               selectableRows
@@ -338,6 +340,15 @@ const ViewFGToStore = () => {
                   style: {
                     padding: "12px",
                     border: "none",
+                  },
+                },
+                cells: {
+                  style: {
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
                   },
                 },
               }}

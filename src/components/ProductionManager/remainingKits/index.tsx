@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import { fetchList, updateInventoryById, createProcessKits } from "@/lib/api";
+import { Inventory } from "@/types/inventory";
 import { useRouter } from "next/navigation";
 import { FiEye, FiCheck, FiTrash, FiX } from "react-icons/fi";
 import { BallTriangle } from "react-loader-spinner";
@@ -13,15 +14,15 @@ import "react-toastify/dist/ReactToastify.css";
 const ViewProcessInventory = () => {
   const [showPopup, setShowPopup] = React.useState(false);
   const [productId, setProductId] = React.useState("");
-  const [productionManagerData, setProductionManagerData] = React.useState([]);
+  const [productionManagerData, setProductionManagerData] = React.useState<Inventory[]>([]);
   const [isInventoryModel, setIsInventoryModel] = React.useState(false);
-  const [inventoryDetails, setInventoryDetails] = React.useState({});
+  const [inventoryDetails, setInventoryDetails] = React.useState<any>({});
   const [inventoryID, setInventoryID] = useState("");
   const [updatedQuantity, setUpdatedQuantity] = React.useState(0);
   const [updatedCartonQuantity, setUpdatedCartonQuantity] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
-  const [selectedRows, setSelectedRows] = React.useState([]);
-  const [packagingData, setPackagingData] = useState([]);
+  const [selectedRows, setSelectedRows] = React.useState<Inventory[]>([]);
+  const [packagingData, setPackagingData] = useState<any[]>([]);
   const [processName, setProcessName] = React.useState("");
   const handleRowSelected = (state: any) => {
     setSelectedRows(state.selectedRows);
@@ -53,25 +54,25 @@ const ViewProcessInventory = () => {
         return;
       }
 
-      const existingItem = inventoryData.find(
-        (value) => value._id === inventoryID,
+      const existingItem = productionManagerData.find(
+        (value: Inventory) => value._id === inventoryID,
       );
       const currentQuantity = existingItem
-        ? parseInt(existingItem.quantity) || 0
+        ? parseInt(String(existingItem.processQuantity)) || 0
         : 0;
       const currentCartonQuantity = existingItem
-        ? parseInt(existingItem.cartonQuantity) || 0
+        ? parseInt(String(existingItem.cartonQuantity)) || 0
         : 0;
-      const additionalQuantity = parseInt(updatedQuantity) || 0;
-      const additionalCartonQuantity = parseInt(updatedCartonQuantity) || 0;
+      const additionalQuantity = parseInt(String(updatedQuantity)) || 0;
+      const additionalCartonQuantity = parseInt(String(updatedCartonQuantity)) || 0;
 
       const finalCartonQuantity =
         currentCartonQuantity + additionalCartonQuantity;
       const finalQuantity = currentQuantity + additionalQuantity;
 
       let formData = new FormData();
-      formData.append("quantity", finalQuantity);
-      formData.append("cartonQuantity", finalCartonQuantity);
+      formData.append("quantity", String(finalQuantity));
+      formData.append("cartonQuantity", String(finalCartonQuantity));
 
       if (finalQuantity > 0) {
         formData.append("status", "In Stock");
@@ -90,7 +91,7 @@ const ViewProcessInventory = () => {
       console.error("Error updating inventory", error);
     }
   };
-  const handleReturnKits = async (data) => {
+  const handleReturnKits = async (data: Inventory) => {
     try {
       let userDetails = JSON.parse(localStorage.getItem("userDetails") ?? "{}");
 
@@ -103,15 +104,15 @@ const ViewProcessInventory = () => {
       form.append("processId", data._id);
       form.append(
         "returnedKits",
-        (parseInt(data.issuedKits, 10) || 0) -
-          (parseInt(data.consumedKits, 10) || 0),
+        String((parseInt((data as any).issuedKits, 10) || 0) -
+          (parseInt((data as any).consumedKits, 10) || 0)),
       );
       form.append(
         "returnedCarton",
-        (parseInt(data.issuedCartons, 10) || 0) -
-          (parseInt(data.consumedCartons, 10) || 0),
+        String((parseInt((data as any).issuedCartons, 10) || 0) -
+          (parseInt((data as any).consumedCartons, 10) || 0)),
       );
-      form.append("userId", userDetails._id);
+      form.append("userId", String(userDetails._id));
       form.append("status", "SEND_TO_STORE");
 
       let result = await createProcessKits(form);
@@ -120,7 +121,7 @@ const ViewProcessInventory = () => {
       } else {
         toast.error("Failed to create kits entry. Please try again.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error while creating kits entry:", error?.message);
       toast.error("An error occurred while creating kits entry.");
     }
@@ -139,17 +140,17 @@ const ViewProcessInventory = () => {
     },
     {
       name: "Quantity",
-      selector: (row: Inventory) => parseInt(row?.quantity),
+      selector: (row: any) => parseInt(String(row?.quantity || 0)),
       sortable: true,
     },
     {
       name: "Remaining kits",
-      selector: (row: Inventory) => row?.issuedKits - row?.consumedKits,
+      selector: (row: Inventory) => (row as any)?.issuedKits - (row as any)?.consumedKits,
       sortable: true,
     },
     {
       name: "Remaining Cartons",
-      selector: (row: Inventory) => row.issuedCartons - row.consumedCartons,
+      selector: (row: Inventory) => (row as any).issuedCartons - (row as any).consumedCartons,
       sortable: true,
     },
     {
@@ -171,9 +172,9 @@ const ViewProcessInventory = () => {
             backgroundColor: "#27968f",
           },
         };
-        const status = row.returnKitsStatus;
+        const status = (row as any).returnKitsStatus;
         const { label, backgroundColor } =
-          statusStyles[status] || statusStyles.DEFAULT;
+          (statusStyles as any)[status] || statusStyles.DEFAULT;
         return (
           <span
             style={{
@@ -193,15 +194,15 @@ const ViewProcessInventory = () => {
     {
       name: "Actions",
       cell: (row: Inventory) =>
-        row?.returnKitsStatus === "" && (
-            <div className="flex items-center space-x-1">
-                <button
-                    onClick={() => handleReturnKits(row)}
-                    className="transform rounded-full bg-blue-500 p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
-                >
-                    <FiCheck size={16} />
-                </button>
-            </div>
+        (row as any)?.returnKitsStatus === "" && (
+          <div className="flex items-center space-x-1">
+            <button
+              onClick={() => handleReturnKits(row)}
+              className="transform rounded-full bg-blue-500 p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
+            >
+              <FiCheck size={16} />
+            </button>
+          </div>
         ),
     },
   ];
@@ -233,7 +234,7 @@ const ViewProcessInventory = () => {
           <>
             <DataTable
               className="dark:bg-bodyDark"
-              columns={columns}
+              columns={columns as any}
               data={productionManagerData}
               pagination
               selectableRows
@@ -260,6 +261,15 @@ const ViewProcessInventory = () => {
                   style: {
                     padding: "12px",
                     border: "none",
+                  },
+                },
+                cells: {
+                  style: {
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
                   },
                 },
               }}
@@ -296,17 +306,17 @@ const ViewProcessInventory = () => {
                     <strong className="font-medium">Kits Shortage :</strong>{" "}
                     {Math.abs(
                       inventoryDetails?.processQuantity -
-                        inventoryDetails?.issuedKits,
+                      inventoryDetails?.issuedKits,
                     )}
                   </div>
                   <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
                     <strong className="font-medium">Surplus Kits :</strong>{" "}
                     {inventoryDetails?.issuedKits >
-                    inventoryDetails?.processQuantity
+                      inventoryDetails?.processQuantity
                       ? Math.abs(
-                          inventoryDetails?.inventoryQuantity -
-                            inventoryDetails?.processQuantity,
-                        )
+                        inventoryDetails?.inventoryQuantity -
+                        inventoryDetails?.processQuantity,
+                      )
                       : 0}
                   </div>
                 </div>
@@ -329,8 +339,8 @@ const ViewProcessInventory = () => {
                         </strong>{" "}
                         {Math.abs(
                           parseInt(inventoryDetails?.processQuantity) /
-                            packagingData[0]?.packagingData?.maxCapacity -
-                            inventoryDetails?.cartonQuantity,
+                          packagingData[0]?.packagingData?.maxCapacity -
+                          inventoryDetails?.cartonQuantity,
                         )}
                       </div>
                       <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
@@ -338,13 +348,13 @@ const ViewProcessInventory = () => {
                           Surplus Cartons :
                         </strong>{" "}
                         {inventoryDetails?.cartonQuantity >
-                        inventoryDetails?.processQuantity /
+                          inventoryDetails?.processQuantity /
                           packagingData[0]?.packagingData?.maxCapacity
                           ? Math.abs(
-                              parseInt(inventoryDetails?.processQuantity) /
-                                packagingData[0]?.packagingData?.maxCapacity -
-                                inventoryDetails?.cartonQuantity,
-                            )
+                            parseInt(inventoryDetails?.processQuantity) /
+                            packagingData[0]?.packagingData?.maxCapacity -
+                            inventoryDetails?.cartonQuantity,
+                          )
                           : 0}
                       </div>
                       <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
@@ -369,7 +379,7 @@ const ViewProcessInventory = () => {
         {showPopup && (
           <ConfirmationPopup
             message="Are you sure you want to delete this item?"
-            onConfirm={() => handleDelete()}
+            onConfirm={() => { }}
             onCancel={() => setShowPopup(false)}
           />
         )}

@@ -124,7 +124,7 @@ const ViewShift = () => {
             label: "Process Created",
             backgroundColor: "#95a5a6",
           },
-        };        
+        };
         const status = row?.status;
         const { label, backgroundColor } = statusStyles[status] || statusStyles.default;
         return (
@@ -184,7 +184,7 @@ const ViewShift = () => {
             </svg>
           </button>
           {row.status != "completed" && (
-            <>          
+            <>
               <button
                 type="button"
                 onClick={() => handleEdit(row._id)}
@@ -237,11 +237,10 @@ const ViewShift = () => {
               <button
                 onClick={handleMultipleRowsDelete}
                 disabled={selectedRows.length === 0}
-                className={`rounded bg-danger px-4 py-2 font-semibold text-white ${
-                  selectedRows.length === 0
-                    ? "cursor-not-allowed opacity-50"
-                    : "hover:bg-red-700"
-                }`}
+                className={`rounded bg-danger px-4 py-2 font-semibold text-white ${selectedRows.length === 0
+                  ? "cursor-not-allowed opacity-50"
+                  : "hover:bg-red-700"
+                  }`}
               >
                 Delete
               </button>
@@ -275,6 +274,16 @@ const ViewShift = () => {
                   style: {
                     padding: "12px",
                     border: "none",
+                  },
+                },
+                cells: {
+                  style: {
+                    padding: "12px",
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
                   },
                 },
               }}

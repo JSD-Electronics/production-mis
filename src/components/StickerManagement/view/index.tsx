@@ -241,6 +241,15 @@ const ViewStickerManagementComponent = () => {
                     border: "none",
                   },
                 },
+                cells: {
+                  style: {
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
+                  },
+                },
               }}
             />
           </>

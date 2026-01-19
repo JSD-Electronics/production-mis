@@ -76,9 +76,9 @@ const ViewSkillManagementComponent = () => {
   const handleSubmitSkills = async () => {
     try {
       let slug = fieldName
-      .split(" ")
-      .map((word) => word.toLowerCase())
-      .join("_");
+        .split(" ")
+        .map((word) => word.toLowerCase())
+        .join("_");
       const formData = new FormData();
       formData.append("name", fieldName);
       formData.append("slug", slug);
@@ -239,6 +239,16 @@ const ViewSkillManagementComponent = () => {
                   style: {
                     padding: "12px",
                     border: "none",
+                  },
+                },
+                cells: {
+                  style: {
+                    padding: "12px",
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
                   },
                 },
               }}

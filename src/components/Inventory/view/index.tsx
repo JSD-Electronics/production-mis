@@ -382,6 +382,16 @@ const ViewInventory = () => {
                     border: "none",
                   },
                 },
+                cells: {
+                  style: {
+                    padding: "12px",
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
+                  },
+                },
               }}
             />
             <Modal
@@ -429,9 +439,9 @@ const ViewInventory = () => {
                         min="1"
                         max={
                           parseInt(selectedProcessDetails?.quantity) >
-                          parseInt(selectedProcessDetails?.issuedKits)
+                            parseInt(selectedProcessDetails?.issuedKits)
                             ? parseInt(selectedProcessDetails?.quantity) -
-                              parseInt(selectedProcessDetails?.issuedKits)
+                            parseInt(selectedProcessDetails?.issuedKits)
                             : parseInt(selectedProcessDetails?.quantity)
                         }
                         onChange={(e) => {
@@ -439,10 +449,10 @@ const ViewInventory = () => {
                           const maxLimit =
                             parseInt(selectedProcessDetails?.
                               cartonQuantity
-                              ) >
-                            parseInt(selectedProcessDetails?.issuedKits)
+                            ) >
+                              parseInt(selectedProcessDetails?.issuedKits)
                               ? parseInt(selectedProcessDetails?.cartonQuantity) -
-                                parseInt(selectedProcessDetails?.issuedKits)
+                              parseInt(selectedProcessDetails?.issuedKits)
                               : parseInt(selectedProcessDetails?.cartonQuantity);
                           if (
                             value === "" ||
@@ -545,25 +555,25 @@ const ViewInventory = () => {
                               min="1"
                               max={
                                 parseInt(selectedProcessDetails?.quantity) >
-                                parseInt(selectedProcessDetails?.issuedKits)
+                                  parseInt(selectedProcessDetails?.issuedKits)
                                   ? parseInt(selectedProcessDetails?.quantity) -
-                                    parseInt(selectedProcessDetails?.issuedKits)
+                                  parseInt(selectedProcessDetails?.issuedKits)
                                   : parseInt(selectedProcessDetails?.quantity)
                               }
                               onChange={(e) => {
                                 const value = e.target.value;
                                 const maxLimit =
                                   parseInt(selectedProcessDetails?.quantity) >
-                                  parseInt(selectedProcessDetails?.issuedKits)
+                                    parseInt(selectedProcessDetails?.issuedKits)
                                     ? parseInt(
-                                        selectedProcessDetails?.quantity,
-                                      ) -
-                                      parseInt(
-                                        selectedProcessDetails?.issuedKits,
-                                      )
+                                      selectedProcessDetails?.quantity,
+                                    ) -
+                                    parseInt(
+                                      selectedProcessDetails?.issuedKits,
+                                    )
                                     : parseInt(
-                                        selectedProcessDetails?.quantity,
-                                      );
+                                      selectedProcessDetails?.quantity,
+                                    );
                                 if (
                                   value === "" ||
                                   (parseInt(value) > 0 &&
@@ -582,10 +592,10 @@ const ViewInventory = () => {
                             {issueKitProcess &&
                               (parseInt(issueKitProcess) < 1 ||
                                 parseInt(issueKitProcess) >
-                                  parseInt(selectedProcessDetails?.quantity) -
-                                    parseInt(
-                                      selectedProcessDetails?.issuedKits,
-                                    )) && (
+                                parseInt(selectedProcessDetails?.quantity) -
+                                parseInt(
+                                  selectedProcessDetails?.issuedKits,
+                                )) && (
                                 <p className="text-red-500 mt-1 text-sm">
                                   Invalid quantity. Please enter a value between
                                   1 and{" "}
