@@ -21,7 +21,7 @@ import {
   Loader2,
 } from "lucide-react";
 import "react-toastify/dist/ReactToastify.css";
-import { faMinus, faTrash, faChevronUp, faChevronDown, faPlus, faPuzzlePiece, faGripLines } from "@fortawesome/free-solid-svg-icons";
+import { faMinus, faTrash, faChevronUp, faChevronDown, faPlus, faPuzzlePiece, faGripLines, faCopy, faRotateLeft } from "@fortawesome/free-solid-svg-icons";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import PrintTableComponent from "./printTableComponents";
 
@@ -136,6 +136,27 @@ const AddProduct = () => {
       ],
     },
   ]);
+  /* Undo History Logic */
+  const [history, setHistory] = useState<any[]>([]);
+
+  const pushToHistory = () => {
+    setHistory((prev) => [
+      ...prev.slice(-19),
+      JSON.parse(JSON.stringify({ name, stages, commonStages })),
+    ]);
+  };
+
+  const handleUndo = () => {
+    if (history.length === 0) return;
+    const lastState = history[history.length - 1];
+    setHistory((prev) => prev.slice(0, -1));
+
+    setName(lastState.name);
+    setStages(lastState.stages);
+    setCommonStages(lastState.commonStages);
+    toast.info("Reverted last change");
+  };
+
   const [commonStages, setCommonStages] = useState<CommonStage[]>([
     {
       stageName: "PDI",
@@ -285,6 +306,7 @@ const AddProduct = () => {
       toast.error("Please select a product to clone.");
       return;
     }
+    pushToHistory();
 
     try {
       const result = await getProductById(stepType);
@@ -346,6 +368,7 @@ const AddProduct = () => {
     }
   };
   const handleAddStage = () => {
+    pushToHistory();
     setStages([
       ...stages,
       {
@@ -429,6 +452,7 @@ const AddProduct = () => {
     param: keyof Stage,
   ) => {
     const newStages = [...stages];
+    pushToHistory();
     (newStages[index] as any)[param] = event.target.value;
     setStages(newStages);
   };
@@ -442,10 +466,39 @@ const AddProduct = () => {
     setCommonStages(newStages);
   };
   const handleRemoveStage = (index: number) => {
+    pushToHistory();
     const newStages = stages.filter((_, i) => i !== index);
     setStages(newStages);
   };
+
+  const handleDuplicateStage = (index: number) => {
+    pushToHistory();
+    const stageToCopy = stages[index];
+    const newStage = JSON.parse(JSON.stringify(stageToCopy));
+
+    // Generate new unique dragIds
+    const timestamp = Date.now();
+    newStage.dragId = `stage-${timestamp}-${Math.random()
+      .toString(36)
+      .substr(2, 5)}`;
+    newStage.stageName = `${newStage.stageName} (Copy)`;
+
+    newStage.subSteps = (newStage.subSteps || []).map(
+      (step: any, sIdx: number) => ({
+        ...step,
+        dragId: `step-${timestamp}-${sIdx}-${Math.random()
+          .toString(36)
+          .substr(2, 5)}`,
+      }),
+    );
+
+    const updatedStages = [...stages];
+    updatedStages.splice(index + 1, 0, newStage);
+    setStages(updatedStages);
+    toast.success(`Stage "${stageToCopy.stageName}" duplicated successfully!`);
+  };
   const handleAddSubStep = (stageIndex: number) => {
+    pushToHistory();
     const newStages = [...stages];
     newStages[stageIndex].subSteps.push({
       dragId: `step-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -475,6 +528,7 @@ const AddProduct = () => {
     setStages(newStages);
   };
   const handleAddCustomField = (index: number, subIndex: number) => {
+    pushToHistory();
     const newStages = [...stages];
     if (!newStages[index].subSteps[subIndex].customFields) {
       newStages[index].subSteps[subIndex].customFields = [];
@@ -524,6 +578,7 @@ const AddProduct = () => {
     subIndex: number,
     customFieldIndex: number,
   ) => {
+    pushToHistory();
     const newStages = [...stages];
     newStages[stageIndex].subSteps[subIndex].customFields = newStages[
       stageIndex
@@ -546,6 +601,7 @@ const AddProduct = () => {
   };
 
   const handleAddJig = (index: number, subIndex: number) => {
+    pushToHistory();
     const newStages = [...stages];
     newStages[index].subSteps[subIndex].jigFields.push({
       jigName: "",
@@ -629,6 +685,7 @@ const AddProduct = () => {
     subIndex: number,
     jigIndex: number,
   ) => {
+    pushToHistory();
     const newStages = [...stages];
     newStages[stageIndex].subSteps[subIndex].jigFields = newStages[
       stageIndex
@@ -636,6 +693,7 @@ const AddProduct = () => {
     setStages(newStages);
   };
   const handleRemoveSubStep = (stageIndex: number, subStepIndex: number) => {
+    pushToHistory();
     const newStages = [...stages];
     newStages[stageIndex].subSteps = newStages[stageIndex].subSteps.filter(
       (_, i) => i !== subStepIndex,
@@ -668,6 +726,8 @@ const AddProduct = () => {
 
     const { source, destination, type } = result;
 
+    pushToHistory();
+
     if (type === "stage") {
       const newStages = Array.from(stages);
       const [reorderedStage] = newStages.splice(source.index, 1);
@@ -695,6 +755,7 @@ const AddProduct = () => {
     subIndex: number,
   ) => {
     const updatedStages = [...stages];
+    pushToHistory();
     const subStep = updatedStages[index].subSteps[subIndex];
     subStep.isPrinterEnable = !subStep.isPrinterEnable;
     if (subStep.isPrinterEnable && (!subStep.printerFields || subStep.printerFields.length === 0)) {
@@ -752,6 +813,7 @@ const AddProduct = () => {
     subIndex: number,
   ) => {
     const updatedStages = [...stages];
+    pushToHistory();
     const subStep = updatedStages[index].subSteps[subIndex];
     subStep.isCheckboxNGStatus = !subStep.isCheckboxNGStatus;
     if (subStep.ngStatusData && subStep.ngStatusData.length === 0) {
@@ -815,6 +877,7 @@ const AddProduct = () => {
   };
   const handlePackagingStatus = (index: number, subIndex: number) => {
     const updatedStages = [...stages];
+    pushToHistory();
     const subStep = updatedStages[index].subSteps[subIndex];
     subStep.isPackagingStatus = !subStep.isPackagingStatus;
     setStages(updatedStages);
@@ -2283,6 +2346,18 @@ const AddProduct = () => {
 
                                       <button
                                         type="button"
+                                        className="mt-4 flex items-center text-primary"
+                                        onClick={() => handleDuplicateStage(index)}
+                                      >
+                                        <FontAwesomeIcon
+                                          icon={faCopy}
+                                          className="mr-2"
+                                        />
+                                        Duplicate Stage
+                                      </button>
+
+                                      <button
+                                        type="button"
                                         className="mt-4 flex items-center text-danger"
                                         onClick={() => handleRemoveStage(index)}
                                       >
@@ -2393,6 +2468,16 @@ const AddProduct = () => {
                   ))}
                 </div>
                 <div className="col-span-12 flex justify-end gap-5">
+                  {history.length > 0 && (
+                    <button
+                      type="button"
+                      className="mt-4 flex items-center rounded-md bg-[#0FADCF] px-4 py-2 text-white transition-all hover:bg-[#0FADCF] active:scale-95"
+                      onClick={handleUndo}
+                    >
+                      <FontAwesomeIcon icon={faRotateLeft} className="mr-2" />
+                      Undo ({history.length})
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={`mt-4 flex items-center gap-2 rounded-md px-4 py-2 text-white ${submitDisabled

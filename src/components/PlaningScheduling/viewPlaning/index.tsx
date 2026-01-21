@@ -13,6 +13,7 @@ import {
   fetchHolidays,
   viewJigCategory,
   getDeviceTestRecordsByProcessId,
+  getDeviceByProductId,
 } from "@/lib/api";
 import {
   FiClipboard,
@@ -26,6 +27,7 @@ import {
   FiPackage,
   FiArchive,
   FiTrendingUp,
+  FiDownload,
 } from "react-icons/fi";
 import { FiUsers, FiActivity, FiCheckCircle, FiXCircle, FiSearch, FiFilter } from "react-icons/fi";
 import { formatDate } from "@/lib/common";
@@ -348,6 +350,47 @@ const ViewPlanSchedule = () => {
     return { pass, ng, avg, hoursWithData };
   }, [completedKitsUPH]);
 
+  const handleDownloadSerials = async () => {
+    try {
+      if (!selectedProcess?.selectedProduct || !selectedProcess?._id) {
+        toast.error("Process data missing");
+        return;
+      }
+      const result = await getDeviceByProductId(selectedProcess.selectedProduct);
+      console.log("result ==>", result?.data);
+
+      const allDevices = result?.data || [];
+      const processDevices = allDevices.filter((d: any) => d.processID === selectedProcess._id);
+      console.log("processDevices ==>", processDevices);
+      if (processDevices.length === 0) {
+        toast.info("No serials found for this process");
+        return;
+      }
+
+      const csvContent = [
+        ["Serial Number", "Status", "Current Stage", "Created At"],
+        ...processDevices.map((d: any) => [
+          d.serialNo,
+          d.status || "Pending",
+          d.currentStage || "",
+          d.createdAt ? new Date(d.createdAt).toLocaleString().replace(",", "") : ""
+        ])
+      ].map(e => e.join(",")).join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `process_serials_${selectedProcess.processID}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Error downloading serials:", error);
+      toast.error("Failed to download serials");
+    }
+  };
+
   useEffect(() => {
     getOperators();
     fetchJigCategories();
@@ -486,36 +529,55 @@ const ViewPlanSchedule = () => {
           acc[stage.stageName] = stage.upha || 0;
           return acc;
         }, {}) || {};
-      const tableData = Array.from({ length: totalHours }, (_, i) => ({
-        hour: `${i + 1}${i === 0 ? "st" : i === 1 ? "nd" : i === 2 ? "rd" : "th"} Hour`,
+      const rawIntervals = Shift?.intervals || [];
+      const intervals = [];
+      rawIntervals.forEach((interval) => {
+        if (interval.breakTime) {
+          intervals.push(interval);
+        } else {
+          let curr = toDate(interval.startTime);
+          const end = toDate(interval.endTime);
+          while (curr < end) {
+            let next = new Date(curr);
+            next.setHours(curr.getHours() + 1);
+            if (next > end) next = new Date(end);
+
+            intervals.push({
+              startTime: toTimeString(curr),
+              endTime: toTimeString(next),
+              breakTime: false,
+            });
+            curr = next;
+          }
+        }
+      });
+
+      const tableData = intervals.map((interval) => ({
+        hour: `${interval.startTime} - ${interval.endTime}`,
+        isBreak: interval.breakTime,
         values: stageHeaders.map((stage) => ({
           stage,
           Pass: 0,
           NG: 0,
-          targetUPH: stageUPHMap[stage] || 0,
+          targetUPH: interval.breakTime ? 0 : (stageUPHMap[stage] || 0),
         })),
         status: "future",
       }));
+
       const now = new Date();
-      const [startHour, startMin] = result?.ProcessShiftMappings?.startTime
-        .split(":")
-        .map(Number);
-      const [endHour, endMin] = result?.ProcessShiftMappings?.endTime
-        .split(":")
-        .map(Number);
-      const shiftStart = new Date(now);
-      shiftStart.setHours(startHour, startMin, 0, 0);
+      tableData.forEach((row, i) => {
+        const [sH, sM] = intervals[i].startTime.split(":").map(Number);
+        const [eH, eM] = intervals[i].endTime.split(":").map(Number);
+        const start = new Date(now);
+        start.setHours(sH, sM, 0, 0);
+        const end = new Date(now);
+        end.setHours(eH, eM, 0, 0);
 
-      const shiftEnd = new Date(now);
-      shiftEnd.setHours(endHour, endMin, 0, 0);
+        if (now >= start && now < end) row.status = "current";
+        else if (now >= end) row.status = "past";
+        else row.status = "future";
+      });
 
-      let hoursSinceShiftStart = -1;
-
-      if (now >= shiftStart && now <= shiftEnd) {
-        hoursSinceShiftStart = Math.floor(
-          (now.getTime() - shiftStart.getTime()) / (1000 * 60 * 60),
-        );
-      }
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       if (deviceTests.length > 0) {
@@ -524,61 +586,44 @@ const ViewPlanSchedule = () => {
           const recordDateOnly = new Date(recordTime);
           recordDateOnly.setHours(0, 0, 0, 0);
           if (recordDateOnly.getTime() !== today.getTime()) return;
-          const hourIndex = Math.floor(
-            (recordTime.getTime() - shiftStart.getTime()) / (1000 * 60 * 60),
-          );
-          if (hourIndex < 0 || hourIndex >= totalHours) return;
+
+          const recH = recordTime.getHours();
+          const recM = recordTime.getMinutes();
+          const recTotalMin = recH * 60 + recM;
+
+          const hourIndex = intervals.findIndex((interval) => {
+            const [sH, sM] = interval.startTime.split(":").map(Number);
+            const [eH, eM] = interval.endTime.split(":").map(Number);
+            const startMinTotal = sH * 60 + sM;
+            const endMinTotal = eH * 60 + eM;
+            return recTotalMin >= startMinTotal && recTotalMin < endMinTotal;
+          });
+
+          if (hourIndex === -1) return;
 
           const cleanedStageName = record.stageName?.trim();
           const stageIndex = stageHeaders.indexOf(cleanedStageName);
-          if (stageIndex === -1) {
-            console.warn(
-              `Stage not found in stageHeaders: "${record.stageName}"`,
-            );
-            return;
-          }
+          if (stageIndex === -1) return;
 
           const status = record.status;
           if (status === "Pass" || status === "NG") {
             tableData[hourIndex].values[stageIndex][status] += 1;
           }
         });
-        for (let i = 0; i < totalHours; i++) {
-          if (hoursSinceShiftStart === -1) {
-            tableData[i].status = "future";
-          } else if (i < hoursSinceShiftStart) {
-            tableData[i].status = "past";
-          } else if (i === hoursSinceShiftStart) {
-            tableData[i].status = "current";
-          } else {
-            tableData[i].status = "future";
-          }
-        }
-        const lastStageIndex = stageHeaders.length - 1;
-        const lastStageSummaryList = tableData
-          .slice(0, totalHours)
-          .map((row) => {
-            const lastStageData = row.values[lastStageIndex];
-            return {
-              hour: row.hour,
-              stage: stageHeaders[lastStageIndex],
-              Pass: lastStageData?.Pass || 0,
-              NG: lastStageData?.NG || 0,
-              status: row.status,
-            };
-          });
-        setCompletedKitsUPH(lastStageSummaryList);
 
-        if (lastStageSummaryList) {
-          const overallLastStageSummary = lastStageSummaryList.reduce(
-            (acc, row) => {
-              acc.Pass += row?.Pass;
-              acc.NG += row?.NG;
-              return acc;
-            },
-            { Pass: 0, NG: 0 },
-          );
-        }
+        const lastStageIndex = stageHeaders.length - 1;
+        const lastStageSummaryList = tableData.map((row) => {
+          const lastStageData = row.values[lastStageIndex];
+          return {
+            hour: row.hour,
+            stage: stageHeaders[lastStageIndex],
+            Pass: row.isBreak ? 0 : (lastStageData?.Pass || 0),
+            NG: row.isBreak ? 0 : (lastStageData?.NG || 0),
+            status: row.status,
+            isBreak: row.isBreak,
+          };
+        });
+        setCompletedKitsUPH(lastStageSummaryList);
 
         const totalRow = {
           hour: "Total Count",
@@ -1274,34 +1319,61 @@ const ViewPlanSchedule = () => {
         return acc;
       }, {}) || {};
 
-    const tableData = Array.from({ length: totalHours }, (_, i) => ({
-      hour: `${i + 1}${i === 0 ? "st" : i === 1 ? "nd" : i === 2 ? "rd" : "th"} Hour`,
+    const rawIntervals = selectedShift?.intervals || [];
+    const intervals = [];
+    rawIntervals.forEach((interval) => {
+      if (interval.breakTime) {
+        intervals.push(interval);
+      } else {
+        let curr = toDate(interval.startTime);
+        const end = toDate(interval.endTime);
+        while (curr < end) {
+          let next = new Date(curr);
+          next.setHours(curr.getHours() + 1);
+          if (next > end) next = new Date(end);
+
+          intervals.push({
+            startTime: toTimeString(curr),
+            endTime: toTimeString(next),
+            breakTime: false,
+          });
+          curr = next;
+        }
+      }
+    });
+
+    const tableData = intervals.map((interval) => ({
+      hour: `${interval.startTime} - ${interval.endTime}`,
+      isBreak: interval.breakTime,
       values: stageHeaders.map((stage) => ({
         stage,
         Pass: 0,
         NG: 0,
-        targetUPH: stageUPHMap[stage] || 0,
+        targetUPH: interval.breakTime ? 0 : (stageUPHMap[stage] || 0),
       })),
       status: "future",
     }));
+
     const selectedDate = new Date(filterDate);
-    const [startHour, startMin] = planData.startTime.split(":").map(Number);
-    const [endHour, endMin] = planData.endTime.split(":").map(Number);
-
-    const shiftStart = new Date(selectedDate);
-    shiftStart.setHours(startHour, startMin, 0, 0);
-
-    const shiftEnd = new Date(selectedDate);
-    shiftEnd.setHours(endHour, endMin, 0, 0);
     const now = new Date();
-    let isToday = now.toDateString() === selectedDate.toDateString();
-    let hoursSinceShiftStart = -1;
+    const isToday = now.toDateString() === selectedDate.toDateString();
 
-    if (isToday && now >= shiftStart && now <= shiftEnd) {
-      hoursSinceShiftStart = Math.floor(
-        (now.getTime() - shiftStart.getTime()) / (1000 * 60 * 60),
-      );
-    }
+    tableData.forEach((row, i) => {
+      const [sH, sM] = intervals[i].startTime.split(":").map(Number);
+      const [eH, eM] = intervals[i].endTime.split(":").map(Number);
+      const start = new Date(selectedDate);
+      start.setHours(sH, sM, 0, 0);
+      const end = new Date(selectedDate);
+      end.setHours(eH, eM, 0, 0);
+
+      if (isToday) {
+        if (now >= start && now < end) row.status = "current";
+        else if (now >= end) row.status = "past";
+        else row.status = "future";
+      } else {
+        row.status = selectedDate < now ? "past" : "future";
+      }
+    });
 
     const selectedFilterDate = new Date(filterDate);
     selectedFilterDate.setHours(0, 0, 0, 0);
@@ -1312,55 +1384,44 @@ const ViewPlanSchedule = () => {
 
       if (recordDateOnly.getTime() !== selectedFilterDate.getTime()) return;
 
-      const hourIndex = Math.floor(
-        (recordTime.getTime() - shiftStart.getTime()) / (1000 * 60 * 60),
-      );
-      if (hourIndex < 0 || hourIndex >= totalHours) return;
+      const recH = recordTime.getHours();
+      const recM = recordTime.getMinutes();
+      const recTotalMin = recH * 60 + recM;
+
+      const hourIndex = intervals.findIndex((interval) => {
+        const [sH, sM] = interval.startTime.split(":").map(Number);
+        const [eH, eM] = interval.endTime.split(":").map(Number);
+        const startMinTotal = sH * 60 + sM;
+        const endMinTotal = eH * 60 + eM;
+        return recTotalMin >= startMinTotal && recTotalMin < endMinTotal;
+      });
+
+      if (hourIndex === -1) return;
 
       const cleanedStageName = record.stageName?.trim();
       const stageIndex = stageHeaders.indexOf(cleanedStageName);
-      if (stageIndex === -1) {
-        return;
-      }
+      if (stageIndex === -1) return;
 
       const status = record.status;
       if (status === "Pass" || status === "NG") {
         tableData[hourIndex].values[stageIndex][status] += 1;
       }
     });
-    for (let i = 0; i < totalHours; i++) {
-      if (hoursSinceShiftStart === -1) {
-        tableData[i].status = "past";
-      } else if (i < hoursSinceShiftStart) {
-        tableData[i].status = "past";
-      } else if (i === hoursSinceShiftStart) {
-        tableData[i].status = "current";
-      } else {
-        tableData[i].status = "future";
-      }
-    }
+
     const lastStageIndex = stageHeaders.length - 1;
     const lastStageSummaryList = tableData.map((row) => {
       const lastStageData = row.values[lastStageIndex];
       return {
         hour: row.hour,
         stage: stageHeaders[lastStageIndex],
-        Pass: lastStageData?.Pass || 0,
-        NG: lastStageData?.NG || 0,
+        Pass: row.isBreak ? 0 : (lastStageData?.Pass || 0),
+        NG: row.isBreak ? 0 : (lastStageData?.NG || 0),
         status: row.status,
+        isBreak: row.isBreak,
       };
     });
     setCompletedKitsUPH(lastStageSummaryList);
-    if (lastStageSummaryList) {
-      const overallLastStageSummary = lastStageSummaryList.reduce(
-        (acc, row) => {
-          acc.Pass += row?.Pass;
-          acc.NG += row?.NG;
-          return acc;
-        },
-        { Pass: 0, NG: 0 },
-      );
-    }
+
     const totalRow = {
       hour: "Total Count",
       values: stageHeaders.map((stage, i) => {
@@ -1486,9 +1547,19 @@ const ViewPlanSchedule = () => {
                   </div>
                   {/* Process Info */}
                   <div className="dark:bg-gray-800 rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-md">
-                    <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-blue-600 dark:text-blue-400">
-                      <FiClipboard /> Process Details
-                    </h3>
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="flex items-center gap-2 text-lg font-semibold text-blue-600 dark:text-blue-400">
+                        <FiClipboard /> Process Details
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={handleDownloadSerials}
+                        className="flex items-center gap-2 rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900"
+                        title="Download Generated & Assigned Serials"
+                      >
+                        <FiDownload /> Download Serials
+                      </button>
+                    </div>
                     <div className="text-gray-700 dark:text-gray-300 grid gap-2 text-sm sm:grid-cols-2">
                       <div>
                         <FiTag className="inline text-primary" />{" "}
@@ -2147,70 +2218,82 @@ const ViewPlanSchedule = () => {
                             <td className="border p-2 font-semibold">
                               {row.hour}
                             </td>
-                            {row.hour !== "Total Count" &&
-                              row.hour !== "Avg UPH"
-                              ? row?.values?.map((val, i) => (
-                                <td key={i} className="border p-2">
-                                  <div className="text-xs">
-                                    <p className="text-left">
-                                      <strong>Pass:</strong> {val?.Pass},
-                                    </p>
-                                    <p className="text-left">
-                                      <strong>NG:</strong> {val?.NG},
-                                    </p>
-                                    <p className="text-left">
-                                      <strong>Target UPH:</strong>{" "}
-                                      {val?.targetUPH}
-                                    </p>
-                                    <p
-                                      className={`text-left ${val?.Pass + val?.NG <= val?.targetUPH && row?.status !== "future" ? "text-danger" : "text-grey"}`}
-                                    >
-                                      <strong>UPH:</strong>{" "}
-                                      {val?.Pass + val?.NG}
-                                    </p>
-                                    <div className="mt-1 h-2 w-full rounded bg-gray-200">
-                                      <div
-                                        className="h-2 rounded bg-blue-500"
-                                        style={{
-                                          width: `${Math.min(
-                                            100,
-                                            Math.round(
-                                              (((val?.Pass || 0) + (val?.NG || 0)) /
-                                                (val?.targetUPH || 1)) * 100,
-                                            ),
-                                          )}%`,
-                                        }}
-                                      ></div>
+                            {row.isBreak ? (
+                              <td
+                                colSpan={stages.length}
+                                className="border bg-gray-50/50 p-4 font-medium italic text-gray-400"
+                              >
+                                <div className="flex items-center justify-center gap-2">
+                                  <FiClock className="animate-pulse text-gray-400" />
+                                  <span>Break Time ({row.hour})</span>
+                                </div>
+                              </td>
+                            ) : (
+                              row.hour !== "Total Count" &&
+                                row.hour !== "Avg UPH"
+                                ? row?.values?.map((val, i) => (
+                                  <td key={i} className="border p-2">
+                                    <div className="text-xs">
+                                      <p className="text-left">
+                                        <strong>Pass:</strong> {val?.Pass},
+                                      </p>
+                                      <p className="text-left">
+                                        <strong>NG:</strong> {val?.NG},
+                                      </p>
+                                      <p className="text-left">
+                                        <strong>Target UPH:</strong>{" "}
+                                        {val?.targetUPH}
+                                      </p>
+                                      <p
+                                        className={`text-left ${val?.Pass + val?.NG <= val?.targetUPH && row?.status !== "future" ? "text-danger" : "text-grey"}`}
+                                      >
+                                        <strong>UPH:</strong>{" "}
+                                        {val?.Pass + val?.NG}
+                                      </p>
+                                      <div className="mt-1 h-2 w-full rounded bg-gray-200">
+                                        <div
+                                          className="h-2 rounded bg-blue-500"
+                                          style={{
+                                            width: `${Math.min(
+                                              100,
+                                              Math.round(
+                                                (((val?.Pass || 0) + (val?.NG || 0)) /
+                                                  (val?.targetUPH || 1)) * 100,
+                                              ),
+                                            )}%`,
+                                          }}
+                                        ></div>
+                                      </div>
+                                      <p className="text-[10px] text-gray-500">
+                                        {Math.min(
+                                          100,
+                                          Math.round(
+                                            (((val?.Pass || 0) + (val?.NG || 0)) /
+                                              (val?.targetUPH || 1)) * 100,
+                                          ),
+                                        )}
+                                        % of target
+                                      </p>
                                     </div>
-                                    <p className="text-[10px] text-gray-500">
-                                      {Math.min(
-                                        100,
-                                        Math.round(
-                                          (((val?.Pass || 0) + (val?.NG || 0)) /
-                                            (val?.targetUPH || 1)) * 100,
-                                        ),
-                                      )}
-                                      % of target
-                                    </p>
-                                  </div>
-                                </td>
-                              ))
-                              : row?.values?.map((val, i) => (
-                                <td key={i} className="border p-2">
-                                  <div className="text-xs">
-                                    <p className="text-left">
-                                      <strong>Pass:</strong> {val?.Pass},
-                                    </p>
-                                    <p className="text-left">
-                                      <strong>NG:</strong> {val?.NG},
-                                    </p>
-                                    <p className="text-left">
-                                      <strong>UPH:</strong>{" "}
-                                      {val?.Pass + val?.NG}
-                                    </p>
-                                  </div>
-                                </td>
-                              ))}
+                                  </td>
+                                ))
+                                : row?.values?.map((val, i) => (
+                                  <td key={i} className="border p-2">
+                                    <div className="text-xs">
+                                      <p className="text-left">
+                                        <strong>Pass:</strong> {val?.Pass},
+                                      </p>
+                                      <p className="text-left">
+                                        <strong>NG:</strong> {val?.NG},
+                                      </p>
+                                      <p className="text-left">
+                                        <strong>UPH:</strong>{" "}
+                                        {val?.Pass + val?.NG}
+                                      </p>
+                                    </div>
+                                  </td>
+                                ))
+                            )}
                           </tr>
                         );
                       })}
@@ -2244,7 +2327,13 @@ const ViewPlanSchedule = () => {
                           <tr key={idx} className={`${rowColor}`}>
                             <td className="border px-4 py-2">{row?.hour}</td>
                             <td className="border px-4 py-2">
-                              {row?.Pass + row?.NG}
+                              {row.isBreak ? (
+                                <span className="italic text-gray-400">
+                                  Break
+                                </span>
+                              ) : (
+                                row?.Pass + row?.NG
+                              )}
                             </td>
                           </tr>
                         );

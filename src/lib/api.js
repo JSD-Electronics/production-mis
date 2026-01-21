@@ -864,9 +864,13 @@ export const getOverallDeviceTestEntry = async (id) => {
     );
   }
 };
-export const getDeviceTestEntryByOperatorId = async (id) => {
+export const getDeviceTestEntryByOperatorId = async (id, date) => {
   try {
-    let response = await api.get(`/getDeviceTestEntryByOperatorId/${id}`);
+    let url = `/getDeviceTestEntryByOperatorId/${id}`;
+    if (date) {
+      url += `?date=${date}`;
+    }
+    let response = await api.get(url);
     return response.data;
   } catch (error) {
     console.log(`Error Fetching Get Device Test Entry By Operator ID`, error);
@@ -906,6 +910,15 @@ export const updateStageBySerialNo = async (id, formData) => {
   } catch (error) {
     console.log(`Error Updating Device status`, error);
     throw error?.response?.data || { message: `Error Updating Device status` };
+  }
+}
+export const markDeviceAsResolved = async (data) => {
+  try {
+    const response = await api.post(`/devices/markAsResolved`, data);
+    return response.data;
+  } catch (error) {
+    console.log(`Error Marking Device As Resolved`, error);
+    throw error?.response?.data || { message: `Error Marking Device As Resolved` };
   }
 }
 export const createReport = async (formData) => {

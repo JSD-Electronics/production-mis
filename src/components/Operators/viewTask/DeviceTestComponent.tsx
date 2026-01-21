@@ -38,6 +38,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Check,
+  Circle,
   QrCode,
   ArrowRightCircle,
   History,
@@ -124,6 +125,8 @@ interface DeviceTestComponentProps {
   handleVerifyPackagingModal: () => void;
   closeVerifyPackagingModal: () => void;
   handlePrintCartonSticker: () => void;
+  historyFilterDate: string;
+  setHistoryFilterDate: (date: string) => void;
 }
 
 export default function DeviceTestComponent({
@@ -189,6 +192,8 @@ export default function DeviceTestComponent({
   handleVerifyPackagingModal,
   closeVerifyPackagingModal,
   handlePrintCartonSticker,
+  historyFilterDate,
+  setHistoryFilterDate,
 }: DeviceTestComponentProps) {
   useEffect(() => {
     if (processData?._id) {
@@ -756,7 +761,16 @@ export default function DeviceTestComponent({
       ? deviceHistory[deviceHistory.length - 1]
       : null;
 
-  const shouldHideJigInterface = lastHistoryEntry?.status === "NG" && (lastHistoryEntry?.assignedDeviceTo === "QC" || lastHistoryEntry?.assignedDeviceTo === "TRC");
+  const hasQCResolved =
+    Array.isArray(deviceHistory) &&
+    deviceHistory.some((h: any) => {
+      const s = (h?.status || "").toString().toLowerCase();
+      return s.includes("resolved");
+    });
+  const shouldHideJigInterface =
+    !hasQCResolved &&
+    lastHistoryEntry?.status === "NG" &&
+    (lastHistoryEntry?.assignedDeviceTo === "QC" || lastHistoryEntry?.assignedDeviceTo === "TRC");
 
   return (
     <>
@@ -1316,19 +1330,56 @@ export default function DeviceTestComponent({
             {/* Device Result */}
             {searchResult ? (
               <div className="mt-4">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <h3 className="text-gray-800 text-sm font-bold">
-                    {searchResult}
-                  </h3>
-                  {deviceHistory.length > 0 && (
-                    <button
-                      onClick={() => setIsPreviousStagesModalOpen(true)}
-                      className="flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600 hover:bg-indigo-100 transition-colors"
-                    >
-                      <ListChecks className="h-3 w-3" />
-                      View Previous Stages
-                    </button>
-                  )}
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center border-b pb-4 justify-between">
+                    <h3 className="text-gray-800 text-sm font-bold">
+                      {searchResult}
+                    </h3>
+                    {deviceHistory.length > 0 && (
+                      <button
+                        onClick={() => setIsPreviousStagesModalOpen(true)}
+                        className="flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600 hover:bg-indigo-100 transition-colors"
+                      >
+                        <ListChecks className="h-3 w-3" />
+                        View Previous Stages
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Enhanced Stage Progress Badges */}
+                  <div className="flex flex-nowrap gap-2.5 overflow-x-auto pb-2 no-scrollbar">
+                    {(processData?.stages || []).map((stage: any, idx: number) => {
+                      const stageHistories = deviceHistory.filter((h: any) => h.stageName === stage.stageName);
+                      const isPass = stageHistories.some((h: any) => h.status === "Pass" || h.status === "Completed");
+                      const isNG = !isPass && stageHistories.some((h: any) => h.status === "NG");
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`group relative flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all duration-300 shrink-0 ${isPass
+                            ? "bg-green-50/50 text-green-700 border-green-200 shadow-sm hover:shadow-green-100/50"
+                            : isNG
+                              ? "bg-red-50/50 text-red-700 border-red-200 shadow-sm hover:shadow-red-100/50"
+                              : "bg-gray-50 text-gray-400 border-gray-100 opacity-60"
+                            }`}
+                        >
+                          <div className={`p-1 rounded-md ${isPass ? 'bg-green-500/10' : isNG ? 'bg-red-500/10' : 'bg-gray-500/10'}`}>
+                            {isPass ? (
+                              <Check className="w-3 h-3 text-green-600" />
+                            ) : isNG ? (
+                              <XCircle className="w-3 h-3 text-red-600" />
+                            ) : (
+                              <Circle className="w-3 h-3 text-gray-300" />
+                            )}
+                          </div>
+                          <span>{stage.stageName}</span>
+                          {isPass && (
+                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full border-2 border-white animate-pulse" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {isPreviousStagesModalOpen && (
@@ -1376,7 +1427,7 @@ export default function DeviceTestComponent({
                           assignUserStage?.[0]?.name ||
                           assignUserStage?.stage),
                     ) &&
-                    (!isdevicePassed || jigDecision) &&
+                    // (!isdevicePassed || jigDecision) &&
                     !shouldHideJigInterface && (
                       <div className="py-6">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
@@ -2111,12 +2162,21 @@ export default function DeviceTestComponent({
               <History className="h-5 w-5 text-indigo-600" />
               Recent Activity
             </h3>
-            <button
-              onClick={() => setIsHistoryOpen(false)}
-              className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-            >
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-3">
+              <input
+                type="date"
+                value={historyFilterDate}
+                onChange={(e) => setHistoryFilterDate(e.target.value)}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
+              />
+              <button
+                onClick={() => setIsHistoryOpen(false)}
+                className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                title="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {/* Drawer Content */}
@@ -2135,7 +2195,7 @@ export default function DeviceTestComponent({
               <div className="max-h-[60vh] overflow-y-auto">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-gray-50 text-gray-500 font-medium uppercase tracking-wider sticky top-0">
-                    <tr>
+                    <tr className="bg-white">
                       <th className="px-4 py-3">Device</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3 text-right">Time</th>

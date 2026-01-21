@@ -110,8 +110,16 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const [processStagesName, setProcessStageName] = useState<string[]>([]);
   const [selectAssignDeviceDepartment, setAsssignDeviceDepartment] =
     useState<string>("");
+  const [resetDeviceIds, setResetDeviceIds] = useState<string[]>([]);
   const isSubmitting = React.useRef(false);
   const { SVG } = useQRCode();
+  const [historyFilterDate, setHistoryFilterDate] = useState(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  });
 
   useEffect(() => {
     const pathname = window.location.pathname;
@@ -122,7 +130,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     getPlaningAndSchedulingByID(id);
     getOverallProgress(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [historyFilterDate]);
+
   const closeScanModal = () => {
     setScanModalOpen(false);
   };
@@ -161,6 +170,26 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       // return;
       if (result && result.status == 200) {
         setDeviceHistory(result.data);
+        const hasQCResolved =
+          Array.isArray(result.data) &&
+          result.data.some((h: any) =>
+            String(h?.status || "").toLowerCase().includes("qc resolved"),
+          );
+          
+        const alreadyReset = resetDeviceIds.includes(String(id));
+        const firstStageName =
+          processData?.stages?.[0]?.stageName || processData?.stages?.[0]?.name || "";
+        if (hasQCResolved && !alreadyReset && firstStageName) {
+          try {
+            const formData = new FormData();
+            formData.append("currentStage", firstStageName);
+            formData.append("status", "Resolved");
+            await updateStageByDeviceId(String(id), formData);
+            setResetDeviceIds((prev) => [...prev, String(id)]);
+          } catch (e) {
+            console.log("Error resetting device to first stage", e);
+          }
+        }
       } else {
         setDeviceHistory([]);
       }
@@ -168,11 +197,13 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       console.log(`Error Fetching Device History`, error);
     }
   };
+
   const getDeviceTestEntry = async () => {
     try {
       const userDetails = getCurrentUser();
-      const result = await getDeviceTestEntryByOperatorId(userDetails?._id);
+      const result = await getDeviceTestEntryByOperatorId(userDetails?._id, historyFilterDate);
       let devices = result.data;
+
       let deviceHistory = [];
       let ngCount = 0;
       let completedCount = 0;
@@ -197,6 +228,11 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       return updatedDeviceHistory;
     } catch (error: any) {
       console.log(`Error Fetching Devices`, error?.message ?? error);
+      // If error occurs (e.g. no records found), clear the displayed list so we don't show old data
+      setCheckedDevice([]);
+      setTotalNg(0);
+      setTotalCompleted(0);
+      setTotalAttempts(0);
     }
   };
   const getDeviceTestEntryOverall = async () => {
@@ -1069,6 +1105,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           handleVerifyPackagingModal={handleVerifyPackagingModal}
           closeVerifyPackagingModal={closeVerifyPackagingModal}
           handlePrintCartonSticker={handlePrintCartonSticker}
+          historyFilterDate={historyFilterDate}
+          setHistoryFilterDate={setHistoryFilterDate}
         />
       ) : (
         <BasicInformation

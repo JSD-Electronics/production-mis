@@ -23,6 +23,8 @@ import {
   faChevronDown,
   faPuzzlePiece,
   faGripLines,
+  faCopy,
+  faRotateLeft,
 } from "@fortawesome/free-solid-svg-icons";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
@@ -163,6 +165,25 @@ const EditProduct = () => {
 
   ]);
   const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+
+  const pushToHistory = () => {
+    setHistory((prev) => [
+      ...prev.slice(-19),
+      JSON.parse(JSON.stringify({ name, stages, commonStages })),
+    ]);
+  };
+
+  const handleUndo = () => {
+    if (history.length === 0) return;
+    const lastState = history[history.length - 1];
+    setHistory((prev) => prev.slice(0, -1));
+
+    setName(lastState.name);
+    setStages(lastState.stages);
+    setCommonStages(lastState.commonStages);
+    toast.info("Reverted last change");
+  };
   const [processes, setProcesses] = useState<any[]>([]);
   const [isProcessLoading, setIsProcessLoading] = useState(false);
   React.useEffect(() => {
@@ -311,6 +332,7 @@ const EditProduct = () => {
     }
   };
   const handleAddStage = () => {
+    pushToHistory();
     setStages([
       ...stages,
       {
@@ -385,18 +407,46 @@ const EditProduct = () => {
     param: keyof Stage,
   ) => {
     const newStages = [...stages];
+    pushToHistory();
     (newStages[index] as any)[param] = event.target.value;
     setStages(newStages);
   };
 
   // Function to remove a stage field
   const handleRemoveStage = (index: number) => {
+    pushToHistory();
     const newStages = stages.filter((_, i) => i !== index);
     setStages(newStages);
   };
 
+  const handleDuplicateStage = (index: number) => {
+    pushToHistory();
+    const stageToCopy = stages[index];
+    const newStage = JSON.parse(JSON.stringify(stageToCopy));
+
+    // Generate new unique dragIds
+    const timestamp = Date.now();
+    newStage.dragId = `stage-${timestamp}-${Math.random().toString(36).substr(2, 5)}`;
+    newStage.stageName = `${newStage.stageName} (Copy)`;
+
+    newStage.subSteps = (newStage.subSteps || []).map(
+      (step: any, sIdx: number) => ({
+        ...step,
+        dragId: `step-${timestamp}-${sIdx}-${Math.random()
+          .toString(36)
+          .substr(2, 5)}`,
+      }),
+    );
+
+    const updatedStages = [...stages];
+    updatedStages.splice(index + 1, 0, newStage);
+    setStages(updatedStages);
+    toast.success(`Stage "${stageToCopy.stageName}" duplicated successfully!`);
+  };
+
   // Function to handle adding new sub-steps
   const handleAddSubStep = (stageIndex: any) => {
+    pushToHistory();
     const newStages = [...stages];
     newStages[stageIndex].subSteps.push({
       dragId: `step-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -426,6 +476,7 @@ const EditProduct = () => {
     setStages(newStages);
   };
   const handleAddJig = (index: number, subIndex: number) => {
+    pushToHistory();
     const newStages = [...stages];
     newStages[index].subSteps[subIndex].jigFields.push({
       jigName: "",
@@ -441,6 +492,7 @@ const EditProduct = () => {
   };
 
   const handleAddCustomField = (index: number, subIndex: number) => {
+    pushToHistory();
     const newStages = [...stages];
     if (!newStages[index].subSteps[subIndex].customFields) {
       newStages[index].subSteps[subIndex].customFields = [];
@@ -490,6 +542,7 @@ const EditProduct = () => {
     subIndex: number,
     customFieldIndex: number,
   ) => {
+    pushToHistory();
     const newStages = [...stages];
     newStages[stageIndex].subSteps[subIndex].customFields = newStages[
       stageIndex
@@ -606,6 +659,7 @@ const EditProduct = () => {
     subIndex: any,
     jigIndex: any,
   ) => {
+    pushToHistory();
     const newStages = [...stages];
     newStages[stageIndex].subSteps[subIndex].jigFields = newStages[
       stageIndex
@@ -630,6 +684,7 @@ const EditProduct = () => {
   };
   // Function to remove a sub-step field
   const handleRemoveSubStep = (stageIndex: any, subStepIndex: any) => {
+    pushToHistory();
     const newStages = [...stages];
     newStages[stageIndex].subSteps = newStages[stageIndex].subSteps.filter(
       (_, i) => i !== subStepIndex,
@@ -698,6 +753,7 @@ const EditProduct = () => {
     subIndex: number,
   ) => {
     const updatedStages = [...stages];
+    pushToHistory();
     const subStep = updatedStages[index].subSteps[subIndex];
     subStep.isCheckboxNGStatus = !subStep.isCheckboxNGStatus;
     if (subStep.ngStatusData && subStep.ngStatusData.length === 0) {
@@ -710,6 +766,7 @@ const EditProduct = () => {
   };
   const handleCheckboxPrinter = (index: number, subIndex: number) => {
     const updatedStages = [...stages];
+    pushToHistory();
     const subStep = updatedStages[index].subSteps[subIndex];
     subStep.isPrinterEnable = !subStep.isPrinterEnable;
     if (subStep.isPrinterEnable && (!subStep.printerFields || subStep.printerFields.length === 0)) {
@@ -792,6 +849,7 @@ const EditProduct = () => {
   };
   const handlePackagingStatus = (index: number, subIndex: number) => {
     const updatedStages = [...stages];
+    pushToHistory();
     const subStep = updatedStages[index].subSteps[subIndex];
     subStep.isPackagingStatus = !subStep.isPackagingStatus;
     setStages(updatedStages);
@@ -915,6 +973,7 @@ const EditProduct = () => {
     if (!result.destination) return;
 
     const { source, destination, type } = result;
+    pushToHistory();
 
     if (type === "stage") {
       const newStages = Array.from(stages);
@@ -2362,6 +2421,15 @@ const EditProduct = () => {
 
                             <button
                               type="button"
+                              className="mt-4 flex items-center text-primary"
+                              onClick={() => handleDuplicateStage(index)}
+                            >
+                              <FontAwesomeIcon icon={faCopy} className="mr-2" />
+                              Duplicate Stage
+                            </button>
+
+                            <button
+                              type="button"
                               className="mt-4 flex items-center text-danger"
                               onClick={() => handleRemoveStage(index)}
                             >
@@ -2460,6 +2528,16 @@ const EditProduct = () => {
                 </div>
               ))}
               <div className="col-span-12 flex justify-end gap-5">
+                {history.length > 0 && (
+                  <button
+                    type="button"
+                    className="mt-4 flex items-center rounded-md bg-[#0FADCF] px-4 py-2 text-white transition-all hover:bg-[#0FADCF] active:scale-95"
+                    onClick={handleUndo}
+                  >
+                    <FontAwesomeIcon icon={faRotateLeft} className="mr-2" />
+                    Undo ({history.length})
+                  </button>
+                )}
                 <button
                   type="button"
                   className="mt-4 flex items-center rounded-md bg-[#34D399] px-4 py-2 text-white"

@@ -142,7 +142,7 @@ export default function NGModal({
                 onClick={handleMoveToNext}
                 className={`flex items-center gap-2 rounded-lg px-4 py-2 text-white transition-colors ${isJigStep
                   ? "bg-orange-600 hover:bg-orange-700"
-                  : "bg-red-600 hover:bg-red-700"
+                  : "bg-danger hover:bg-danger"
                   }`}
               >
                 {isJigStep && <ArrowRight className="h-4 w-4" />}
