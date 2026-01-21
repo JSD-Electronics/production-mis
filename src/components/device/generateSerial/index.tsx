@@ -1,4 +1,4 @@
-  "use client";
+"use client";
 import React, { useState, useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import {
@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Loader2,
+  Download,
 } from "lucide-react";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -49,11 +50,11 @@ const GenerateSerialComponent = () => {
     getProduct();
   }, []);
 
-  const getProcess = async (id) => {
+  const getProcess = async (id: any) => {
     try {
       let result = await viewProcessByProductId(id);
       setProcesses(result.Processes);
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error Fetching Process: ${error?.message}`);
     }
   };
@@ -133,10 +134,27 @@ const GenerateSerialComponent = () => {
     }
   };
 
+  const handleDownloadSerials = () => {
+    if (serials.length === 0) {
+      toast.error("No serials to download");
+      return;
+    }
+
+    const csvContent = "Serial Number\n" + serials.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `serials_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handlesubmit = async () => {
     try {
       setSubmitting(true);
-      let product = products.find((value) => value._id == productId);
+      let product: any = products.find((value: any) => value._id == productId);
       let stage = product?.stages[0]?.stageName || "";
 
       let formData = new FormData();
@@ -181,7 +199,7 @@ const GenerateSerialComponent = () => {
               className="border-gray-300 bg-gray-100 w-full rounded-lg border px-4 py-2 text-sm shadow-sm focus:border-primary focus:ring focus:ring-primary/30 disabled:cursor-not-allowed dark:border-form-strokedark dark:bg-form-input"
             >
               <option value="">Please Select</option>
-              {products?.map((product, index) => (
+              {products?.map((product: any, index) => (
                 <option key={index} value={product._id}>
                   {product.name}
                 </option>
@@ -199,7 +217,7 @@ const GenerateSerialComponent = () => {
               className="border-gray-300 bg-gray-100 w-full rounded-lg border px-4 py-2 text-sm shadow-sm focus:border-primary focus:ring focus:ring-primary/30 disabled:cursor-not-allowed dark:border-form-strokedark dark:bg-form-input"
             >
               <option value="">Please Select</option>
-              {processes?.map((process) => (
+              {processes?.map((process: any) => (
                 <option key={process._id} value={process._id}>
                   {process.name}
                 </option>
@@ -275,9 +293,20 @@ const GenerateSerialComponent = () => {
 
         {/* Serial Report */}
         <div className="bg-gray-50 dark:bg-gray-800 mt-8 rounded-lg p-4 shadow-inner">
-          <h2 className="text-gray-800 mb-3 flex items-center gap-2 text-base font-semibold dark:text-white">
-            <FileSpreadsheet className="h-4 w-4 text-primary" /> Serial Report
-          </h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-gray-800 flex items-center gap-2 text-base font-semibold dark:text-white">
+              <FileSpreadsheet className="h-4 w-4 text-primary" /> Serial Report
+            </h2>
+            {serials.length > 0 && (
+              <button
+                type="button"
+                onClick={handleDownloadSerials}
+                className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 hover:shadow-md transition-all active:scale-95"
+              >
+                <Download className="h-3 w-3" /> Download CSV
+              </button>
+            )}
+          </div>
           {serials.length > 0 ? (
             <div className="border-gray-200 dark:border-gray-700 dark:bg-gray-900 h-64 overflow-y-auto rounded-lg border bg-white p-3 text-sm">
               <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
@@ -321,9 +350,8 @@ const GenerateSerialComponent = () => {
               type="button"
               onClick={handlesubmit}
               disabled={submitting}
-              className={`flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-medium text-white transition ${
-                submitting ? "bg-green-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-500"
-              }`}
+              className={`flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-medium text-white transition ${submitting ? "bg-green-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-500"
+                }`}
             >
               {submitting ? (
                 <>
@@ -340,167 +368,6 @@ const GenerateSerialComponent = () => {
         </div>
       </div>
     </>
-
-    // <>
-    //   <ToastContainer position="top-center" />
-    //   <Breadcrumb pageName="Generate Serials" parentName="Device Management" />
-
-    //   <div className="rounded-lg bg-white p-6 mt-6 shadow-md dark:bg-boxdark">
-    //     {/* Product & Process */}
-    //     <div className="grid gap-6 sm:grid-cols-2">
-    //       <div>
-    //         <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-bodydark">
-    //           Product Type
-    //         </label>
-    //         <select
-    //           value={productId || ""}
-    //           disabled
-    //           className="w-full rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 disabled:cursor-not-allowed dark:border-form-strokedark dark:bg-form-input"
-    //         >
-    //           <option value="">Please Select</option>
-    //           {products?.map((product, index) => (
-    //             <option key={index} value={product._id}>
-    //               {product.name}
-    //             </option>
-    //           ))}
-    //         </select>
-    //       </div>
-
-    //       <div>
-    //         <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-bodydark">
-    //           Process Type
-    //         </label>
-    //         <select
-    //           value={processId || ""}
-    //           disabled
-    //           className="w-full rounded-md border border-gray-300 bg-gray-100 px-4 py-2 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 disabled:cursor-not-allowed dark:border-form-strokedark dark:bg-form-input"
-    //         >
-    //           <option value="">Please Select</option>
-    //           {processes?.map((process) => (
-    //             <option key={process._id} value={process._id}>
-    //               {process.name}
-    //             </option>
-    //           ))}
-    //         </select>
-    //       </div>
-    //     </div>
-
-    //     {/* Prefix, Suffix & Serial Inputs */}
-    //     <div className="mt-6 grid gap-6 sm:grid-cols-2">
-    //       <div>
-    //         <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-bodydark">
-    //           Prefix Code
-    //         </label>
-    //         <input
-    //           name="prefix"
-    //           value={form.prefix}
-    //           onChange={handleChange}
-    //           className="w-full rounded-md border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 dark:border-form-strokedark dark:bg-form-input"
-    //         />
-    //       </div>
-
-    //       <div>
-    //         <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-bodydark">
-    //           No. of Serials Required
-    //         </label>
-    //         <input
-    //           type="number"
-    //           name="noOfSerialRequired"
-    //           max={5000}
-    //           value={form.noOfSerialRequired}
-    //           onChange={handleChange}
-    //           className="w-full rounded-md border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 dark:border-form-strokedark dark:bg-form-input"
-    //         />
-    //       </div>
-    //     </div>
-
-    //     {/* Zero Toggle & Suffix */}
-    //     <div className="mt-6 flex items-center gap-4">
-    //       <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-gray-700 dark:text-bodydark">
-    //         <input
-    //           type="checkbox"
-    //           checked={enableZero}
-    //           onChange={() => setEnabledZero(!enableZero)}
-    //           className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-    //         />
-    //         Add Leading Zeros
-    //       </label>
-    //       {enableZero && (
-    //         <input
-    //           type="number"
-    //           name="noOfZeroRequired"
-    //           max={10}
-    //           value={form.noOfZeroRequired}
-    //           onChange={handleChange}
-    //           className="w-20 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 dark:border-form-strokedark dark:bg-form-input"
-    //         />
-    //       )}
-    //     </div>
-
-    //     <div className="mt-6">
-    //       <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-bodydark">
-    //         Suffix Code
-    //       </label>
-    //       <input
-    //         name="suffix"
-    //         value={form.suffix}
-    //         onChange={handleChange}
-    //         className="w-full rounded-md border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 dark:border-form-strokedark dark:bg-form-input"
-    //       />
-    //     </div>
-
-    //     {/* Serial Report */}
-    //     <div className="mt-8 rounded-md bg-gray-50 p-4 shadow-inner dark:bg-gray-800">
-    //       <h2 className="mb-3 text-base font-semibold text-gray-800 dark:text-white">
-    //         Serial Report
-    //       </h2>
-    //       {serials.length > 0 ? (
-    //         <div className="h-64 overflow-y-auto rounded-md border border-gray-200 bg-white p-3 text-sm dark:border-gray-700 dark:bg-gray-900">
-    //           <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-    //             {serials.map((serial, index) => (
-    //               <li
-    //                 key={index}
-    //                 className="rounded-md bg-gray-100 px-2 py-1 text-center text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200"
-    //               >
-    //                 {serial}
-    //               </li>
-    //             ))}
-    //           </ul>
-    //         </div>
-    //       ) : (
-    //         <p className="text-sm text-gray-500">No serials generated yet.</p>
-    //       )}
-    //     </div>
-
-    //     {/* Buttons */}
-    //     <div className="mt-6 flex justify-end gap-4">
-    //       <button
-    //         type="button"
-    //         onClick={() => setIsGenerateSerials(false)}
-    //         className="rounded-md bg-gray-200 px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
-    //       >
-    //         Cancel
-    //       </button>
-    //       {!isGenerateSerials ? (
-    //         <button
-    //           type="button"
-    //           onClick={handleGenerateSerials}
-    //           className="rounded-md bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-500"
-    //         >
-    //           Generate Serials
-    //         </button>
-    //       ) : (
-    //         <button
-    //           type="button"
-    //           onClick={handlesubmit}
-    //           className="rounded-md bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-500"
-    //         >
-    //           Submit
-    //         </button>
-    //       )}
-    //     </div>
-    //   </div>
-    // </>
   );
 };
 

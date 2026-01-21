@@ -245,11 +245,10 @@ const ReturnedKits = () => {
               <button
                 onClick={handleMultipleRowsDelete}
                 disabled={selectedRows.length === 0}
-                className={`rounded bg-danger px-4 py-2 font-semibold text-white ${
-                  selectedRows.length === 0
+                className={`rounded bg-danger px-4 py-2 font-semibold text-white ${selectedRows.length === 0
                     ? "cursor-not-allowed opacity-50"
                     : "hover:bg-red-700"
-                }`}
+                  }`}
               >
                 Delete
               </button>
@@ -283,6 +282,15 @@ const ReturnedKits = () => {
                   style: {
                     padding: "12px",
                     border: "none",
+                  },
+                },
+                cells: {
+                  style: {
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
                   },
                 },
               }}

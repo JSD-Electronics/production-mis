@@ -187,9 +187,9 @@ const ViewProcessInventory = () => {
       let form = new FormData();
       form.append("id", data?._id);
       form.append("status", status);
-      if(status === "Waiting_Kits_allocation"){
+      if (status === "Waiting_Kits_allocation") {
         let returnedKits = data?.quantity - data?.issuedKits;
-        form.append("issuedKits",returnedKits);
+        form.append("issuedKits", returnedKits);
       }
       let result = await updateProductionStatus(form);
       if (result && result.status === 200) {
@@ -217,7 +217,7 @@ const ViewProcessInventory = () => {
           issuedCartons: row.issuedCartons,
         });
       }
-    }  
+    }
     // return false;
     setProcessData(row);
     setStartLineStage(selectedStageEntries);
@@ -339,52 +339,52 @@ const ViewProcessInventory = () => {
           )}
           {(row.status === "waiting_for_line_feeding" ||
             row.issuedKitsStatus === "PARTIALLY_ISSUED") && (
-            <button
-              onClick={() => handleIssuedKits(row)}
-              className="transform rounded-full bg-[#34D399] p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-[#34D399]"
-            >
-              <svg
-                width="15px"
-                height="15px"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                stroke="#ffffff"
+              <button
+                onClick={() => handleIssuedKits(row)}
+                className="transform rounded-full bg-[#34D399] p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-[#34D399]"
               >
-                <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                <g
-                  id="SVGRepo_tracerCarrier"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                ></g>
-                <g id="SVGRepo_iconCarrier">
-                  {" "}
-                  <path
-                    d="M18 18.86H17.24C16.44 18.86 15.68 19.17 15.12 19.73L13.41 21.42C12.63 22.19 11.36 22.19 10.58 21.42L8.87 19.73C8.31 19.17 7.54 18.86 6.75 18.86H6C4.34 18.86 3 17.53 3 15.89V4.97998C3 3.33998 4.34 2.01001 6 2.01001H18C19.66 2.01001 21 3.33998 21 4.97998V15.89C21 17.52 19.66 18.86 18 18.86Z"
-                    stroke="#ffffff"
-                    stroke-width="1.5"
-                    stroke-miterlimit="10"
+                <svg
+                  width="15px"
+                  height="15px"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  stroke="#ffffff"
+                >
+                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                  <g
+                    id="SVGRepo_tracerCarrier"
                     stroke-linecap="round"
                     stroke-linejoin="round"
-                  ></path>{" "}
-                  <path
-                    d="M11.9999 10.0001C13.2868 10.0001 14.33 8.95687 14.33 7.67004C14.33 6.38322 13.2868 5.34009 11.9999 5.34009C10.7131 5.34009 9.66992 6.38322 9.66992 7.67004C9.66992 8.95687 10.7131 10.0001 11.9999 10.0001Z"
-                    stroke="#ffffff"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  ></path>{" "}
-                  <path
-                    d="M16 15.6601C16 13.8601 14.21 12.4001 12 12.4001C9.79 12.4001 8 13.8601 8 15.6601"
-                    stroke="#ffffff"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  ></path>{" "}
-                </g>
-              </svg>
-            </button>
-          )}
+                  ></g>
+                  <g id="SVGRepo_iconCarrier">
+                    {" "}
+                    <path
+                      d="M18 18.86H17.24C16.44 18.86 15.68 19.17 15.12 19.73L13.41 21.42C12.63 22.19 11.36 22.19 10.58 21.42L8.87 19.73C8.31 19.17 7.54 18.86 6.75 18.86H6C4.34 18.86 3 17.53 3 15.89V4.97998C3 3.33998 4.34 2.01001 6 2.01001H18C19.66 2.01001 21 3.33998 21 4.97998V15.89C21 17.52 19.66 18.86 18 18.86Z"
+                      stroke="#ffffff"
+                      stroke-width="1.5"
+                      stroke-miterlimit="10"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    ></path>{" "}
+                    <path
+                      d="M11.9999 10.0001C13.2868 10.0001 14.33 8.95687 14.33 7.67004C14.33 6.38322 13.2868 5.34009 11.9999 5.34009C10.7131 5.34009 9.66992 6.38322 9.66992 7.67004C9.66992 8.95687 10.7131 10.0001 11.9999 10.0001Z"
+                      stroke="#ffffff"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    ></path>{" "}
+                    <path
+                      d="M16 15.6601C16 13.8601 14.21 12.4001 12 12.4001C9.79 12.4001 8 13.8601 8 15.6601"
+                      stroke="#ffffff"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    ></path>{" "}
+                  </g>
+                </svg>
+              </button>
+            )}
         </div>
       ),
     },
@@ -441,6 +441,16 @@ const ViewProcessInventory = () => {
                   style: {
                     padding: "12px",
                     border: "none",
+                  },
+                },
+                cells: {
+                  style: {
+                    padding: "12px",
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
                   },
                 },
               }}
@@ -540,17 +550,17 @@ const ViewProcessInventory = () => {
                     <strong className="font-medium">Kits Shortage :</strong>{" "}
                     {Math.abs(
                       inventoryDetails?.processQuantity -
-                        inventoryDetails?.issuedKits,
+                      inventoryDetails?.issuedKits,
                     )}
                   </div>
                   <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
                     <strong className="font-medium">Surplus Kits :</strong>{" "}
                     {inventoryDetails?.issuedKits >
-                    inventoryDetails?.processQuantity
+                      inventoryDetails?.processQuantity
                       ? Math.abs(
-                          inventoryDetails?.inventoryQuantity -
-                            inventoryDetails?.processQuantity,
-                        )
+                        inventoryDetails?.inventoryQuantity -
+                        inventoryDetails?.processQuantity,
+                      )
                       : 0}
                   </div>
                 </div>
@@ -573,8 +583,8 @@ const ViewProcessInventory = () => {
                         </strong>{" "}
                         {Math.abs(
                           parseInt(inventoryDetails?.processQuantity) /
-                            packagingData[0]?.packagingData?.maxCapacity -
-                            inventoryDetails?.cartonQuantity,
+                          packagingData[0]?.packagingData?.maxCapacity -
+                          inventoryDetails?.cartonQuantity,
                         )}
                       </div>
                       <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
@@ -582,13 +592,13 @@ const ViewProcessInventory = () => {
                           Surplus Cartons :
                         </strong>{" "}
                         {inventoryDetails?.cartonQuantity >
-                        inventoryDetails?.processQuantity /
+                          inventoryDetails?.processQuantity /
                           packagingData[0]?.packagingData?.maxCapacity
                           ? Math.abs(
-                              parseInt(inventoryDetails?.processQuantity) /
-                                packagingData[0]?.packagingData?.maxCapacity -
-                                inventoryDetails?.cartonQuantity,
-                            )
+                            parseInt(inventoryDetails?.processQuantity) /
+                            packagingData[0]?.packagingData?.maxCapacity -
+                            inventoryDetails?.cartonQuantity,
+                          )
                           : 0}
                       </div>
                       <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">

@@ -38,7 +38,7 @@ const TaskComponent = () => {
     });
     setOperatorAssignedKitModel(true);
   };
-  const handleOperatorAssignedKit = () => {};
+  const handleOperatorAssignedKit = () => { };
   const closeOperatorAssignedKit = () => {
     setOperatorAssignedKitModel(false);
   };
@@ -72,7 +72,7 @@ const TaskComponent = () => {
       let formData = new FormData();
       formData.append("status", status);
       formData.append("processId", selectedProcessId);
-      if(status === "CONFIRM"){
+      if (status === "CONFIRM") {
         formData.append('processStatus', 'active');
       } else {
         formData.append("issuedKitsStatus", "REJECTED")
@@ -92,7 +92,7 @@ const TaskComponent = () => {
   const getOperatorTask = async (id: any) => {
     try {
       let result = await getTaskByUserId(id);
-      console.log("result ===>", result);
+      // console.log("result ===>", result);
       setTaskList(result?.task);
     } catch (error) {
       console.log("Error Fetching Tasks", error);
@@ -174,7 +174,7 @@ const TaskComponent = () => {
           ISSUED: "Issued",
           PARTIALLY_ISSUED: "Partially Issued",
           NOT_ISSUED: "Not Issued",
-          REJECTED : "Rejected",
+          REJECTED: "Rejected",
         };
         const backgroundColor =
           statusColorMap[row.issuedKitsStatus] || "#6c757d";
@@ -268,7 +268,7 @@ const TaskComponent = () => {
       name: "Actions",
       cell: (row: taskList) => {
         return row.status != "Completed" &&
-          row.kitRecievedConfirmationStatus != "ASSIGN_TO_OPERATOR" &&  row.kitRecievedConfirmationStatus != "REJECT" ? (
+          row.kitRecievedConfirmationStatus != "ASSIGN_TO_OPERATOR" && row.kitRecievedConfirmationStatus != "REJECT" ? (
           <div className="flex items-center space-x-3.5">
             <button
               onClick={() => handleViewProcess(row.planId)}
@@ -280,57 +280,57 @@ const TaskComponent = () => {
         ) : (
           <div className="flex space-x-1">
             {row.kitRecievedConfirmationStatus != "REJECT" && (
-            <button
-              onClick={() => handleOperatorRecievedKit(row)}
-              className="transform rounded-full bg-blue-500 p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
-            >
-              <svg
-                fill="#ffffff"
-                width="15px"
-                height="15px"
-                viewBox="0 0 36 36"
-                version="1.1"
-                preserveAspectRatio="xMidYMid meet"
-                xmlns="http://www.w3.org/2000/svg"
-                stroke="#ffffff"
+              <button
+                onClick={() => handleOperatorRecievedKit(row)}
+                className="transform rounded-full bg-blue-500 p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
               >
-                <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                <g
-                  id="SVGRepo_tracerCarrier"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                ></g>
-                <g id="SVGRepo_iconCarrier">
-                  {" "}
-                  <title>assign-user-solid</title>{" "}
-                  <circle
-                    cx="17.99"
-                    cy="10.36"
-                    r="6.81"
-                    className="clr-i-solid clr-i-solid-path-1"
-                  ></circle>
-                  <path
-                    d="M12,26.65a2.8,2.8,0,0,1,4.85-1.8L20.71,29l6.84-7.63A16.81,16.81,0,0,0,18,18.55,16.13,16.13,0,0,0,5.5,24a1,1,0,0,0-.2.61V30a2,2,0,0,0,1.94,2h8.57l-3.07-3.3A2.81,2.81,0,0,1,12,26.65Z"
-                    className="clr-i-solid clr-i-solid-path-2"
-                  ></path>
-                  <path
-                    d="M28.76,32a2,2,0,0,0,1.94-2V26.24L25.57,32Z"
-                    className="clr-i-solid clr-i-solid-path-3"
-                  ></path>
-                  <path
-                    d="M33.77,18.62a1,1,0,0,0-1.42.08l-11.62,13-5.2-5.59A1,1,0,0,0,14.12,26a1,1,0,0,0,0,1.42l6.68,7.2L33.84,20A1,1,0,0,0,33.77,18.62Z"
-                    className="clr-i-solid clr-i-solid-path-4"
-                  ></path>{" "}
-                  <rect
-                    x="0"
-                    y="0"
-                    width="36"
-                    height="36"
-                    fill-opacity="0"
-                  ></rect>{" "}
-                </g>
-              </svg>
-            </button>
+                <svg
+                  fill="#ffffff"
+                  width="15px"
+                  height="15px"
+                  viewBox="0 0 36 36"
+                  version="1.1"
+                  preserveAspectRatio="xMidYMid meet"
+                  xmlns="http://www.w3.org/2000/svg"
+                  stroke="#ffffff"
+                >
+                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+                  <g
+                    id="SVGRepo_tracerCarrier"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  ></g>
+                  <g id="SVGRepo_iconCarrier">
+                    {" "}
+                    <title>assign-user-solid</title>{" "}
+                    <circle
+                      cx="17.99"
+                      cy="10.36"
+                      r="6.81"
+                      className="clr-i-solid clr-i-solid-path-1"
+                    ></circle>
+                    <path
+                      d="M12,26.65a2.8,2.8,0,0,1,4.85-1.8L20.71,29l6.84-7.63A16.81,16.81,0,0,0,18,18.55,16.13,16.13,0,0,0,5.5,24a1,1,0,0,0-.2.61V30a2,2,0,0,0,1.94,2h8.57l-3.07-3.3A2.81,2.81,0,0,1,12,26.65Z"
+                      className="clr-i-solid clr-i-solid-path-2"
+                    ></path>
+                    <path
+                      d="M28.76,32a2,2,0,0,0,1.94-2V26.24L25.57,32Z"
+                      className="clr-i-solid clr-i-solid-path-3"
+                    ></path>
+                    <path
+                      d="M33.77,18.62a1,1,0,0,0-1.42.08l-11.62,13-5.2-5.59A1,1,0,0,0,14.12,26a1,1,0,0,0,0,1.42l6.68,7.2L33.84,20A1,1,0,0,0,33.77,18.62Z"
+                      className="clr-i-solid clr-i-solid-path-4"
+                    ></path>{" "}
+                    <rect
+                      x="0"
+                      y="0"
+                      width="36"
+                      height="36"
+                      fill-opacity="0"
+                    ></rect>{" "}
+                  </g>
+                </svg>
+              </button>
             )}
           </div>
         );
@@ -367,10 +367,13 @@ const TaskComponent = () => {
                   },
                 },
               },
-              pagination: {
+              cells: {
                 style: {
-                  padding: "12px",
-                  border: "none",
+                  "& > div:first-child": {
+                    whiteSpace: "break-spaces",
+                    overflow: "hidden",
+                    textOverflow: "inherit",
+                  },
                 },
               },
             }}

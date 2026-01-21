@@ -840,9 +840,9 @@ export const getDeviceByProductId = async (id) => {
     throw error?.response?.data || { message: `Error Fetching Devices` };
   }
 };
-export const createDeviceTestEntry = async (formData) => {
+export const createDeviceTestEntry = async (data) => {
   try {
-    let response = await api.post(`/deviceRecord/create`, formData);
+    let response = await api.post(`/deviceRecord/create`, data);
     return response.data;
   } catch (error) {
     console.log(`Error Creating Device Test Entry`, error);
@@ -864,9 +864,13 @@ export const getOverallDeviceTestEntry = async (id) => {
     );
   }
 };
-export const getDeviceTestEntryByOperatorId = async (id) => {
+export const getDeviceTestEntryByOperatorId = async (id, date) => {
   try {
-    let response = await api.get(`/getDeviceTestEntryByOperatorId/${id}`);
+    let url = `/getDeviceTestEntryByOperatorId/${id}`;
+    if (date) {
+      url += `?date=${date}`;
+    }
+    let response = await api.get(url);
     return response.data;
   } catch (error) {
     console.log(`Error Fetching Get Device Test Entry By Operator ID`, error);
@@ -899,6 +903,24 @@ export const updateStageByDeviceId = async (id, formData) => {
     throw error?.response?.data || { message: `Error Updating Device status` };
   }
 };
+export const updateStageBySerialNo = async (id, formData) => {
+  try {
+    let response = await api.patch(`/updateStageBySerialNo/${id}`, formData);
+    return response.data;
+  } catch (error) {
+    console.log(`Error Updating Device status`, error);
+    throw error?.response?.data || { message: `Error Updating Device status` };
+  }
+}
+export const markDeviceAsResolved = async (data) => {
+  try {
+    const response = await api.post(`/devices/markAsResolved`, data);
+    return response.data;
+  } catch (error) {
+    console.log(`Error Marking Device As Resolved`, error);
+    throw error?.response?.data || { message: `Error Marking Device As Resolved` };
+  }
+}
 export const createReport = async (formData) => {
   try {
     let response = await api.post(`/createReport`, formData);
@@ -1261,6 +1283,16 @@ export const shiftToNextCommonStage = async (processId, formData) => {
     return response.data;
   } catch (error) {
     console.log("Error Carton Shift To Common Stage :", error.message);
+  }
+};
+
+export const keepCartonInStore = async (processId, formData) => {
+  try {
+    let response = await api.post(`/cartons/${processId}/keep-in-store`, formData);
+    return response.data;
+  } catch (error) {
+    console.log("Error Keeping Carton In Store :", error.message);
+    throw error;
   }
 };
 export const getFGInventoryToShift = async () => {

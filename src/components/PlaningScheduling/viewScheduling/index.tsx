@@ -15,8 +15,8 @@ const ViewScheduling = () => {
   const [planingData, setPlaningData] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [selectedRows, setSelectedRows] = React.useState([]);
-  const [selectedFilterStartDate,setSelectedFilterStartDate] = React.useState("");
-  const [selectedFilterEndDate,setSelectedFilterEndDate] = React.useState("");
+  const [selectedFilterStartDate, setSelectedFilterStartDate] = React.useState("");
+  const [selectedFilterEndDate, setSelectedFilterEndDate] = React.useState("");
   const handleRowSelected = (state: any) => {
     setSelectedRows(state.selectedRows);
   };
@@ -79,12 +79,12 @@ const ViewScheduling = () => {
   };
   const handleFilter = async () => {
     try {
-      if(selectedFilterStartDate != "" && selectedFilterEndDate != ""){
-      setPlaningData([]);
-      let result = await getPlanningAndSchedulingDate(selectedFilterStartDate,selectedFilterEndDate);
-      console.log("result.plans ===>", result.plans);
-      setPlaningData(result.plans);
-      }else{
+      if (selectedFilterStartDate != "" && selectedFilterEndDate != "") {
+        setPlaningData([]);
+        let result = await getPlanningAndSchedulingDate(selectedFilterStartDate, selectedFilterEndDate);
+        console.log("result.plans ===>", result.plans);
+        setPlaningData(result.plans);
+      } else {
         alert("Choose Dates before filtering the data.")
       }
     } catch (error) {
@@ -107,7 +107,7 @@ const ViewScheduling = () => {
       selector: (row: planingData) => formatDateToMMDDYYYY(row.startDate),
       sortable: true,
     },
-    
+
     {
       name: "Process Name",
       selector: (row: planingData) => row?.processName,
@@ -237,11 +237,10 @@ const ViewScheduling = () => {
                 <button
                   onClick={handleMultipleRowsDelete}
                   disabled={selectedRows.length === 0}
-                  className={`rounded bg-danger px-4 py-2 font-semibold text-white ${
-                    selectedRows.length === 0
+                  className={`rounded bg-danger px-4 py-2 font-semibold text-white ${selectedRows.length === 0
                       ? "cursor-not-allowed opacity-50"
                       : "hover:bg-red-700"
-                  }`}
+                    }`}
                 >
                   Delete
                 </button>
@@ -276,6 +275,15 @@ const ViewScheduling = () => {
                   style: {
                     padding: "12px",
                     border: "none",
+                  },
+                },
+                cells: {
+                  style: {
+                    "& > div:first-child": {
+                      whiteSpace: "break-spaces",
+                      overflow: "hidden",
+                      textOverflow: "inherit",
+                    },
                   },
                 },
               }}

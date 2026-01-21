@@ -161,7 +161,7 @@ const StoreDashboard: React.FC = () => {
         </CardDataStats>
         <CardDataStats
           title="Overall Accuracy"
-          total={inventoryDashboard.overallInventoryAccuracy +'%'}
+          total={inventoryDashboard.overallInventoryAccuracy + '%'}
           rate="4.35%"
           levelDown
         >

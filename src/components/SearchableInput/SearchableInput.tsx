@@ -1,3 +1,4 @@
+"use client";
 import React, { useState } from "react";
 import { Search, XCircle } from "lucide-react";
 
@@ -11,8 +12,9 @@ interface SearchableInputProps {
   getDeviceById: any;
   setIsPassNGButtonShow: any;
   setIsStickerPrinted: any;
+  setIsVerifiedSticker: any;
   checkIsPrintEnable: any;
-  setIsDevicePassed:any;
+  setIsDevicePassed: any;
 }
 
 const SearchableInput = ({
@@ -25,38 +27,51 @@ const SearchableInput = ({
   getDeviceById,
   setIsPassNGButtonShow,
   setIsStickerPrinted,
+  setIsVerifiedSticker,
   checkIsPrintEnable,
   setIsDevicePassed,
 }: SearchableInputProps) => {
-  const [filteredOptions, setFilteredOptions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
-  const handleInputChange = (e) => {
+  // Derived state for filtered options
+  const filteredOptions = React.useMemo(() => {
+    if (!searchQuery || searchQuery.trim() === "") {
+      return [];
+    }
+    return options.filter((value) =>
+      value?.serialNo?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [options, searchQuery]);
+
+  // Handle No Results side effect
+  React.useEffect(() => {
+    if (filteredOptions.length === 0 && searchQuery.trim() !== "") {
+      onNoResults(searchQuery);
+    }
+  }, [filteredOptions, searchQuery, onNoResults]);
+
+  const handleInputChange = (e: any) => {
     const query = e.target.value;
     setSearchQuery(query);
 
-    if (query.trim() === "") {
-      setFilteredOptions([]);
+    if (query.trim() !== "") {
+      setShowSuggestions(true);
+    } else {
       setShowSuggestions(false);
-      return;
     }
-
-    const filtered = options.filter((value) =>
-      value?.serialNo?.toLowerCase().includes(query.toLowerCase()),
-    );
-
-    setFilteredOptions(filtered);
-    setShowSuggestions(true);
   };
 
-  const handleSuggestionClick = (option) => {
+  const handleSuggestionClick = (option: any) => {
     getDeviceById(option._id);
     setSearchQuery(option?.serialNo);
     setSearchResult(option?.serialNo);
+    setIsStickerPrinted(false);
+    setIsVerifiedSticker(false);
+    setIsDevicePassed(false);
     setShowSuggestions(false);
   };
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e: any) => {
     if (e.key === "Enter") {
       e.preventDefault();
       if (filteredOptions.length > 0) {
@@ -70,18 +85,15 @@ const SearchableInput = ({
       }
       setIsDevicePassed(false);
       setIsStickerPrinted(false);
+      setIsVerifiedSticker(false);
       if (!checkIsPrintEnable) {
         setIsPassNGButtonShow(true);
-      }else {
+      } else {
         setIsPassNGButtonShow(false);
       }
       setShowSuggestions(false);
     }
   };
-
-  if (filteredOptions.length === 0 && searchQuery.trim() !== "") {
-    onNoResults(searchQuery);
-  }
 
   return (
     <div className="relative w-full">
@@ -103,7 +115,6 @@ const SearchableInput = ({
             className="text-gray-400 hover:text-red-500 ml-2 h-4 w-4 cursor-pointer"
             onClick={() => {
               setSearchQuery("");
-              setFilteredOptions([]);
               setSearchResult("");
               setShowSuggestions(false);
             }}
@@ -114,6 +125,7 @@ const SearchableInput = ({
       {/* Suggestions */}
       {showSuggestions && (
         <div className="border-gray-200 absolute z-10 mt-1 w-full rounded-md border bg-white shadow-lg">
+
           {filteredOptions.length > 0 ? (
             <ul className="max-h-40 overflow-y-auto py-1 text-sm">
               {filteredOptions.map((option, index) => (

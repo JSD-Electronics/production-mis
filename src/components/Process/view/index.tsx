@@ -27,9 +27,9 @@ const ViewProcess = () => {
     React.useState(false);
   const [showPopup, setShowPopup] = React.useState(false);
   const [productId, setProductId] = React.useState("");
-  const [shiftData, setShiftData] = React.useState<Stages[]>([]);
+  const [shiftData, setShiftData] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [selectedRows, setSelectedRows] = React.useState([]);
+  const [selectedRows, setSelectedRows] = React.useState<any[]>([]);
   const [isAddQuantityModel, setIsAddQuantityModel] = useState(false);
   const [addMoreQuantity, setMoreQuantity] = useState(0);
   const [selectedProcessID, setSelectedProcessID] = useState("");
@@ -54,7 +54,7 @@ const ViewProcess = () => {
       let response = await getOrderConfirmationNumers();
       setOcNoArr(response.getOrderConfirmationNo);
     } catch (error) {
-      console.log("Error Fethcing Order Confirmation Numbers", error?.message);
+      console.log("Error Fethcing Order Confirmation Numbers", (error as any)?.message);
     }
   };
   const getProcess = async () => {
@@ -82,7 +82,7 @@ const ViewProcess = () => {
   };
   const handleMultipleRowsDelete = async () => {
     try {
-      const selectedIds = selectedRows.map((row) => row._id);
+      const selectedIds = selectedRows.map((row: any) => row._id);
       await deleteMultipleProcesses(selectedIds);
       setSelectedRows([]);
       toast.success("Shift(s) Deleted Successfully!");
@@ -111,8 +111,8 @@ const ViewProcess = () => {
   const handleSubmitQuantity = async () => {
     try {
       let formData = new FormData();
-      formData.append("quantity", addMoreQuantity);
-      formData.append("status" , 'partially_issued');
+      formData.append("quantity", String(addMoreQuantity));
+      formData.append("status", 'partially_issued');
       let response = await updateQuantity(formData, id);
       let userDetails = JSON.parse(localStorage.getItem("userDetails"));
       const formData3 = new FormData();
@@ -121,7 +121,7 @@ const ViewProcess = () => {
       formData3.append("userId", userDetails?._id || "");
       formData3.append(
         "description",
-        `${addMoreQuantity} Quantity is added into process ${name}`,
+        `${addMoreQuantity} Quantity is added into process ${(shiftData.find(s => s._id === id) as any)?.name || ""}`,
       );
       try {
         const logResult = await createProcessLogs(formData3);
@@ -140,7 +140,7 @@ const ViewProcess = () => {
     }
     setIsAddQuantityModel(false);
   };
-  const handleMarkAsCompleteButton = (id: String) => {
+  const handleMarkAsCompleteButton = (id: string) => {
     setShowMarkAsCompletePopup(true);
     setSelectedProcessID(id);
   };
@@ -151,7 +151,7 @@ const ViewProcess = () => {
       );
       let formData = new FormData();
       let formData3 = new FormData();
-      let userDetails = JSON.parse(localStorage.getItem("userDetails"));
+      let userDetails = JSON.parse(localStorage.getItem("userDetails") || "{}");
       formData.append("status", "completed");
       let result = await updateMarkAsComplete(formData, selectedProcessID);
       formData3.append("action", "PROCESS_EXTENDED");
@@ -184,22 +184,22 @@ const ViewProcess = () => {
   const columns = [
     {
       name: "ID",
-      selector: (row: Shifts, index: number) => index + 1,
+      selector: (row: any, index?: number) => (index ?? 0) + 1,
       sortable: true,
     },
     {
       name: "Order confirmation no",
-      selector: (row: Shifts) => row?.orderConfirmationNo,
+      selector: (row: any) => row?.orderConfirmationNo,
       sortable: true,
     },
     {
       name: "Process ID",
-      selector: (row: Shifts) => row?.processID,
+      selector: (row: any) => row?.processID,
       sortable: true,
     },
     {
       name: "Product Name",
-      selector: (row: Shifts) => row?.productName,
+      selector: (row: any) => row?.productName,
       sortable: true,
     },
     {
@@ -209,12 +209,12 @@ const ViewProcess = () => {
     },
     {
       name: "Quantity",
-      selector: (row: Shifts) => row?.quantity,
+      selector: (row: any) => row?.quantity,
       sortable: true,
     },
     {
       name: "Schedule",
-      selector: (row: Shifts) =>
+      selector: (row: any) =>
         row.status != "waiting_schedule" ? (
           <>
             <button
@@ -556,11 +556,10 @@ const ViewProcess = () => {
                 <button
                   onClick={handleMultipleRowsDelete}
                   disabled={selectedRows.length === 0}
-                  className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white transition ${
-                    selectedRows.length === 0
-                      ? "cursor-not-allowed bg-danger/50"
-                      : "bg-danger hover:bg-danger/90"
-                  }`}
+                  className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold text-white transition ${selectedRows.length === 0
+                    ? "cursor-not-allowed bg-danger/50"
+                    : "bg-danger hover:bg-danger/90"
+                    }`}
                 >
                   <Trash2 size={16} /> Delete
                 </button>
@@ -585,7 +584,7 @@ const ViewProcess = () => {
             <div className="mt-6 overflow-x-auto rounded-xl border border-gray-200 bg-white custom-scroll">
               <DataTable
                 className="min-w-full text-sm"
-                columns={columns}
+                columns={columns as any}
                 data={displayData}
                 pagination
                 paginationRowsPerPageOptions={[10, 25, 50, 100]}
@@ -653,11 +652,15 @@ const ViewProcess = () => {
                   },
                   cells: {
                     style: {
-                      wordBreak: "break-word",
-                      whiteSpace: "normal",
-                      lineHeight: "1.4",
-                      maxWidth: "220px",
                       padding: "12px",
+                      maxWidth: "220px",
+                      "& > div:first-child": {
+                        whiteSpace: "break-spaces",
+                        overflow: "hidden",
+                        textOverflow: "inherit",
+                        wordBreak: "break-word",
+                        lineHeight: "1.4",
+                      },
                     },
                   },
                 }}
