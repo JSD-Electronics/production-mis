@@ -13,6 +13,7 @@ import {
   getPDICartonByProcessId,
   getCartonsIntoStore,
   keepCartonInStore,
+  updateStageBySerialNo,
 } from "@/lib/api";
 import {
   FileText,
@@ -232,6 +233,10 @@ export default function DeviceTestComponent({
   const [isPreviousStagesModalOpen, setIsPreviousStagesModalOpen] = useState(false);
   const [isCartonDevicesModalOpen, setIsCartonDevicesModalOpen] = useState(false);
   const [isVerifyCartonModal, setIsVerifyCartonModal] = useState(false);
+  const [manualFieldValues, setManualFieldValues] = useState<Record<string, string>>({});
+  const [manualErrors, setManualErrors] = useState<Record<string, string | null>>({});
+  const [isManualValuesModalOpen, setIsManualValuesModalOpen] = useState(false);
+  const [hasManualValues, setHasManualValues] = useState(false);
 
   const handleVerifyCarton = (scannedValue: string) => {
     if (scannedValue === selectedCarton) {
@@ -253,6 +258,116 @@ export default function DeviceTestComponent({
       ) || []
     );
   }, [processAssignUserStage]);
+
+  const validateCustomField = (cf: any, valRaw: string) => {
+    const fname = cf?.fieldName || "";
+    const vtype = cf?.validationType || "value";
+    const val = (valRaw ?? "").trim();
+    if (!fname) return { valid: false, message: "Field name missing" };
+    if (val.length === 0) return { valid: false, message: "Value is required" };
+    if (vtype === "value") {
+      const expected = (cf?.value ?? "").trim();
+      if (!expected) return { valid: true, message: null };
+      if (val === expected) return { valid: true, message: null };
+      return { valid: false, message: `Expected "${expected}"` };
+    }
+    if (vtype === "range") {
+      const num = Number(val);
+      const from = Number(cf?.rangeFrom);
+      const to = Number(cf?.rangeTo);
+      if (Number.isNaN(num)) return { valid: false, message: "Enter a number" };
+      if (Number.isNaN(from) || Number.isNaN(to)) return { valid: true, message: null };
+      if (num < from || num > to) return { valid: false, message: `Enter between ${from}-${to}` };
+      return { valid: true, message: null };
+    }
+    if (vtype === "length") {
+      const len = val.length;
+      const from = Number(cf?.lengthFrom);
+      const to = Number(cf?.lengthTo);
+      if (Number.isNaN(from) || Number.isNaN(to)) return { valid: true, message: null };
+      if (len < from || len > to) return { valid: false, message: `Length ${from}-${to} chars` };
+      return { valid: true, message: null };
+    }
+    return { valid: true, message: null };
+  };
+
+  useEffect(() => {
+    setManualFieldValues({});
+    setManualErrors({});
+    setHasManualValues(false);
+    setIsManualValuesModalOpen(false);
+  }, [currentJigStepIndex]);
+
+  const updateCustomFieldsDataIntoDB = async (values: Record<string, string>) => {
+    try {
+      const formData = new FormData();
+      formData.append("customFields", JSON.stringify(values));
+      await updateStageBySerialNo(searchQuery, formData);
+    } catch (error) {
+      console.error("Failed to update custom fields");
+    }
+  };
+
+  const handleManualPass = async () => {
+    const currentSubStep = testSteps[currentJigStepIndex];
+    if (currentSubStep?.stepType === "manual" && Array.isArray(currentSubStep?.customFields) && currentSubStep.customFields.length > 0) {
+      const hasError = currentSubStep.customFields.some((cf: any) => {
+        const name = cf?.fieldName;
+        const v = manualFieldValues[name ?? ""] ?? "";
+        const result = validateCustomField(cf, v);
+        return !result.valid;
+      });
+      if (hasError) return;
+    }
+    if (currentSubStep?.stepType === "manual" && Array.isArray(currentSubStep?.customFields) && currentSubStep.customFields.length > 0) {
+      const collected: Record<string, string> = {};
+      currentSubStep.customFields.forEach((cf: any) => {
+        const name = cf?.fieldName;
+        if (name) {
+          collected[name] = manualFieldValues[name] ?? "";
+        }
+      });
+      await updateCustomFieldsDataIntoDB(collected);
+    }
+    handleStepDecision("Pass");
+  };
+
+  const handleManualNG = async () => {
+    const currentSubStep = testSteps[currentJigStepIndex];
+    if (currentSubStep?.stepType === "manual" && Array.isArray(currentSubStep?.customFields) && currentSubStep.customFields.length > 0) {
+      const collected: Record<string, string> = {};
+      currentSubStep.customFields.forEach((cf: any) => {
+        const name = cf?.fieldName;
+        if (name) {
+          collected[name] = manualFieldValues[name] ?? "";
+        }
+      });
+      await updateCustomFieldsDataIntoDB(collected);
+    }
+    handleStepDecision("NG");
+  };
+  const handleSubmitManualValues = () => {
+    const currentSubStep = testSteps[currentJigStepIndex];
+    if (!Array.isArray(currentSubStep?.customFields) || currentSubStep.customFields.length === 0) {
+      setHasManualValues(true);
+      setIsManualValuesModalOpen(false);
+      return;
+    }
+    const newErrors: Record<string, string | null> = {};
+    let allValid = true;
+    currentSubStep.customFields.forEach((cf: any) => {
+      const name = cf?.fieldName || "";
+      const v = manualFieldValues[name] ?? "";
+      const res = validateCustomField(cf, v);
+      newErrors[name] = res.valid ? null : res.message || "Invalid value";
+      if (!res.valid) allValid = false;
+    });
+    setManualErrors(newErrors);
+    if (allValid) {
+      setHasManualValues(true);
+      setIsManualValuesModalOpen(false);
+    }
+  };
 
   const handleStepDecision = (status: "Pass" | "NG", reason?: string, data?: any, isImmediate = true) => {
     if (jigDecision) {
@@ -1524,33 +1639,111 @@ export default function DeviceTestComponent({
                                           </div>
 
                                           <div className="p-6">
-                                            <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                                              <button
-                                                onClick={() => handleStepDecision("Pass")}
-                                                disabled={!!jigDecision}
-                                                className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
-                                                  ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none"
-                                                  : "bg-success hover:bg-green-600"
-                                                  }`}
-                                              >
-                                                <CheckCircle className="h-5 w-5" />
-                                                Confirm & Mark Pass
-                                              </button>
-                                              <button
-                                                onClick={() => handleStepDecision("NG")}
-                                                disabled={!!jigDecision}
-                                                className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
-                                                  ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none"
-                                                  : "bg-danger hover:bg-red-600"
-                                                  }`}
-                                              >
-                                                <XCircle className="h-5 w-5" />
-                                                Report Issue (NG)
-                                              </button>
-                                            </div>
+                                            {!hasManualValues && Array.isArray(currentSubStep?.customFields) && currentSubStep.customFields.length > 0 && (
+                                              <div className="flex justify-end w-100">
+                                                <button
+                                                  onClick={() => setIsManualValuesModalOpen(true)}
+                                                  disabled={!!jigDecision}
+                                                  className="flex items-center w-100 justify-center gap-2 rounded-lg bg-primary px-6 py-3.5 text-sm font-bold text-white shadow-sm hover:bg-primary/90 transition-all active:scale-[0.98]"
+                                                >
+                                                  <ClipboardList className="h-5 w-5" />
+                                                  Add Value
+                                                </button>
+                                              </div>
+                                            )}
+                                            {(
+                                              !Array.isArray(currentSubStep?.customFields) ||
+                                              currentSubStep.customFields.length === 0 ||
+                                              hasManualValues
+                                            ) && (
+                                              <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                                                <button
+                                                  onClick={handleManualPass}
+                                                  disabled={
+                                                    !!jigDecision ||
+                                                    (Array.isArray(currentSubStep?.customFields) &&
+                                                      currentSubStep.customFields.some((cf: any) => {
+                                                        const name = cf?.fieldName;
+                                                        const v = manualFieldValues[name ?? ""] ?? "";
+                                                        return !validateCustomField(cf, v).valid;
+                                                      }))
+                                                  }
+                                                  className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
+                                                    ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none"
+                                                    : "bg-success hover:bg-green-600"
+                                                    }`}
+                                                >
+                                                  <CheckCircle className="h-5 w-5" />
+                                                  Confirm & Mark Pass
+                                                </button>
+                                                <button
+                                                  onClick={handleManualNG}
+                                                  disabled={!!jigDecision}
+                                                  className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
+                                                    ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none"
+                                                    : "bg-danger hover:bg-red-600"
+                                                    }`}
+                                                >
+                                                  <XCircle className="h-5 w-5" />
+                                                  Report Issue (NG)
+                                                </button>
+                                              </div>
+                                            )}
                                           </div>
                                         </div>
                                       )}
+                                      <Modal
+                                        isOpen={isManualValuesModalOpen}
+                                        onClose={() => setIsManualValuesModalOpen(false)}
+                                        onSubmit={handleSubmitManualValues}
+                                        title="Add Custom Values"
+                                      >
+                                        <div className="space-y-4">
+                                          {Array.isArray(currentSubStep?.customFields) && currentSubStep.customFields.length > 0 ? (
+                                            currentSubStep.customFields.map((cf: any, idx: number) => {
+                                              const fname = cf?.fieldName || `Field ${idx + 1}`;
+                                              const vtype = cf?.validationType || "value";
+                                              const inputType = vtype === "range" || vtype === "length" ? "number" : "text";
+                                              const val = manualFieldValues[fname] ?? "";
+                                              const res = validateCustomField(cf, val);
+                                              const hasError = !res.valid && (val?.length ?? 0) > 0 || !res.valid && val.length === 0;
+                                              const baseCls = "w-full rounded-lg border px-4 py-3 text-sm outline-none transition";
+                                              const normalCls = "border-stroke bg-transparent focus:border-primary dark:border-form-strokedark dark:bg-form-input";
+                                              const errorCls = "border-danger bg-red-50 text-red-700 focus:border-danger";
+                                              return (
+                                                <div key={idx} className="space-y-2">
+                                                  <label className="text-sm font-semibold text-gray-800">
+                                                    {fname}
+                                                    <span className="ml-1 text-red-500">*</span>
+                                                  </label>
+                                                  <div className="text-[11px] text-gray-500">
+                                                    {vtype === "value" && (cf?.value ? `Expected: "${cf.value}"` : "Enter a value")}
+                                                    {vtype === "range" && `Range: ${cf?.rangeFrom ?? "-"} - ${cf?.rangeTo ?? "-"}`}
+                                                    {vtype === "length" && `Length: ${cf?.lengthFrom ?? "-"} - ${cf?.lengthTo ?? "-"}`}
+                                                  </div>
+                                                  <input
+                                                    type={inputType}
+                                                    value={val}
+                                                    onChange={(e) => {
+                                                      const v = e.target.value;
+                                                      setManualFieldValues((prev) => ({ ...prev, [fname]: v }));
+                                                      const r = validateCustomField(cf, v);
+                                                      setManualErrors((prev) => ({ ...prev, [fname]: r.valid ? null : r.message || "Invalid value" }));
+                                                    }}
+                                                    placeholder="Enter value"
+                                                    className={`${baseCls} ${hasError ? errorCls : normalCls}`}
+                                                  />
+                                                  {hasError && (
+                                                    <div className="text-[12px] font-medium text-danger">{manualErrors[fname] || res.message}</div>
+                                                  )}
+                                                </div>
+                                              );
+                                            })
+                                          ) : (
+                                            <div className="text-sm text-gray-500">No custom fields configured for this manual step.</div>
+                                          )}
+                                        </div>
+                                      </Modal>
 
                                       {/* PRINTING STEP UI */}
                                       {currentSubStep.isPrinterEnable && (

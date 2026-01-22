@@ -155,7 +155,7 @@ export default function NGDeviceDetails({
           const name = res?.user?.name || id;
           setUserNames((prev) => ({ ...prev, [id]: name }));
         })
-        .catch(() => {});
+        .catch(() => { });
     });
   }, [history, deviceData]);
 
@@ -168,7 +168,7 @@ export default function NGDeviceDetails({
             res?.stages?.[0]?.stageName || res?.stages?.[0]?.name || "";
           setFirstStageName(s0 || "");
         })
-        .catch(() => {});
+        .catch(() => { });
     } else if (deviceData?.process?.stages?.length > 0) {
       const s0 =
         deviceData.process.stages[0]?.stageName ||
@@ -286,13 +286,12 @@ export default function NGDeviceDetails({
                 "Device Details"}
               <span
                 className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide
-                    ${
-                      deviceData.status === "Pass"
-                        ? "border-green-200 bg-green-100 text-green-700"
-                        : deviceData.status === "NG"
-                          ? "bg-red-100 text-red-700 border-red-200"
-                          : "bg-gray-100 text-gray-600 border-gray-200"
-                    }`}
+                    ${deviceData.status === "Pass"
+                    ? "border-green-200 bg-green-100 text-green-700"
+                    : deviceData.status === "NG"
+                      ? "bg-red-100 text-red-700 border-red-200"
+                      : "bg-gray-100 text-gray-600 border-gray-200"
+                  }`}
               >
                 {deviceData.status || "Unknown"}
               </span>
@@ -408,17 +407,16 @@ export default function NGDeviceDetails({
                     const isAlreadyResolved = statusText === "resolved";
                     const canMarkResolved = !(isQCResolved || isAlreadyResolved || hasQCResolvedHistory) && !isResolving;
                     return (
-                    <button
-                      onClick={() => setIsResolveModalOpen(true)}
-                      className={`inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold focus:outline-none focus:ring-2 ${
-                        canMarkResolved
-                          ? "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-400"
-                          : "bg-gray-300 text-gray-600 cursor-not-allowed"
-                      }`}
-                      disabled={!canMarkResolved}
-                    >
-                      Mark as Resolved
-                    </button>
+                      <button
+                        onClick={() => setIsResolveModalOpen(true)}
+                        className={`inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold focus:outline-none focus:ring-2 ${canMarkResolved
+                            ? "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-400"
+                            : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                          }`}
+                        disabled={!canMarkResolved}
+                      >
+                        Mark as Resolved
+                      </button>
                     )
                   })()}
                 </div>
@@ -467,7 +465,7 @@ export default function NGDeviceDetails({
                             {item.stepName || `Step ${idx + 1}`}
                             {item.stageName &&
                               item.stageName !==
-                                (item.stepName || `Step ${idx + 1}`) && (
+                              (item.stepName || `Step ${idx + 1}`) && (
                                 <span className="text-gray-500 ml-2 text-xs">
                                   Stage: {item.stageName}
                                 </span>
@@ -481,13 +479,12 @@ export default function NGDeviceDetails({
                         <div className="mb-3 flex items-center gap-2">
                           <span
                             className={`rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide
-                                      ${
-                                        isPass
-                                          ? "border-green-200 bg-green-50 text-green-700"
-                                          : isNG
-                                            ? "bg-red-50 text-red-700 border-red-200"
-                                            : "bg-gray-100 text-gray-600 border-gray-200"
-                                      }`}
+                                      ${isPass
+                                ? "border-green-200 bg-green-50 text-green-700"
+                                : isNG
+                                  ? "bg-red-50 text-red-700 border-red-200"
+                                  : "bg-gray-100 text-gray-600 border-gray-200"
+                              }`}
                           >
                             {item.status || "INFO"}
                           </span>

@@ -255,7 +255,7 @@ const AddProduct = () => {
         }
 
         // Custom Fields Validation
-        if (subStep.stepFields.actionType === "Custom Fields") {
+        if (subStep.stepType === "manual") {
           if (!subStep.customFields || subStep.customFields.length === 0) {
             toast.error(`At least one Custom Field is required for Stage ${stageIndex + 1}, Step ${subStepIndex + 1}`);
             isValid = false;
@@ -927,7 +927,7 @@ const AddProduct = () => {
   return (
     <>
       <Breadcrumb parentName="Product Management" pageName="Add Product" />
-      <div className="grid grid-cols-1 bg-white shadow-lg dark:bg-boxdark sm:grid-cols-1">
+      <div className="grid grid-cols-1 bg-white shadow-lg dark:bg-boxdark sm:grid-cols-1 pb-24">
         <ToastContainer
           position="top-center"
           closeOnClick
@@ -1343,16 +1343,16 @@ const AddProduct = () => {
                                                                     Store to DB
                                                                   </option>
                                                                   <option
-                                                                    value="Custom Fields"
-                                                                    className="text-body dark:text-bodydark"
-                                                                  >
-                                                                    Custom Fields
-                                                                  </option>
-                                                                </select>
-                                                              </div>
-                                                              {subStep.stepFields.actionType ===
-                                                                "Command" && (
-                                                                  <div>
+                                                                  value="Store to DB"
+                                                                  className="text-body dark:text-bodydark"
+                                                                >
+                                                                  Store to DB
+                                                                </option>
+                                                              </select>
+                                                            </div>
+                                                            {subStep.stepFields.actionType ===
+                                                              "Command" && (
+                                                              <div>
                                                                     <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
                                                                       Command
                                                                     </label>
@@ -1756,13 +1756,12 @@ const AddProduct = () => {
                                                         </div>
                                                       )}
                                                       {subStep.isSubExpand &&
-                                                        subStep.stepFields.actionType ===
-                                                        "Custom Fields" && (
-                                                          <>
-                                                            {subStep?.customFields?.map(
-                                                              (customField: CustomField, customIndex: number) => (
-                                                                <div
-                                                                  key={customIndex}
+                                                        subStep.stepType === "manual" && (
+                                                        <>
+                                                          {subStep?.customFields?.map(
+                                                            (customField: CustomField, customIndex: number) => (
+                                                              <div
+                                                                key={customIndex}
                                                                   className="mb-6 mt-4 overflow-hidden rounded-xl border border-primary/20 bg-primary/[0.02] shadow-sm transition-all duration-300 hover:shadow-md dark:border-strokedark dark:bg-meta-4/10"
                                                                 >
                                                                   <div className="flex items-center justify-between border-b border-primary/10 bg-primary/5 px-5 py-3 dark:border-strokedark dark:bg-meta-4/20">
@@ -2009,8 +2008,8 @@ const AddProduct = () => {
                                                                 </div>
                                                               )
                                                             )}
-                                                          </>
-                                                        )}
+                                                        </>
+                                                      )}
 
                                                       {subStep.stepType == "jig" && (
                                                         <>
@@ -2275,40 +2274,40 @@ const AddProduct = () => {
                                                           )}
                                                         </>
                                                       )}
+
                                                       <div className="col-span-12 flex justify-end gap-3">
                                                         {subStep.isSubExpand &&
                                                           subStep.stepType == "jig" && (
-                                                            <button
-                                                              type="button"
-                                                              className="mt-4 flex items-center text-blue-500"
-                                                              onClick={() =>
-                                                                handleAddJig(index, subIndex)
-                                                              }
-                                                            >
-                                                              <FontAwesomeIcon
-                                                                icon={faPlus}
-                                                                className="mr-2"
-                                                              />
-                                                              Add Jig Fields
-                                                            </button>
-                                                          )}
+                                                          <button
+                                                            type="button"
+                                                            className="mt-4 flex items-center text-blue-500"
+                                                            onClick={() =>
+                                                              handleAddJig(index, subIndex)
+                                                            }
+                                                          >
+                                                            <FontAwesomeIcon
+                                                              icon={faPlus}
+                                                              className="mr-2"
+                                                            />
+                                                            Add Jig Fields
+                                                          </button>
+                                                        )}
                                                         {subStep.isSubExpand &&
-                                                          subStep.stepFields.actionType ===
-                                                          "Custom Fields" && (
-                                                            <button
-                                                              type="button"
-                                                              className="mt-4 flex items-center text-blue-500"
-                                                              onClick={() =>
-                                                                handleAddCustomField(index, subIndex)
-                                                              }
-                                                            >
-                                                              <FontAwesomeIcon
-                                                                icon={faPlus}
-                                                                className="mr-2"
-                                                              />
-                                                              Add Custom Fields
-                                                            </button>
-                                                          )}
+                                                          subStep.stepType === "manual" && (
+                                                          <button
+                                                            type="button"
+                                                            className="mt-4 flex items-center text-blue-500"
+                                                            onClick={() =>
+                                                              handleAddCustomField(index, subIndex)
+                                                            }
+                                                          >
+                                                            <FontAwesomeIcon
+                                                              icon={faPlus}
+                                                              className="mr-2"
+                                                            />
+                                                            Add Custom Field
+                                                          </button>
+                                                        )}
                                                         <button
                                                           type="button"
                                                           className="mt-4 flex items-center text-danger"
@@ -2467,38 +2466,47 @@ const AddProduct = () => {
                     </div>
                   ))}
                 </div>
-                <div className="col-span-12 flex justify-end gap-5">
-                  {history.length > 0 && (
-                    <button
-                      type="button"
-                      className="mt-4 flex items-center rounded-md bg-[#0FADCF] px-4 py-2 text-white transition-all hover:bg-[#0FADCF] active:scale-95"
-                      onClick={handleUndo}
-                    >
-                      <FontAwesomeIcon icon={faRotateLeft} className="mr-2" />
-                      Undo ({history.length})
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className={`mt-4 flex items-center gap-2 rounded-md px-4 py-2 text-white ${submitDisabled
-                      ? "cursor-not-allowed bg-[#34D399]/70"
-                      : "bg-[#34D399]"
-                      }`}
-                    onClick={submitStageForm}
-                    disabled={submitDisabled}
-                  >
-                    {submitDisabled ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Submitting...
-                      </>
-                    ) : (
-                      <>Submit</>
-                    )}
-                  </button>
-                </div>
+                
               </div>
             </form>
+          </div>
+        </div>
+      </div>
+      <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-white/90 backdrop-blur">
+        <div className="mx-auto max-w-screen-xl px-6 py-3">
+          <div className="flex justify-end gap-3">
+            {history.length > 0 && (
+              <button
+                type="button"
+                className="inline-flex items-center rounded-md bg-[#0FADCF] px-4 py-2 text-white transition-all hover:bg-[#0EAAC9] active:scale-95"
+                onClick={handleUndo}
+              >
+                <FontAwesomeIcon icon={faRotateLeft} className="mr-2" />
+                Undo ({history.length})
+              </button>
+            )}
+            <button
+              type="button"
+              className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-white ${submitDisabled ? "cursor-not-allowed bg-[#34D399]/70" : "bg-[#34D399]"}`}
+              onClick={submitStageForm}
+              disabled={submitDisabled}
+            >
+              {submitDisabled ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                <>Submit</>
+              )}
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-white"
+              onClick={openModal}
+            >
+              Clone
+            </button>
           </div>
         </div>
       </div>

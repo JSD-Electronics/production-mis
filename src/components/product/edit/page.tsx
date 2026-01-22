@@ -1003,7 +1003,7 @@ const EditProduct = () => {
   return (
     <>
       <Breadcrumb parentName="Product Management" pageName="Edit Product" />
-      <div className="mt-4 grid grid-cols-1 bg-white shadow-lg dark:bg-boxdark sm:grid-cols-1">
+      <div className="mt-4 grid grid-cols-1 bg-white shadow-lg dark:bg-boxdark sm:grid-cols-1 pb-24">
         <ToastContainer
           position="top-center"
           closeOnClick
@@ -1452,12 +1452,6 @@ const EditProduct = () => {
                                                             >
                                                               Store to DB
                                                             </option>
-                                                            <option
-                                                              value="Custom Fields"
-                                                              className="text-body dark:text-bodydark"
-                                                            >
-                                                              Custom Fields
-                                                            </option>
                                                           </select>
                                                         </div>
                                                         {subStep.stepFields.actionType ===
@@ -1485,108 +1479,110 @@ const EditProduct = () => {
                                                       </>
                                                     )}
 
-                                                    {/* Validation (only for manual) */}
+                                                    {/* Manual Validation (no Action Type) */}
                                                     {subStep.stepType == "manual" && (
-                                                      <>
-                                                        <div>
-                                                          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                            Validation Type
-                                                          </label>
-                                                          <select
-                                                            value={
-                                                              subStep.stepFields.validationType
-                                                            }
-                                                            onChange={(e) =>
-                                                              handleValidationTypeChange(
-                                                                index,
-                                                                subIndex,
-                                                                e,
-                                                              )
-                                                            }
-                                                            className={`relative z-20 w-full appearance-none rounded rounded-lg border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
-                                                          >
-                                                            <option
-                                                              value="value"
-                                                              className="text-body dark:text-bodydark"
+                                                      <div>
+                                                        <>
+                                                          <div>
+                                                            <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                              Validation Type
+                                                            </label>
+                                                            <select
+                                                              value={
+                                                                subStep.stepFields.validationType
+                                                              }
+                                                              onChange={(e) =>
+                                                                handleValidationTypeChange(
+                                                                  index,
+                                                                  subIndex,
+                                                                  e,
+                                                                )
+                                                              }
+                                                              className={`relative z-20 w-full appearance-none rounded rounded-lg border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
                                                             >
-                                                              Value
-                                                            </option>
-                                                            <option
-                                                              value="range"
-                                                              className="text-body dark:text-bodydark"
-                                                            >
-                                                              Range
-                                                            </option>
-                                                          </select>
-                                                        </div>
-                                                        {subStep.stepFields.validationType ===
-                                                          "value" && (
-                                                            <>
-                                                              <div>
-                                                                <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                  Validation Value
-                                                                </label>
-                                                                <input
-                                                                  type="text"
-                                                                  value={subStep.stepFields.value}
-                                                                  onChange={(e) =>
-                                                                    handleSubStepFieldChange(
-                                                                      index,
-                                                                      subIndex,
-                                                                      e,
-                                                                      "value",
-                                                                    )
-                                                                  }
-                                                                  placeholder={`Validation Value`}
-                                                                  className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                />
-                                                              </div>
-                                                            </>
-                                                          )}
-                                                        {subStep.stepFields.validationType ===
-                                                          "range" && (
-                                                            <>
-                                                              <div>
-                                                                <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                  Range From
-                                                                </label>
-                                                                <input
-                                                                  type="number"
-                                                                  value={subStep.stepFields.rangeFrom}
-                                                                  onChange={(e) =>
-                                                                    handleSubStepFieldChange(
-                                                                      index,
-                                                                      subIndex,
-                                                                      e,
-                                                                      "rangeFrom",
-                                                                    )
-                                                                  }
-                                                                  placeholder={`min`}
-                                                                  className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                />
-                                                              </div>
-                                                              <div>
-                                                                <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                  Range To
-                                                                </label>
-                                                                <input
-                                                                  type="number"
-                                                                  value={subStep.stepFields.rangeTo}
-                                                                  onChange={(e) =>
-                                                                    handleSubStepFieldChange(
-                                                                      index,
-                                                                      subIndex,
-                                                                      e,
-                                                                      "rangeTo",
-                                                                    )
-                                                                  }
-                                                                  placeholder={`max`}
-                                                                  className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                />
-                                                              </div>
-                                                            </>
-                                                          )}
-                                                      </>
+                                                              <option
+                                                                value="value"
+                                                                className="text-body dark:text-bodydark"
+                                                              >
+                                                                Value
+                                                              </option>
+                                                              <option
+                                                                value="range"
+                                                                className="text-body dark:text-bodydark"
+                                                              >
+                                                                Range
+                                                              </option>
+                                                            </select>
+                                                          </div>
+                                                          {subStep.stepFields.validationType ===
+                                                            "value" && (
+                                                              <>
+                                                                <div>
+                                                                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                    Validation Value
+                                                                  </label>
+                                                                  <input
+                                                                    type="text"
+                                                                    value={subStep.stepFields.value}
+                                                                    onChange={(e) =>
+                                                                      handleSubStepFieldChange(
+                                                                        index,
+                                                                        subIndex,
+                                                                        e,
+                                                                        "value",
+                                                                      )
+                                                                    }
+                                                                    placeholder={`Validation Value`}
+                                                                    className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                  />
+                                                                </div>
+                                                              </>
+                                                            )}
+                                                          {subStep.stepFields.validationType ===
+                                                            "range" && (
+                                                              <>
+                                                                <div>
+                                                                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                    Range From
+                                                                  </label>
+                                                                  <input
+                                                                    type="number"
+                                                                    value={subStep.stepFields.rangeFrom}
+                                                                    onChange={(e) =>
+                                                                      handleSubStepFieldChange(
+                                                                        index,
+                                                                        subIndex,
+                                                                        e,
+                                                                        "rangeFrom",
+                                                                      )
+                                                                    }
+                                                                    placeholder={`min`}
+                                                                    className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                  />
+                                                                </div>
+                                                                <div>
+                                                                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                    Range To
+                                                                  </label>
+                                                                  <input
+                                                                    type="number"
+                                                                    value={subStep.stepFields.rangeTo}
+                                                                    onChange={(e) =>
+                                                                      handleSubStepFieldChange(
+                                                                        index,
+                                                                        subIndex,
+                                                                        e,
+                                                                        "rangeTo",
+                                                                      )
+                                                                    }
+                                                                    placeholder={`max`}
+                                                                    className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                  />
+                                                                </div>
+                                                              </>
+                                                            )}
+                                                        </>
+                                                      </div>
                                                     )}
 
                                                     {/* Packaging Stage */}
@@ -1835,12 +1831,11 @@ const EditProduct = () => {
                                                   )}
 
                                                 {subStep.isSubExpand &&
-                                                  subStep.stepFields.actionType ===
-                                                  "Custom Fields" && (
-                                                    <div className="mt-6 space-y-4">
-                                                      <h6 className="text-gray-900 border-l-4 border-blue-500 pl-3 text-sm font-bold dark:text-white uppercase tracking-wider">
-                                                        Custom Fields Configuration
-                                                      </h6>
+                                                  subStep.stepType === "manual" && (
+                                                  <div className="mt-6 space-y-4">
+                                                    <h6 className="text-gray-900 border-l-4 border-blue-500 pl-3 text-sm font-bold dark:text-white uppercase tracking-wider">
+                                                      Custom Fields Configuration
+                                                    </h6>
 
                                                       {subStep?.customFields?.map(
                                                         (customField: CustomField, customIndex: number) => (
@@ -2362,22 +2357,21 @@ const EditProduct = () => {
                                                     </button>
                                                   )}
                                                   {subStep.isSubExpand &&
-                                                    subStep.stepFields.actionType ===
-                                                    "Custom Fields" && (
-                                                      <button
-                                                        type="button"
-                                                        className="mt-4 flex items-center text-blue-500 font-semibold"
-                                                        onClick={() =>
-                                                          handleAddCustomField(index, subIndex)
-                                                        }
-                                                      >
-                                                        <FontAwesomeIcon
-                                                          icon={faPlus}
-                                                          className="mr-2"
-                                                        />
-                                                        Add Custom Field
-                                                      </button>
-                                                    )}
+                                                    subStep.stepType === "manual" && (
+                                                    <button
+                                                      type="button"
+                                                      className="mt-4 flex items-center text-blue-500 font-semibold"
+                                                      onClick={() =>
+                                                        handleAddCustomField(index, subIndex)
+                                                      }
+                                                    >
+                                                      <FontAwesomeIcon
+                                                        icon={faPlus}
+                                                        className="mr-2"
+                                                      />
+                                                      Add Custom Field
+                                                    </button>
+                                                  )}
                                                   <button
                                                     type="button"
                                                     className="mt-4 flex items-center text-danger"
@@ -2527,34 +2521,6 @@ const EditProduct = () => {
                   </div>
                 </div>
               ))}
-              <div className="col-span-12 flex justify-end gap-5">
-                {history.length > 0 && (
-                  <button
-                    type="button"
-                    className="mt-4 flex items-center rounded-md bg-[#0FADCF] px-4 py-2 text-white transition-all hover:bg-[#0FADCF] active:scale-95"
-                    onClick={handleUndo}
-                  >
-                    <FontAwesomeIcon icon={faRotateLeft} className="mr-2" />
-                    Undo ({history.length})
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="mt-4 flex items-center rounded-md bg-[#34D399] px-4 py-2 text-white"
-                  onClick={submitStageForm}
-                  disabled={submitDisabled}
-                >
-                  {submitDisabled ? "Updating..." : "Update"}
-                </button>
-                <button
-                  type="button"
-                  className="mt-4 flex items-center rounded-md bg-primary px-4 py-2 text-white"
-                  onClick={handleFetchProcesses}
-                  disabled={isProcessLoading}
-                >
-                  {isProcessLoading ? "Loading..." : "Clone"}
-                </button>
-              </div>
               <CloneProcessModal
                 isOpen={isCloneModalOpen}
                 onClose={() => setIsCloneModalOpen(false)}
@@ -2565,6 +2531,38 @@ const EditProduct = () => {
             </div>
           </div>
         </form>
+      </div>
+      <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-white/90 backdrop-blur">
+        <div className="mx-auto max-w-screen-xl px-6 py-3">
+          <div className="flex justify-end gap-3">
+            {history.length > 0 && (
+              <button
+                type="button"
+                className="inline-flex items-center rounded-md bg-[#0FADCF] px-4 py-2 text-white transition-all hover:bg-[#0EAAC9] active:scale-95"
+                onClick={handleUndo}
+              >
+                <FontAwesomeIcon icon={faRotateLeft} className="mr-2" />
+                Undo ({history.length})
+              </button>
+            )}
+            <button
+              type="button"
+              className="inline-flex items-center rounded-md bg-[#34D399] px-4 py-2 text-white"
+              onClick={submitStageForm}
+              disabled={submitDisabled}
+            >
+              {submitDisabled ? "Updating..." : "Update"}
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-white"
+              onClick={handleFetchProcesses}
+              disabled={isProcessLoading}
+            >
+              {isProcessLoading ? "Loading..." : "Clone"}
+            </button>
+          </div>
+        </div>
       </div>
     </>
   );
