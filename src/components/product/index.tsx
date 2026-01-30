@@ -88,7 +88,14 @@ const AddProduct = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [stepType, setStepType] = useState("");
   const [stickerFields, setStickerFields] = useState<any[]>([]);
-  const [stickerData, setStickerData] = useState<any[]>([]);
+  const [stickerData, setStickerData] = useState<any[]>([{
+    serial_no: "SN-2024-0001",
+    imei_no: "358123456789012",
+    model_name: "X-Series Device",
+    batch_no: "BATCH-A1",
+    model: "X100",
+    date: new Date().toLocaleDateString()
+  }]);
   const [skillData, setSkillFieldData] = useState<any[]>([]);
   const [newSkill, setNewSkill] = useState("");
   const [userType, setUserType] = useState<any[]>([]);
@@ -411,17 +418,6 @@ const AddProduct = () => {
     ]);
   };
   const submitStageForm = async () => {
-    // Add stickerData into the printerFields.fields array safely
-    // stages.forEach((stage) => {
-    //   stage.subSteps.forEach((subStep) => {
-    //     if (subStep.isPrinterEnable) {
-    //       subStep.printerFields.forEach((printerField) => {
-    //         printerField.dimensions = stickerDimensions;
-    //         printerField.fields = [...stickerData];
-    //       });
-    //     }
-    //   });
-    // });
     if (validateForm()) {
       setSubmitDisabled(true);
       const formData = new FormData();
@@ -1343,16 +1339,16 @@ const AddProduct = () => {
                                                                     Store to DB
                                                                   </option>
                                                                   <option
-                                                                  value="Store to DB"
-                                                                  className="text-body dark:text-bodydark"
-                                                                >
-                                                                  Store to DB
-                                                                </option>
-                                                              </select>
-                                                            </div>
-                                                            {subStep.stepFields.actionType ===
-                                                              "Command" && (
-                                                              <div>
+                                                                    value="Store to DB"
+                                                                    className="text-body dark:text-bodydark"
+                                                                  >
+                                                                    Store to DB
+                                                                  </option>
+                                                                </select>
+                                                              </div>
+                                                              {subStep.stepFields.actionType ===
+                                                                "Command" && (
+                                                                  <div>
                                                                     <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
                                                                       Command
                                                                     </label>
@@ -1498,58 +1494,55 @@ const AddProduct = () => {
                                                           )}
                                                         </div>
 
-                                                        {/* Checkboxes */}
-                                                        <div className="mt-6 flex flex-wrap gap-6">
-                                                          <label className="text-gray-700 dark:text-gray-300 flex items-center gap-2 text-sm">
+                                                        <div className="flex gap-9">
+                                                          <div className="mt-6.5 flex items-center space-x-2">
                                                             <input
                                                               type="checkbox"
-                                                              checked={
-                                                                subStep?.isPrinterEnable || false
-                                                              }
-                                                              onChange={(e) =>
+                                                              checked={subStep?.isPrinterEnable || false}
+                                                              onChange={() =>
                                                                 handleCheckboxPrinter(
                                                                   index,
                                                                   subIndex,
                                                                 )
                                                               }
-                                                              className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 h-4 w-4 rounded text-primary focus:ring-primary"
+                                                              className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
                                                             />
-                                                            Enable Printing
-                                                          </label>
-
-                                                          <label className="text-gray-700 dark:text-gray-300 flex items-center gap-2 text-sm">
+                                                            <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                                                              Enable Printing Option
+                                                            </label>
+                                                          </div>
+                                                          <div className="mt-6.5 flex items-center space-x-2">
                                                             <input
                                                               type="checkbox"
-                                                              checked={
-                                                                subStep?.isCheckboxNGStatus || false
-                                                              }
-                                                              onChange={(e) =>
+                                                              checked={subStep?.isCheckboxNGStatus || false}
+                                                              onChange={() =>
                                                                 handleCheckboxNGStatus(
                                                                   index,
                                                                   subIndex,
                                                                 )
                                                               }
-                                                              className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 h-4 w-4 rounded text-primary focus:ring-primary"
+                                                              className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
                                                             />
-                                                            Mark as NG
-                                                          </label>
-
-                                                          <label className="text-gray-700 dark:text-gray-300 flex items-center gap-2 text-sm">
+                                                            <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                                                              Mark As NG
+                                                            </label>
+                                                          </div>
+                                                          <div className="mt-6.5 flex items-center space-x-2">
                                                             <input
                                                               type="checkbox"
-                                                              checked={
-                                                                subStep?.isPackagingStatus || false
-                                                              }
-                                                              onChange={(e) =>
+                                                              checked={subStep?.isPackagingStatus || false}
+                                                              onChange={() =>
                                                                 handlePackagingStatus(
                                                                   index,
                                                                   subIndex,
                                                                 )
                                                               }
-                                                              className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 h-4 w-4 rounded text-primary focus:ring-primary"
+                                                              className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
                                                             />
-                                                            Packaging Stage
-                                                          </label>
+                                                            <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                                                              Packaging Stage
+                                                            </label>
+                                                          </div>
                                                         </div>
                                                       </div>
                                                       {subStep?.isPackagingStatus &&
@@ -1731,37 +1724,34 @@ const AddProduct = () => {
                                                           </div>
                                                         </div>
                                                       )}
-                                                      {subStep?.isPrinterEnable && (
-                                                        <div className="mt-6.5 rounded-lg border border-[#eee] px-3">
-                                                          {subStep.printerFields?.map(
-                                                            (field: any, fieldIndex: number) => (
-                                                              <div key={fieldIndex}>
-                                                                <PrintTableComponent
-                                                                  stages={stages}
-                                                                  setStages={setStages}
-                                                                  stickerFields={stickerFields}
-                                                                  stickerDimensions={stickerDimensions}
-                                                                  setStickerDimensions={
-                                                                    setStickerDimensions
-                                                                  }
-                                                                  index={index}
-                                                                  subIndex1={subIndex}
-                                                                  fieldIndex={fieldIndex}
-                                                                  stickerData={stickerData}
-                                                                  setStickerData={setStickerData}
-                                                                />
-                                                              </div>
-                                                            ),
-                                                          )}
-                                                        </div>
-                                                      )}
+                                                      {subStep?.isPrinterEnable &&
+                                                        subStep?.printerFields?.map(
+                                                          (field: any, fieldIndex: number) => (
+                                                            <div key={fieldIndex}>
+                                                              <PrintTableComponent
+                                                                stages={stages}
+                                                                setStages={setStages}
+                                                                stickerFields={stickerFields}
+                                                                stickerDimensions={field.dimensions}
+                                                                setStickerDimensions={
+                                                                  setStickerDimensions
+                                                                }
+                                                                index={index}
+                                                                subIndex1={subIndex}
+                                                                fieldIndex={fieldIndex}
+                                                                stickerData={stickerData}
+                                                                setStickerData={setStickerData}
+                                                              />
+                                                            </div>
+                                                          ),
+                                                        )}
                                                       {subStep.isSubExpand &&
                                                         subStep.stepType === "manual" && (
-                                                        <>
-                                                          {subStep?.customFields?.map(
-                                                            (customField: CustomField, customIndex: number) => (
-                                                              <div
-                                                                key={customIndex}
+                                                          <>
+                                                            {subStep?.customFields?.map(
+                                                              (customField: CustomField, customIndex: number) => (
+                                                                <div
+                                                                  key={customIndex}
                                                                   className="mb-6 mt-4 overflow-hidden rounded-xl border border-primary/20 bg-primary/[0.02] shadow-sm transition-all duration-300 hover:shadow-md dark:border-strokedark dark:bg-meta-4/10"
                                                                 >
                                                                   <div className="flex items-center justify-between border-b border-primary/10 bg-primary/5 px-5 py-3 dark:border-strokedark dark:bg-meta-4/20">
@@ -2008,8 +1998,8 @@ const AddProduct = () => {
                                                                 </div>
                                                               )
                                                             )}
-                                                        </>
-                                                      )}
+                                                          </>
+                                                        )}
 
                                                       {subStep.stepType == "jig" && (
                                                         <>
@@ -2278,36 +2268,36 @@ const AddProduct = () => {
                                                       <div className="col-span-12 flex justify-end gap-3">
                                                         {subStep.isSubExpand &&
                                                           subStep.stepType == "jig" && (
-                                                          <button
-                                                            type="button"
-                                                            className="mt-4 flex items-center text-blue-500"
-                                                            onClick={() =>
-                                                              handleAddJig(index, subIndex)
-                                                            }
-                                                          >
-                                                            <FontAwesomeIcon
-                                                              icon={faPlus}
-                                                              className="mr-2"
-                                                            />
-                                                            Add Jig Fields
-                                                          </button>
-                                                        )}
+                                                            <button
+                                                              type="button"
+                                                              className="mt-4 flex items-center text-blue-500"
+                                                              onClick={() =>
+                                                                handleAddJig(index, subIndex)
+                                                              }
+                                                            >
+                                                              <FontAwesomeIcon
+                                                                icon={faPlus}
+                                                                className="mr-2"
+                                                              />
+                                                              Add Jig Fields
+                                                            </button>
+                                                          )}
                                                         {subStep.isSubExpand &&
                                                           subStep.stepType === "manual" && (
-                                                          <button
-                                                            type="button"
-                                                            className="mt-4 flex items-center text-blue-500"
-                                                            onClick={() =>
-                                                              handleAddCustomField(index, subIndex)
-                                                            }
-                                                          >
-                                                            <FontAwesomeIcon
-                                                              icon={faPlus}
-                                                              className="mr-2"
-                                                            />
-                                                            Add Custom Field
-                                                          </button>
-                                                        )}
+                                                            <button
+                                                              type="button"
+                                                              className="mt-4 flex items-center text-blue-500"
+                                                              onClick={() =>
+                                                                handleAddCustomField(index, subIndex)
+                                                              }
+                                                            >
+                                                              <FontAwesomeIcon
+                                                                icon={faPlus}
+                                                                className="mr-2"
+                                                              />
+                                                              Add Custom Field
+                                                            </button>
+                                                          )}
                                                         <button
                                                           type="button"
                                                           className="mt-4 flex items-center text-danger"
@@ -2466,7 +2456,7 @@ const AddProduct = () => {
                     </div>
                   ))}
                 </div>
-                
+
               </div>
             </form>
           </div>

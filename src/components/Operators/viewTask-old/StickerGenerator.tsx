@@ -1,6 +1,7 @@
 import React from "react";
 import Barcode from "react-barcode";
 import { QRCodeCanvas } from "qrcode.react";
+
 const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; deviceData: any }) => {
   const width = stickerData?.dimensions?.width || stickerData?.cartonWidth || 300;
   const height = stickerData?.dimensions?.height || stickerData?.cartonHeight || 150;
@@ -18,111 +19,124 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
 
   return (
     <div
-      className="border-gray-300 relative border bg-white"
+      className="actual-sticker-container bg-white"
+      data-sticker-width={width}
+      data-sticker-height={height}
       style={{
         width: `${width}px`,
         height: `${height}px`,
         position: "relative",
         backgroundColor: "#ffffff",
+        margin: "0",
+        padding: "0",
+        boxSizing: "border-box",
+        overflow: "hidden",
+        fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+        color: "black",
       }}
     >
       {stickerData?.fields?.map((field: any) => {
-        const formattedKey = toCamelCase(field.slug);
-        const fieldValue = deviceData[0]?.[formattedKey];
+        const formattedKey = field.slug ? toCamelCase(field.slug) : "";
+        const device = (deviceData && deviceData.length > 0) ? deviceData[0] : null;
+        let fieldValue = (formattedKey && device) ? device[formattedKey] : undefined;
+
+        // Custom Fields Lookup
+        const customFields = device?.customFields || device?.custom_fields || device?.customfields;
+        if (field.slug !== "serial_no" && !fieldValue && customFields) {
+          let customFieldsObj = customFields;
+          if (typeof customFieldsObj === "string") {
+            try {
+              customFieldsObj = JSON.parse(customFieldsObj);
+            } catch (e) {
+              customFieldsObj = null;
+            }
+          }
+
+          if (customFieldsObj) {
+            const slug = (field.slug || "").toLowerCase();
+            const displayName = (field.name || "").toLowerCase();
+            const keys = Object.keys(customFieldsObj);
+            const normalize = (s: any) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+            const foundKey = keys.find(k => {
+              const kLower = k.toLowerCase();
+              return kLower === slug ||
+                kLower === displayName ||
+                normalize(k) === normalize(slug) ||
+                normalize(k) === normalize(displayName);
+            });
+
+            if (foundKey) {
+              fieldValue = customFieldsObj[foundKey];
+            } else {
+              fieldValue = customFieldsObj[formattedKey] ||
+                customFieldsObj[formattedKey.charAt(0).toUpperCase() + formattedKey.slice(1)];
+            }
+          }
+        }
+
+        const align = field.styles?.textAlign || "center";
+        const fontSize = parseInt(String(field.styles?.fontSize || 14), 10);
 
         return (
           <div
             key={field._id}
-            className="absolute flex items-center justify-center whitespace-nowrap text-center"
+            className="absolute flex items-center"
             style={{
               top: `${field.y}px`,
               left: `${field.x}px`,
               width: `${field.width || 100}px`,
               height: `${field.height || 30}px`,
-              fontSize: `${field.styles?.fontSize || 14}px`,
-              fontWeight: field.styles?.fontWeight || "normal",
-              fontStyle: field.styles?.fontStyle || "normal",
-              color: field.styles?.color || "black",
-              border: field.type === "text" ? "none" : "1px dashed #ddd", // ✅ No border for text
-              background: "transparent",
-              padding: "2px",
-              borderRadius: "4px",
+              justifyContent: align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center",
+              padding: "0 2px",
+              boxSizing: "border-box",
+              // REMOVED: overflow: "hidden" - this was cutting off the text
+              zIndex: 10,
             }}
           >
             {field.type === "barcode" ? (
-              <div
-                style={{
-                  width:
-                    typeof field.width === "number"
-                      ? `${field.width}px`
-                      : `${parseInt(String(field.width || 100), 10)}px`,
-                  height:
-                    typeof field.height === "number"
-                      ? `${field.height}px`
-                      : `${parseInt(String(field.height || 40), 10)}px`,
-                  overflow: "hidden", // Prevent barcode from overlapping other fields
-                }}
-              >
+              <div className="flex w-full h-full items-center justify-center">
                 <Barcode
-                  value={fieldValue || "000000000000"}
+                  value={String(fieldValue || "000000000000")}
                   renderer="svg"
-                  width={
-                    typeof field.barWidth === "number"
-                      ? field.barWidth
-                      : Math.max(
-                        1, // Changed from 3 to 1 to allow smaller barcodes
-                        Math.floor(
-                          (typeof field.width === "number"
-                            ? field.width
-                            : parseInt(String(field.width || 100), 10)) / 100, // Adjusted divisor from 180 to 100
-                        ),
-                      )
-                  }
-                  height={
-                    typeof field.barHeight === "number"
-                      ? field.barHeight
-                      : (typeof field.height === "number"
-                        ? field.height
-                        : parseInt(String(field.height || 40), 10)) - 10 // Increased spacing for text
-                  }
+                  width={field.barWidth || 1}
+                  height={(field.height || 40) - 15}
                   displayValue={true}
-                  fontSize={10} // Slightly smaller font
-                  background="#ffffff"
-                  lineColor="#000000"
-                  margin={0} // Removed margin (was 12) to prevent horizontal overflow
-                  svgRef={(node: SVGSVGElement | null) => {
-                    if (node) {
-                      try {
-                        node.setAttribute("preserveAspectRatio", "xMidYMid meet"); // Standard value to maintain aspect ratio and fit
-                        const w =
-                          typeof field.width === "number"
-                            ? field.width
-                            : parseInt(String(field.width || 100), 10);
-                        const h =
-                          typeof field.height === "number"
-                            ? field.height
-                            : parseInt(String(field.height || 40), 10);
-                        node.setAttribute("width", String(w));
-                        node.setAttribute("height", String(h));
-                      } catch { }
-                    }
-                  }}
+                  fontSize={fontSize - 4 > 8 ? fontSize - 4 : 8}
+                  background="transparent"
+                  margin={0}
                 />
               </div>
             ) : field.type === "qrcode" ? (
               <QRCodeCanvas
-                value={fieldValue || "N/A"}
-                size={Math.min(
-                  typeof field.width === "number" ? field.width : parseInt(String(field.width || 80), 10),
-                  typeof field.height === "number" ? field.height : parseInt(String(field.height || 80), 10),
-                )}
-                bgColor="#ffffff"
-                fgColor="#000000"
+                value={String(fieldValue || "N/A")}
+                size={Math.min(field.width || 80, field.height || 80)}
+                bgColor="transparent"
+                fgColor={field.styles?.color || "#000000"}
                 level="H"
-                includeMargin={false}
+              />
+            ) : field.type === "image" ? (
+              <img
+                src={field.value}
+                alt="Logo"
+                style={{ width: "100%", height: "100%", objectFit: "contain" }}
               />
             ) : (
-              field.type === "text" && <span>{field.value}</span>
+              <span
+                style={{
+                  width: "100%",
+                  fontSize: `${fontSize}px`,
+                  fontWeight: field.styles?.fontWeight || "normal",
+                  color: field.styles?.color || "black",
+                  textAlign: align as any,
+                  // Increased line-height and removed clipping to ensure text is visible
+                  lineHeight: "1.4",
+                  display: "block",
+                  background: "transparent"
+                }}
+              >
+                {String(fieldValue || field.value || "")}
+              </span>
             )}
           </div>
         );
