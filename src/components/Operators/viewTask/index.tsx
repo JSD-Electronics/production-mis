@@ -175,7 +175,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           result.data.some((h: any) =>
             String(h?.status || "").toLowerCase().includes("qc resolved"),
           );
-          
+
         const alreadyReset = resetDeviceIds.includes(String(id));
         const firstStageName =
           processData?.stages?.[0]?.stageName || processData?.stages?.[0]?.name || "";
@@ -689,40 +689,53 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       toast.error("Carton sticker preview not found");
       return;
     }
+
+    const actualSticker = stickerElement.querySelector('[data-sticker-width]');
+    const widthPx = actualSticker ? parseInt(actualSticker.getAttribute('data-sticker-width') || '400') : 400;
+    const heightPx = actualSticker ? parseInt(actualSticker.getAttribute('data-sticker-height') || '250') : 250;
+
+    const stickerWidthMM = Math.round(widthPx * 0.264583) || 100;
+    const stickerHeightMM = Math.round(heightPx * 0.264583) || 60;
+
     html2canvas(stickerElement as HTMLElement, {
-      scale: window.devicePixelRatio,
+      scale: 3,
       useCORS: true,
+      backgroundColor: "#ffffff",
+      logging: false,
     }).then((canvas) => {
       const imageData = canvas.toDataURL("image/png");
 
-      const stickerWidthMM = 100; // Larger for carton
-      const stickerHeightMM = 60;
-
       const printWindow = window.open("", "_blank");
-      printWindow?.document.write(`
+      if (!printWindow) {
+        toast.error("Please allow popups to print stickers");
+        return;
+      }
+
+      printWindow.document.write(`
         <html>
           <head>
             <title>Print Carton Sticker</title>
             <style>
-              @media print {
-                @page {
-                  size: ${stickerWidthMM}mm ${stickerHeightMM}mm;
-                  margin: 0;
-                }
-                body {
-                  margin: 0;
-                  display: flex;
-                  justify-content: center;
-                  align-items: center;
-                  width: ${stickerWidthMM}mm;
-                  height: ${stickerHeightMM}mm;
-                  background-color: white;
-                }
-                img {
-                  width: ${stickerWidthMM}mm;
-                  height: ${stickerHeightMM}mm;
-                  object-fit: contain;
-                }
+              @page {
+                size: ${stickerWidthMM}mm ${stickerHeightMM}mm;
+                margin: 0;
+              }
+              body {
+                margin: 0;
+                padding: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                width: ${stickerWidthMM}mm;
+                height: ${stickerHeightMM}mm;
+                background-color: white;
+                -webkit-print-color-adjust: exact;
+              }
+              img {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+                display: block;
               }
             </style>
           </head>
@@ -741,7 +754,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           </body>
         </html>
       `);
-      printWindow?.document.close();
+      printWindow.document.close();
       setIsCartonBarCodePrinted(true);
     });
   };
@@ -763,62 +776,48 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     setIsReportIssueModal(true);
   };
   const handlePrintSticker = () => {
-    const stickerElement = document.getElementById("sticker-preview");
+    const stickerRoot = document.getElementById("sticker-preview");
     setIsVerifiedSticker(false);
-    if (!stickerElement) return;
-    html2canvas(stickerElement as HTMLElement, {
-      scale: window.devicePixelRatio,
+    if (!stickerRoot) return;
+
+    const stickerElement = (stickerRoot.querySelector('.actual-sticker-container') || stickerRoot) as HTMLElement;
+    const widthPx = parseInt(stickerElement.getAttribute('data-sticker-width') || '300');
+    const heightPx = parseInt(stickerElement.getAttribute('data-sticker-height') || '150');
+    const stickerWidthMM = Math.round(widthPx * 0.264583);
+    const stickerHeightMM = Math.round(heightPx * 0.264583);
+
+    html2canvas(stickerElement, {
+      scale: 3,
       useCORS: true,
+      backgroundColor: "#ffffff",
+      logging: false,
     }).then((canvas) => {
       const imageData = canvas.toDataURL("image/png");
-
-      const stickerWidthMM = 50;
-      const stickerHeightMM = 30;
-
       const printWindow = window.open("", "_blank");
-      printWindow?.document.write(`
+      if (!printWindow) {
+        toast.error("Please allow popups to print stickers");
+        return;
+      }
+      printWindow.document.write(`
         <html>
           <head>
-            <title>Print Sticker</title>
             <style>
-              @media print {
-                @page {
-                  size: ${stickerWidthMM}mm ${stickerHeightMM}mm;
-                  margin: 0;
-                }
-                body {
-                  margin: 0;
-                  display: flex;
-                  justify-content: center;
-                  align-items: center;
-                  width: ${stickerWidthMM}mm;
-                  height: ${stickerHeightMM}mm;
-                  background-color: white;
-                }
-                img {
-                  width: ${stickerWidthMM}mm;
-                  height: ${stickerHeightMM}mm;
-                  object-fit: contain;
-                }
-              }
+              @page { size: ${stickerWidthMM}mm ${stickerHeightMM}mm; margin: 0; }
+              body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; }
+              img { width: ${stickerWidthMM}mm; height: ${stickerHeightMM}mm; display: block; }
             </style>
           </head>
           <body>
-            <img src="${imageData}" alt="Sticker">
+            <img src="${imageData}">
             <script>
               window.onload = function() {
-                setTimeout(() => {
-                  window.print();
-                  window.onafterprint = function() {
-                    window.close();
-                  };
-                }, 500); // Small delay for proper rendering
+                setTimeout(() => { window.print(); window.close(); }, 300);
               };
             </script>
           </body>
         </html>
       `);
-      printWindow?.document.close();
+      printWindow.document.close();
     });
     setIsPassNGButtonShow(false);
     setIsStickerPrinted(!isStickerPrinted);

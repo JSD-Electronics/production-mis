@@ -91,7 +91,14 @@ const EditProduct = () => {
   const [submitDisabled, setSubmitDisabled] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [stickerFields, setStickerFields] = useState<any[]>([]);
-  const [stickerData, setStickerData] = useState<any[]>([]);
+  const [stickerData, setStickerData] = useState<any[]>([{
+    serial_no: "SN-2024-0001",
+    imei_no: "358123456789012",
+    model_name: "X-Series Device",
+    batch_no: "BATCH-A1",
+    model: "X100",
+    date: new Date().toLocaleDateString()
+  }]);
   const [skillData, setSkillFieldData] = useState<any[]>([]);
   const [userType, setUserType] = useState<any[]>([]);
   const [stickerDimensions, setStickerDimensions] = useState({
@@ -1832,10 +1839,10 @@ const EditProduct = () => {
 
                                                 {subStep.isSubExpand &&
                                                   subStep.stepType === "manual" && (
-                                                  <div className="mt-6 space-y-4">
-                                                    <h6 className="text-gray-900 border-l-4 border-blue-500 pl-3 text-sm font-bold dark:text-white uppercase tracking-wider">
+                                                    <div className="mt-6 space-y-4">
+                                                      {/* <h6 className="text-gray-900 border-l-4 border-blue-500 pl-3 text-sm font-bold dark:text-white uppercase tracking-wider">
                                                       Custom Fields Configuration
-                                                    </h6>
+                                                    </h6> */}
 
                                                       {subStep?.customFields?.map(
                                                         (customField: CustomField, customIndex: number) => (
@@ -2358,20 +2365,20 @@ const EditProduct = () => {
                                                   )}
                                                   {subStep.isSubExpand &&
                                                     subStep.stepType === "manual" && (
-                                                    <button
-                                                      type="button"
-                                                      className="mt-4 flex items-center text-blue-500 font-semibold"
-                                                      onClick={() =>
-                                                        handleAddCustomField(index, subIndex)
-                                                      }
-                                                    >
-                                                      <FontAwesomeIcon
-                                                        icon={faPlus}
-                                                        className="mr-2"
-                                                      />
-                                                      Add Custom Field
-                                                    </button>
-                                                  )}
+                                                      <button
+                                                        type="button"
+                                                        className="mt-4 flex items-center text-blue-500 font-semibold"
+                                                        onClick={() =>
+                                                          handleAddCustomField(index, subIndex)
+                                                        }
+                                                      >
+                                                        <FontAwesomeIcon
+                                                          icon={faPlus}
+                                                          className="mr-2"
+                                                        />
+                                                        Add Custom Field
+                                                      </button>
+                                                    )}
                                                   <button
                                                     type="button"
                                                     className="mt-4 flex items-center text-danger"

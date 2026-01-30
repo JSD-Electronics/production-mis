@@ -300,11 +300,31 @@ export default function DeviceTestComponent({
 
   const updateCustomFieldsDataIntoDB = async (values: Record<string, string>) => {
     try {
+      const targetSerial = searchResult || searchQuery;
+      if (!targetSerial) return;
+
       const formData = new FormData();
       formData.append("customFields", JSON.stringify(values));
-      await updateStageBySerialNo(searchQuery, formData);
+      await updateStageBySerialNo(targetSerial, formData);
+
+      // Update local state so that subsequent steps (like printing) see the new data
+      if (setDeviceList) {
+        setDeviceList((prev: any[]) =>
+          prev.map((d) => {
+            if (prev.length > 0 && d === prev[0]) {
+              console.log(`[DeviceTestComponent] Device Object Keys:`, Object.keys(d));
+            }
+            const dSerial = d.serialNo || d.serial_no || d.serialNo;
+            if (String(dSerial).trim() === String(targetSerial).trim()) {
+              console.log(`[DeviceTestComponent] Synchronizing customFields for ${targetSerial}`);
+              return { ...d, customFields: values, custom_fields: values }; // Sync both just in case
+            }
+            return d;
+          }),
+        );
+      }
     } catch (error) {
-      console.error("Failed to update custom fields");
+      console.error("Failed to update custom fields", error);
     }
   };
 
@@ -1656,39 +1676,39 @@ export default function DeviceTestComponent({
                                               currentSubStep.customFields.length === 0 ||
                                               hasManualValues
                                             ) && (
-                                              <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                                                <button
-                                                  onClick={handleManualPass}
-                                                  disabled={
-                                                    !!jigDecision ||
-                                                    (Array.isArray(currentSubStep?.customFields) &&
-                                                      currentSubStep.customFields.some((cf: any) => {
-                                                        const name = cf?.fieldName;
-                                                        const v = manualFieldValues[name ?? ""] ?? "";
-                                                        return !validateCustomField(cf, v).valid;
-                                                      }))
-                                                  }
-                                                  className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
-                                                    ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none"
-                                                    : "bg-success hover:bg-green-600"
-                                                    }`}
-                                                >
-                                                  <CheckCircle className="h-5 w-5" />
-                                                  Confirm & Mark Pass
-                                                </button>
-                                                <button
-                                                  onClick={handleManualNG}
-                                                  disabled={!!jigDecision}
-                                                  className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
-                                                    ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none"
-                                                    : "bg-danger hover:bg-red-600"
-                                                    }`}
-                                                >
-                                                  <XCircle className="h-5 w-5" />
-                                                  Report Issue (NG)
-                                                </button>
-                                              </div>
-                                            )}
+                                                <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                                                  <button
+                                                    onClick={handleManualPass}
+                                                    disabled={
+                                                      !!jigDecision ||
+                                                      (Array.isArray(currentSubStep?.customFields) &&
+                                                        currentSubStep.customFields.some((cf: any) => {
+                                                          const name = cf?.fieldName;
+                                                          const v = manualFieldValues[name ?? ""] ?? "";
+                                                          return !validateCustomField(cf, v).valid;
+                                                        }))
+                                                    }
+                                                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
+                                                      ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none"
+                                                      : "bg-success hover:bg-green-600"
+                                                      }`}
+                                                  >
+                                                    <CheckCircle className="h-5 w-5" />
+                                                    Confirm & Mark Pass
+                                                  </button>
+                                                  <button
+                                                    onClick={handleManualNG}
+                                                    disabled={!!jigDecision}
+                                                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
+                                                      ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none"
+                                                      : "bg-danger hover:bg-red-600"
+                                                      }`}
+                                                  >
+                                                    <XCircle className="h-5 w-5" />
+                                                    Report Issue (NG)
+                                                  </button>
+                                                </div>
+                                              )}
                                           </div>
                                         </div>
                                       )}
@@ -1756,10 +1776,12 @@ export default function DeviceTestComponent({
                                               </div>
                                               <div id="sticker-preview" className="space-y-4">
                                                 {currentSubStep.printerFields?.map((field: any, idx: number) => (
-                                                  <div key={idx} className="bg-gray-50 rounded-xl border border-dashed border-gray-300 p-6 flex justify-center mb-4">
+                                                  <div key={idx} className="flex justify-center mb-4">
                                                     <StickerGenerator
                                                       stickerData={field}
-                                                      deviceData={deviceList.filter((d: any) => d.serialNo === searchResult)}
+                                                      deviceData={deviceList.filter((d: any) =>
+                                                        String(d.serialNo || d.serial_no || "").trim() === String(searchResult || "").trim()
+                                                      )}
                                                     />
                                                   </div>
                                                 ))}
