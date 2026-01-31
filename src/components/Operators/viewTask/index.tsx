@@ -26,6 +26,7 @@ import {
 } from "@/lib/api";
 import { calculateTimeDifference } from "@/lib/common";
 import SearchableInput from "@/components/SearchableInput/SearchableInput";
+import { Video, ExternalLink } from "lucide-react";
 
 // Utility: safely read current user from localStorage
 const getCurrentUser = () => {
@@ -971,15 +972,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       />
 
       {/* Seat Info */}
-      <div className="mt-4 flex items-center gap-2">
-        <h5 className="text-md text-gray-700 font-semibold">Seat Details:</h5>
-        <p className="text-gray-800 text-sm">
+      <div className="mt-4 flex items-center gap-2 px-6 text-sm">
+        <h5 className="text-gray-700 font-semibold">Seat Details:</h5>
+        <p className="text-gray-800">
           Line Number: {operatorSeatInfo?.rowNumber}, Seat Number:{" "}
           {operatorSeatInfo?.seatNumber}
         </p>
       </div>
       {/* Stats */}
-      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-4 px-6 md:grid-cols-3">
         <div className="rounded-xl border-l-4 border-blue-500 bg-blue-50 p-5 shadow">
           <h3 className="text-lg font-bold text-blue-700">Issued Kits</h3>
           <div className="mt-2 space-y-1 text-sm text-blue-900">
@@ -1040,83 +1041,163 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           </p>
         </div>
       </div>
-      {startTest ? (
-        <DeviceTestComponent
-          product={product}
-          isPaused={isPaused}
-          setIsPaused={setIsPaused}
-          setStartTest={setStartTest}
-          timerDisplay={timerDisplay}
-          setDevicePause={setDevicePause}
-          deviceDisplay={deviceDisplay}
-          deviceList={deviceList}
-          setDeviceList={setDeviceList}
-          checkedDevice={checkedDevice}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          handleNoResults={handleNoResults}
-          getDeviceById={getDeviceById}
-          setSearchResult={setSearchResult}
-          setIsPassNGButtonShow={setIsPassNGButtonShow}
-          setIsStickerPrinted={setIsStickerPrinted}
-          searchResult={searchResult}
-          deviceHistory={deviceHistory}
-          notFoundError={notFoundError}
-          openReportIssueModel={openReportIssueModel}
-          isReportIssueModal={isReportIssueModal}
-          handleSubmitReport={handleSubmitReport}
-          closeReportIssueModal={closeReportIssueModal}
-          setIssueType={setIssueType}
-          setIssueDescription={setIssueDescription}
-          processAssignUserStage={processAssignUserStage}
-          isStickerPrinted={isStickerPrinted}
-          isVerifiedSticker={isVerifiedSticker}
-          setIsVerifiedSticker={setIsVerifiedSticker}
-          isPassNGButtonShow={isPassNGButtonShow}
-          handlePrintSticker={handlePrintSticker}
-          handleVerifySticker={handleVerifySticker}
-          isVerifyStickerModal={isVerifyStickerModal}
-          handleVerifyStickerModal={handleVerifyStickerModal}
-          closeVerifyStickerModal={closeVerifyStickerModal}
-          serialNumber={serialNumber}
-          setSerialNumber={setSerialNumber}
-          handleUpdateStatus={handleUpdateStatus}
-          processData={processData}
-          setCartons={setCartons}
-          cartons={cartons}
-          setIsCartonBarCodePrinted={setIsCartonBarCodePrinted}
-          isCartonBarcodePrinted={isCartonBarcodePrinted}
-          setProcessCartons={setProcessCartons}
-          processCartons={processCartons}
-          assignedTaskDetails={assignedTaskDetails}
-          assignUserStage={assignUserStage}
-          setIsDevicePassed={setIsDevicePassed}
-          isdevicePassed={isdevicePassed}
-          setAsssignDeviceDepartment={setAsssignDeviceDepartment}
-          selectAssignDeviceDepartment={selectAssignDeviceDepartment}
-          processStagesName={processStagesName}
-          isAddedToCart={isAddedToCart}
-          setIsAddedToCart={setIsAddedToCart}
-          isVerifiedPackaging={isVerifiedPackaging}
-          setIsVerifiedPackaging={setIsVerifiedPackaging}
-          isVerifyPackagingModal={isVerifyPackagingModal}
-          handleVerifyPackaging={handleVerifyPackaging}
-          handleVerifyPackagingModal={handleVerifyPackagingModal}
-          closeVerifyPackagingModal={closeVerifyPackagingModal}
-          handlePrintCartonSticker={handlePrintCartonSticker}
-          historyFilterDate={historyFilterDate}
-          setHistoryFilterDate={setHistoryFilterDate}
-        />
-      ) : (
-        <BasicInformation
-          product={product}
-          assignUserStage={assignUserStage}
-          getPlaningAndScheduling={getPlaningAndScheduling}
-          shift={shift}
-          setStartTest={setStartTest}
-          processAssignUserStage={processAssignUserStage}
-        />
-      )}
+
+      {/* Reference Videos section */}
+      {(() => {
+        const customStages = processData?.stages || [];
+        const commonStages = processData?.commonStages || [];
+
+        const allVideos: any[] = [];
+        [...customStages, ...commonStages].forEach((stage: any) => {
+          const links = Array.isArray(stage.videoLinks)
+            ? stage.videoLinks
+            : (stage.videoLink ? [stage.videoLink] : []);
+
+          links.forEach((link: string, i: number) => {
+            if (link && link.trim()) {
+              allVideos.push({
+                stageName: stage.stageName || stage.name,
+                url: link,
+                part: links.length > 1 ? i + 1 : null
+              });
+            }
+          });
+        });
+
+        if (allVideos.length === 0) return null;
+
+        return (
+          <div className="mt-6 px-6">
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md">
+              <div className="bg-gradient-to-r from-red-50 to-white px-6 py-4 border-b border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-lg bg-red-100 p-2 text-red-600">
+                      <Video className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-800">Process Help Videos</h3>
+                      <p className="text-xs text-gray-500">Visual guides for each stage of production</p>
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
+                    {allVideos.length} Video{allVideos.length > 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-6">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {allVideos.map((video, idx) => (
+                    <a
+                      key={idx}
+                      href={video.url.startsWith('http') ? video.url : `https://${video.url}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group flex items-center gap-4 rounded-xl border border-gray-50 bg-gray-50/50 p-4 transition-all hover:border-red-100 hover:bg-red-50/50 hover:shadow-sm"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white shadow-sm group-hover:bg-red-50">
+                        <Video className="h-5 w-5 text-red-500 transition-transform group-hover:scale-110" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="truncate text-sm font-bold text-gray-700 group-hover:text-red-700">
+                            {video.stageName} {video.part ? `(Part ${video.part})` : ''}
+                          </h4>
+                          <ExternalLink className="h-3 w-3 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100" />
+                        </div>
+                        <p className="truncate text-[10px] text-gray-400 group-hover:text-red-400">
+                          {video.url}
+                        </p>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      <div className="px-6 pb-12">
+        {startTest ? (
+          <DeviceTestComponent
+            product={product}
+            isPaused={isPaused}
+            setIsPaused={setIsPaused}
+            setStartTest={setStartTest}
+            timerDisplay={timerDisplay}
+            setDevicePause={setDevicePause}
+            deviceDisplay={deviceDisplay}
+            deviceList={deviceList}
+            setDeviceList={setDeviceList}
+            checkedDevice={checkedDevice}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            handleNoResults={handleNoResults}
+            getDeviceById={getDeviceById}
+            setSearchResult={setSearchResult}
+            setIsPassNGButtonShow={setIsPassNGButtonShow}
+            setIsStickerPrinted={setIsStickerPrinted}
+            searchResult={searchResult}
+            deviceHistory={deviceHistory}
+            notFoundError={notFoundError}
+            openReportIssueModel={openReportIssueModel}
+            isReportIssueModal={isReportIssueModal}
+            handleSubmitReport={handleSubmitReport}
+            closeReportIssueModal={closeReportIssueModal}
+            setIssueType={setIssueType}
+            setIssueDescription={setIssueDescription}
+            processAssignUserStage={processAssignUserStage}
+            isStickerPrinted={isStickerPrinted}
+            isVerifiedSticker={isVerifiedSticker}
+            setIsVerifiedSticker={setIsVerifiedSticker}
+            isPassNGButtonShow={isPassNGButtonShow}
+            handlePrintSticker={handlePrintSticker}
+            handleVerifySticker={handleVerifySticker}
+            isVerifyStickerModal={isVerifyStickerModal}
+            handleVerifyStickerModal={handleVerifyStickerModal}
+            closeVerifyStickerModal={closeVerifyStickerModal}
+            serialNumber={serialNumber}
+            setSerialNumber={setSerialNumber}
+            handleUpdateStatus={handleUpdateStatus}
+            processData={processData}
+            setCartons={setCartons}
+            cartons={cartons}
+            setIsCartonBarCodePrinted={setIsCartonBarCodePrinted}
+            isCartonBarcodePrinted={isCartonBarcodePrinted}
+            setProcessCartons={setProcessCartons}
+            processCartons={processCartons}
+            assignedTaskDetails={assignedTaskDetails}
+            assignUserStage={assignUserStage}
+            setIsDevicePassed={setIsDevicePassed}
+            isdevicePassed={isdevicePassed}
+            setAsssignDeviceDepartment={setAsssignDeviceDepartment}
+            selectAssignDeviceDepartment={selectAssignDeviceDepartment}
+            processStagesName={processStagesName}
+            isAddedToCart={isAddedToCart}
+            setIsAddedToCart={setIsAddedToCart}
+            isVerifiedPackaging={isVerifiedPackaging}
+            setIsVerifiedPackaging={setIsVerifiedPackaging}
+            isVerifyPackagingModal={isVerifyPackagingModal}
+            handleVerifyPackaging={handleVerifyPackaging}
+            handleVerifyPackagingModal={handleVerifyPackagingModal}
+            closeVerifyPackagingModal={closeVerifyPackagingModal}
+            handlePrintCartonSticker={handlePrintCartonSticker}
+            historyFilterDate={historyFilterDate}
+            setHistoryFilterDate={setHistoryFilterDate}
+          />
+        ) : (
+          <BasicInformation
+            product={product}
+            assignUserStage={assignUserStage}
+            getPlaningAndScheduling={getPlaningAndScheduling}
+            shift={shift}
+            setStartTest={setStartTest}
+            processAssignUserStage={processAssignUserStage}
+          />
+        )}
+      </div>
     </div>
   );
 };

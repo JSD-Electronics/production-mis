@@ -1160,19 +1160,18 @@ const AddProduct = () => {
                                         </label>
                                         <input
                                           type="file"
-                                          value={stage.sopFile}
                                           onChange={(e) =>
                                             handleStageChange(index, e, "sopFile")
                                           }
                                           className="
-                              border-gray-300 bg-gray-50 text-gray-600 w-full cursor-pointer rounded-lg border-[1.5px] px-3 
-                              py-2 text-sm outline-none transition
-                              file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-white
-                              hover:file:bg-primary/90
-                              focus:border-primary focus:ring-1 focus:ring-primary
-                              dark:border-form-strokedark dark:bg-form-input dark:text-white 
-                              dark:file:bg-primary dark:file:text-white
-                            "
+                                            border-gray-300 bg-gray-50 text-gray-600 w-full cursor-pointer rounded-lg border-[1.5px] px-3 
+                                            py-2 text-sm outline-none transition
+                                            file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-white
+                                            hover:file:bg-primary/90
+                                            focus:border-primary focus:ring-1 focus:ring-primary
+                                            dark:border-form-strokedark dark:bg-form-input dark:text-white 
+                                            dark:file:bg-primary dark:file:text-white
+                                          "
                                         />
                                         <p className="text-gray-500 dark:text-gray-400 mt-1 text-xs">
                                           Upload PDF or DOC (Max 5MB)
