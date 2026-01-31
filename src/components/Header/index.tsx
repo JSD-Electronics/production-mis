@@ -4,6 +4,7 @@ import DarkModeSwitcher from "./DarkModeSwitcher";
 import DropdownMessage from "./DropdownMessage";
 import DropdownNotification from "./DropdownNotification";
 import DropdownUser from "./DropdownUser";
+import { CONFIG } from "@/config";
 
 const Header = ({
   sidebarOpen,
@@ -17,6 +18,14 @@ const Header = ({
       <div className="flex flex-grow items-center justify-between px-4 py-2 md:px-6 lg:px-8">
         {/* Left Section */}
         <div className="flex items-center gap-3">
+          {/* Environment Indicator */}
+          {CONFIG.ENVIRONMENT !== "production" && (
+            <div className="hidden xsm:block">
+              <span className="inline-flex items-center rounded-md bg-yellow-400/10 px-2 py-1 text-xs font-medium text-yellow-600 ring-1 ring-inset ring-yellow-400/20">
+                {CONFIG.ENVIRONMENT.toUpperCase()}
+              </span>
+            </div>
+          )}
           {/* Hamburger Button */}
           <button
             aria-controls="sidebar"
