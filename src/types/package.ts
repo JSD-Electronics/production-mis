@@ -1,4 +1,4 @@
-export type Package = {
+﻿export type Package = {
   name: string;
   price: number;
   invoiceDate: string;

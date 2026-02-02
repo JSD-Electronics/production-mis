@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState } from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
@@ -54,7 +54,7 @@ const ViewProcess = () => {
       let response = await getOrderConfirmationNumers();
       setOcNoArr(response.getOrderConfirmationNo);
     } catch (error) {
-      console.log("Error Fethcing Order Confirmation Numbers", (error as any)?.message);
+      ?.message);
     }
   };
   const getProcess = async () => {
@@ -486,7 +486,7 @@ const ViewProcess = () => {
           </div>
         ) : (
           <>
-            {/* 🔹 Top Action Bar */}
+            {/* ðŸ”¹ Top Action Bar */}
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               {/* Left: Filter */}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -580,7 +580,7 @@ const ViewProcess = () => {
               </CardDataStats>
             </div>
 
-            {/* 🔹 Table */}
+            {/* ðŸ”¹ Table */}
             <div className="mt-6 overflow-x-auto rounded-xl border border-gray-200 bg-white custom-scroll">
               <DataTable
                 className="min-w-full text-sm"
@@ -683,7 +683,7 @@ const ViewProcess = () => {
           </>
         )}
 
-        {/* 🔹 Popups */}
+        {/* ðŸ”¹ Popups */}
         {showMarkAsCompletePopup && (
           <ConfirmationPopup
             message="Are you sure you want to mark this process as completed?"
@@ -700,7 +700,7 @@ const ViewProcess = () => {
         )}
       </div>
 
-      {/* 🔹 Modal: Add Quantity */}
+      {/* ðŸ”¹ Modal: Add Quantity */}
       <Modal
         isOpen={isAddQuantityModel}
         onSubmit={handleSubmitQuantity}
@@ -744,7 +744,7 @@ const ViewProcess = () => {
     //       </div>
     //     ) : (
     //       <>
-    //         {/* 🔹 Filter + Action Bar */}
+    //         {/* ðŸ”¹ Filter + Action Bar */}
     //         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
     //           {/* Left: Select + Filter */}
     //           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -809,7 +809,7 @@ const ViewProcess = () => {
     //           </div>
     //         </div>
 
-    //         {/* 🔹 Table */}
+    //         {/* ðŸ”¹ Table */}
     //         <div className="mt-6 overflow-x-auto rounded-md">
     //           <DataTable
     //             className="min-w-full text-sm"
@@ -850,7 +850,7 @@ const ViewProcess = () => {
     //       </>
     //     )}
 
-    //     {/* 🔹 Popups */}
+    //     {/* ðŸ”¹ Popups */}
     //     {showMarkAsCompletePopup && (
     //       <ConfirmationPopup
     //         message="Are you sure you want to Mark as Completed this Process?"
@@ -867,7 +867,7 @@ const ViewProcess = () => {
     //     )}
     //   </div>
 
-    //   {/* 🔹 Modal */}
+    //   {/* ðŸ”¹ Modal */}
     //   <Modal
     //     isOpen={isAddQuantityModel}
     //     onSubmit={handleSubmitQuantity}

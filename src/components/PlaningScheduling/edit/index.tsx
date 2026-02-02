@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState, useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import FormComponent from "@/components/PlaningScheduling/edit/FormComponents";
@@ -119,7 +119,7 @@ const EditPlanSchedule = () => {
       let result = await viewJigCategory();
       setJigCategories(result?.JigCategories);
     } catch (error) {
-      console.log("Fetch Jig Categories :", error);
+
     }
   };
   const getHolidayList = async () => {
@@ -127,7 +127,7 @@ const EditPlanSchedule = () => {
       let result = await fetchHolidays();
       return result?.holidays;
     } catch (error) {
-      console.log("Error Fetching Availability", error);
+
     }
   };
   const getProduct = async (id: any) => {
@@ -144,7 +144,7 @@ const EditPlanSchedule = () => {
       setProductName(result.product.name);
       setSelectedProduct(result);
     } catch (error) {
-      console.log("Error Fetching Products:", error);
+
     }
   };
   const getPlaningById = async (id: any) => {
@@ -275,7 +275,7 @@ const EditPlanSchedule = () => {
       }, {});
       return assignedStagesObject;
     } catch (error) {
-      console.log("Error Fetching Availability", error);
+
       return {};
     }
   };
@@ -285,7 +285,7 @@ const EditPlanSchedule = () => {
       setOperators(result.users);
       return false;
     } catch (error) {
-      console.log("Error Fetching Operators", error);
+
     }
   };
   const getAllShifts = async () => {
@@ -293,7 +293,7 @@ const EditPlanSchedule = () => {
       const result = await viewShift();
       setShifts(result?.Shifts);
     } catch (error) {
-      console.log("Error Fetching Shifts", error);
+
     }
   };
   const getAllProcess = async () => {
@@ -301,7 +301,7 @@ const EditPlanSchedule = () => {
       const result = await viewProcess();
       setProcess(result.Processes);
     } catch (error) {
-      console.log("Error Fetching Process", error);
+
     }
   };
   const handleRemoveStage = (
@@ -414,9 +414,6 @@ const EditPlanSchedule = () => {
         const updatedStages = { ...prev };
         const currentKey = `${rowIndex}-${seatIndex}`;
         if (updatedStages[currentKey]?.[0]?.reserved) {
-          console.log(
-            "Attempted to move to/from a reserved seat; action canceled.",
-          );
           return prev;
         }
         const isSeatAssigned = updatedStages[currentKey]?.length > 0;
@@ -656,26 +653,26 @@ const EditPlanSchedule = () => {
   };
   const handleDragStart =
     (stage: any, substep = null) =>
-    (event: any) => {
-      const data = {
-        name: stage.stageName,
-        upha: stage.upha,
-        substepName: substep ? [substep.stepName] : null,
-        requiredSkill: stage.requiredSkill,
-        managedBy: stage.managedBy,
+      (event: any) => {
+        const data = {
+          name: stage.stageName,
+          upha: stage.upha,
+          substepName: substep ? [substep.stepName] : null,
+          requiredSkill: stage.requiredSkill,
+          managedBy: stage.managedBy,
+        };
+        event.dataTransfer.setData("text/plain", JSON.stringify(data));
       };
-      event.dataTransfer.setData("text/plain", JSON.stringify(data));
-    };
   const moveItem = (fromCoordinates, toCoordinates) => {
     setAssignedStages((prevStages) => {
       const updatedStages = { ...prevStages };
       const updatedOperators = { ...assignedOperators };
       if (updatedStages[fromCoordinates]?.[0]?.reserved) {
-        console.log("Attempted to move from a reserved seat; action canceled.");
+
         return prevStages;
       }
       if (updatedStages[toCoordinates]?.[0]?.reserved) {
-        console.log("Target seat is reserved; move action canceled.");
+
         return prevStages;
       }
       let fromStage = updatedStages[fromCoordinates];
@@ -914,7 +911,7 @@ const EditPlanSchedule = () => {
               const setAssignedOperators =
                 await createAssignedOperatorsToPlan(formAssignOperator);
               const result = await createProcessLogs(formData3);
-              console.log("Log Creation Result: ", result);
+
             } catch (error) {
               console.error("Error creating plan logs: ", error);
             }
@@ -957,7 +954,7 @@ const EditPlanSchedule = () => {
             try {
               const newAssignedJig = await createAssignedJigs(assginedJigForm);
               const result = await createProcessLogs(formData2);
-              console.log("Log Creation Result: ", result);
+
             } catch (error) {
               console.error("Error creating plan logs: ", error);
             }
@@ -1007,7 +1004,7 @@ const EditPlanSchedule = () => {
         result.message || "Planing and Scheduling Updated Successfully!!",
       );
     } catch (e) {
-      console.log("Error Submitting Planing and Scheduling !!", e);
+
     }
     return false;
   };
@@ -1052,7 +1049,7 @@ const EditPlanSchedule = () => {
         toast.success(result.message || "DownTime Updated Successfully!!");
       }
     } catch (error) {
-      console.log("Error Occured : ", error.message);
+
     }
   };
   const handleDownTimeProcessStatus = async () => {
@@ -1067,7 +1064,7 @@ const EditPlanSchedule = () => {
         toast.success(response.message || "DownTime Updated Successfully!!");
       }
     } catch (error) {
-      console.log("Error Occured : ", error?.message);
+
     }
   };
   const openCustomStagesModal = (stage, index) => {
@@ -1133,7 +1130,7 @@ const EditPlanSchedule = () => {
       });
       //   }
     } catch (error) {
-      console.log("Error Handle Remove Operator :", error);
+
     }
   };
   return (
@@ -1199,36 +1196,36 @@ const EditPlanSchedule = () => {
                 )}
                 {(processStatus === "down_time_hold" ||
                   processStatus === "active") && (
-                  <button
-                    className="flex items-center justify-center gap-2 rounded-lg bg-black px-2 py-2 text-sm text-white"
-                    onClick={() => setIsDownTimeModalOpen(true)}
-                  >
-                    <svg
-                      width="15px"
-                      height="15px"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="#ffffff"
+                    <button
+                      className="flex items-center justify-center gap-2 rounded-lg bg-black px-2 py-2 text-sm text-white"
+                      onClick={() => setIsDownTimeModalOpen(true)}
                     >
-                      <g id="SVGRepo_bgCarrier" strokeWidth="0" />
-                      <g
-                        id="SVGRepo_tracerCarrier"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <g id="SVGRepo_iconCarrier">
-                        <path
-                          d="M3 5.5L5 3.5M21 5.5L19 3.5M9 9.5L15 15.5M15 9.5L9 15.5M20 12.5C20 16.9183 16.4183 20.5 12 20.5C7.58172 20.5 4 16.9183 4 12.5C4 8.08172 7.58172 4.5 12 4.5C16.4183 4.5 20 8.08172 20 12.5Z"
-                          stroke="#ffffff"
-                          strokeWidth="2"
+                      <svg
+                        width="15px"
+                        height="15px"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#ffffff"
+                      >
+                        <g id="SVGRepo_bgCarrier" strokeWidth="0" />
+                        <g
+                          id="SVGRepo_tracerCarrier"
                           strokeLinecap="round"
                           strokeLinejoin="round"
                         />
-                      </g>
-                    </svg>
-                    <span>Downtime</span>
-                  </button>
-                )}
+                        <g id="SVGRepo_iconCarrier">
+                          <path
+                            d="M3 5.5L5 3.5M21 5.5L19 3.5M9 9.5L15 15.5M15 9.5L9 15.5M20 12.5C20 16.9183 16.4183 20.5 12 20.5C7.58172 20.5 4 16.9183 4 12.5C4 8.08172 7.58172 4.5 12 4.5C16.4183 4.5 20 8.08172 20 12.5Z"
+                            stroke="#ffffff"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </g>
+                      </svg>
+                      <span>Downtime</span>
+                    </button>
+                  )}
               </div>
 
               {showPopup && (
@@ -1280,7 +1277,7 @@ const EditPlanSchedule = () => {
                       value={downTimeType}
                       onChange={(e) => setDownTimeType(e.target.value)}
                       className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
-                      // disabled={processStatus == "process_created" ? false : true}
+                    // disabled={processStatus == "process_created" ? false : true}
                     >
                       <option value="" className="text-body dark:text-bodydark">
                         Please Select
@@ -1370,49 +1367,49 @@ const EditPlanSchedule = () => {
                 {/* end FormComponent 1 */}
                 <div className="my-3">
                   {/* {totalTimeEstimation && ( */}
-                    <div className="dark:bg-gray-800 border-gray-300 dark:border-gray-700 mt-6 rounded-xl border bg-white p-6 shadow-lg transition-all duration-300">
-                      <h3 className="text-gray-800 mb-5 flex items-center gap-2 text-xl font-semibold dark:text-white">
-                        <Clock className="h-5 w-5 text-primary" />
-                        Time & Production Estimation
-                      </h3>
+                  <div className="dark:bg-gray-800 border-gray-300 dark:border-gray-700 mt-6 rounded-xl border bg-white p-6 shadow-lg transition-all duration-300">
+                    <h3 className="text-gray-800 mb-5 flex items-center gap-2 text-xl font-semibold dark:text-white">
+                      <Clock className="h-5 w-5 text-primary" />
+                      Time & Production Estimation
+                    </h3>
 
-                      <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-3">
-                        {/* Estimated Completion Date */}
-                        <div className="bg-gray-50 dark:bg-gray-700 flex flex-col gap-2 rounded-lg p-4 shadow-sm">
-                          <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
-                            Estimated Completion Date
-                          </span>
-                          <span className="text-md text-gray-900 font-semibold dark:text-white">
-                            {estimatedEndDate}
-                          </span>
-                        </div>
+                    <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-3">
+                      {/* Estimated Completion Date */}
+                      <div className="bg-gray-50 dark:bg-gray-700 flex flex-col gap-2 rounded-lg p-4 shadow-sm">
+                        <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
+                          Estimated Completion Date
+                        </span>
+                        <span className="text-md text-gray-900 font-semibold dark:text-white">
+                          {estimatedEndDate}
+                        </span>
+                      </div>
 
-                        {/* Total Time Estimation */}
-                        <div className="bg-gray-50 dark:bg-gray-700 flex flex-col gap-2 rounded-lg p-4 shadow-sm">
-                          <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
-                            Total Time Estimation
-                          </span>
-                          <span className="text-md text-gray-900 font-semibold dark:text-white">
-                            {totalTimeEstimation} Days
-                          </span>
-                        </div>
+                      {/* Total Time Estimation */}
+                      <div className="bg-gray-50 dark:bg-gray-700 flex flex-col gap-2 rounded-lg p-4 shadow-sm">
+                        <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
+                          Total Time Estimation
+                        </span>
+                        <span className="text-md text-gray-900 font-semibold dark:text-white">
+                          {totalTimeEstimation} Days
+                        </span>
+                      </div>
 
-                        {/* Units Processed Per Hour */}
-                        <div className="bg-gray-50 dark:bg-gray-700 flex flex-col gap-2 rounded-lg p-4 shadow-sm">
-                          <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
-                            Units Processed Per Hour
-                          </span>
-                          <span className="text-md text-gray-900 font-semibold dark:text-white">
-                            {(
-                              shiftTime -
-                              parseInt(selectedShift?.totalBreakTime || "0") /
-                                60
-                            ).toFixed(2)}{" "}
-                            -Hour Day: {totalUPHA}
-                          </span>
-                        </div>
+                      {/* Units Processed Per Hour */}
+                      <div className="bg-gray-50 dark:bg-gray-700 flex flex-col gap-2 rounded-lg p-4 shadow-sm">
+                        <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">
+                          Units Processed Per Hour
+                        </span>
+                        <span className="text-md text-gray-900 font-semibold dark:text-white">
+                          {(
+                            shiftTime -
+                            parseInt(selectedShift?.totalBreakTime || "0") /
+                            60
+                          ).toFixed(2)}{" "}
+                          -Hour Day: {totalUPHA}
+                        </span>
                       </div>
                     </div>
+                  </div>
                   {/* )} */}
                 </div>
                 {/* {totalTimeEstimation && (

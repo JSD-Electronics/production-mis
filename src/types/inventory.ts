@@ -1,4 +1,4 @@
-export interface Inventory {
+﻿export interface Inventory {
     _id: string;
     name: string;
     processID: string;

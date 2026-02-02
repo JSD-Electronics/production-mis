@@ -1,4 +1,4 @@
-const Loader = () => {
+﻿const Loader = () => {
   return (
     <div className="flex h-screen items-center justify-center bg-transparent backdrop-blur-sm fixed inset-0 z-[9999]">
       <div className="relative">

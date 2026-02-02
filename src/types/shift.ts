@@ -1,4 +1,4 @@
-export interface Shifts {
+﻿export interface Shifts {
     _id: string;
     name: string;
     startTime: string;

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { use, useState } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -213,10 +213,10 @@ const AddProduct = () => {
   const getUserRoles = async () => {
     try {
       let result = await getUserType();
-      console.log("userType ==>", result?.userType);
+      
       setUserType(result?.userType);
     } catch (error) {
-      console.log("Error Fetching User Roles");
+      
     }
   };
   const getSkillField = async () => {
@@ -232,7 +232,7 @@ const AddProduct = () => {
       let result = await getStickerFields();
       setStickerFields(result?.data);
     } catch (error) {
-      console.log(`Error Fetching Sticker Fields!!`, error);
+      
     }
   };
   const validateForm = () => {

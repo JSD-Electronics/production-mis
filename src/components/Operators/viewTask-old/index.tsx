@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import DeviceTestComponent from "@/components/Operators/viewTask/DeviceTestComponent-old";
 import React, { useEffect, useState } from "react";
@@ -102,7 +102,7 @@ const ViewTaskDetailsComponent = ({
     try {
       // createCatron
     } catch (error) {
-      console.log(`Error Creating Carton`, error?.message);
+      
     }
   };
   const getAssignedTask = async (id: any) => {
@@ -110,7 +110,7 @@ const ViewTaskDetailsComponent = ({
       let response = await getOperatorTaskByUserID(id);
       return response.task;
     } catch (error) {
-      console.log(`Error Fetching Assigned Task:`, error);
+      
     }
   };
   const closeVerifyStickerModal = () => {
@@ -127,7 +127,7 @@ const ViewTaskDetailsComponent = ({
       let devices = response.data;
       setOverallTotalAttempts(devices.length);
     } catch (error) {
-      console.log(`Error Fetching Device History`, error);
+      
     }
   };
   const getDeviceById = async (id: any) => {
@@ -140,7 +140,7 @@ const ViewTaskDetailsComponent = ({
         setDeviceHistory([]);
       }
     } catch (error) {
-      console.log(`Error Fetching Device History`, error);
+      
     }
   };
   const getDeviceTestEntry = async () => {
@@ -170,7 +170,7 @@ const ViewTaskDetailsComponent = ({
       setCheckedDevice(updatedDeviceHistory);
       return updatedDeviceHistory;
     } catch (error) {
-      console.log(`Error Fetching Devices`, error);
+      
     }
   };
   const getDeviceTestEntryOverall = async () => {
@@ -253,7 +253,7 @@ const ViewTaskDetailsComponent = ({
       formData.append("currentStage", assignUserStage?.stageName);
       formData.append("issueType", issueType);
       formData.append("issueDescription", issueDescription);
-      console.log("formData ==>", formData);
+      
       return;
       const response = await createReport(formData);
       if (response && response.status == 200) {
@@ -291,14 +291,14 @@ const ViewTaskDetailsComponent = ({
   };
   const getProduct = async (id: any, assignStageToUser: any) => {
     try {
-      //   console.log("assignStageToUser ===>", assignStageToUser);
+      //   
       //  return false;
       let result = await getProductById(id);
 
       setSelectedProduct(result);
       return;
     } catch (error) {
-      console.log("Error Fetching Product !", error);
+      
     }
   };
   const fetchProcessByID = async (id: any, assignStageToUser: any) => {
@@ -310,13 +310,13 @@ const ViewTaskDetailsComponent = ({
         return value.stageName === assignStageToUser[0].name;
       });
 
-      console.log("processStage ==>", processStage);
+      
       setProcessAssignUserStage(processStage);
       getDevices(result?.selectedProduct, assignStageToUser, result?._id);
       getProduct(result.selectedProduct, assignStageToUser);
       setProduct(result);
     } catch (error) {
-      console.log("Error Fetching Processs !", error);
+      
     }
   };
   const getShiftByID = async (id: any) => {
@@ -326,13 +326,13 @@ const ViewTaskDetailsComponent = ({
       setTimeDifference(diff);
       setShift(result);
     } catch (error) {
-      console.log("Error Fetching Shift", error);
+      
     }
   };
   const getPlaningAndSchedulingByID = async (id: any) => {
     try {
       let result = await getPlaningAndSchedulingById(id);
-      console.log("result ==> ", result);
+      
       let user = JSON.parse(localStorage.getItem("userDetails"));
       let assignedTaskDetails = await getAssignedTask(user._id);
       let assignOperator, assignStage;
@@ -376,7 +376,7 @@ const ViewTaskDetailsComponent = ({
       getShiftByID(result?.selectedShift);
       setPlaningAndScheduling(result);
     } catch (error) {
-      console.log("error fetching planing and scheduling", error);
+      
     }
   };
   const toggleFullScreenMode = () => {
@@ -462,12 +462,12 @@ const ViewTaskDetailsComponent = ({
         toast.error(result?.message || "error Creating Device Test Entry");
       }
     } catch (error) {
-      console.log("error Creating Device Test Entry", error);
+      
       toast.error(error?.message || "error Creating Device Test Entry");
     }
   };
   const handleNoResults = (query) => {
-    console.log("No results found for:", query);
+    
     setNotFoundError(`No results found for: ${query}`);
     setSearchedSerialNo(query);
   };
@@ -613,7 +613,7 @@ const ViewTaskDetailsComponent = ({
         };
 
         cartons.push(newCarton);
-        console.log("New carton created and device added:", newCarton);
+        
       } else {
         lastCarton.devices.push(device);
         if (lastCarton.devices.length === lastCarton.maxCapacity) {
@@ -621,14 +621,14 @@ const ViewTaskDetailsComponent = ({
         } else {
           lastCarton.status = "partial";
         }
-        console.log("Device added to existing carton:", lastCarton);
+        
       }
     } catch (error: any) {
       console.error("Error Creating/Updating Carton", error?.message);
     }
   };
   // const handleAddToCart = async (packageData: any) => {
-  //   console.log("packageData ==>", packageData);
+  //   
   //   return false;
   //   try {
   //     const pathname = window.location.pathname;
@@ -645,7 +645,7 @@ const ViewTaskDetailsComponent = ({
   //     formData.append("weightCarton", packageData.cartonWeight);
   //     let result = await createCarton();
   //   } catch (error) {
-  //      console.log(`Error Creating Carton`, error?.message);
+  //      
   //   }
   // };
   const handleMoveToPackaging = () => {
@@ -661,7 +661,7 @@ const ViewTaskDetailsComponent = ({
       setIsVerifyStickerModal(false);
       setMoveToPackaging(true);
     } catch (error) {
-      console.log(`Error Creating Carton`, error?.message);
+      
     }
   };
   return (

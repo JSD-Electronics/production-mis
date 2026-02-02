@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React from "react";
 import CardDataStats from "../CardDataStats";
 import { viewProcess, viewPlaning } from "@/lib/api";

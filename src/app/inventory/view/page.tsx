@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import InventoryManagement from "@/components/Inventory/view/index";
 import { Metadata } from "next";
 import DefaultLayout from "@/components/Layouts/DefaultLayout";

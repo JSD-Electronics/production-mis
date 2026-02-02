@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import CardDataStats from "../../CardDataStats";
@@ -25,7 +25,7 @@ const StoreDashboard: React.FC = () => {
       let result = await fetchList("/inventory/dashboard");
       setInventoryDasboard(result.inventoryDashboard);
     } catch (error) {
-      console.log("Failed to fetch inventory Dashboard", error);
+      
     }
   };
   const getTask = async (id: any) => {
@@ -33,7 +33,7 @@ const StoreDashboard: React.FC = () => {
       let result = await getTaskByUserId(id);
       setTaskList(result.task);
     } catch (error) {
-      console.log("Failed to fetch Room Plan :", error);
+      
     }
   };
   return (

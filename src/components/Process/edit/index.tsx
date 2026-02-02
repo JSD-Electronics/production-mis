@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import React, { useState } from "react";
 import {
@@ -38,7 +38,7 @@ const EditProcess = () => {
       let result = await viewProduct();
       setProduct(result.Products);
     } catch (error) {
-      console.log("Error Fetching Products:", error);
+      
     }
   };
   const getProcess = async (id: any) => {

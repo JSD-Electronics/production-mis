@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import Product from "@/components/product";
 import { Metadata } from "next";
 import DefaultLayout from "@/components/Layouts/DefaultLayout";

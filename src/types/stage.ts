@@ -1,4 +1,4 @@
-export interface Stages {
+﻿export interface Stages {
     _id: string;
     name: string;
     status: string;

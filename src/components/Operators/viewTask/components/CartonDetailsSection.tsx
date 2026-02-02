@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { Package, QrCode, Printer, ArrowRightCircle } from "lucide-react";
 import { useQRCode } from "next-qrcode";
 

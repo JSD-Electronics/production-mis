@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState, useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import FormComponent from "@/components/PlaningScheduling/add/FormComponents";
@@ -81,7 +81,7 @@ const ADDPlanSchedule = () => {
       let result = await viewJigCategory();
       setJigCategories(result?.JigCategories);
     } catch (error) {
-      console.log("Fetch Jig Categories :", error);
+
     }
   };
   const getAllPlaning = async () => {
@@ -89,7 +89,7 @@ const ADDPlanSchedule = () => {
       let result = await getPlaningAndSchedulingModel();
       setSavedPlaning(result?.PlaningAndScheduling);
     } catch (error) {
-      console.log("Error Fetching Availability", error);
+
     }
   };
   const getHolidayList = async () => {
@@ -97,7 +97,7 @@ const ADDPlanSchedule = () => {
       let result = await fetchHolidays();
       return result.holidays;
     } catch (error) {
-      console.log("Error Fetching Availability", error);
+
     }
   };
   const formatDate = (dateString: any) => {
@@ -211,7 +211,7 @@ const ADDPlanSchedule = () => {
       }, {});
       return assignedStagesObject;
     } catch (error) {
-      console.log("Error Fetching Availability", error);
+
       return {};
     }
   };
@@ -221,7 +221,7 @@ const ADDPlanSchedule = () => {
       setOperators(result.users);
       return false;
     } catch (error) {
-      console.log("Error Fetching Operators", error);
+
     }
   };
   const getAllShifts = async () => {
@@ -229,7 +229,7 @@ const ADDPlanSchedule = () => {
       const result = await viewShift();
       setShifts(result?.Shifts);
     } catch (error) {
-      console.log("Error Fetching Shifts", error);
+
     }
   };
   const getProduct = async (id: any) => {
@@ -246,7 +246,7 @@ const ADDPlanSchedule = () => {
       setProductName(result.product.name);
       setSelectedProduct(result.product);
     } catch (error) {
-      console.log("Error Fetching Products:", error);
+
     }
   };
   const getAllProcess = async () => {
@@ -264,7 +264,7 @@ const ADDPlanSchedule = () => {
       setSelectedProcess(selectedProces[0]);
       setProcess(filterProcess);
     } catch (error) {
-      console.log("Error Fetching Process", error);
+
     }
   };
   const handleRemoveStage = (
@@ -345,13 +345,13 @@ const ADDPlanSchedule = () => {
     const endDate = new Date(
       `1970-01-01T${selected.intervals[selected.intervals.length - 1].endTime}`,
     );
-    // console.log("endDate ==>", endDate);
+    // 
 
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
       throw new Error("Invalid start or end time format");
     }
     const differenceInMilliseconds = endDate - startDate;
-    console.log();
+
     const totalMinutes = Math.floor(differenceInMilliseconds / (1000 * 60));
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
@@ -379,9 +379,6 @@ const ADDPlanSchedule = () => {
         const updatedStages = { ...prev };
         const currentKey = `${rowIndex}-${seatIndex}`;
         if (updatedStages[currentKey]?.[0]?.reserved) {
-          console.log(
-            "Attempted to move to/from a reserved seat; action canceled.",
-          );
           return prev;
         }
         const isSeatAssigned = updatedStages[currentKey]?.length > 0;
@@ -507,7 +504,7 @@ const ADDPlanSchedule = () => {
         }
         if (stageIndex < stages.length * repeatCount) {
           const currentStage = stages[stageIndex % stages.length];
-          console.log("currentStage ===>", currentStage);
+
           const hasJigStepType = currentStage.subSteps.some(
             (step) => step.stepType === "jig",
           );
@@ -557,7 +554,7 @@ const ADDPlanSchedule = () => {
       const uphaValues = selectedProduct?.stages
         ?.map((stage: any) => parseInt(stage.upha, 10))
         .filter((val: number) => !isNaN(val));
-      console.log("uphaValues ==>", uphaValues);
+
       if (!uphaValues?.length) {
         console.warn("No valid UPHA values found");
         return;
@@ -586,8 +583,8 @@ const ADDPlanSchedule = () => {
       }
 
       const unitsPer8HourDay = leastUpha * adjustedShiftTime * repeatCount;
-      console.log("leastUpha =>", leastUpha);
-      console.log("unitsPer8HourDay ==>", unitsPer8HourDay);
+
+
       if (unitsPer8HourDay <= 0) {
         console.error("Units per 8-hour day calculation failed");
         return;
@@ -605,7 +602,7 @@ const ADDPlanSchedule = () => {
         return;
       }
 
-      console.log("expectedEndDate ===>", expectedEndDate);
+
       let reservedSeats = [];
       try {
         reservedSeats = await checkSeatAvailability(
@@ -688,7 +685,7 @@ const ADDPlanSchedule = () => {
   //     totalTimeEstimationInDays,
   //   );
 
-  //   console.log("expectedEndDate ===>", expectedEndDate);
+  //   
   //   // const reservedSeats = await checkSeatAvailability(
   //   //   selectedRoom,
   //   //   selectedShift,
@@ -734,7 +731,7 @@ const ADDPlanSchedule = () => {
 
     let start = new Date(fullYear, month - 1, day);
 
-    // ✅ Cache holidays so API isn’t called every time
+    // âœ… Cache holidays so API isnâ€™t called every time
     // if (!holidayCache) {
     //   try {
     //     // const holidayList = await getHolidayList();
@@ -768,7 +765,7 @@ const ADDPlanSchedule = () => {
       start.getSeconds(),
     ).padStart(2, "0")}`;
 
-    console.log("formattedEndDate ==>", formattedEndDate);
+
     return formattedEndDate;
   };
 
@@ -779,7 +776,7 @@ const ADDPlanSchedule = () => {
   //   let start = new Date(fullYear, month - 1, day);
 
   //   // let holidayList = await getHolidayList();
-  //   // console.log("holidayList =>>", holidayList);
+  //   // 
   //   // const holidays = holidayList.map((holiday: any) =>
   //   //   new Date(holiday.holidayDate).toDateString(),
   //   // );
@@ -805,11 +802,11 @@ const ADDPlanSchedule = () => {
   //   ).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}:${String(
   //     start.getSeconds(),
   //   ).padStart(2, "0")}`;
-  //   console.log("formattedEndDate ==>", formattedEndDate);
+  //   
   //   return false;
   //   return formattedEndDate;
   // };
-  const handleDragStart =(stage: any, substep = null) => (event: any) => {
+  const handleDragStart = (stage: any, substep = null) => (event: any) => {
     const data = {
       name: stage.stageName,
       upha: stage.upha,
@@ -824,11 +821,11 @@ const ADDPlanSchedule = () => {
       const updatedStages = { ...prevStages };
       const updatedOperators = { ...assignedOperators };
       if (updatedStages[fromCoordinates]?.[0]?.reserved) {
-        console.log("Attempted to move from a reserved seat; action canceled.");
+
         return prevStages;
       }
       if (updatedStages[toCoordinates]?.[0]?.reserved) {
-        console.log("Target seat is reserved; move action canceled.");
+
         return prevStages;
       }
       let fromStage = updatedStages[fromCoordinates];
@@ -928,7 +925,7 @@ const ADDPlanSchedule = () => {
         throw new Error(result.message || "Failed to create stage");
       }
     } catch (e) {
-      console.log("Error Submitting Planing and Scheduling !!", e);
+
     }
     return false;
   };
@@ -1174,7 +1171,7 @@ const ADDPlanSchedule = () => {
         return newAssignedOperators;
       });
     } catch (error) {
-      console.log("Error Handle Remove Operator :", error);
+
     }
   };
   return (
@@ -1400,7 +1397,7 @@ const ADDPlanSchedule = () => {
                                     <div className="flex items-center justify-end ">
                                       {assignedCustomOperators[index] &&
                                         assignedCustomOperators[index].length >
-                                          0 && (
+                                        0 && (
                                           <div className="flex gap-2">
                                             {assignedCustomOperators[index].map(
                                               (op, i) => (

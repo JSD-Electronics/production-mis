@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState } from "react";
 import { useDrag, useDrop } from "react-dnd";
 import Modal from "@/components/Modal/page";
@@ -29,7 +29,7 @@ const DraggableGridItem = ({
 
   const openModal = (stages: any) => {
     const requiredSkills = stages.map((stage) => {
-      console.log("stage ==>", stage);
+      
       return stage.requiredSkill.toLowerCase().trim();
     });
     const assignedOperatorIds = Object.values(assignedOperators)
@@ -133,7 +133,7 @@ const DraggableGridItem = ({
       let result = await fetchJigsById(id);
       setJigs(result);
     } catch (error) {
-      console.log("Error Fecth Jig Category :", error);
+      
     }
   };
   return (

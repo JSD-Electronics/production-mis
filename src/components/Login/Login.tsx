@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState } from "react";
 import Image from "next/image";
@@ -140,7 +140,7 @@ const SignIn = () => {
               </button>
             </form>
             <div className="text-gray-400 mt-6 text-center text-xs">
-              © {new Date().getFullYear()} Production Portal
+              Â© {new Date().getFullYear()} Production Portal
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import CardDataStats from "../../CardDataStats";
@@ -23,7 +23,7 @@ const ProductionManagerDashboard: React.FC = () => {
       let result = await getTaskByUserId(id);
       setTaskList(result.task);
     } catch (error) {
-      console.log("Failed to fetch Room Plan :", error);
+      
     }
   };
   return (

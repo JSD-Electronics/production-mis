@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
@@ -28,7 +28,7 @@ const ViewScheduling = () => {
   const getPlanningAndSchedulingDateWise = async () => {
     try {
       let result = await getPlanningAndSchedulingDate();
-      console.log("result.plans ===>", result.plans);
+      
       setPlaningData(result.plans);
     } catch (error) {
       console.error("Error Fetching Shifts:", error.message);
@@ -82,7 +82,7 @@ const ViewScheduling = () => {
       if (selectedFilterStartDate != "" && selectedFilterEndDate != "") {
         setPlaningData([]);
         let result = await getPlanningAndSchedulingDate(selectedFilterStartDate, selectedFilterEndDate);
-        console.log("result.plans ===>", result.plans);
+        
         setPlaningData(result.plans);
       } else {
         alert("Choose Dates before filtering the data.")

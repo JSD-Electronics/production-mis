@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState, useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import FormComponent from "@/components/PlaningScheduling/edit/FormComponents";
@@ -357,11 +357,11 @@ const ViewPlanSchedule = () => {
         return;
       }
       const result = await getDeviceByProductId(selectedProcess.selectedProduct);
-      console.log("result ==>", result?.data);
+      
 
       const allDevices = result?.data || [];
       const processDevices = allDevices.filter((d: any) => d.processID === selectedProcess._id);
-      console.log("processDevices ==>", processDevices);
+      
       if (processDevices.length === 0) {
         toast.info("No serials found for this process");
         return;
@@ -416,7 +416,7 @@ const ViewPlanSchedule = () => {
       let result = await viewJigCategory();
       setJigCategories(result?.JigCategories);
     } catch (error) {
-      console.log("Fetch Jig Categories :", error);
+      
     }
   };
   const getHolidayList = async () => {
@@ -424,7 +424,7 @@ const ViewPlanSchedule = () => {
       let result = await fetchHolidays();
       return result?.holidays;
     } catch (error) {
-      console.log("Error Fetching Availability", error);
+      
     }
   };
   const getProduct = async (id: any) => {
@@ -441,7 +441,7 @@ const ViewPlanSchedule = () => {
       setProductName(result.product.name);
       setSelectedProduct(result);
     } catch (error) {
-      console.log("Error Fetching Products:", error);
+      
     }
   };
   const getHourlyIntervals = (start, end) => {
@@ -709,7 +709,7 @@ const ViewPlanSchedule = () => {
 
       setLoading(false);
     } catch (error) {
-      console.log("Error Fetching Planing & Scheduling", error.message);
+      
       setLoading(false);
       return {};
     }
@@ -773,7 +773,7 @@ const ViewPlanSchedule = () => {
 
       return assignedStagesObject;
     } catch (error) {
-      console.log("Error Fetching Availability", error);
+      
       return {};
     }
   };
@@ -786,7 +786,7 @@ const ViewPlanSchedule = () => {
       setOperators(operators);
       return false;
     } catch (error) {
-      console.log("Error Fetching Operators", error);
+      
     }
   };
   const getAllShifts = async () => {
@@ -795,7 +795,7 @@ const ViewPlanSchedule = () => {
       return result?.Shifts;
       setShifts(result?.Shifts);
     } catch (error) {
-      console.log("Error Fetching Shifts", error);
+      
     }
   };
   const getAllProcess = async () => {
@@ -804,7 +804,7 @@ const ViewPlanSchedule = () => {
       setProcess(result.Processes);
       return result.Processes;
     } catch (error) {
-      console.log("Error Fetching Process", error);
+      
     }
   };
   const handleRemoveStage = (
@@ -1010,7 +1010,7 @@ const ViewPlanSchedule = () => {
     assignedIssuedKits = 0,
     deviceTests = [],
   ) => {
-    console.log("deviceTests ===>", deviceTests);
+    
 
     const stagePassCount = deviceTests.reduce((acc, record) => {
       const stage = record.stageName?.trim();
@@ -1032,7 +1032,7 @@ const ViewPlanSchedule = () => {
     }, {});
     const testResultsBySeatAndStage = {};
     deviceTests.forEach((record) => {
-      console.log("record ==>", record);
+      
       const key = `${record.seatNumber}:${record.stageName?.trim()}`;
       if (!testResultsBySeatAndStage[key]) {
         testResultsBySeatAndStage[key] = { passed: 0, ng: 0 };
@@ -1057,7 +1057,7 @@ const ViewPlanSchedule = () => {
       return false;
     }
     let seatIndex = 0;
-    console.log("testResultsBySeatAndStage ===>", testResultsBySeatAndStage);
+    
     selectedRoom.lines?.forEach((row: any, rowIndex: number) => {
       row.seats.forEach((_: any, seatPosition: number) => {
         const seatKey = `${rowIndex}-${seatPosition}`;
@@ -1495,9 +1495,9 @@ const ViewPlanSchedule = () => {
                   );
                 })() && (
                   <div className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-md px-3 py-1 text-sm font-medium">
-                    ⏸ On Hold (
-                    {new Date(downTimeval?.downTimeFrom).toLocaleDateString()} –{" "}
-                    {new Date(downTimeval?.downTimeTo).toLocaleDateString()}) ·
+                    â¸ On Hold (
+                    {new Date(downTimeval?.downTimeFrom).toLocaleDateString()} â€“{" "}
+                    {new Date(downTimeval?.downTimeTo).toLocaleDateString()}) Â·
                     Reason: {downTimeval?.downTimeDesc}
                   </div>
                 )}
@@ -1523,7 +1523,7 @@ const ViewPlanSchedule = () => {
                 </div>
               ) : (
                 <span className="rounded-lg bg-green-100 px-3 py-1 text-sm font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                  ✅ Completed
+                  âœ… Completed
                 </span>
               )}
             </div>

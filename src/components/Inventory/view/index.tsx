@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState } from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
@@ -185,7 +185,7 @@ const ViewInventory = () => {
     }
   };
   const handleIssueKit = (selectedProcess, event) => {
-    console.log("event ==>", event);
+    
 
     setIssueKitProcess(e.target.value);
   };

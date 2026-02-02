@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+﻿import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Cable, Square, Terminal, Trash2, Download, Play, Activity } from "lucide-react";
 import { updateStageBySerialNo } from "@/lib/api";
 import { toast } from "react-toastify";
@@ -277,7 +277,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
           }
         }
       });
-      console.log(`Matches: ${matchCount} / ${requiredFieldsCount}. AllPassed: ${allPassed}`);
+      
 
       if (matchCount < requiredFieldsCount) {
         const missing = currentSubStep.jigFields.filter((field: any) => {
@@ -294,7 +294,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
           return !found;
         }).map((f: any) => f.jigName);
         if (missing.length > 0) {
-          console.log("Waiting for fields:", missing);
+          
         }
 
         // --- NEW: Report current status to parent for better timeout reasons ---
@@ -315,7 +315,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       if (matchCount > 0 && onDecisionRef.current) {
         if (matchCount >= requiredFieldsCount) {
           if (isCommandBusyRef.current) {
-            console.log("[JigSection] Waiting for command execution completion...");
+            
             // Optionally add a small status message to notify the user
             if (onStatusUpdateRef.current) onStatusUpdateRef.current("Waiting for command completion...");
             return;
@@ -437,7 +437,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
     const command = subStep?.stepFields?.command;
 
     if (isConnected && (actionType === "Command" || actionType === "Custom Fields") && command && lastSentCommandStepRef.current !== currentStepId) {
-      console.log(`[JigSection] Auto-sending command for step ${currentStepId} (${actionType}): ${command}`);
+      : ${command}`);
       isCommandBusyRef.current = true;
       sendCommand(command).then(() => {
         // Wait for 1.5s after command is sent to allow jig to process/respond fully

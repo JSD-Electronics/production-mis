@@ -1,4 +1,4 @@
-type CheckboxOneProps = {
+﻿type CheckboxOneProps = {
   id: string;
   value: string | number;
   checked: boolean;

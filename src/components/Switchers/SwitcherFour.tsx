@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 
 const SwitcherFour = () => {
   const [enabled, setEnabled] = useState<boolean>(false);

@@ -1,4 +1,4 @@
-import axios from "axios";
+﻿import axios from "axios";
 import { CONFIG } from "../config";
 
 const api = axios.create({
@@ -225,7 +225,7 @@ export const createRoomPlan = async (formData) => {
     const response = await api.post(`/room-plan/create`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error Creating Room Plan :`, error);
+
     throw error.response?.data || { message: "Error Creating Room Plan!!" };
   }
 };
@@ -234,7 +234,7 @@ export const viewRoom = async () => {
     const response = await api.get(`/room-plan/view`);
     return response.data;
   } catch (error) {
-    console.log(`Error Creating Room Plan :`, error);
+
     throw error.response?.data || { message: "Error Creating Room Plan!!" };
   }
 };
@@ -243,7 +243,7 @@ export const deleteRoomPlan = async (id) => {
     const response = await api.delete(`/room-plan/delete/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Deleting Room Plan`, error);
+
     throw error.response?.data || { message: "Error Deleting Room Plan!!" };
   }
 };
@@ -311,7 +311,7 @@ export const deleteUser = async (id) => {
     const response = await api.delete(`/user/delete/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Deleting User`, error);
+
     throw error.response?.data || { message: "Error Deleting User!!" };
   }
 };
@@ -358,7 +358,7 @@ export const deleteUserRole = async (id) => {
     const response = await api.delete(`/user-roles/delete/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Deleting User Roles`, error);
+
     throw error.response?.data || { message: "Error Deleting User Roles!!" };
   }
 };
@@ -432,7 +432,7 @@ export const viewShift = async () => {
     const response = await api.get(`/shift/view`);
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Shifts`, error);
+
     throw error.response?.data || { message: `Error Fetching User Type` };
   }
 };
@@ -441,7 +441,7 @@ export const deleteShift = async (id) => {
     const response = await api.delete(`/shift/delete/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Deleting Shift`, error);
+
     throw error.response?.data || { message: `Error Deleting shift` };
   }
 };
@@ -452,7 +452,7 @@ export const deleteMultipleShifts = async (ids) => {
     });
     return response.data;
   } catch (error) {
-    console.log(`Error Deleting Shifts`, error);
+
     throw error.response?.data || { message: `Error Deleting Shift!!` };
   }
 };
@@ -461,7 +461,7 @@ export const getShift = async (id) => {
     let response = await api.get(`/shift/get/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Shifts`, error);
+
     throw error.response?.data || { message: `Error Fetching Shifts` };
   }
 };
@@ -470,7 +470,7 @@ export const updateShift = async (formData, id) => {
     const response = await api.put(`/shift/update/${id}`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error Updating Shift`, error);
+
     throw error.response?.data || { message: `Error Updating Shift` };
   }
 };
@@ -479,7 +479,7 @@ export const createProcess = async (formData, id) => {
     const response = await api.post(`/process/create`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error Creating Process`, error);
+
     throw error.response?.data || { message: `Error Creating Process` };
   }
 };
@@ -488,7 +488,7 @@ export const viewProcess = async () => {
     const response = await api.get(`/process/view`);
     return response.data;
   } catch (error) {
-    console.log("Error Fetching Process", error);
+
     throw error.response?.data || { message: `Error Fetching Process` };
   }
 };
@@ -497,7 +497,7 @@ export const viewProcessByProductId = async (id) => {
     const response = await api.get(`/getProcessesByProductId/${id}`);
     return response.data;
   } catch (error) {
-    console.log("Error Fetching Processes", error);
+
     throw error.response.data || { message: "Error Fetching Process" };
   }
 };
@@ -506,7 +506,7 @@ export const deleteProcess = async (id) => {
     const reponse = api.delete(`/process/delete/${id}`);
     return reponse.data;
   } catch (error) {
-    console.log("Error Deleting Process", error);
+
     throw error.response?.data || { message: `Error Deleting Process` };
   }
 };
@@ -517,7 +517,7 @@ export const deleteMultipleProcesses = async (ids) => {
     });
     return response.data;
   } catch (error) {
-    console.log(`Error Deleting Process`, error);
+
     throw error.response?.data || { message: `Error Deleting Process!!` };
   }
 };
@@ -526,7 +526,7 @@ export const getProcessByID = async (id) => {
     let response = await api.get(`/process/get/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Process`, error);
+
     throw error.response?.data || { message: `Error Fetching Process!!` };
   }
 };
@@ -535,7 +535,7 @@ export const updateProcess = async (formData, id) => {
     const response = await api.put(`/process/update/${id}`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Process`, error);
+
     throw error.response?.data || { message: `Error Fetching Process!!` };
   }
 };
@@ -544,7 +544,7 @@ export const createPlaningAndScheduling = async (formData) => {
     const response = await api.post(`/planing/create`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error Creating Planing and Scheduling`, error);
+
     throw (
       error.response?.data || {
         message: `Error Fetching Planing and Scheduling!!`,
@@ -588,7 +588,7 @@ export const viewPlaning = async () => {
     const response = await api.get(`/planing/view`);
     return response.data;
   } catch (error) {
-    console.log("Error Fetching the planning and Scheduling", error);
+
     throw (
       error.response?.data || {
         message: `Error Fetching Planing and Scheduling!!`,
@@ -601,7 +601,7 @@ export const deletePlan = async (id) => {
     const response = await api.delete(`/planing/delete/${id}`);
     return response.data;
   } catch (error) {
-    console.log("Error Deleting the Planing and Scheduling", error);
+
     throw (
       error.response?.data || {
         message: "Error Deleting Planing and Scheduling|",
@@ -616,7 +616,7 @@ export const deleteMultiplePlaning = async (ids) => {
     });
     return response.data;
   } catch (error) {
-    console.log(`Error Deleting Process`, error);
+
     throw error.response?.data || { message: `Error Deleting Process!!` };
   }
 };
@@ -625,7 +625,7 @@ export const getPlaningAndSchedulingById = async (id) => {
     let response = await api.get(`/planingAndScheduling/get/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Deleting Process`, error);
+
     throw error.response?.data || { message: `Error Deleting Process!!` };
   }
 };
@@ -634,7 +634,7 @@ export const getOperatorTaskByUserID = async (id) => {
     let response = await api.get(`/assignPlanToOperator/get/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Operator`, error);
+
     throw error.response?.data || { message: `Error Fetching Process !!` };
   }
 };
@@ -645,7 +645,7 @@ export const getPlaningAndSchedulingByProcessId = async (id) => {
     );
     return response.data;
   } catch (error) {
-    console.log(`Error Deleting Process`, error);
+
     throw error.response?.data || { message: `Error Deleting Process!!` };
   }
 };
@@ -657,7 +657,7 @@ export const updatePlaningAndScheduling = async (formData, id) => {
     );
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Process`, error);
+
     throw error.response?.data || { message: `Error Fetching Process!!` };
   }
 };
@@ -666,7 +666,7 @@ export const fetchHolidays = async () => {
     const response = await api.get("/holiday/view");
     return response?.data;
   } catch (error) {
-    console.log(`Error Fetching Holidays`, error);
+
     throw error?.response?.data || { message: `Error Fetching Holidays!` };
   }
 };
@@ -675,7 +675,7 @@ export const createHoliday = async (formData) => {
     const response = await api.post(`/holiday/create`, formData);
     return response?.data;
   } catch (error) {
-    console.log(`Error Creating Holiday`, error);
+
     throw error?.response?.data || { message: `Error Fetching Holiday!` };
   }
 };
@@ -684,7 +684,7 @@ export const deleteHolidays = async (id) => {
     const response = await api.delete(`/holiday/delete/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Delete Holidays`, error);
+
     throw error?.response?.data || { message: `Error Deleting Holiday!` };
   }
 };
@@ -693,7 +693,7 @@ export const deleteIMEI = async (id) => {
     const response = await api.delete(`/devices/deleteIMEI/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Delete IMEI`, error);
+
     throw error?.response?.data || { message: `Error Deleting IMEI!` };
   }
 };
@@ -704,7 +704,7 @@ export const deleteMultipleIMEI = async (ids) => {
     });
     return response.data;
   } catch (error) {
-    console.log(`Error Deleting Holiday`, error);
+
     throw error.response?.data || { message: `Error Deleting Holiday!!` };
   }
 };
@@ -715,7 +715,7 @@ export const deleteMultipleHoliday = async (ids) => {
     });
     return response.data;
   } catch (error) {
-    console.log(`Error Deleting Holiday`, error);
+
     throw error.response?.data || { message: `Error Deleting Holiday!!` };
   }
 };
@@ -732,7 +732,7 @@ export const fetchSeatAvailabilityFromCurrentDate = async (roomId, shiftId) => {
       return [];
     }
   } catch (error) {
-    console.log(`Error Fetching Seat Availability`, error);
+
     throw (
       error.response?.data || { message: `Error Fetching Seat Availability` }
     );
@@ -743,7 +743,7 @@ export const getPlaningAndSchedulingModel = async () => {
     const response = await api.get(`/planing/getPlaningAndSchedulingModel`);
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Seat Availability`, error);
+
     throw (
       error.response?.data || { message: `Error Fetching Seat Availability` }
     );
@@ -754,7 +754,7 @@ export const createProcessLogs = async (formData) => {
     const response = await api.post(`/process/log/create`, formData);
     return response?.data;
   } catch (error) {
-    console.log(`Error Creating Planing!!`, error);
+
     throw error.response?.data || { message: `Error Creating Planing!!` };
   }
 };
@@ -763,7 +763,7 @@ export const getLogsByProcessID = async (id) => {
     let response = await api.get(`/process/logs/getLogsByProcessID/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Deleting Process`, error);
+
     throw error.response?.data || { message: `Error Deleting Process!!` };
   }
 };
@@ -772,7 +772,7 @@ export const createAssignedOperatorsToPlan = async (formData) => {
     let response = await api.post(`/assignPlanToOperator/create`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error creating assigned operators to Plan`, error);
+
     throw (
       error.response?.data || {
         message: "Error Creating Assign Operator to Plan !",
@@ -785,7 +785,7 @@ export const getTaskByUserId = async (id) => {
     let response = await api.get(`/assignPlanToOperator/view/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Task By ID`, error);
+
     throw error?.response?.data || { message: `Error Retriving Task By ID` };
   }
 };
@@ -794,7 +794,7 @@ export const fetchJigsById = async (id) => {
     let response = await api.get(`/fetchJigsById/${id}`);
     return response?.data;
   } catch (error) {
-    console.log(`Error Fetching Jigs By ID`, error);
+
     throw error?.response?.data || { message: `Error Fetching Jigs By ID` };
   }
 };
@@ -811,7 +811,7 @@ export const createDevice = async (formData) => {
     let response = await api.post(`/devices/create`, formData);
     return response.data;
   } catch (error) {
-    console.log("error Creating Device", error);
+
     throw error.response?.data || { message: "Error Creating Device" };
   }
 };
@@ -820,7 +820,7 @@ export const createIMEI = async (formData) => {
     let response = await api.post(`/devices/createIMEI`, formData);
     return response.data;
   } catch (error) {
-    console.log("error Creating Imei", error);
+
     throw error.response?.data || { message: "Error Creating Imei" };
   }
 };
@@ -829,7 +829,7 @@ export const viewIMEI = async () => {
     let response = await api.get(`/devices/viewIMEI`);
     return response.data;
   } catch (error) {
-    console.log("error Fetching Imei", error);
+
     throw error.response?.data || { message: "Error Fetching Imei" };
   }
 };
@@ -838,7 +838,7 @@ export const getDeviceByProductId = async (id) => {
     let response = await api.get(`/devices/devicesByProductID/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Devices`, error);
+
     throw error?.response?.data || { message: `Error Fetching Devices` };
   }
 };
@@ -847,7 +847,7 @@ export const createDeviceTestEntry = async (data) => {
     let response = await api.post(`/deviceRecord/create`, data);
     return response.data;
   } catch (error) {
-    console.log(`Error Creating Device Test Entry`, error);
+
     throw (
       error?.response?.data || { message: `Error Creating Device Test Entry` }
     );
@@ -858,7 +858,7 @@ export const getOverallDeviceTestEntry = async (id) => {
     let response = await api.get(`/getOverallDeviceTestEntry`);
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Get Device Test Entry`, error);
+
     throw (
       error?.response?.data || {
         message: `Error Fetching Get Device Test Entry`,
@@ -875,7 +875,7 @@ export const getDeviceTestEntryByOperatorId = async (id, date) => {
     let response = await api.get(url);
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Get Device Test Entry By Operator ID`, error);
+
     throw (
       error?.response?.data || {
         message: `Error Fetching Get Device Test Entry By Operator ID`,
@@ -888,7 +888,7 @@ export const getDeviceTestByDeviceId = async (id) => {
     let response = await api.get(`/deviceTestHistoryByDeviceId/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Get Device Test By Device ID`, error);
+
     throw (
       error?.response?.data || {
         message: `Error Fetching Get Device Test By DeviceID`,
@@ -901,7 +901,7 @@ export const updateStageByDeviceId = async (id, formData) => {
     let response = await api.patch(`/updateStageByDeviceId/${id}`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error Updating Device status`, error);
+
     throw error?.response?.data || { message: `Error Updating Device status` };
   }
 };
@@ -910,7 +910,7 @@ export const updateStageBySerialNo = async (id, formData) => {
     let response = await api.patch(`/updateStageBySerialNo/${id}`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error Updating Device status`, error);
+
     throw error?.response?.data || { message: `Error Updating Device status` };
   }
 }
@@ -919,7 +919,7 @@ export const markDeviceAsResolved = async (data) => {
     const response = await api.post(`/devices/markAsResolved`, data);
     return response.data;
   } catch (error) {
-    console.log(`Error Marking Device As Resolved`, error);
+
     throw error?.response?.data || { message: `Error Marking Device As Resolved` };
   }
 }
@@ -928,7 +928,7 @@ export const createReport = async (formData) => {
     let response = await api.post(`/createReport`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error Creating Report`, error);
+
     throw error?.response?.data || { message: `Error Updating Device status` };
   }
 };
@@ -939,7 +939,7 @@ export const getOverallProgressByOperatorId = async (data) => {
     );
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Overall Progress By Operator ID`, error);
+
     throw (
       error?.response?.data || {
         message: `Error Fetching Overall Progress By Operator ID`,
@@ -952,7 +952,7 @@ export const createStickerField = async (formData) => {
     let response = await api.post(`/sticker/fields/create`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error Creating Sticker Field`, error);
+
     throw error?.response?.data || { message: `Error Creating Sticker Field` };
   }
 };
@@ -961,7 +961,7 @@ export const getStickerFields = async () => {
     const response = await api.get("/sticker/fields/get");
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Sticker Field`, error);
+
     throw error?.response?.data || { message: `Error Fetching Sticker Field` };
   }
 };
@@ -970,7 +970,7 @@ export const deleteStickerField = async (id) => {
     const response = await api.delete(`/sticker/fields/delete/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Deleting Sticker Field`, error);
+
     throw error?.response?.data || { message: `Error Fetching Sticker Field` };
   }
 };
@@ -981,7 +981,7 @@ export const deleteStickerFieldMultiple = async (ids) => {
     });
     return response.data;
   } catch (error) {
-    console.log(`Error Deleting Sticker Fields`, error);
+
     throw (
       error.response?.data || { message: `Error Deleting Sticker Fields!!` }
     );
@@ -1004,7 +1004,7 @@ export const updateInventoryById = async (id, formData) => {
     let response = await api.put(`/inventory/update/${id}`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error Updating Inventory`, error);
+
     throw error?.response?.data || { message: `Error Updating Inventory` };
   }
 };
@@ -1013,7 +1013,7 @@ export const getProcessByProductID = async (id) => {
     let response = await api.get(`/inventory/getProcessByProduct/${id}`);
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching Process By Product ID`, error);
+
     throw (
       error?.response?.data || { message: `Error Fetching Process By Product` }
     );
@@ -1024,7 +1024,7 @@ export const updateIssueKit = async (formData) => {
     let response = await api.put(`/inventory/process/updateIssueKit`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error Updating Issueed Kit`, error);
+
     throw error?.response?.data || { message: `Error Updating Issueed Kit` };
   }
 };
@@ -1036,7 +1036,7 @@ export const updateIssueCarton = async (formData) => {
     );
     return response.data;
   } catch (error) {
-    console.log(`Error Updating Issueed Kit`, error);
+
     throw error?.response?.data || { message: `Error Updating Issueed Kit` };
   }
 };
@@ -1045,7 +1045,7 @@ export const addUserRole = async (formData) => {
     let response = await api.post(`/user-roles/create`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error Adding User Role`, error);
+
   }
 };
 export const updateProductionStatus = async (formData) => {
@@ -1056,7 +1056,7 @@ export const updateProductionStatus = async (formData) => {
     );
     return response.data;
   } catch (error) {
-    console.log(`Error Updating Production Status`, error);
+
   }
 };
 export const updateOperatorSkillSet = async (formData, id) => {
@@ -1067,7 +1067,7 @@ export const updateOperatorSkillSet = async (formData, id) => {
     );
     return response.data;
   } catch (error) {
-    console.log(`Error Updating Operator Skill Set`, error);
+
   }
 };
 export const createOperatorSkill = async (formData) => {
@@ -1075,7 +1075,7 @@ export const createOperatorSkill = async (formData) => {
     let response = await api.post(`/skill-management/create`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error Creating Skill`, error);
+
   }
 };
 export const getOperatorSkills = async () => {
@@ -1083,7 +1083,7 @@ export const getOperatorSkills = async () => {
     let response = await api.get(`/skill-management/get`);
     return response.data;
   } catch (error) {
-    console.log(`Error Fetching skills`, error);
+
   }
 };
 export const updateQuantity = async (formData, id) => {
@@ -1091,7 +1091,7 @@ export const updateQuantity = async (formData, id) => {
     let response = await api.put(`/process/updateQuantity/${id}`, formData);
     return response.data;
   } catch (error) {
-    console.log(`Error Updating Quantity`, error);
+
   }
 };
 export const updateMarkAsComplete = async (formData, id) => {
@@ -1102,7 +1102,7 @@ export const updateMarkAsComplete = async (formData, id) => {
     );
     return response.data;
   } catch (error) {
-    console.log("error Updating Process Status", error.message);
+
   }
 };
 export const updateKitsEntry = async (formData, id) => {
@@ -1110,7 +1110,7 @@ export const updateKitsEntry = async (formData, id) => {
     let response = await api.put(`/store/updateKitsStatus/${id}`, formData);
     return response.data;
   } catch (error) {
-    console.log("error Updatign Kits Entry", error.message);
+
   }
 };
 export const createProcessKits = async (data) => {
@@ -1118,7 +1118,7 @@ export const createProcessKits = async (data) => {
     let response = await api.post(`/production/returnKitsToStore`, data);
     return response.data;
   } catch (error) {
-    console.log("Error Creating Process Kits", error.message);
+
   }
 };
 export const createAssignedJigs = async (formData) => {
@@ -1126,7 +1126,7 @@ export const createAssignedJigs = async (formData) => {
     let response = await api.post("/planing/createAssignedJigs", formData);
     return response.data;
   } catch (error) {
-    console.log("Error Creating Assigned Jigs", error.message);
+
   }
 };
 export const getUpdateStatus = async (id, data) => {
@@ -1134,7 +1134,7 @@ export const getUpdateStatus = async (id, data) => {
     let response = await api.put(`/operator/updateStatus/${id}`, data);
     return response.data;
   } catch (error) {
-    console.log("Error Fetching Update Status", error.message);
+
   }
 };
 export const updateJigStatus = async (id, data) => {
@@ -1142,7 +1142,7 @@ export const updateJigStatus = async (id, data) => {
     let response = await api.put(`/jig/updateStatus/${id}`, data);
     return response.data;
   } catch (error) {
-    console.log("Error Updating Jig Status", error.message);
+
   }
 };
 export const updateIssuedKitsToLine = async (formData) => {
@@ -1150,7 +1150,7 @@ export const updateIssuedKitsToLine = async (formData) => {
     let response = await api.put(`/process/updateIssueKitsToLine`, formData);
     return response.data;
   } catch (error) {
-    console.log("Error Updating Issued Kits to Line", error.message);
+
   }
 };
 export const updateStatusRecivedKitToLine = async (id, formData) => {
@@ -1161,7 +1161,7 @@ export const updateStatusRecivedKitToLine = async (id, formData) => {
     );
     return response.data;
   } catch (error) {
-    console.log("Error Updating Reciving kit to Line :", error.message);
+
   }
 };
 export const getDeviceTestRecordsByProcessId = async (id) => {
@@ -1171,7 +1171,7 @@ export const getDeviceTestRecordsByProcessId = async (id) => {
     );
     return response.data;
   } catch (error) {
-    console.log(
+    console.error(
       "Error Fetching Device Test Records By Plan Id :",
       error.message,
     );
@@ -1182,7 +1182,7 @@ export const getOrderConfirmationNumers = async () => {
     let reponse = await api.get("/process/orderConfirmation/get");
     return reponse.data;
   } catch (error) {
-    console.log(`Error Fetching Order Confirmation Numbers :`, error.message);
+
   }
 };
 export const createOrderConfirmationNumbers = async (formData) => {
@@ -1193,7 +1193,7 @@ export const createOrderConfirmationNumbers = async (formData) => {
     );
     return response.data;
   } catch (error) {
-    console.log("Error Creating Confirmation Number", error.message);
+
   }
 };
 export const updateDownTimeProcess = async (id, formData) => {
@@ -1201,7 +1201,7 @@ export const updateDownTimeProcess = async (id, formData) => {
     let response = await api.put(`/process/addDownTime/${id}`, formData);
     return response.data;
   } catch (error) {
-    console.log("Error Updating Down Time Process", error.message);
+
   }
 };
 export const updateProcessStatus = async (id, formData) => {
@@ -1212,7 +1212,7 @@ export const updateProcessStatus = async (id, formData) => {
     );
     return response.data;
   } catch (error) {
-    console.log("Error Updating Process Status", error.message);
+
   }
 };
 export const getPlanningAndSchedulingDate = async (
@@ -1233,7 +1233,7 @@ export const getPlanningAndSchedulingDate = async (
     }
     return response.data;
   } catch (error) {
-    console.log("Error Fetching Scheduling : ", error.message);
+
   }
 };
 export const getLastEntryBasedUponPrefixAndSuffix = async (prefix, suffix) => {
@@ -1243,7 +1243,7 @@ export const getLastEntryBasedUponPrefixAndSuffix = async (prefix, suffix) => {
     );
     return response.data;
   } catch (error) {
-    console.log("Error Fetching Last Entry Based on Prefix : ", error.message);
+
   }
 };
 export const createCarton = async (formData) => {
@@ -1251,7 +1251,7 @@ export const createCarton = async (formData) => {
     let response = await api.post(`/carton/createCarton`, formData);
     return response.data;
   } catch (error) {
-    console.log("Error Creating Carton  : ", error.message);
+
   }
 };
 export const fetchCartonByProcessID = async (processID) => {
@@ -1259,16 +1259,16 @@ export const fetchCartonByProcessID = async (processID) => {
     let response = await api.get(`/cartons/${processID}/partial`);
     return response.data;
   } catch (error) {
-    console.log("Error Fetching Carton By Process ID :", error.message);
+
   }
 };
 export const fetchCartons = async (processID) => {
   try {
     let response = await api.get(`/cartons/${processID}`);
-    console.log("response ===>", response);
+
     return response.data;
   } catch (error) {
-    console.log("Error Fetxhing Cartons :", error.message);
+
   }
 };
 export const shiftToPDI = async (formData) => {
@@ -1276,7 +1276,7 @@ export const shiftToPDI = async (formData) => {
     let response = await api.post(`cartons/shift-to-pdi`, formData);
     return response.data;
   } catch (error) {
-    console.log("Error Carton Shift To PDI :", error.message);
+
   }
 };
 export const shiftToNextCommonStage = async (processId, formData) => {
@@ -1284,7 +1284,7 @@ export const shiftToNextCommonStage = async (processId, formData) => {
     let response = await api.post(`/cartons/${processId}/shift`, formData);
     return response.data;
   } catch (error) {
-    console.log("Error Carton Shift To Common Stage :", error.message);
+
   }
 };
 
@@ -1293,7 +1293,7 @@ export const keepCartonInStore = async (processId, formData) => {
     let response = await api.post(`/cartons/${processId}/keep-in-store`, formData);
     return response.data;
   } catch (error) {
-    console.log("Error Keeping Carton In Store :", error.message);
+
     throw error;
   }
 };

@@ -1,4 +1,4 @@
-export type CardItemProps = {
+﻿export type CardItemProps = {
   imageSrc?: string;
   name?: string;
   role?: string;

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState, useEffect, use } from "react";
 import { viewRoom, getProductById, viewProcess, viewShift } from "@/lib/api";
 
@@ -107,7 +107,7 @@ const FormComponent = ({
       setProductName(result.name);
       setSelectedProduct(result);
     } catch (error) {
-      console.log("Error Fetching Products:", error);
+      
     }
   };
   const handleShift = (e: any) => {
@@ -743,7 +743,7 @@ const FormComponent = ({
     //                 </div>
     //                 <div className="col-span-3">
     //                   <strong>Dimension:</strong>{" "}
-    //                   {packagingData[0].packagingData.cartonWidth} ×{" "}
+    //                   {packagingData[0].packagingData.cartonWidth} Ã—{" "}
     //                   {packagingData[0].packagingData.cartonHeight}
     //                 </div>
     //               </div>
@@ -1058,7 +1058,7 @@ const FormComponent = ({
     //               </div>
     //               <div className="col-span-3">
     //                 <strong>Dimension:</strong>{" "}
-    //                 {packagingData[0].packagingData.cartonWidth} ×{" "}
+    //                 {packagingData[0].packagingData.cartonWidth} Ã—{" "}
     //                 {packagingData[0].packagingData.cartonHeight}
     //               </div>
     //             </div>

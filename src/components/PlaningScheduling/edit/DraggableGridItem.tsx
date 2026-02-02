@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState } from "react";
 import { useDrag, useDrop } from "react-dnd";
 import Modal from "@/components/Modal/page";
@@ -32,12 +32,12 @@ const DraggableGridItem = ({
     const requiredSkills = stages.map((stage) =>
       stage.requiredSkill.toLowerCase().trim(),
     );
-    console.log("requiredSkills ==>", requiredSkills);
+    
     const assignedOperatorIds = Object.values(assignedOperators || {})
       .flat()
       .filter((operator) => operator && operator._id) // only valid ones
       .map((operator) => operator._id);
-    console.log("assignedOperatorIds ==>", assignedOperatorIds);
+    
     const compatibleOperators = operators.filter((operator) => {
       const normalizedSkills = operator.skills.map((skill) =>
         skill.toLowerCase().trim(),
@@ -115,7 +115,7 @@ const DraggableGridItem = ({
       if (data && data.status == 200) {
       }
     } catch (error) {
-      console.log("Error Handle Remove Operator :", error);
+      
     }
   };
   const openAssignJigModal = (stages: any) => {
@@ -158,7 +158,7 @@ const DraggableGridItem = ({
         // handlePlaningSubmit();
       }
     } catch (error) {
-      console.log("Error Handle Remove Jig :", error);
+      
     }
   };
   const changeJigCategories = async (id: any) => {
@@ -166,7 +166,7 @@ const DraggableGridItem = ({
       let result = await fetchJigsById(id);
       setJigs(result);
     } catch (error) {
-      console.log("Error Fecth Jig Category :", error);
+      
     }
   };
   return (

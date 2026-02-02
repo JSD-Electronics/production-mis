@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 export default function QrScanner({slug, slugVal, setScanResult}) {

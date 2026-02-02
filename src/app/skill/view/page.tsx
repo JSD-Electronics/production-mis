@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import ViewSkillManagementComponent from "@/components/SkillManagement/view/page"
 import DefaultLayout from "@/components/Layouts/DefaultLayout";
 

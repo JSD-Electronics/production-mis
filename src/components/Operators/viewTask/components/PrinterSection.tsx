@@ -1,4 +1,4 @@
-import { Printer, CheckCircle, XCircle } from "lucide-react";
+﻿import { Printer, CheckCircle, XCircle } from "lucide-react";
 import StickerGenerator from "../../viewTask-old/StickerGenerator";
 
 interface PrinterSectionProps {

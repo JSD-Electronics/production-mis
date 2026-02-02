@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState, useEffect, use } from "react";
 import { fetchSeatAvailabilityFromCurrentDate } from "@/lib/api";
 import flatpickr from "flatpickr";

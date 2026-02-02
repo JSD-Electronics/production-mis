@@ -1,4 +1,4 @@
-export interface Device {
+﻿export interface Device {
   _id: string;
   serialNo: string;
   modelName?: string;
