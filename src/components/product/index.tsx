@@ -260,37 +260,6 @@ const AddProduct = () => {
           toast.error(`Step Name is required for Stage ${stageIndex + 1}, Step ${subStepIndex + 1}`);
           isValid = false;
         }
-
-        // Custom Fields Validation
-        if (subStep.stepType === "manual") {
-          if (!subStep.customFields || subStep.customFields.length === 0) {
-            toast.error(`At least one Custom Field is required for Stage ${stageIndex + 1}, Step ${subStepIndex + 1}`);
-            isValid = false;
-          } else {
-            subStep.customFields.forEach((cf, cfIndex) => {
-              if (!cf.fieldName) {
-                toast.error(`Field Name is required for Custom Field ${cfIndex + 1} in Stage ${stageIndex + 1}, Step ${subStepIndex + 1}`);
-                isValid = false;
-              }
-              if (cf.validationType === "value" && !cf.value) {
-                toast.error(`Validation Value is required for Custom Field "${cf.fieldName || cfIndex + 1}"`);
-                isValid = false;
-              }
-              if (cf.validationType === "range") {
-                if (cf.rangeFrom === "" || cf.rangeTo === "") {
-                  toast.error(`Range From and To are required for Custom Field "${cf.fieldName || cfIndex + 1}"`);
-                  isValid = false;
-                }
-              }
-              if (cf.validationType === "length") {
-                if (cf.lengthFrom === "" || cf.lengthTo === "") {
-                  toast.error(`Length From and To are required for Custom Field "${cf.fieldName || cfIndex + 1}"`);
-                  isValid = false;
-                }
-              }
-            });
-          }
-        }
       });
     });
 
