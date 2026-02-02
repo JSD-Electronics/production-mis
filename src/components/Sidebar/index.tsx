@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { getUseTypeByType, getAllMenus } from "../../lib/api";
@@ -44,7 +44,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
         return updatedMenuGroups;
       });
     } catch (error) {
-      console.log("Failed to fetch Room Plan :", error);
+      
     }
   };
   const getAccessPermission = async (userType: any) => {

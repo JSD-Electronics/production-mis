@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+﻿import { useMemo } from "react";
 
 interface UseDeviceLogicProps {
   handleUpdateStatus: (status: string, assignedDept?: string | null) => Promise<any>;

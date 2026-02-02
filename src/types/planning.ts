@@ -1,4 +1,4 @@
-export interface PlaningData {
+﻿export interface PlaningData {
     _id: string;
     orderConfirmationNo: string;
     processID: string;

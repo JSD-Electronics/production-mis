@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState, useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import { viewProduct, createIMEI } from "@/lib/api";
@@ -41,7 +41,7 @@ const AddImeiComponent = () => {
             ?.map((field) => field.replace(/^"|"$/g, "").trim()) || []
         );
       });
-      console.log("Processed CSV Data:", parsedData);
+      
       setCsvData(parsedData);
     };
     reader.readAsText(file);

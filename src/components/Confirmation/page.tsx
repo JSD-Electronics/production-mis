@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 
 const ConfirmationPopup = ({message,onConfirm,onCancel,}: {message: string;onConfirm: () => void;onCancel: () => void;}) => {
   return (

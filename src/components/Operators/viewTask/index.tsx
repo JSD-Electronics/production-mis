@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import BasicInformation from "./BasicInformation";
 import DeviceTestComponent from "./DeviceTestComponent";
@@ -140,7 +140,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     try {
       // createCarton implementation
     } catch (error: any) {
-      console.log(`Error Creating Carton`, error?.message ?? error);
+      
     }
   };
   const getAssignedTask = async (id: any) => {
@@ -148,7 +148,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       let response = await getOperatorTaskByUserID(id);
       return response.task;
     } catch (error) {
-      console.log(`Error Fetching Assigned Task:`, error);
+      
     }
   };
   const closeVerifyStickerModal = () => {
@@ -162,7 +162,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       let devices = response.data || [];
       setOverallTotalAttempts(devices.length);
     } catch (error: any) {
-      console.log(`Error Fetching Device History`, error?.message ?? error);
+      
     }
   };
   const getDeviceById = async (id: any) => {
@@ -188,14 +188,14 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             await updateStageByDeviceId(String(id), formData);
             setResetDeviceIds((prev) => [...prev, String(id)]);
           } catch (e) {
-            console.log("Error resetting device to first stage", e);
+            
           }
         }
       } else {
         setDeviceHistory([]);
       }
     } catch (error) {
-      console.log(`Error Fetching Device History`, error);
+      
     }
   };
 
@@ -228,7 +228,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       setCheckedDevice(updatedDeviceHistory);
       return updatedDeviceHistory;
     } catch (error: any) {
-      console.log(`Error Fetching Devices`, error?.message ?? error);
+      
       // If error occurs (e.g. no records found), clear the displayed list so we don't show old data
       setCheckedDevice([]);
       setTotalNg(0);
@@ -248,15 +248,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     try {
       const result = await getDeviceByProductId(id);
       // result?.data contains product devices
-      // console.log("result ===>", result?.data);
+      // 
       const existingDevices = await getDeviceTestEntryOverall();
       const existingSerials = new Set(
         (existingDevices || [])
           .filter((device: any) => device.processId === pId && device.stageName === (assignStageToUser?.[0]?.name || assignStageToUser?.name))
           .map((device: any) => device.serialNo),
       );
-      // console.log("Existing Serials:", existingSerials);
-      // console.log("assignStageToUser?.[0]?.name  ==>", assignStageToUser?.[0]?.name);
+      // 
+      // 
       const filteredDeviceList = result?.data.filter(
         (device: any) =>
           !existingDevices.includes(device.serialNo) &&
@@ -265,7 +265,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           device.assignDeviceTo !== "TRC" &&
           device.assignDeviceTo !== "QC"
       );
-      console.log("Filtered Device List:", filteredDeviceList);
+      
       // set filtered list
       setDeviceList(filteredDeviceList);
     } catch (error) {
@@ -367,7 +367,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       setSelectedProduct(result);
       return;
     } catch (error) {
-      console.log("Error Fetching Product !", error);
+      
     }
   };
   const fetchProcessByID = async (id: any, assignStageToUser: any) => {
@@ -393,7 +393,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       getProduct(result.selectedProduct, assignStageToUser);
       setProduct(result);
     } catch (error: any) {
-      console.log("Error Fetching Processs !", error?.message ?? error);
+      
     }
   };
   const getShiftByID = async (id: any) => {
@@ -403,7 +403,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       setTimeDifference(diff);
       setShift(result);
     } catch (error) {
-      console.log("Error Fetching Shift", error);
+      
     }
   };
   const getPlaningAndSchedulingByID = async (id: any) => {
@@ -421,7 +421,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         assignOperator = JSON.parse(result?.assignedOperators || "{}");
         assignStage = JSON.parse(result?.assignedStages || "{}");
       }
-      // console.log("assignStage from function ==>", assignStage);
+      // 
       const currentUserName = user;
       const keys = Object.keys(assignOperator || {});
       const keysAssignStages = Object.keys(assignStage || {});
@@ -455,7 +455,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       getShiftByID(result?.selectedShift);
       setPlaningAndScheduling(result);
     } catch (error: any) {
-      console.log("error fetching planing and scheduling", error?.message ?? error);
+      
     }
   };
   const toggleFullScreenMode = () => {
@@ -466,7 +466,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   };
   const handleUpdateStatus = async (status: string, deviceDepartment: string, subStepResults?: any) => {
     if (isSubmitting.current) {
-      console.log("[handleUpdateStatus] Submission already in progress, ignoring duplicate call.");
+      
       return;
     }
     isSubmitting.current = true;
@@ -532,7 +532,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           (s: any) => s.stepType === "jig" || s.stepType === "manual"
         ) || [];
 
-        // console.log("testSteps ==>", testSteps);
+        // 
 
         // Construct logs array based on new schema
         logs = Object.keys(subStepResults).map((key) => {
@@ -595,8 +595,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         });
 
 
-        console.log("[ViewTask index] Submitting logs (converted from subStepResults) to DB:");
-        console.log("  - Number of steps:", logs.length);
+         to DB:");
+        
         let totalOriginalLogs = 0;
         let totalOptimizedLogs = 0;
         logs.forEach((log, idx) => {
@@ -604,14 +604,14 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           const optimizedCount = log.logData?.terminalLogs?.length || 0;
           totalOriginalLogs += originalCount;
           totalOptimizedLogs += optimizedCount;
-          console.log(`  - Step ${idx + 1} (${log.stepName}):`, {
+          :`, {
             stepType: log.stepType,
             status: log.status,
             terminalLogs: `${optimizedCount} / ${originalCount} (${originalCount > 0 ? Math.round((1 - optimizedCount / originalCount) * 100) : 0}% reduced)`,
             hasParsedData: !!log.logData?.parsedData
           });
         });
-        console.log(`  - Total logs: ${totalOptimizedLogs} / ${totalOriginalLogs} (${totalOriginalLogs > 0 ? Math.round((1 - totalOptimizedLogs / totalOriginalLogs) * 100) : 0}% reduction)`);
+         * 100) : 0}% reduction)`);
       }
 
       // Build JSON payload
@@ -678,7 +678,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         toast.error(result?.message || "Error creating device test entry");
       }
     } catch (error: any) {
-      console.log("error Creating Device Test Entry", error?.message ?? error);
+      
       toast.error(error?.message || "Error creating device test entry");
     } finally {
       isSubmitting.current = false;
@@ -946,7 +946,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       setIsVerifyStickerModal(false);
       setMoveToPackaging(true);
     } catch (error: any) {
-      console.log(`Error Creating Carton`, error?.message);
+      
     }
   };
   return (

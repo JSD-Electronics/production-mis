@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import Modal from "@/components/Modal/page";
 import { useQRCode } from "next-qrcode";
 import SearchableInput from "@/components/SearchableInput/SearchableInput";
@@ -311,13 +311,9 @@ export default function DeviceTestComponent({
       if (setDeviceList) {
         setDeviceList((prev: any[]) =>
           prev.map((d) => {
-            if (prev.length > 0 && d === prev[0]) {
-              console.log(`[DeviceTestComponent] Device Object Keys:`, Object.keys(d));
-            }
             const dSerial = d.serialNo || d.serial_no || d.serialNo;
             if (String(dSerial).trim() === String(targetSerial).trim()) {
-              console.log(`[DeviceTestComponent] Synchronizing customFields for ${targetSerial}`);
-              return { ...d, customFields: values, custom_fields: values }; // Sync both just in case
+              return { ...d, customFields: values, custom_fields: values };
             }
             return d;
           }),
@@ -391,18 +387,14 @@ export default function DeviceTestComponent({
 
   const handleStepDecision = (status: "Pass" | "NG", reason?: string, data?: any, isImmediate = true) => {
     if (jigDecision) {
-      console.log("[DeviceTestComponent] handleStepDecision ignored: jigDecision already set.", { status, reason });
+
       return;
     }
 
-    console.log(
-      `[DeviceTestComponent] handleStepDecision -> Step ${currentJigStepIndex + 1} finalized:`,
-      { status, reason, data }
-    );
 
     // For the new requirement: If it's a non-immediate NG from the jig, store the reason and wait.
     if (status === "NG" && !isImmediate) {
-      console.log(`[DeviceTestComponent] NG detected but waiting for timeout:`, reason);
+
       pendingJigErrorRef.current = reason || "Validation failed";
       setPendingJigErrorState(reason || "Validation failed");
       return;
@@ -506,7 +498,7 @@ export default function DeviceTestComponent({
   const handlePrint = () => {
     setIsCartonBarCodePrinted(true);
     const printContents = document.getElementById("barcode-area")?.innerHTML;
-    console.log("printContents ==>", printContents);
+
     const printWindow = window.open("", "_blank", "width=600,height=400");
     if (printWindow) {
       printWindow.document.write(`
@@ -526,7 +518,7 @@ export default function DeviceTestComponent({
   const handleCommonGenerateQRCode = async (carton: any) => {
     try {
       if (!carton) {
-        // Case 1: New carton → save first
+        // Case 1: New carton â†’ save first
         const response = await createCarton(carton);
         if (response?.newCartonModel) {
           alert("Carton saved! Now generating QR Code...");
@@ -536,7 +528,7 @@ export default function DeviceTestComponent({
           }));
         }
       } else {
-        // Case 2: Existing carton → just generate QR
+        // Case 2: Existing carton â†’ just generate QR
         setQrCartons((prev: Record<string, boolean>) => ({
           ...prev,
           [carton]: true,
@@ -549,7 +541,7 @@ export default function DeviceTestComponent({
   const handleGenerateQRCode = async (carton: any) => {
     try {
       if (!carton.cartonSerial) {
-        // Case 1: New carton → save first
+        // Case 1: New carton â†’ save first
         const response = await createCarton(carton);
         if (response?.newCartonModel) {
           alert("Carton saved! Now generating QR Code...");
@@ -559,7 +551,7 @@ export default function DeviceTestComponent({
           }));
         }
       } else {
-        // Case 2: Existing carton → just generate QR
+        // Case 2: Existing carton â†’ just generate QR
         setQrCartons((prev: Record<string, boolean>) => ({
           ...prev,
           [carton.cartonSerial]: true,
@@ -573,7 +565,7 @@ export default function DeviceTestComponent({
     try {
       let result;
       const currentStageName = assignUserStage?.stage || "";
-      console.log("currentStageName ==>", currentStageName);
+
       if (currentStageName === "PDI") {
         result = await getPDICartonByProcessId(processData._id);
       } else if (currentStageName === "FG to Store") {
@@ -583,7 +575,7 @@ export default function DeviceTestComponent({
       }
 
       if (result) {
-        console.log("process Cartons -->", result);
+
         const details = result.cartonDetails || (Array.isArray(result) ? result : [result]);
 
         // Filter out cartons that are shifted to FG/Store
@@ -615,7 +607,7 @@ export default function DeviceTestComponent({
         ...carton,
         devices: carton.devices?.map((d: any) => d.serialNo) || [],
       }));
-      console.log("transformed ==>", transformed);
+
       setCartons(transformed);
     } catch (error) {
       console.error("Error fetching cartons:", error);
@@ -691,7 +683,7 @@ export default function DeviceTestComponent({
       return updatedCarts;
     });
 
-    // 🔹 Backend call after state update
+    // ðŸ”¹ Backend call after state update
     try {
       await createCarton({
         cartonSerial: newCartonObj
@@ -749,7 +741,7 @@ export default function DeviceTestComponent({
     setSelectedCarton(data[0].cartonSerial);
     setLoadingCartonDevices(false);
     setCartonDevices(data[0].devices);
-    console.log("data ==>", data);
+
   };
   const getNGAssignOptions = () => {
     const options: any[] = [];
@@ -789,14 +781,14 @@ export default function DeviceTestComponent({
   };
 
   const handleNG = () => {
-    console.log('selectAssignDeviceDepartment ==>', selectAssignDeviceDepartment);
+
     handleUpdateStatus("NG", selectAssignDeviceDepartment, jigResults);
     setShowNGModal(false);
 
   };
 
   const handleRetry = () => {
-    console.log('[DeviceTestComponent] Retrying test from beginning...');
+
 
     // Reset all test state
     setCurrentJigStepIndex(0);
@@ -810,7 +802,7 @@ export default function DeviceTestComponent({
     stepStartTimeRef.current = Date.now();
 
     // Close modal
-    console.log('[DeviceTestComponent] Test state reset. Ready to retry.');
+
   };
 
   const handleShiftToNextStage = async (cartonSerial: any) => {
@@ -1026,7 +1018,7 @@ export default function DeviceTestComponent({
                   setSearchQuery={setCartonSearchQuery}
                   onSelect={(carton) => handleSearchCarton(carton)}
                   onNoResults={(query) =>
-                    console.log("No carton found for:", query)
+                    
                   }
                 />
               </>
@@ -1873,7 +1865,7 @@ export default function DeviceTestComponent({
                                                   <div className="flex items-center gap-2">
                                                     <Box className="h-6 w-6 text-primary" />
                                                     <h3 className="text-gray-900 text-xl font-semibold dark:text-white">
-                                                      {isCarton ? "📦 Carton Details" : "📄 Single Device Sticker"}
+                                                      {isCarton ? "ðŸ“¦ Carton Details" : "ðŸ“„ Single Device Sticker"}
                                                     </h3>
                                                   </div>
                                                   {isCarton && (
@@ -1890,7 +1882,7 @@ export default function DeviceTestComponent({
                                                 {isCarton ? (
                                                   <>
                                                     <div className="text-gray-700 dark:text-gray-300 grid gap-4 sm:grid-cols-2">
-                                                      <p className="flex items-center gap-2"><Package className="h-5 w-5 text-blue-500" /> <span className="font-medium">Dimensions:</span> {currentSubStep?.packagingData?.cartonWidth} × {currentSubStep?.packagingData?.cartonHeight}</p>
+                                                      <p className="flex items-center gap-2"><Package className="h-5 w-5 text-blue-500" /> <span className="font-medium">Dimensions:</span> {currentSubStep?.packagingData?.cartonWidth} Ã— {currentSubStep?.packagingData?.cartonHeight}</p>
                                                       <p className="flex items-center gap-2"><Weight className="h-5 w-5 text-green-500" /> <span className="font-medium">Weight:</span> {currentSubStep?.packagingData?.cartonWeight} kg</p>
                                                       <p className="flex items-center gap-2"><Layers className="h-5 w-5 text-purple-500" /> <span className="font-medium">Capacity:</span> {currentSubStep?.packagingData?.maxCapacity}</p>
                                                       <p className="flex items-center gap-2"><ClipboardCheck className="h-5 w-5 text-orange-500" /> <span className="font-medium">Issued:</span> {processData?.issuedCartons}</p>
@@ -2298,10 +2290,10 @@ export default function DeviceTestComponent({
                                   -- Select an Issue --
                                 </option>
                                 <option value="not_found">
-                                  📦 Device Not Found
+                                  ðŸ“¦ Device Not Found
                                 </option>
                                 <option value="technical_fault">
-                                  ⚡ Technical Fault
+                                  âš¡ Technical Fault
                                 </option>
                               </select>
                             </div>

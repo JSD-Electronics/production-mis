@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { ComponentType, useEffect, useState } from "react";
 import { getUseTypeByType, getAllMenus } from "../../../lib/api";
 
@@ -26,7 +26,7 @@ const withAuth = (WrappedComponent: ComponentType<any>) => {
           localStorage.getItem("userDetails") || "{}",
         );
         if (!userDetails || !userDetails.userType) {
-          console.log("User details not found or user type is missing.");
+          
           window.location.href = "/not-authorized";
           return;
         }

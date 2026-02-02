@@ -1,4 +1,4 @@
-# DeviceTestComponent Optimization TODO
+﻿# DeviceTestComponent Optimization TODO
 
 ## Performance Optimizations
 - [ ] Wrap component with React.memo to prevent unnecessary re-renders

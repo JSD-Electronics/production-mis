@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState } from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
@@ -172,7 +172,7 @@ const ViewProcessInventory = () => {
       const result = await updateInventoryById(inventoryID, formData);
 
       if (result && result.status === 200) {
-        console.log("Inventory updated successfully");
+        
         setIsInventoryModel(false);
         getProductionManagerProcess();
       } else {

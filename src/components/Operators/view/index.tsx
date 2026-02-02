@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState } from "react";
 import DataTable from "react-data-table-component";
 import { Stages } from "@/types/stage";
@@ -47,7 +47,7 @@ const ViewOperator = () => {
 
   React.useEffect(() => {
     let userDetails = JSON.parse(localStorage.getItem("userDetails"));
-    console.log("userDetails ==>", userDetails);
+    
     setUserType(userDetails.userType);
     getStages();
     getSkillField();

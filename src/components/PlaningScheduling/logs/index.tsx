@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState, useEffect } from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
@@ -34,7 +34,7 @@ const PlaningAndSchedulingLogsComponent = () => {
       let result = await getLogsByProcessID(id);
       setPlaningData(result.reverse());
     } catch (error) {
-      console.log("Error fetching logs", error);
+      
     } finally {
       setLoading(false);
     }
@@ -49,7 +49,7 @@ const PlaningAndSchedulingLogsComponent = () => {
       setTotalUPHA(result?.totalUPHA);
       setEstimatedEndDate(formatDate(result?.estimatedEndDate));
     } catch (error) {
-      console.log("Error fetching planing & scheduling", error);
+      
     }
   };
 
@@ -87,11 +87,11 @@ const PlaningAndSchedulingLogsComponent = () => {
 
   return (
     <div className="bg-gray-100 min-h-screen p-4 md:p-6">
-      {/* 🔹 Breadcrumb */}
+      {/* ðŸ”¹ Breadcrumb */}
       <Breadcrumb pageName="Process Logs" parentName="Process" />
 
       <div className="mt-6 rounded-xl bg-white p-6 shadow-md">
-        {/* 🔹 Header Section */}
+        {/* ðŸ”¹ Header Section */}
         <div className="border-gray-200 flex items-center gap-3 border-b pb-4">
           <FileText className="h-6 w-6 text-primary" />
           <h2 className="text-gray-800 text-xl font-semibold dark:text-white">
@@ -99,7 +99,7 @@ const PlaningAndSchedulingLogsComponent = () => {
           </h2>
         </div>
         <>
-          {/* 🔹 Process Details */}
+          {/* ðŸ”¹ Process Details */}
           {startDate || totalTimeEstimation || totalUPHA || estimatedEndDate ? (
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
@@ -130,13 +130,13 @@ const PlaningAndSchedulingLogsComponent = () => {
           ) : (
             <div className="mt-6 rounded-lg bg-danger/10 p-4 text-center">
               <p className="font-medium text-danger">
-                ⚠️ Please do Planning & Scheduling for more details
+                âš ï¸ Please do Planning & Scheduling for more details
               </p>
             </div>
           )}
         </>
 
-        {/* 🔹 Logs Table */}
+        {/* ðŸ”¹ Logs Table */}
         <div className="mt-8">
           <h3 className="text-gray-800 mb-4 text-lg font-semibold dark:text-white">
             Activity Logs
@@ -237,7 +237,7 @@ export default PlaningAndSchedulingLogsComponent;
 //       let result = await getLogsByProcessID(id);
 //       setPlaningData(result.reverse());
 //     } catch (error) {
-//       console.log("Error Fetching Planing & Scheduling", error);
+//       
 //       return {};
 //     }
 //   };
@@ -250,7 +250,7 @@ export default PlaningAndSchedulingLogsComponent;
 //       setTotalUPHA(result?.totalUPHA);
 //       setEstimatedEndDate(formatDate(result?.estimatedEndDate));
 //     } catch (error) {
-//       console.log("Error Fetching Planing & Scheduling", error);
+//       
 //       setLoading(false);
 //       return {};
 //     }

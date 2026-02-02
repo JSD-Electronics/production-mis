@@ -1,4 +1,4 @@
-"use client";  // Necessary for state management and client-side logic
+﻿"use client";  // Necessary for state management and client-side logic
 import { useEffect, useState } from "react";
 import ECommerce from "@/components/Login/Login";
 import Dashboard from "@/components/Dashboard/E-commerce";
@@ -27,7 +27,7 @@ export default function Home() {
        router.push("/");
         return true; // Token is expired
       } else {
-        console.log('Token is valid');
+        
         return false; // Token is valid
       }
     } catch (error) {

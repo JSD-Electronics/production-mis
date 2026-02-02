@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import DatePickerOne from "@/components/FormElements/DatePicker/DatePickerOne";
@@ -134,7 +134,7 @@ const AddOperators = () => {
   const handleChange = (selected) => {
     //setSkills(selected); // update local state
     const selectedValues = selected ? selected.map((opt) => opt.label) : [];
-    console.log("Selected Values:", selectedValues);
+    
     setSkills(selectedValues);
   };
 

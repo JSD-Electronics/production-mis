@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { Search } from "lucide-react";
 import SearchableInput from "@/components/SearchableInput/SearchableInput";
 import CartonSearchableInput from "@/components/SearchableInput/CartonSearchableInput";
@@ -69,7 +69,7 @@ export default function DeviceSearchSection({
             searchQuery={cartonSearchQuery}
             setSearchQuery={setCartonSearchQuery}
             onSelect={(carton) => handleSearchCarton(carton)}
-            onNoResults={(query) => console.log("No carton found for:", query)}
+            onNoResults={(query) => }
           />
         </>
       ) : (

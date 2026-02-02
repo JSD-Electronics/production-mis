@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -44,7 +44,7 @@ const TaskComponent = () => {
   };
   // const updateStatusRecievedKits = async (id, status) => {
   //   try {
-  //     // 🔁 Override rejected status
+  //     // ðŸ” Override rejected status
   //     const finalStatus =
   //       status === "rejected" ? "waiting_for_line_feeding" : status;
 
@@ -63,7 +63,7 @@ const TaskComponent = () => {
   //       getOperatorTask(userDetails._id);
   //     }
   //   } catch (error) {
-  //     console.log("error Update Recieved Kit Status :", error?.message);
+  //     
   //   }
   // };  
 
@@ -86,16 +86,16 @@ const TaskComponent = () => {
         getOperatorTask(userDetails._id);
       }
     } catch (error) {
-      console.log("error Update Recieved Kit Status :", error.message);
+      
     }
   };
   const getOperatorTask = async (id: any) => {
     try {
       let result = await getTaskByUserId(id);
-      // console.log("result ===>", result);
+      // 
       setTaskList(result?.task);
     } catch (error) {
-      console.log("Error Fetching Tasks", error);
+      
     }
   };
   const handleViewProcess = async (id: any) => {

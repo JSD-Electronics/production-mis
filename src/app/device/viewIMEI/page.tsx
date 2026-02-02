@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import ViewImeiComponent from "@/components/device/viewImei/index";
 import DefaultLayout from "@/components/Layouts/DefaultLayout";
 

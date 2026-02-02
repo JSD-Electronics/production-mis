@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import ClickOutside from "@/components/ClickOutside";
@@ -86,7 +86,7 @@ const DropdownMessage = () => {
                     <h6 className="text-sm font-medium text-black dark:text-white">
                       Mariya Desoja
                     </h6>
-                    <p className="text-sm">I like your confidence 💪</p>
+                    <p className="text-sm">I like your confidence ðŸ’ª</p>
                     <p className="text-xs">2min ago</p>
                   </div>
                 </Link>
@@ -167,7 +167,7 @@ const DropdownMessage = () => {
                     <h6 className="text-sm font-medium text-black dark:text-white">
                       Cody Fisher
                     </h6>
-                    <p className="text-sm">I’m waiting for you response!</p>
+                    <p className="text-sm">Iâ€™m waiting for you response!</p>
                     <p className="text-xs">5days ago</p>
                   </div>
                 </Link>
@@ -194,7 +194,7 @@ const DropdownMessage = () => {
                     <h6 className="text-sm font-medium text-black dark:text-white">
                       Mariya Desoja
                     </h6>
-                    <p className="text-sm">I like your confidence 💪</p>
+                    <p className="text-sm">I like your confidence ðŸ’ª</p>
                     <p className="text-xs">2min ago</p>
                   </div>
                 </Link>

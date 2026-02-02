@@ -1,4 +1,4 @@
-const decodeToken = (token) => {
+﻿const decodeToken = (token) => {
   if (!token) return null;
 
   const base64Url = token.split(".")[1];

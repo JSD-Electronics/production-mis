@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState, useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import {
@@ -16,7 +16,7 @@ import {
   Hash,
   Layers,
   AlignLeft,
-} from "lucide-react"; // ✅ Import icons
+} from "lucide-react"; // âœ… Import icons
 
 const AddProcess = () => {
   const [name, setName] = useState("");
@@ -40,7 +40,7 @@ const AddProcess = () => {
       let response = await getOrderConfirmationNumers();
       setOcNoArr(response.getOrderConfirmationNo);
     } catch (error) {
-      console.log("Error Fethcing Order Confirmation Numbers", error?.message);
+      
     }
   };
 
@@ -49,7 +49,7 @@ const AddProcess = () => {
       let result = await viewProduct();
       setProduct(result.Products);
     } catch (error) {
-      console.log("Error Fetching Products:", error);
+      
     }
   };
 
@@ -147,7 +147,7 @@ const AddProcess = () => {
           <div className="rounded-xl border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark">
             <div className="border-b border-stroke px-6.5 py-4 dark:border-strokedark flex justify-between items-center">
               <h3 className="text-lg font-semibold text-black dark:text-white">
-                ➕ Add New Process
+                âž• Add New Process
               </h3>
             </div>
 

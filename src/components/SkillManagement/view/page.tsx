@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import Modal from "@/components/Modal/page";
@@ -93,7 +93,7 @@ const ViewSkillManagementComponent = () => {
       }
       return false;
     } catch (error) {
-      console.log("Error Creating Submit Skills ==>", error);
+      
     }
   };
   const handleAddSkillManagement = () => {

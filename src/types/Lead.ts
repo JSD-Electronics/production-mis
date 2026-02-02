@@ -1,4 +1,4 @@
-export type Lead = {
+﻿export type Lead = {
   avatar: string;
   name: string;
   email: string;

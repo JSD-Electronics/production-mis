@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
@@ -104,7 +104,7 @@ const ViewHoliday = () => {
         throw new Error(result.message || "Failed to create Holiday");
       }
     } catch (error) {
-      console.log("Error Submitting Holiday !!", error);
+      
     }
   };
   const handlepopup = (id: string) => {

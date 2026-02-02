@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import CardDataStats from "../../CardDataStats";
@@ -21,11 +21,11 @@ const OperatorDashboard: React.FC = () => {
   const getTask = async (id: any) => {
     try {
       let result = await getTaskByUserId(id);
-      console.log("result.task ===>", result.task);
+      
       return false;
       setTaskList(result.task);
     } catch (error) {
-      console.log("Failed to fetch Room Plan :", error);
+      
     }
   };
   return (

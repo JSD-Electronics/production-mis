@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState, useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import { viewProduct, viewProcessByProductId, createDevice } from "@/lib/api";
@@ -89,8 +89,8 @@ const AddDeviceComponent = () => {
     stepBy = 1,
     repeatTimes = 1,
   ) {
-    console.log("sequenceFrom ==>", sequenceFrom);
-    console.log("sequenceTo ==>", sequenceTo);
+    
+    
     const serials: string[] = [];
     for (let i = sequenceFrom; i <= sequenceTo; i += stepBy) {
       const paddedNumber = enableZero ? String(i).padStart(3, "0") : i;
@@ -98,14 +98,14 @@ const AddDeviceComponent = () => {
         serials.push(`${prefix}${paddedNumber}${suffix}`);
       }
     }
-    console.log("serials ==>", serials);
+    
     setSerials(serials);
     return serials;
   }
 
   const handlesubmit = async () => {
     try {
-      console.log("form ====", form);
+      
       generateSerials(
         form.prefix,
         form.sequenceFrom,
