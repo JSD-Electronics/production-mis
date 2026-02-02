@@ -8,9 +8,11 @@ export const BASE_URL = IS_PROD
     ? process.env.NEXT_PUBLIC_BASE_URL_PROD
     : process.env.NEXT_PUBLIC_BASE_URL_DEV;
 
-// Default fallbacks if env variables are missing
+// Use relative path for local proxy to bypass CORS
 export const CONFIG = {
-    API_BASE_URL: API_BASE_URL || "http://localhost:8000/api",
-    BASE_URL: BASE_URL || "http://localhost:8000",
+    API_BASE_URL: "/api",
+    BASE_URL: IS_PROD
+        ? process.env.NEXT_PUBLIC_BASE_URL_PROD
+        : process.env.NEXT_PUBLIC_BASE_URL_DEV || "http://localhost:8000",
     ENVIRONMENT: IS_PROD ? "production" : "development"
 };

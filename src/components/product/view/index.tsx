@@ -6,7 +6,7 @@ import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import { viewProduct, deleteProduct, deleteMultipleProduct } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { FiEdit, FiTrash } from "react-icons/fi";
-import { BallTriangle } from "react-loader-spinner";
+import Loader from "@/components/common/Loader";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import { ToastContainer, toast } from "react-toastify";
 const ViewProduct = () => {
@@ -14,7 +14,7 @@ const ViewProduct = () => {
   const [productId, setProductId] = React.useState("");
   const [stageData, setStageData] = React.useState<Stages[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [selectedRows, setSelectedRows] = React.useState([]);
+  const [selectedRows, setSelectedRows] = React.useState<Stages[]>([]);
   const handleRowSelected = (state: any) => {
     setSelectedRows(state.selectedRows);
   };
@@ -122,14 +122,7 @@ const ViewProduct = () => {
           pauseOnHover
         />
         {loading ? (
-          <div className="flex justify-center">
-            <BallTriangle
-              height={100}
-              width={100}
-              color="#4fa94d"
-              ariaLabel="loading"
-            />
-          </div>
+          <Loader />
         ) : (
           <>
             <div className="mb-4 mt-4 text-right">

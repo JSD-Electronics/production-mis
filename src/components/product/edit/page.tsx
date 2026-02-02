@@ -27,6 +27,7 @@ import {
   faRotateLeft,
 } from "@fortawesome/free-solid-svg-icons";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
+import Loader from "@/components/common/Loader";
 
 import PrintTableComponent from "../printTableComponents";
 import { BarChart3, Box, ClipboardList, Clock, ExternalLink, Paperclip, User, Video, Plus, Trash2 } from "lucide-react";
@@ -91,6 +92,7 @@ interface CommonStage {
 const EditProduct = () => {
   const [errors, setErrors] = useState<any>({ name: false, stages: [] });
   const [name, setName] = useState("");
+  const [loading, setLoading] = useState(true);
   const [sopFile, setSopFile] = useState("");
   const sopFilePickerRef = React.useRef<HTMLInputElement>(null);
   const [submitDisabled, setSubmitDisabled] = useState(false);
@@ -205,12 +207,23 @@ const EditProduct = () => {
   const [processes, setProcesses] = useState<any[]>([]);
   const [isProcessLoading, setIsProcessLoading] = useState(false);
   React.useEffect(() => {
-    const pathname = window.location.pathname;
-    const id = pathname.split("/").pop();
-    getProduct(id);
-    getStickerField();
-    getSkillField();
-    getUserRoles();
+    const fetchData = async () => {
+      try {
+        const pathname = window.location.pathname;
+        const id = pathname.split("/").pop();
+        await Promise.all([
+          getProduct(id),
+          getStickerField(),
+          getSkillField(),
+          getUserRoles(),
+        ]);
+      } catch (error) {
+        console.error("Error fetching initial product data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
     setMounted(true);
   }, []);
   const getUserRoles = async () => {
@@ -1075,6 +1088,10 @@ const EditProduct = () => {
   };
 
   if (!mounted) return null;
+
+  if (loading) {
+    return <Loader />;
+  }
 
   return (
     <>
