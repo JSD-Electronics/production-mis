@@ -9,8 +9,9 @@ import {
   uploadProfilePicture,
   uploadCoverPicture,
 } from "../../../lib/api";
+import { CONFIG } from "@/config";
 const Profile = ({ params }: { params: { id: string } }) => {
-  const [userDetails, setUserDetails] = useState({});
+  const [userDetails, setUserDetails] = useState<any>({});
   const [profilePicture, setProfilePicture] = useState("");
   const [coverPicture, setCoverPicture] = useState("");
 
@@ -24,10 +25,10 @@ const Profile = ({ params }: { params: { id: string } }) => {
         const normalizedFilePath = filePath.replace(/\\/g, "/");
         const normalizedCoverPath = coverPic.replace(/\\/g, "/");
         setProfilePicture(
-          `${process.env.NEXT_PUBLIC_BASE_URL}/${normalizedFilePath}`,
+          `${CONFIG.BASE_URL}/${normalizedFilePath}`,
         );
         setCoverPicture(
-          `${process.env.NEXT_PUBLIC_BASE_URL}/${normalizedCoverPath}`,
+          `${CONFIG.BASE_URL}/${normalizedCoverPath}`,
         );
       } catch (err) {
         console.log(err);
@@ -36,7 +37,7 @@ const Profile = ({ params }: { params: { id: string } }) => {
 
     fetchUserDetails();
   }, [params.id]);
-  const uploadCoverPic = async (e:any) => {
+  const uploadCoverPic = async (e: any) => {
     e.preventDefault();
     const formData = new FormData();
     formData.append("coverPic", e.target.files[0]);
@@ -44,11 +45,11 @@ const Profile = ({ params }: { params: { id: string } }) => {
     const filePath = result.user.coverPic;
     const normalizedFilePath = filePath.replace(/\\/g, "/");
     setCoverPicture(
-      `${process.env.NEXT_PUBLIC_BASE_URL}/${normalizedFilePath}`,
+      `${CONFIG.BASE_URL}/${normalizedFilePath}`,
     );
-    localStorage.setItem('userDetails',JSON.stringify(result.user));
+    localStorage.setItem('userDetails', JSON.stringify(result.user));
   };
-  const uploadProfilePic = async (e:any) => {
+  const uploadProfilePic = async (e: any) => {
     e.preventDefault();
 
     const formData = new FormData();
@@ -57,9 +58,9 @@ const Profile = ({ params }: { params: { id: string } }) => {
     const filePath = result.user.profilePic;
     const normalizedFilePath = filePath.replace(/\\/g, "/");
     setProfilePicture(
-      `${process.env.NEXT_PUBLIC_BASE_URL}/${normalizedFilePath}`,
+      `${CONFIG.BASE_URL}/${normalizedFilePath}`,
     );
-    localStorage.setItem('userDetails',JSON.stringify(result.user));
+    localStorage.setItem('userDetails', JSON.stringify(result.user));
   };
   return (
     <DefaultLayout>

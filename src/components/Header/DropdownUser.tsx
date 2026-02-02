@@ -6,10 +6,11 @@ import ClickOutside from "@/components/ClickOutside";
 import { logout } from "../../lib/api";
 import { useRouter } from "next/navigation";
 import { verifyTokenClientSide } from "@/middleware/verifytoken";
+import { CONFIG } from "@/config";
 
 const DropdownUser = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [userDetails, setUserDetails] = useState({});
+  const [userDetails, setUserDetails] = useState<any>({});
   const [profilePic, setProfilePicture] = useState("");
   const router = useRouter();
   React.useEffect(() => {
@@ -17,12 +18,12 @@ const DropdownUser = () => {
     // if (!decoded) {
     //   router.push("/");
     // } else {
-    let response = JSON.parse(localStorage.getItem("userDetails"));
+    let response = JSON.parse(localStorage.getItem("userDetails") || "{}");
     setUserDetails(response);
-    const filePath = response.profilePic;
+    const filePath = response.profilePic || "";
     const normalizedFilePath = filePath.replace(/\\/g, "/");
     setProfilePicture(
-      `${process.env.NEXT_PUBLIC_BASE_URL}/${normalizedFilePath}`,
+      `${CONFIG.BASE_URL}/${normalizedFilePath}`,
     );
     // }
   }, [localStorage.getItem("userDetails")]);

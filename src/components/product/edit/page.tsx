@@ -29,7 +29,7 @@ import {
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
 import PrintTableComponent from "../printTableComponents";
-import { BarChart3, Box, ClipboardList, Paperclip, User } from "lucide-react";
+import { BarChart3, Box, ClipboardList, Clock, ExternalLink, Paperclip, User, Video, Plus, Trash2 } from "lucide-react";
 
 interface CustomField {
   fieldName: string;
@@ -72,6 +72,8 @@ interface Stage {
   requiredSkill: string;
   managedBy: string;
   upha: string;
+  cycleTime: string;
+  videoLinks: string[];
   sopFile?: string;
   jigId?: string;
   isExpanded: boolean;
@@ -83,11 +85,14 @@ interface CommonStage {
   requiredSkill: string;
   managedBy: string;
   upha: string;
+  videoLinks: string[];
 }
 
 const EditProduct = () => {
   const [errors, setErrors] = useState<any>({ name: false, stages: [] });
   const [name, setName] = useState("");
+  const [sopFile, setSopFile] = useState("");
+  const sopFilePickerRef = React.useRef<HTMLInputElement>(null);
   const [submitDisabled, setSubmitDisabled] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [stickerFields, setStickerFields] = useState<any[]>([]);
@@ -112,6 +117,8 @@ const EditProduct = () => {
       managedBy: "",
       requiredSkill: "",
       upha: "",
+      cycleTime: "",
+      videoLinks: [""],
       sopFile: "",
       jigId: "",
       isExpanded: true,
@@ -150,24 +157,28 @@ const EditProduct = () => {
       requiredSkill: "",
       managedBy: "",
       upha: "",
+      videoLinks: [""],
     },
     {
       stageName: "FG to Store",
       requiredSkill: "",
       managedBy: "",
       upha: "",
+      videoLinks: [""],
     },
     {
       stageName: "Dispatch",
       requiredSkill: "",
       managedBy: "",
       upha: "",
+      videoLinks: [""],
     },
     {
       stageName: "Delivery",
       requiredSkill: "",
       managedBy: "",
       upha: "",
+      videoLinks: [""],
     },
 
   ]);
@@ -318,9 +329,11 @@ const EditProduct = () => {
       let result = await getProductById(id);
       if (result && result.product) {
         setName(result.product.name || "");
+        setSopFile(result.product.sopFile || "");
         const loadedStages = result.product.stages || [];
         const stagesWithIds = loadedStages.map((stage: any, sIdx: number) => ({
           ...stage,
+          videoLinks: Array.isArray(stage.videoLinks) ? stage.videoLinks : (stage.videoLink ? [stage.videoLink] : [""]),
           dragId: stage.dragId || `stage-${sIdx}-${Date.now()}`,
           subSteps: (stage.subSteps || []).map((step: any, stIdx: number) => ({
             ...step,
@@ -330,7 +343,10 @@ const EditProduct = () => {
         }));
         setStages(stagesWithIds);
         if (result.product.commonStages && result.product.commonStages.length > 0) {
-          setCommonStages(result.product.commonStages);
+          setCommonStages(result.product.commonStages.map((cs: any) => ({
+            ...cs,
+            videoLinks: Array.isArray(cs.videoLinks) ? cs.videoLinks : (cs.videoLink ? [cs.videoLink] : [""]),
+          })));
         }
       }
     } catch (error) {
@@ -348,6 +364,8 @@ const EditProduct = () => {
         managedBy: "",
         requiredSkill: "",
         upha: "",
+        cycleTime: "",
+        videoLinks: [""],
         sopFile: "",
         isExpanded: false,
         jigId: "",
@@ -390,6 +408,11 @@ const EditProduct = () => {
       const id = pathname.split("/").pop();
       const formData = new FormData();
       formData.append("name", name);
+      if (sopFilePickerRef.current?.files?.[0]) {
+        formData.append("sopFile", sopFilePickerRef.current.files[0]);
+      } else {
+        formData.append("sopFile", sopFile);
+      }
       formData.append("stages", JSON.stringify(stages));
       formData.append("commonStages", JSON.stringify(commonStages));
       try {
@@ -415,7 +438,17 @@ const EditProduct = () => {
   ) => {
     const newStages = [...stages];
     pushToHistory();
-    (newStages[index] as any)[param] = event.target.value;
+    const value = event.target.value;
+    (newStages[index] as any)[param] = value;
+
+    if (param === "cycleTime") {
+      const cycle = parseFloat(value);
+      if (!isNaN(cycle) && cycle > 0) {
+        newStages[index].upha = Math.round(3600 / cycle).toString();
+      } else {
+        newStages[index].upha = "0";
+      }
+    }
     setStages(newStages);
   };
 
@@ -618,6 +651,42 @@ const EditProduct = () => {
   ) => {
     const newStages = [...commonStages];
     (newStages[index] as any)[param] = event?.target.value;
+    setCommonStages(newStages);
+  };
+
+  const handleStageVideoLinkChange = (stageIndex: number, videoIndex: number, value: string) => {
+    const newStages = [...stages];
+    newStages[stageIndex].videoLinks[videoIndex] = value;
+    setStages(newStages);
+  };
+
+  const addStageVideoLink = (stageIndex: number) => {
+    const newStages = [...stages];
+    newStages[stageIndex].videoLinks = [...(newStages[stageIndex].videoLinks || []), ""];
+    setStages(newStages);
+  };
+
+  const removeStageVideoLink = (stageIndex: number, videoIndex: number) => {
+    const newStages = [...stages];
+    newStages[stageIndex].videoLinks = newStages[stageIndex].videoLinks.filter((_, i) => i !== videoIndex);
+    setStages(newStages);
+  };
+
+  const handleCommonStageVideoLinkChange = (stageIndex: number, videoIndex: number, value: string) => {
+    const newStages = [...commonStages];
+    newStages[stageIndex].videoLinks[videoIndex] = value;
+    setCommonStages(newStages);
+  };
+
+  const addCommonStageVideoLink = (stageIndex: number) => {
+    const newStages = [...commonStages];
+    newStages[stageIndex].videoLinks = [...(newStages[stageIndex].videoLinks || []), ""];
+    setCommonStages(newStages);
+  };
+
+  const removeCommonStageVideoLink = (stageIndex: number, videoIndex: number) => {
+    const newStages = [...commonStages];
+    newStages[stageIndex].videoLinks = newStages[stageIndex].videoLinks.filter((_, i) => i !== videoIndex);
     setCommonStages(newStages);
   };
 
@@ -1083,18 +1152,80 @@ const EditProduct = () => {
                   ref={provided.innerRef}
                   className="flex flex-col space-y-5 p-10"
                 >
-                  <div className="bg-gray-100 px-1 py-6 dark:bg-boxdark">
-                    <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
-                      Product Name
-                    </label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      style={{ borderColor: errors?.name ? "red" : "" }}
-                      placeholder="Enter Product Name"
-                      className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-100 px-6 py-8 dark:bg-boxdark rounded-xl border border-gray-200 dark:border-strokedark mb-4">
+                    <div>
+                      <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-bold">
+                        Product Name
+                      </label>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        style={{ borderColor: errors?.name ? "red" : "" }}
+                        placeholder="Enter Product Name"
+                        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-bold">
+                        <Paperclip className="h-4 w-4 text-primary" />
+                        Master SOP (Project Based)
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 relative">
+                          <input
+                            type="file"
+                            ref={sopFilePickerRef}
+                            accept=".pdf,.doc,.docx"
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                            onChange={(e) => {
+                              if (e.target.files?.[0]) {
+                                setSopFile(e.target.files[0].name);
+                              }
+                            }}
+                          />
+                          <div className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm flex items-center justify-between dark:border-form-strokedark dark:bg-form-input dark:text-white">
+                            <span className="truncate max-w-[200px]">
+                              {sopFile ? (
+                                <span className="text-primary font-medium flex items-center gap-1">
+                                  <ClipboardList className="h-4 w-4" /> {sopFile.split('/').pop()}
+                                </span>
+                              ) : "Choose Master SOP File"}
+                            </span>
+                            <button type="button" className="text-primary text-xs font-bold hover:underline">
+                              Browse
+                            </button>
+                          </div>
+                        </div>
+                        {sopFile && (
+                          <div className="flex gap-2">
+                            {typeof sopFile === 'string' && sopFile.startsWith('http') && (
+                              <a
+                                href={sopFile}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                                title="View Current SOP"
+                              >
+                                <ExternalLink className="h-5 w-5" />
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSopFile("");
+                                if (sopFilePickerRef.current) sopFilePickerRef.current.value = "";
+                              }}
+                              className="p-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                              title="Remove SOP"
+                            >
+                              <Trash2 className="h-5 w-5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-1">PDF or Word documents only. Max size 5MB.</p>
+                    </div>
                   </div>
 
                   {stages.map((stage, index) => (
@@ -1217,6 +1348,19 @@ const EditProduct = () => {
                                 </div>
                                 <div>
                                   <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
+                                    <Clock className="h-4 w-4 text-primary" />
+                                    Cycle Time (Seconds)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={stage.cycleTime}
+                                    onChange={(e) => handleStageChange(index, e, "cycleTime")}
+                                    placeholder={`Cycle Time`}
+                                    className="border-gray-300 bg-gray-50 text-gray-800 w-full rounded-lg border-[1.5px] px-5 py-3 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
                                     <BarChart3 className="h-4 w-4 text-primary" />
                                     UPHA (Units Per Hour Analysis)
                                   </label>
@@ -1225,7 +1369,8 @@ const EditProduct = () => {
                                     value={stage.upha}
                                     onChange={(e) => handleStageChange(index, e, "upha")}
                                     placeholder={`UPHA`}
-                                    className="border-gray-300 bg-gray-50 text-gray-800 w-full rounded-lg border-[1.5px] px-5 py-3 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                    readOnly
+                                    className="border-gray-300 bg-gray-100 text-gray-500 w-full rounded-lg border-[1.5px] px-5 py-3 text-sm outline-none cursor-not-allowed dark:border-form-strokedark dark:bg-meta-4 dark:text-white"
                                   />
                                 </div>
                                 <div>
@@ -1234,13 +1379,57 @@ const EditProduct = () => {
                                     Attach SOP
                                   </label>
                                   <input
-                                    value={stage.sopFile}
                                     type="file"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        const newStages = [...stages];
+                                        newStages[index].sopFile = file.name; // Visual feedback only for now
+                                        setStages(newStages);
+                                      }
+                                    }}
                                     className="border-gray-300 bg-gray-50 text-gray-600 w-full cursor-pointer rounded-lg border-[1.5px] px-3 py-2 text-sm outline-none transition file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-primary/90 focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:file:bg-primary dark:file:text-white"
                                   />
                                   <p className="text-gray-500 dark:text-gray-400 mt-1 text-xs">
                                     Upload PDF or DOC (Max 5MB)
                                   </p>
+                                </div>
+                                <div className="col-span-1 lg:col-span-3">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <label className="text-gray-800 dark:text-gray-200 flex items-center gap-2 text-sm font-semibold">
+                                      <Video className="h-4 w-4 text-primary" />
+                                      Video Tutorials
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={() => addStageVideoLink(index)}
+                                      className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                    >
+                                      <Plus className="h-3 w-3" /> Add Link
+                                    </button>
+                                  </div>
+                                  <div className="space-y-3">
+                                    {stage.videoLinks.map((link, vIdx) => (
+                                      <div key={vIdx} className="flex items-center gap-2">
+                                        <input
+                                          type="text"
+                                          value={link}
+                                          onChange={(e) => handleStageVideoLinkChange(index, vIdx, e.target.value)}
+                                          placeholder="Enter video URL (e.g. YouTube, Drive)"
+                                          className="border-gray-300 bg-gray-50 text-gray-800 w-full rounded-lg border-[1.5px] px-5 py-3 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                        />
+                                        {stage.videoLinks.length > 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => removeStageVideoLink(index, vIdx)}
+                                            className="p-3 text-red-500 hover:bg-red-50 rounded-lg transition-colors dark:hover:bg-red-900/20"
+                                          >
+                                            <Trash2 className="h-5 w-5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               </div>
                               {/* {stage.stepType == "manual" && ( */}
@@ -2526,6 +2715,44 @@ const EditProduct = () => {
                       ))}
                     </select>
                   </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-gray-800 dark:text-white flex items-center gap-2 text-sm font-semibold">
+                        <Video className="h-4 w-4 text-primary" />
+                        Video Tutorials
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => addCommonStageVideoLink(index)}
+                        className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                      >
+                        <Plus className="h-3 w-3" /> Add Link
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {stage.videoLinks.map((link, vIdx) => (
+                        <div key={vIdx} className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={link}
+                            onChange={(e) => handleCommonStageVideoLinkChange(index, vIdx, e.target.value)}
+                            placeholder="Enter video URL"
+                            className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
+                          />
+                          {stage.videoLinks.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeCommonStageVideoLink(index, vIdx)}
+                              className="p-3 text-red-500 hover:bg-red-50 rounded-lg transition-colors dark:hover:bg-red-900/20"
+                            >
+                              <Trash2 className="h-5 w-5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                 </div>
               ))}
               <CloneProcessModal
@@ -2537,8 +2764,8 @@ const EditProduct = () => {
               />
             </div>
           </div>
-        </form>
-      </div>
+        </form >
+      </div >
       <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-white/90 backdrop-blur">
         <div className="mx-auto max-w-screen-xl px-6 py-3">
           <div className="flex justify-end gap-3">
