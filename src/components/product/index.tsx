@@ -21,6 +21,7 @@ import {
   Loader2,
 } from "lucide-react";
 import "react-toastify/dist/ReactToastify.css";
+import Loader from "@/components/common/Loader";
 import { faMinus, faTrash, faChevronUp, faChevronDown, faPlus, faPuzzlePiece, faGripLines, faCopy, faRotateLeft } from "@fortawesome/free-solid-svg-icons";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import PrintTableComponent from "./printTableComponents";
@@ -82,6 +83,7 @@ interface CommonStage {
 
 const AddProduct = () => {
   const [name, setName] = useState("");
+  const [loading, setLoading] = useState(true);
   const [submitDisabled, setSubmitDisabled] = useState(false);
   const [errors, setErrors] = useState<any>({ name: false, stages: [] });
   const [stageData, setStageData] = useState<any[]>([]);
@@ -192,10 +194,21 @@ const AddProduct = () => {
   ]);
 
   React.useEffect(() => {
-    getStages();
-    getStickerField();
-    getSkillField();
-    getUserRoles();
+    const fetchData = async () => {
+      try {
+        await Promise.all([
+          getStages(),
+          getStickerField(),
+          getSkillField(),
+          getUserRoles(),
+        ]);
+      } catch (error) {
+        console.error("Error fetching initial data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
   const getUserRoles = async () => {
     try {
@@ -889,6 +902,10 @@ const AddProduct = () => {
     );
     return { stageCount, substepCount, printerEnabled, packagingEnabled };
   }, [stages]);
+  if (loading) {
+    return <Loader />;
+  }
+
   return (
     <>
       <Breadcrumb parentName="Product Management" pageName="Add Product" />

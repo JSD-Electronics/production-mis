@@ -6,4 +6,5 @@ export interface Stages {
     createdAt: string;
     updatedAt: string;
     subSteps?: any[];
+    stages?: any[];
 }
