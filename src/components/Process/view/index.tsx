@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useState } from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
@@ -54,7 +54,10 @@ const ViewProcess = () => {
       let response = await getOrderConfirmationNumers();
       setOcNoArr(response.getOrderConfirmationNo);
     } catch (error) {
-      ?.message);
+      console.error(
+        "Error fetching order confirmation numbers:",
+        (error as any)?.message || error,
+      );
     }
   };
   const getProcess = async () => {

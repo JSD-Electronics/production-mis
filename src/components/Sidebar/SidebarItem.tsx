@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import Link from "next/link";
 import SidebarDropdown from "@/components/Sidebar/SidebarDropdown";
 import { usePathname } from "next/navigation";
@@ -18,7 +18,12 @@ const SidebarItem = ({
 
   const pathname = usePathname();
   const transformedLabel = item.label.replace(/\s+/g, "_").toLowerCase();
-  const hasPermission = permission[transformedLabel]?.[userType.toLowerCase()];
+  const normalizedUserType = (userType || "")
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+  const hasPermission =
+    permission[transformedLabel]?.[normalizedUserType] ??
+    normalizedUserType === "admin";
   const isActive = (item: any) => {
     if (item.route === pathname) return true;
     if (item.children) {

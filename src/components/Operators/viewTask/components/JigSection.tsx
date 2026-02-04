@@ -277,7 +277,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
           }
         }
       });
-      
+
 
       if (matchCount < requiredFieldsCount) {
         const missing = currentSubStep.jigFields.filter((field: any) => {
@@ -294,7 +294,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
           return !found;
         }).map((f: any) => f.jigName);
         if (missing.length > 0) {
-          
+
         }
 
         // --- NEW: Report current status to parent for better timeout reasons ---
@@ -315,7 +315,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       if (matchCount > 0 && onDecisionRef.current) {
         if (matchCount >= requiredFieldsCount) {
           if (isCommandBusyRef.current) {
-            
+
             // Optionally add a small status message to notify the user
             if (onStatusUpdateRef.current) onStatusUpdateRef.current("Waiting for command completion...");
             return;
@@ -437,7 +437,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
     const command = subStep?.stepFields?.command;
 
     if (isConnected && (actionType === "Command" || actionType === "Custom Fields") && command && lastSentCommandStepRef.current !== currentStepId) {
-      : ${command}`);
+      addLog(`Auto-sending command: ${command}`, 'info');
       isCommandBusyRef.current = true;
       sendCommand(command).then(() => {
         // Wait for 1.5s after command is sent to allow jig to process/respond fully

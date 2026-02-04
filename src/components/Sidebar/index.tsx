@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { getUseTypeByType, getAllMenus } from "../../lib/api";
@@ -110,8 +110,12 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
                     const transformedLabel = menuItem.label
                       .replace(/\s+/g, "_")
                       .toLowerCase();
+                    const normalizedUserType = (userType || "")
+                      .toLowerCase()
+                      .replace(/\s+/g, "_");
                     const hasPermission =
-                      permission[transformedLabel]?.[userType.toLowerCase()];
+                      permission[transformedLabel]?.[normalizedUserType] ??
+                      normalizedUserType === "admin";
                     return (
                       hasPermission && (
                         <SidebarItem
