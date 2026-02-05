@@ -23,9 +23,14 @@ const nextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: process.env.NODE_ENV === "production"
-          ? "http://34.205.96.179:8000/api/:path*"
-          : "http://localhost:8000/api/:path*",
+        destination: (() => {
+          const isProd = process.env.NODE_ENV === "production";
+          const override = process.env.NEXT_PUBLIC_API_PROXY_URL;
+          const devBase = process.env.NEXT_PUBLIC_BASE_URL_DEV || "http://127.0.0.1:4000";
+          const prodBase = process.env.NEXT_PUBLIC_BASE_URL_PROD || "http://34.205.96.179:4000";
+          const base = isProd ? prodBase : (override || devBase);
+          return `${base}/api/:path*`;
+        })(),
       },
     ];
   },
