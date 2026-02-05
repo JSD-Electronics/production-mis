@@ -30,18 +30,9 @@ import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import Loader from "@/components/common/Loader";
 
 import PrintTableComponent from "../printTableComponents";
-import { BarChart3, Box, ClipboardList, Clock, ExternalLink, Paperclip, User, Video, Plus, Trash2 } from "lucide-react";
+import { BarChart3, Box, ClipboardList, Clock, ExternalLink, Paperclip, User, Video, Plus, Trash2, Play } from "lucide-react";
 
-interface CustomField {
-  fieldName: string;
-  isSubExpand: boolean;
-  validationType: string;
-  value: string;
-  rangeFrom: string;
-  rangeTo: string;
-  lengthFrom: string;
-  lengthTo: string;
-}
+
 
 interface SubStep {
   dragId: string;
@@ -56,7 +47,6 @@ interface SubStep {
   packagingData?: any;
   ngStatusData?: any[];
   jigFields: any[];
-  customFields: CustomField[];
   stepFields: {
     actionType: string;
     command: string;
@@ -112,6 +102,8 @@ const EditProduct = () => {
     width: 100,
     height: 100,
   });
+  const [simulatorInitialStage, setSimulatorInitialStage] = useState(0);
+
   const [stages, setStages] = useState<Stage[]>([
     {
       dragId: `stage-${Date.now()}`,
@@ -143,7 +135,6 @@ const EditProduct = () => {
           stepType: "manual",
           printerFields: [],
           jigFields: [],
-          customFields: [],
           ngStatusData: [],
           stepFields: {
             actionType: "",
@@ -229,10 +220,10 @@ const EditProduct = () => {
   const getUserRoles = async () => {
     try {
       let result = await getUserType();
-      
+
       setUserType(result?.userType);
     } catch (error) {
-      
+
     }
   };
   const getSkillField = async () => {
@@ -248,7 +239,7 @@ const EditProduct = () => {
       let result = await getStickerFields();
       setStickerFields(result?.data);
     } catch (error) {
-      
+
     }
   };
   const validateForm = () => {
@@ -290,36 +281,7 @@ const EditProduct = () => {
           isValid = false;
         }
 
-        // Custom Fields Validation
-        if (subStep.stepFields.actionType === "Custom Fields") {
-          if (!subStep.customFields || subStep.customFields.length === 0) {
-            toast.error(`At least one Custom Field is required for Stage ${stageIndex + 1}, Step ${subStepIndex + 1}`);
-            isValid = false;
-          } else {
-            subStep.customFields.forEach((cf, cfIndex) => {
-              if (!cf.fieldName) {
-                toast.error(`Field Name is required for Custom Field ${cfIndex + 1} in Stage ${stageIndex + 1}, Step ${subStepIndex + 1}`);
-                isValid = false;
-              }
-              if (cf.validationType === "value" && !cf.value) {
-                toast.error(`Validation Value is required for Custom Field "${cf.fieldName || cfIndex + 1}"`);
-                isValid = false;
-              }
-              if (cf.validationType === "range") {
-                if (cf.rangeFrom === "" || cf.rangeTo === "") {
-                  toast.error(`Range From and To are required for Custom Field "${cf.fieldName || cfIndex + 1}"`);
-                  isValid = false;
-                }
-              }
-              if (cf.validationType === "length") {
-                if (cf.lengthFrom === "" || cf.lengthTo === "") {
-                  toast.error(`Length From and To are required for Custom Field "${cf.fieldName || cfIndex + 1}"`);
-                  isValid = false;
-                }
-              }
-            });
-          }
-        }
+
       });
     });
 
@@ -348,11 +310,34 @@ const EditProduct = () => {
           ...stage,
           videoLinks: Array.isArray(stage.videoLinks) ? stage.videoLinks : (stage.videoLink ? [stage.videoLink] : [""]),
           dragId: stage.dragId || `stage-${sIdx}-${Date.now()}`,
-          subSteps: (stage.subSteps || []).map((step: any, stIdx: number) => ({
-            ...step,
-            dragId: step.dragId || `step-${sIdx}-${stIdx}-${Date.now()}`,
-            ngTimeout: step.ngTimeout || 0,
-          })),
+          subSteps: (stage.subSteps || []).map((step: any, stIdx: number) => {
+            const jigFields = [...(step.jigFields || [])];
+            if (step.customFields && step.customFields.length > 0) {
+              step.customFields.forEach((cf: any) => {
+                // Check if this field hasn't already been migrated (simple check by name)
+                if (!jigFields.some(jf => jf.jigName === cf.label)) {
+                  jigFields.push({
+                    jigName: cf.label || "",
+                    isSubExpand: cf.isSubExpand || false,
+                    validationType: cf.validationType || "value",
+                    value: cf.value || "",
+                    rangeFrom: cf.rangeFrom || "",
+                    rangeTo: cf.rangeTo || "",
+                    lengthFrom: cf.lengthFrom || "",
+                    lengthTo: cf.lengthTo || "",
+                  });
+                }
+              });
+              // Remove customFields after migration to clean up the object
+              delete step.customFields;
+            }
+            return {
+              ...step,
+              dragId: step.dragId || `step-${sIdx}-${stIdx}-${Date.now()}`,
+              ngTimeout: step.ngTimeout || 0,
+              jigFields: jigFields,
+            };
+          }),
         }));
         setStages(stagesWithIds);
         if (result.product.commonStages && result.product.commonStages.length > 0) {
@@ -401,7 +386,6 @@ const EditProduct = () => {
             stepType: "manual",
             printerFields: [],
             jigFields: [],
-            customFields: [],
             ngStatusData: [],
             stepFields: {
               actionType: "",
@@ -413,10 +397,8 @@ const EditProduct = () => {
     ]);
   };
   const submitStageForm = async () => {
-    // 
-    // return false;
     if (validateForm()) {
-
+      setSubmitDisabled(true);
       const pathname = window.location.pathname;
       const id = pathname.split("/").pop();
       const formData = new FormData();
@@ -432,6 +414,7 @@ const EditProduct = () => {
         const result = await updateProduct(formData, id);
         if (result && result.status === 200) {
           toast.success("Stage Updated successfully!!");
+          setSubmitDisabled(false);
         } else {
           throw new Error(result.message || "Failed to Update stage");
         }
@@ -519,7 +502,6 @@ const EditProduct = () => {
       stepType: "manual",
       printerFields: [],
       jigFields: [],
-      customFields: [],
       ngStatusData: [],
       stepFields: {
         actionType: "",
@@ -544,78 +526,7 @@ const EditProduct = () => {
     setStages(newStages);
   };
 
-  const handleAddCustomField = (index: number, subIndex: number) => {
-    pushToHistory();
-    const newStages = [...stages];
-    if (!newStages[index].subSteps[subIndex].customFields) {
-      newStages[index].subSteps[subIndex].customFields = [];
-    }
-    newStages[index].subSteps[subIndex].customFields.push({
-      fieldName: "",
-      isSubExpand: true,
-      validationType: "value",
-      value: "",
-      rangeFrom: "",
-      rangeTo: "",
-      lengthFrom: "",
-      lengthTo: "",
-    });
-    setStages(newStages);
-  };
 
-  const handleCustomFieldChange = (
-    stageIndex: number,
-    subIndex: number,
-    customFieldIndex: number,
-    event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-    param: keyof CustomField,
-  ) => {
-    const newStages = [...stages];
-    (newStages[stageIndex].subSteps[subIndex].customFields[customFieldIndex] as any)[
-      param
-    ] = event.target.value;
-    setStages(newStages);
-  };
-
-  const handleCustomFieldValidationTypeChange = (
-    stageIndex: any,
-    subIndex: any,
-    customFieldIndex: any,
-    event: any,
-  ) => {
-    const newStages = [...stages];
-    newStages[stageIndex].subSteps[subIndex].customFields[
-      customFieldIndex
-    ].validationType = event.target.value;
-    setStages(newStages);
-  };
-
-  const handleRemoveCustomField = (
-    stageIndex: number,
-    subIndex: number,
-    customFieldIndex: number,
-  ) => {
-    pushToHistory();
-    const newStages = [...stages];
-    newStages[stageIndex].subSteps[subIndex].customFields = newStages[
-      stageIndex
-    ].subSteps[subIndex].customFields.filter((_: any, i: number) => i !== customFieldIndex);
-    setStages(newStages);
-  };
-
-  const toggleCustomFieldExpand = (
-    index: number,
-    subIndex: number,
-    customFieldIndex: number,
-  ) => {
-    const newStages = [...stages];
-    newStages[index].subSteps[subIndex].customFields[
-      customFieldIndex
-    ].isSubExpand =
-      !newStages[index].subSteps[subIndex].customFields[customFieldIndex]
-        .isSubExpand;
-    setStages(newStages);
-  };
 
   const toggleJigSubExpand = (
     index: number,
@@ -717,7 +628,11 @@ const EditProduct = () => {
   };
   const handlestepTypeChange = (index: number, subIndex: number, event: React.ChangeEvent<HTMLSelectElement>) => {
     const newStages = [...stages];
-    newStages[index].subSteps[subIndex].stepType = event.target.value as "jig" | "manual";
+    const newType = event.target.value as "jig" | "manual";
+    newStages[index].subSteps[subIndex].stepType = newType;
+    if (newType === "manual" && newStages[index].subSteps[subIndex].stepFields.actionType === "Command") {
+      newStages[index].subSteps[subIndex].stepFields.actionType = "";
+    }
     setStages(newStages);
   };
   const handleJigValidationTypeChange = (
@@ -1169,7 +1084,7 @@ const EditProduct = () => {
                   ref={provided.innerRef}
                   className="flex flex-col space-y-5 p-10"
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-100 px-6 py-8 dark:bg-boxdark rounded-xl border border-gray-200 dark:border-strokedark mb-4">
+                  <div className="grid grid-cols-1 gap-6 bg-gray-100 px-6 py-8 dark:bg-boxdark rounded-xl border border-gray-200 dark:border-strokedark mb-4">
                     <div>
                       <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-bold">
                         Product Name
@@ -1183,66 +1098,7 @@ const EditProduct = () => {
                         className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
                       />
                     </div>
-                    <div>
-                      <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-bold">
-                        <Paperclip className="h-4 w-4 text-primary" />
-                        Master SOP (Project Based)
-                      </label>
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 relative">
-                          <input
-                            type="file"
-                            ref={sopFilePickerRef}
-                            accept=".pdf,.doc,.docx"
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                            onChange={(e) => {
-                              if (e.target.files?.[0]) {
-                                setSopFile(e.target.files[0].name);
-                              }
-                            }}
-                          />
-                          <div className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm flex items-center justify-between dark:border-form-strokedark dark:bg-form-input dark:text-white">
-                            <span className="truncate max-w-[200px]">
-                              {sopFile ? (
-                                <span className="text-primary font-medium flex items-center gap-1">
-                                  <ClipboardList className="h-4 w-4" /> {sopFile.split('/').pop()}
-                                </span>
-                              ) : "Choose Master SOP File"}
-                            </span>
-                            <button type="button" className="text-primary text-xs font-bold hover:underline">
-                              Browse
-                            </button>
-                          </div>
-                        </div>
-                        {sopFile && (
-                          <div className="flex gap-2">
-                            {typeof sopFile === 'string' && sopFile.startsWith('http') && (
-                              <a
-                                href={sopFile}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="p-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                                title="View Current SOP"
-                              >
-                                <ExternalLink className="h-5 w-5" />
-                              </a>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSopFile("");
-                                if (sopFilePickerRef.current) sopFilePickerRef.current.value = "";
-                              }}
-                              className="p-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                              title="Remove SOP"
-                            >
-                              <Trash2 className="h-5 w-5" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-gray-500 mt-1">PDF or Word documents only. Max size 5MB.</p>
-                    </div>
+
                   </div>
 
                   {stages.map((stage, index) => (
@@ -1628,69 +1484,69 @@ const EditProduct = () => {
                                                       </div>
                                                     )}
 
-                                                    {/* Jig Action Type and Command */}
-                                                    {subStep.stepType === "jig" && (
-                                                      <>
-                                                        <div>
-                                                          <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                            Action Type
-                                                          </label>
-                                                          <select
-                                                            value={subStep.stepFields.actionType || ""}
-                                                            onChange={(e) =>
-                                                              handleSubStepFieldChange(
-                                                                index,
-                                                                subIndex,
-                                                                e,
-                                                                "actionType",
-                                                              )
-                                                            }
-                                                            className={`w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white`}
+                                                    {/* Action Type and Command */}
+                                                    <>
+                                                      <div>
+                                                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                                          Action Type
+                                                        </label>
+                                                        <select
+                                                          value={subStep.stepFields.actionType || ""}
+                                                          onChange={(e) =>
+                                                            handleSubStepFieldChange(
+                                                              index,
+                                                              subIndex,
+                                                              e,
+                                                              "actionType",
+                                                            )
+                                                          }
+                                                          className={`w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white`}
+                                                        >
+                                                          <option
+                                                            value=""
+                                                            className="text-body dark:text-bodydark"
                                                           >
-                                                            <option
-                                                              value=""
-                                                              className="text-body dark:text-bodydark"
-                                                            >
-                                                              None
-                                                            </option>
+                                                            None
+                                                          </option>
+                                                          {subStep.stepType === "jig" && (
                                                             <option
                                                               value="Command"
                                                               className="text-body dark:text-bodydark"
                                                             >
                                                               Command
                                                             </option>
-                                                            <option
-                                                              value="Store to DB"
-                                                              className="text-body dark:text-bodydark"
-                                                            >
-                                                              Store to DB
-                                                            </option>
-                                                          </select>
-                                                        </div>
-                                                        {subStep.stepFields.actionType ===
-                                                          "Command" && (
-                                                            <div>
-                                                              <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                                Command
-                                                              </label>
-                                                              <input
-                                                                type="text"
-                                                                value={subStep.stepFields.command}
-                                                                onChange={(e) =>
-                                                                  handleSubStepFieldChange(
-                                                                    index,
-                                                                    subIndex,
-                                                                    e,
-                                                                    "command",
-                                                                  )
-                                                                }
-                                                                placeholder={`Enter Command`}
-                                                                className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
-                                                              />
-                                                            </div>
                                                           )}
-                                                      </>
-                                                    )}
+                                                          <option
+                                                            value="Store to DB"
+                                                            className="text-body dark:text-bodydark"
+                                                          >
+                                                            Store to DB
+                                                          </option>
+                                                        </select>
+                                                      </div>
+                                                      {subStep.stepFields.actionType ===
+                                                        "Command" && (
+                                                          <div>
+                                                            <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                                              Command
+                                                            </label>
+                                                            <input
+                                                              type="text"
+                                                              value={subStep.stepFields.command}
+                                                              onChange={(e) =>
+                                                                handleSubStepFieldChange(
+                                                                  index,
+                                                                  subIndex,
+                                                                  e,
+                                                                  "command",
+                                                                )
+                                                              }
+                                                              placeholder={`Enter Command`}
+                                                              className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                                            />
+                                                          </div>
+                                                        )}
+                                                    </>
 
                                                     {/* Manual Validation (no Action Type) */}
                                                     {subStep.stepType == "manual" && (
@@ -2043,559 +1899,243 @@ const EditProduct = () => {
                                                     ),
                                                   )}
 
-                                                {subStep.isSubExpand &&
-                                                  subStep.stepType === "manual" && (
-                                                    <div className="mt-6 space-y-4">
-                                                      {/* <h6 className="text-gray-900 border-l-4 border-blue-500 pl-3 text-sm font-bold dark:text-white uppercase tracking-wider">
-                                                      Custom Fields Configuration
-                                                    </h6> */}
-
-                                                      {subStep?.customFields?.map(
-                                                        (customField: CustomField, customIndex: number) => (
-                                                          <div
-                                                            key={customIndex}
-                                                            className="overflow-hidden rounded-xl border border-primary/20 bg-primary/[0.02] shadow-sm transition-all duration-300 hover:shadow-md dark:border-strokedark dark:bg-meta-4/10"
+                                                <div className="mt-6 space-y-4">
+                                                  {subStep.jigFields.map((jigField: any, jigIndex: number) => (
+                                                    <div
+                                                      key={jigIndex}
+                                                      className="mt-6 rounded-lg border border-[#eee] p-5 dark:border-form-strokedark"
+                                                    >
+                                                      <div className="grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
+                                                        <h5 className="text-gray-900 text-md block font-semibold dark:text-white">
+                                                          Jig Field {jigIndex + 1}{" "}
+                                                          {jigField?.jigName}
+                                                        </h5>
+                                                        <div className="text-right">
+                                                          <button
+                                                            type="button"
+                                                            className="text-gray-900 text-lg font-semibold dark:text-white "
+                                                            onClick={() =>
+                                                              toggleJigSubExpand(
+                                                                index,
+                                                                subIndex,
+                                                                jigIndex,
+                                                              )
+                                                            }
                                                           >
-                                                            <div className="flex items-center justify-between border-b border-primary/10 bg-primary/5 px-5 py-3 dark:border-strokedark dark:bg-meta-4/20">
-                                                              <div className="flex items-center gap-3">
-                                                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-white shadow-lg shadow-primary/30">
-                                                                  <FontAwesomeIcon
-                                                                    icon={faPuzzlePiece}
-                                                                    className="text-sm"
-                                                                  />
-                                                                </div>
-                                                                <h4 className="text-sm font-bold text-black dark:text-white">
-                                                                  Field {customIndex + 1}:{" "}
-                                                                  <span className="font-medium text-primary">
-                                                                    {customField.fieldName ||
-                                                                      "Unnamed Field"}
-                                                                  </span>
-                                                                </h4>
-                                                              </div>
-                                                              <div className="flex items-center gap-2">
-                                                                <button
-                                                                  type="button"
-                                                                  onClick={() =>
-                                                                    toggleCustomFieldExpand(
-                                                                      index,
-                                                                      subIndex,
-                                                                      customIndex,
-                                                                    )
-                                                                  }
-                                                                  className="flex h-8 w-8 items-center justify-center rounded-full text-primary transition-all hover:bg-primary hover:text-white"
-                                                                >
-                                                                  <FontAwesomeIcon
-                                                                    icon={
-                                                                      customField.isSubExpand
-                                                                        ? faChevronUp
-                                                                        : faChevronDown
-                                                                    }
-                                                                  />
-                                                                </button>
-                                                              </div>
+                                                            <FontAwesomeIcon
+                                                              icon={
+                                                                jigField.isSubExpand
+                                                                  ? faChevronUp
+                                                                  : faChevronDown
+                                                              }
+                                                            />
+                                                          </button>
+                                                        </div>
+                                                      </div>
+                                                      {jigField.isSubExpand && (
+                                                        <>
+                                                          <div className="mt-6 grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
+                                                            <div>
+                                                              <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                Name
+                                                              </label>
+                                                              <input
+                                                                type="text"
+                                                                value={jigField.jigName}
+                                                                onChange={(e) =>
+                                                                  handleJigSubStepChange(
+                                                                    index,
+                                                                    subIndex,
+                                                                    jigIndex,
+                                                                    e,
+                                                                    "jigName",
+                                                                  )
+                                                                }
+                                                                placeholder={`Name`}
+                                                                className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                              />
                                                             </div>
-                                                            {customField.isSubExpand && (
-                                                              <div className="p-5">
-                                                                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                                                                  <div className="space-y-2">
-                                                                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                                                      Field Name
-                                                                    </label>
-                                                                    <input
-                                                                      type="text"
-                                                                      value={
-                                                                        customField.fieldName
-                                                                      }
-                                                                      onChange={(e) =>
-                                                                        handleCustomFieldChange(
-                                                                          index,
-                                                                          subIndex,
-                                                                          customIndex,
-                                                                          e,
-                                                                          "fieldName",
-                                                                        )
-                                                                      }
-                                                                      placeholder="e.g. Voltage, Current"
-                                                                      className="w-full rounded-lg border border-stroke bg-white px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10 dark:border-form-strokedark dark:bg-form-input dark:text-white"
-                                                                    />
-                                                                  </div>
-                                                                  <div className="space-y-2">
-                                                                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                                                      Validation Type
-                                                                    </label>
-                                                                    <select
-                                                                      value={
-                                                                        customField.validationType
-                                                                      }
-                                                                      onChange={(e) =>
-                                                                        handleCustomFieldValidationTypeChange(
-                                                                          index,
-                                                                          subIndex,
-                                                                          customIndex,
-                                                                          e,
-                                                                        )
-                                                                      }
-                                                                      className="w-full appearance-none rounded-lg border border-stroke bg-white px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10 dark:border-form-strokedark dark:bg-form-input"
-                                                                    >
-                                                                      <option value="value">
-                                                                        Exact Value
-                                                                      </option>
-                                                                      <option value="range">
-                                                                        Numeric Range
-                                                                      </option>
-                                                                      <option value="length">
-                                                                        String Length
-                                                                      </option>
-                                                                    </select>
-                                                                  </div>
-                                                                  <div className="flex items-end gap-3 md:col-span-2 lg:col-span-1">
-                                                                    {customField.validationType ===
-                                                                      "range" && (
-                                                                        <>
-                                                                          <div className="flex-1 space-y-2">
-                                                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                                                              From
-                                                                            </label>
-                                                                            <input
-                                                                              type="number"
-                                                                              value={
-                                                                                customField.rangeFrom
-                                                                              }
-                                                                              onChange={(e) =>
-                                                                                handleCustomFieldChange(
-                                                                                  index,
-                                                                                  subIndex,
-                                                                                  customIndex,
-                                                                                  e,
-                                                                                  "rangeFrom",
-                                                                                )
-                                                                              }
-                                                                              placeholder="Min"
-                                                                              className="w-full rounded-lg border border-stroke bg-white px-4 py-2.5 text-sm outline-none focus:border-primary dark:border-form-strokedark dark:bg-form-input"
-                                                                            />
-                                                                          </div>
-                                                                          <div className="flex-1 space-y-2">
-                                                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                                                              To
-                                                                            </label>
-                                                                            <input
-                                                                              type="number"
-                                                                              value={
-                                                                                customField.rangeTo
-                                                                              }
-                                                                              onChange={(e) =>
-                                                                                handleCustomFieldChange(
-                                                                                  index,
-                                                                                  subIndex,
-                                                                                  customIndex,
-                                                                                  e,
-                                                                                  "rangeTo",
-                                                                                )
-                                                                              }
-                                                                              placeholder="Max"
-                                                                              className="w-full rounded-lg border border-stroke bg-white px-4 py-2.5 text-sm outline-none focus:border-primary dark:border-form-strokedark dark:bg-form-input"
-                                                                            />
-                                                                          </div>
-                                                                        </>
-                                                                      )}
-                                                                    {customField.validationType ===
-                                                                      "value" && (
-                                                                        <div className="flex-1 space-y-2">
-                                                                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                                                            Expected Value
-                                                                          </label>
-                                                                          <input
-                                                                            type="text"
-                                                                            value={
-                                                                              customField.value
-                                                                            }
-                                                                            onChange={(e) =>
-                                                                              handleCustomFieldChange(
-                                                                                index,
-                                                                                subIndex,
-                                                                                customIndex,
-                                                                                e,
-                                                                                "value",
-                                                                              )
-                                                                            }
-                                                                            placeholder="Exact value to match"
-                                                                            className="w-full rounded-lg border border-stroke bg-white px-4 py-2.5 text-sm outline-none focus:border-primary dark:border-form-strokedark dark:bg-form-input"
-                                                                          />
-                                                                        </div>
-                                                                      )}
-                                                                    {customField.validationType ===
-                                                                      "length" && (
-                                                                        <>
-                                                                          <div className="flex-1 space-y-2">
-                                                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                                                              Min Length
-                                                                            </label>
-                                                                            <input
-                                                                              type="number"
-                                                                              value={
-                                                                                customField.lengthFrom
-                                                                              }
-                                                                              onChange={(e) =>
-                                                                                handleCustomFieldChange(
-                                                                                  index,
-                                                                                  subIndex,
-                                                                                  customIndex,
-                                                                                  e,
-                                                                                  "lengthFrom",
-                                                                                )
-                                                                              }
-                                                                              placeholder="Chars"
-                                                                              className="w-full rounded-lg border border-stroke bg-white px-4 py-2.5 text-sm outline-none focus:border-primary dark:border-form-strokedark dark:bg-form-input"
-                                                                            />
-                                                                          </div>
-                                                                          <div className="flex-1 space-y-2">
-                                                                            <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                                                              Max Length
-                                                                            </label>
-                                                                            <input
-                                                                              type="number"
-                                                                              value={
-                                                                                customField.lengthTo
-                                                                              }
-                                                                              onChange={(e) =>
-                                                                                handleCustomFieldChange(
-                                                                                  index,
-                                                                                  subIndex,
-                                                                                  customIndex,
-                                                                                  e,
-                                                                                  "lengthTo",
-                                                                                )
-                                                                              }
-                                                                              placeholder="Chars"
-                                                                              className="w-full rounded-lg border border-stroke bg-white px-4 py-2.5 text-sm outline-none focus:border-primary dark:border-form-strokedark dark:bg-form-input"
-                                                                            />
-                                                                          </div>
-                                                                        </>
-                                                                      )}
-                                                                  </div>
-                                                                </div>
-                                                                <div className="mt-6 flex justify-end border-t border-primary/10 pt-4 dark:border-strokedark">
-                                                                  <button
-                                                                    type="button"
-                                                                    className="group flex items-center gap-2 text-sm font-semibold text-danger transition-colors hover:text-danger/80"
-                                                                    onClick={() =>
-                                                                      handleRemoveCustomField(
+                                                            <div>
+                                                              <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                Validation Type
+                                                              </label>
+                                                              <select
+                                                                value={jigField.validationType}
+                                                                onChange={(e) =>
+                                                                  handleJigValidationTypeChange(
+                                                                    index,
+                                                                    subIndex,
+                                                                    jigIndex,
+                                                                    e,
+                                                                  )
+                                                                }
+                                                                className={`relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
+                                                              >
+                                                                <option value="value">Value</option>
+                                                                <option value="range">Range</option>
+                                                                <option value="length">Length</option>
+                                                              </select>
+                                                            </div>
+                                                            {jigField.validationType === "range" && (
+                                                              <>
+                                                                <div>
+                                                                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                    Range From
+                                                                  </label>
+                                                                  <input
+                                                                    type="number"
+                                                                    value={jigField.rangeFrom}
+                                                                    onChange={(e) =>
+                                                                      handleJigSubStepChange(
                                                                         index,
                                                                         subIndex,
-                                                                        customIndex,
+                                                                        jigIndex,
+                                                                        e,
+                                                                        "rangeFrom",
                                                                       )
                                                                     }
-                                                                  >
-                                                                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-danger/10 text-danger group-hover:bg-danger group-hover:text-white transition-all">
-                                                                      <FontAwesomeIcon
-                                                                        icon={faTrash}
-                                                                        className="text-xs"
-                                                                      />
-                                                                    </div>
-                                                                    Remove Field
-                                                                  </button>
+                                                                    placeholder={`min`}
+                                                                    className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                  />
                                                                 </div>
-                                                              </div>
+                                                                <div>
+                                                                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                    Range To
+                                                                  </label>
+                                                                  <input
+                                                                    type="number"
+                                                                    value={jigField.rangeTo}
+                                                                    onChange={(e) =>
+                                                                      handleJigSubStepChange(
+                                                                        index,
+                                                                        subIndex,
+                                                                        jigIndex,
+                                                                        e,
+                                                                        "rangeTo",
+                                                                      )
+                                                                    }
+                                                                    placeholder={`max`}
+                                                                    className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                  />
+                                                                </div>
+                                                              </>
+                                                            )}
+                                                            {jigField.validationType === "length" && (
+                                                              <>
+                                                                <div>
+                                                                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                    Length From
+                                                                  </label>
+                                                                  <input
+                                                                    type="number"
+                                                                    value={jigField.lengthFrom}
+                                                                    onChange={(e) =>
+                                                                      handleJigSubStepChange(
+                                                                        index,
+                                                                        subIndex,
+                                                                        jigIndex,
+                                                                        e,
+                                                                        "lengthFrom",
+                                                                      )
+                                                                    }
+                                                                    placeholder={`Length From`}
+                                                                    className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                  />
+                                                                </div>
+                                                                <div>
+                                                                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                    Length To
+                                                                  </label>
+                                                                  <input
+                                                                    type="number"
+                                                                    value={jigField.lengthTo}
+                                                                    onChange={(e) =>
+                                                                      handleJigSubStepChange(
+                                                                        index,
+                                                                        subIndex,
+                                                                        jigIndex,
+                                                                        e,
+                                                                        "lengthTo",
+                                                                      )
+                                                                    }
+                                                                    placeholder={`Length To`}
+                                                                    className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                  />
+                                                                </div>
+                                                              </>
                                                             )}
                                                           </div>
-                                                        )
-                                                      )}
-                                                    </div>
-                                                  )}
-                                                {subStep.stepType == "jig" && (
-                                                  <>
-                                                    {subStep.jigFields.map((jigField, jigIndex) => (
-                                                      <div
-                                                        key={jigIndex}
-                                                        className="mt-6 rounded-lg border border-[#eee] p-2 p-5 dark:border-form-strokedark"
-                                                      >
-                                                        <div className="grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
-                                                          <h5 className="text-gray-900 text-md block font-semibold dark:text-white">
-                                                            Jig Field {jigIndex + 1}{" "}
-                                                            {jigField?.jigName}
-                                                          </h5>
-                                                          <div className="text-right">
-                                                            <button
-                                                              type="button"
-                                                              className="text-gray-900 text-lg font-semibold dark:text-white "
-                                                              onClick={() =>
-                                                                toggleJigSubExpand(
-                                                                  index,
-                                                                  subIndex,
-                                                                  jigIndex,
-                                                                )
-                                                              }
-                                                            >
-                                                              <FontAwesomeIcon
-                                                                icon={
-                                                                  jigField.isSubExpand
-                                                                    ? faChevronUp
-                                                                    : faChevronDown
-                                                                }
-                                                              />
-                                                            </button>
-                                                          </div>
-                                                        </div>
-                                                        {jigField.isSubExpand && (
-                                                          <>
-                                                            <div className="mt-6 grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
+                                                          <div className="mt-3 grid grid-cols-1 items-center gap-3 sm:grid-cols-1">
+                                                            {jigField.validationType === "value" && (
                                                               <div>
                                                                 <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                  Name
+                                                                  Validation Value
                                                                 </label>
                                                                 <input
                                                                   type="text"
-                                                                  value={jigField.jigName}
+                                                                  value={jigField.value}
                                                                   onChange={(e) =>
                                                                     handleJigSubStepChange(
                                                                       index,
                                                                       subIndex,
                                                                       jigIndex,
                                                                       e,
-                                                                      "jigName",
+                                                                      "value",
                                                                     )
                                                                   }
-                                                                  placeholder={`Name`}
+                                                                  placeholder={`Validation Value`}
                                                                   className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
                                                                 />
                                                               </div>
-                                                              <div>
-                                                                <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                  Validation Type
-                                                                </label>
-                                                                <select
-                                                                  value={jigField.validationType}
-                                                                  onChange={(e) =>
-                                                                    handleJigValidationTypeChange(
-                                                                      index,
-                                                                      subIndex,
-                                                                      jigIndex,
-                                                                      e,
-                                                                    )
-                                                                  }
-                                                                  className={`relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
-                                                                >
-                                                                  <option
-                                                                    value="value"
-                                                                    className="text-body dark:text-bodydark"
-                                                                  >
-                                                                    Value
-                                                                  </option>
-                                                                  <option
-                                                                    value="range"
-                                                                    className="text-body dark:text-bodydark"
-                                                                  >
-                                                                    Range
-                                                                  </option>
-                                                                  <option
-                                                                    value="length"
-                                                                    className="text-body dark:text-bodydark"
-                                                                  >
-                                                                    Length
-                                                                  </option>
-                                                                </select>
-                                                              </div>
-                                                              {jigField.validationType ===
-                                                                "range" && (
-                                                                  <>
-                                                                    <div>
-                                                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                        Range From
-                                                                      </label>
-                                                                      <input
-                                                                        type="number"
-                                                                        value={jigField.rangeFrom}
-                                                                        onChange={(e) =>
-                                                                          handleJigSubStepChange(
-                                                                            index,
-                                                                            subIndex,
-                                                                            jigIndex,
-                                                                            e,
-                                                                            "rangeFrom",
-                                                                          )
-                                                                        }
-                                                                        placeholder={`min`}
-                                                                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                      />
-                                                                    </div>
-                                                                    <div>
-                                                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                        Range To
-                                                                      </label>
-                                                                      <input
-                                                                        type="number"
-                                                                        value={jigField.rangeTo}
-                                                                        onChange={(e) =>
-                                                                          handleJigSubStepChange(
-                                                                            index,
-                                                                            subIndex,
-                                                                            jigIndex,
-                                                                            e,
-                                                                            "rangeTo",
-                                                                          )
-                                                                        }
-                                                                        placeholder={`max`}
-                                                                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                      />
-                                                                    </div>
-                                                                  </>
-                                                                )}
-                                                              {jigField.validationType ===
-                                                                "length" && (
-                                                                  <>
-                                                                    <div>
-                                                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                        Length From
-                                                                      </label>
-                                                                      <input
-                                                                        type="number"
-                                                                        value={jigField.lengthFrom}
-                                                                        onChange={(e) =>
-                                                                          handleJigSubStepChange(
-                                                                            index,
-                                                                            subIndex,
-                                                                            jigIndex,
-                                                                            e,
-                                                                            "lengthFrom",
-                                                                          )
-                                                                        }
-                                                                        placeholder={`Length From`}
-                                                                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                      />
-                                                                    </div>
-                                                                    <div>
-                                                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                        Length To
-                                                                      </label>
-                                                                      <input
-                                                                        type="number"
-                                                                        value={jigField.lengthTo}
-                                                                        onChange={(e) =>
-                                                                          handleJigSubStepChange(
-                                                                            index,
-                                                                            subIndex,
-                                                                            jigIndex,
-                                                                            e,
-                                                                            "lengthTo",
-                                                                          )
-                                                                        }
-                                                                        placeholder={`Length To`}
-                                                                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                      />
-                                                                    </div>
-                                                                  </>
-                                                                )}
-                                                            </div>
-                                                            <div className="mt-3 grid grid-cols-1 items-center gap-3 sm:grid-cols-1">
-                                                              {jigField.validationType ===
-                                                                "value" && (
-                                                                  <>
-                                                                    <div>
-                                                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                        Validation Value
-                                                                      </label>
-                                                                      <input
-                                                                        type="text"
-                                                                        value={jigField.value}
-                                                                        onChange={(e) =>
-                                                                          handleJigSubStepChange(
-                                                                            index,
-                                                                            subIndex,
-                                                                            jigIndex,
-                                                                            e,
-                                                                            "value",
-                                                                          )
-                                                                        }
-                                                                        placeholder={`Validation Value`}
-                                                                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                      />
-                                                                    </div>
-                                                                  </>
-                                                                )}
-                                                            </div>
-                                                            <div className="col-span-12 flex justify-end">
-                                                              <button
-                                                                type="button"
-                                                                className="mt-4 flex items-center text-danger"
-                                                                onClick={() =>
-                                                                  handleRemoveJigSubStep(
-                                                                    index,
-                                                                    subIndex,
-                                                                    jigIndex,
-                                                                  )
-                                                                }
-                                                              >
-                                                                <FontAwesomeIcon
-                                                                  icon={faTrash}
-                                                                  className="mr-2"
-                                                                />
-                                                                Remove Jig Field
-                                                              </button>
-                                                            </div>
-                                                          </>
-                                                        )}
-                                                      </div>
-                                                    ))}
-                                                  </>
-                                                )}
+                                                            )}
+                                                          </div>
+                                                          <div className="col-span-12 flex justify-end">
+                                                            <button
+                                                              type="button"
+                                                              className="mt-4 flex items-center text-danger"
+                                                              onClick={() =>
+                                                                handleRemoveJigSubStep(
+                                                                  index,
+                                                                  subIndex,
+                                                                  jigIndex,
+                                                                )
+                                                              }
+                                                            >
+                                                              <FontAwesomeIcon icon={faTrash} className="mr-2" />
+                                                              Remove Field
+                                                            </button>
+                                                          </div>
+                                                        </>
+                                                      )}
+                                                    </div>
+                                                  ))}
+                                                </div>
 
                                                 <div className="col-span-12 flex justify-end gap-3">
-                                                  {subStep.isSubExpand &&
-                                                    subStep.stepType == "jig" && (
-                                                      <button
-                                                        type="button"
-                                                        className="mt-4 flex items-center text-blue-500"
-                                                        onClick={() =>
-                                                          handleAddJig(index, subIndex)
-                                                        }
-                                                      >
-                                                        <FontAwesomeIcon
-                                                          icon={faPlus}
-                                                          className="mr-2"
-                                                        />
-                                                        Add Jig Fields
-                                                      </button>
-                                                    )}
+                                                  <button
+                                                    type="button"
+                                                    className="mt-4 flex items-center text-blue-500"
+                                                    onClick={() => handleAddJig(index, subIndex)}
+                                                  >
+                                                    <FontAwesomeIcon icon={faPlus} className="mr-2" />
+                                                    Add Field
+                                                  </button>
                                                   {subStep?.isCheckboxNGStatus && (
                                                     <button
                                                       type="button"
                                                       className="mt-4 flex items-center text-blue-500"
                                                       onClick={() => addNGField(index, subIndex)}
                                                     >
-                                                      <FontAwesomeIcon
-                                                        icon={faPlus}
-                                                        className="mr-2"
-                                                      />
+                                                      <FontAwesomeIcon icon={faPlus} className="mr-2" />
                                                       Add NG Field
                                                     </button>
                                                   )}
-                                                  {subStep.isSubExpand &&
-                                                    subStep.stepType === "manual" && (
-                                                      <button
-                                                        type="button"
-                                                        className="mt-4 flex items-center text-blue-500 font-semibold"
-                                                        onClick={() =>
-                                                          handleAddCustomField(index, subIndex)
-                                                        }
-                                                      >
-                                                        <FontAwesomeIcon
-                                                          icon={faPlus}
-                                                          className="mr-2"
-                                                        />
-                                                        Add Custom Field
-                                                      </button>
-                                                    )}
                                                   <button
                                                     type="button"
                                                     className="mt-4 flex items-center text-danger"
-                                                    onClick={() =>
-                                                      handleRemoveSubStep(index, subIndex)
-                                                    }
+                                                    onClick={() => handleRemoveSubStep(index, subIndex)}
                                                   >
-                                                    <FontAwesomeIcon
-                                                      icon={faTrash}
-                                                      className="mr-2"
-                                                    />
+                                                    <FontAwesomeIcon icon={faTrash} className="mr-2" />
                                                     Remove Step
                                                   </button>
                                                 </div>
@@ -2609,9 +2149,6 @@ const EditProduct = () => {
                                   </div>
                                 )}
                               </Droppable>
-
-                              {/* </> */}
-                              {/* )} */}
                             </>
                           )}
                           <div className="col-span-12 flex justify-end gap-5">
@@ -2625,6 +2162,21 @@ const EditProduct = () => {
                                 Add Sub-Step
                               </button>
                             )}
+
+                            <button
+                              type="button"
+                              className="mt-4 flex items-center text-indigo-600"
+                              onClick={() => {
+                                localStorage.setItem("simulationConfig", JSON.stringify({
+                                  stages: stages,
+                                  initialStageIndex: index
+                                }));
+                                window.open("/product/simulator", "_blank");
+                              }}
+                            >
+                              <Play className="mr-2 h-4 w-4" />
+                              Test Stage
+                            </button>
 
                             <button
                               type="button"
@@ -2732,7 +2284,7 @@ const EditProduct = () => {
                       ))}
                     </select>
                   </div>
-                  <div>
+                  {/* <div>
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-gray-800 dark:text-white flex items-center gap-2 text-sm font-semibold">
                         <Video className="h-4 w-4 text-primary" />
@@ -2768,7 +2320,7 @@ const EditProduct = () => {
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </div> */}
 
                 </div>
               ))}
@@ -2780,6 +2332,9 @@ const EditProduct = () => {
                 isLoading={isProcessLoading}
               />
             </div>
+
+
+
           </div>
         </form >
       </div >

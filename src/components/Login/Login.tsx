@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { login } from "../../lib/api";
 import {
   Mail,
+  User,
   Lock,
   AlertCircle,
   Eye,
@@ -22,7 +23,7 @@ import {
 
 const SignIn = () => {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +38,7 @@ const SignIn = () => {
     setError(null);
     setLoading(true);
     try {
-      await login(email, password);
+      await login(identifier, password);
       router.push("/dashboard");
     } catch (err: any) {
       setError(err.message || "Invalid credentials");
@@ -56,25 +57,25 @@ const SignIn = () => {
                 Sign in
               </h1>
               <p className="text-gray-500 mt-1 text-center text-sm">
-                Use your work email and password
+                Use your work email, phone, or employee code
               </p>
             </div>
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="text-gray-700 mb-2 block text-sm font-medium">
-                  Email Address
+                  Email / Phone / Employee Code
                 </label>
                 <div className="relative">
-                  <Mail
+                  <User
                     className="text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"
                     size={18}
                   />
                   <input
-                    type="email"
-                    placeholder="you@example.com"
+                    type="text"
+                    placeholder="Email, Phone, or Employee Code"
                     className="border-gray-300 text-gray-900 w-full rounded-lg border bg-white px-10 py-2.5 text-sm outline-none ring-0 transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
                     required
                   />
                 </div>

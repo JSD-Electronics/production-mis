@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -12,8 +12,12 @@ const SidebarDropdown = ({ item, permission, userType }: any) => {
           const transformedLabel = item?.label
             ?.replace(/\s+/g, "_")
             .toLowerCase();
+          const normalizedUserType = (userType || "")
+            .toLowerCase()
+            .replace(/\s+/g, "_");
           const hasPermission =
-            permission[transformedLabel]?.[userType.toLowerCase()];
+            permission[transformedLabel]?.[normalizedUserType] ??
+            normalizedUserType === "admin";
 
           return (
             hasPermission && (
