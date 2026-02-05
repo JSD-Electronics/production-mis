@@ -1,4 +1,4 @@
-﻿import axios from "axios";
+import axios from "axios";
 import { CONFIG } from "../config";
 
 const api = axios.create({
@@ -33,9 +33,22 @@ api.interceptors.response.use(
     return Promise.reject(error);
   },
 );
-export const login = async (email, password) => {
+export const login = async (identifier, password) => {
   try {
-    const response = await api.post("/login", { email, password });
+    let payload = { password };
+
+    // Determine the type of identifier
+    if (identifier.includes("@")) {
+      payload.email = identifier;
+    } else if (/^[0-9+]{10,}$/.test(identifier)) {
+      // Assuming phone number is at least 10 digits (with optional +)
+      payload.phoneNumber = identifier;
+    } else {
+      // Fallback to employeeCode for other formats
+      payload.employeeCode = identifier;
+    }
+
+    const response = await api.post("/login", payload);
     localStorage.setItem("token", response.data.token);
     localStorage.setItem("userDetails", JSON.stringify(response.data.user));
     return response.data;

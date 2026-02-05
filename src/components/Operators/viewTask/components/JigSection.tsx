@@ -16,6 +16,7 @@ interface JigSectionProps {
   finalResult?: "Pass" | "NG" | null;
   finalReason?: string | null;
   onStatusUpdate?: (reason: string) => void;
+  expanded?: boolean;
 }
 
 interface LogEntry {
@@ -660,7 +661,7 @@ const Header = ({ isConnected, onConnect, onDisconnect, onSimulate }: any) => (
   </div>
 );
 
-const TerminalOutput = ({ logs, onClear, onDownload, onSend, connected }: { logs: LogEntry[]; onClear: () => void; onDownload: () => void; onSend: (cmd: string, eol: "CRLF" | "LF" | "CR" | "NONE") => void; connected: boolean }) => {
+const TerminalOutput = ({ logs, onClear, onDownload, onSend, connected, expanded }: { logs: LogEntry[]; onClear: () => void; onDownload: () => void; onSend: (cmd: string, eol: "CRLF" | "LF" | "CR" | "NONE") => void; connected: boolean; expanded?: boolean }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [cmd, setCmd] = useState("");
   const [eol, setEol] = useState<"CRLF" | "LF" | "CR" | "NONE">("CRLF");
@@ -717,12 +718,7 @@ const TerminalOutput = ({ logs, onClear, onDownload, onSend, connected }: { logs
 
       <div
         ref={scrollRef}
-        className="h-80 overflow-y-auto p-4 font-mono text-xs leading-relaxed 
-          scrollbar-thin scrollbar-track-[#1e1e1e] scrollbar-thumb-[#424242] scrollbar-thumb-rounded-full
-          hover:[&::-webkit-scrollbar-thumb]:bg-[#5a5a5a] 
-          [&::-webkit-scrollbar-thumb]:rounded-full
-          [&::-webkit-scrollbar-track]:bg-[#1e1e1e]
-          [&::-webkit-scrollbar]:w-2"
+        className={`${expanded ? 'min-h-[20rem]' : 'h-80 overflow-y-auto scrollbar-thin scrollbar-track-[#1e1e1e] scrollbar-thumb-[#424242] scrollbar-thumb-rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[#5a5a5a] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-[#1e1e1e] [&::-webkit-scrollbar]:w-2'} p-4 font-mono text-xs leading-relaxed`}
       >
         {logs.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-gray-500">
@@ -766,7 +762,7 @@ export default function JigSection(props: JigSectionProps) {
         onDisconnect={disconnectJig}
         onSimulate={simulateJigConnection}
       />
-      <TerminalOutput logs={logs} onClear={clearLogs} onDownload={downloadLogs} onSend={sendCommand} connected={isConnected} />
+      <TerminalOutput logs={logs} onClear={clearLogs} onDownload={downloadLogs} onSend={sendCommand} connected={isConnected} expanded={props.expanded} />
     </div>
   );
 }

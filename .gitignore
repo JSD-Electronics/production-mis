@@ -35,3 +35,22 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# IDEs
+.idea
+.vscode
+*.swp
+*.swo
+
+# System Files
+Thumbs.db
+
+# Environment variables
+.env
+
+# Logs and temp files
+*.log
+*.bak
+console_files.txt
+console_scan.txt
+files_with_console.txt

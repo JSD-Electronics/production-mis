@@ -21,12 +21,14 @@ import {
   Box,
   Loader2,
   Video,
+  Play,
 } from "lucide-react";
 import "react-toastify/dist/ReactToastify.css";
 import Loader from "@/components/common/Loader";
 import { faMinus, faTrash, faChevronUp, faChevronDown, faPlus, faPuzzlePiece, faGripLines, faCopy, faRotateLeft } from "@fortawesome/free-solid-svg-icons";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import PrintTableComponent from "./printTableComponents";
+
 
 
 
@@ -99,6 +101,8 @@ const AddProduct = () => {
     width: 400,
     height: 250,
   });
+  const [simulatorInitialStage, setSimulatorInitialStage] = useState(0);
+
   const [stages, setStages] = useState<Stage[]>([
     {
       dragId: `stage-${Date.now()}`,
@@ -2085,6 +2089,33 @@ const AddProduct = () => {
 
                                       <button
                                         type="button"
+                                        className="mt-4 flex items-center text-indigo-600"
+                                        onClick={() => {
+                                          localStorage.setItem("simulationConfig", JSON.stringify({
+                                            stages: stages,
+                                            initialStageIndex: index
+                                          }));
+                                          window.open("/product/simulator", "_blank");
+                                        }}
+                                      >
+                                        <Play className="mr-2 h-4 w-4" />
+                                        Test Stage
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        className="mt-4 flex items-center text-primary"
+                                        onClick={() => handleDuplicateStage(index)}
+                                      >
+                                        <FontAwesomeIcon
+                                          icon={faCopy}
+                                          className="mr-2"
+                                        />
+                                        Duplicate Stage
+                                      </button>
+
+                                      <button
+                                        type="button"
                                         className="mt-4 flex items-center text-danger"
                                         onClick={() => handleRemoveStage(index)}
                                       >
@@ -2196,6 +2227,10 @@ const AddProduct = () => {
                 </div>
 
               </div>
+
+              {/* STAGE SIMULATOR MODAL */}
+
+
             </form>
           </div>
         </div>

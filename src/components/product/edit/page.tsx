@@ -30,7 +30,7 @@ import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import Loader from "@/components/common/Loader";
 
 import PrintTableComponent from "../printTableComponents";
-import { BarChart3, Box, ClipboardList, Clock, ExternalLink, Paperclip, User, Video, Plus, Trash2 } from "lucide-react";
+import { BarChart3, Box, ClipboardList, Clock, ExternalLink, Paperclip, User, Video, Plus, Trash2, Play } from "lucide-react";
 
 
 
@@ -102,6 +102,8 @@ const EditProduct = () => {
     width: 100,
     height: 100,
   });
+  const [simulatorInitialStage, setSimulatorInitialStage] = useState(0);
+
   const [stages, setStages] = useState<Stage[]>([
     {
       dragId: `stage-${Date.now()}`,
@@ -2163,6 +2165,21 @@ const EditProduct = () => {
 
                             <button
                               type="button"
+                              className="mt-4 flex items-center text-indigo-600"
+                              onClick={() => {
+                                localStorage.setItem("simulationConfig", JSON.stringify({
+                                  stages: stages,
+                                  initialStageIndex: index
+                                }));
+                                window.open("/product/simulator", "_blank");
+                              }}
+                            >
+                              <Play className="mr-2 h-4 w-4" />
+                              Test Stage
+                            </button>
+
+                            <button
+                              type="button"
                               className="mt-4 flex items-center text-primary"
                               onClick={() => handleDuplicateStage(index)}
                             >
@@ -2315,6 +2332,9 @@ const EditProduct = () => {
                 isLoading={isProcessLoading}
               />
             </div>
+
+
+
           </div>
         </form >
       </div >
