@@ -24,6 +24,7 @@ import {
   User,
   ArrowLeft,
   Search,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -42,12 +43,92 @@ export default function NGDeviceDetails({
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [firstStageName, setFirstStageName] = useState<string>("");
+  const [userType, setUserType] = useState<string>("");
+  const [isTRCFormOpen, setIsTRCFormOpen] = useState(false);
+  const [trcFormData, setTrcFormData] = useState({
+    modelName: "",
+    troubleshootedBy: "",
+    pcbSerial: "",
+    imei: "",
+    processId: "",
+    ocNumber: "",
+    findingsAfterDiagnosis: "",
+    problemType: "",
+    problemCategory: "",
+    trcStatus: "",
+    resolutionSteps: "",
+    componentCategory: "",
+    faultCategory: "",
+    photo: null as File | null,
+  });
+
+  // Prefill TRC form when modal opens
+  useEffect(() => {
+    const prefillTRCForm = async () => {
+      if (isTRCFormOpen && deviceData) {
+        const userDetails = JSON.parse(
+          localStorage.getItem("userDetails") || "{}",
+        );
+
+        // Fetch process data to get PID and OC Number
+        let processIdValue = "";
+        let ocNumberValue = "";
+
+        const pid = deviceData.processId;
+        if (isObjectId(pid)) {
+          try {
+            const processRes = await getProcessByID(pid);
+            processIdValue = processRes?.pid || processRes?._id || pid;
+            ocNumberValue =
+              processRes?.ocNumber || processRes?.orderConfirmationNumber || "";
+          } catch (error) {
+            console.error("Error fetching process data:", error);
+            processIdValue = pid;
+          }
+        } else {
+          processIdValue = pid || "";
+        }
+
+        setTrcFormData({
+          modelName:
+            deviceData.deviceInfo?.modelName || deviceData.device?.model || "",
+          troubleshootedBy: userDetails.name || "",
+          pcbSerial:
+            deviceData.serialNo || deviceData.deviceInfo?.serialNo || "",
+          imei: deviceData.deviceInfo?.imei || "",
+          processId: processIdValue,
+          ocNumber: ocNumberValue,
+          findingsAfterDiagnosis: "",
+          problemType: "",
+          problemCategory: "",
+          trcStatus: "",
+          resolutionSteps: "",
+          componentCategory: "",
+          faultCategory: "",
+          photo: null,
+        });
+      }
+    };
+
+    prefillTRCForm();
+  }, [isTRCFormOpen, deviceData]);
 
   useEffect(() => {
     if (params.id) {
       fetchDeviceDetails();
     }
   }, [params.id]);
+
+  useEffect(() => {
+    try {
+      const userDetails = JSON.parse(
+        localStorage.getItem("userDetails") || "{}",
+      );
+      setUserType(userDetails.userType || "");
+    } catch (error) {
+      console.error("Error parsing user details:", error);
+    }
+  }, []);
 
   const fetchDeviceDetails = async () => {
     setLoading(true);
@@ -106,6 +187,85 @@ export default function NGDeviceDetails({
   const isObjectId = (val: any) =>
     typeof val === "string" && /^[a-fA-F0-9]{24}$/.test(val);
 
+  const resolveDevice = async (mode: "QC" | "TRC") => {
+    try {
+      setIsResolving(true);
+      const targetDeviceId =
+        deviceData?.deviceId?._id || deviceData?.deviceId || params.id;
+      const serialNumber =
+        deviceData?.serialNo || deviceData?.deviceInfo?.serialNo || "";
+
+      if (mode === "TRC") {
+        const trcRemarkData = {
+          modelName: trcFormData.modelName,
+          troubleshootedBy: trcFormData.troubleshootedBy,
+          pcbSerial: trcFormData.pcbSerial,
+          imei: trcFormData.imei,
+          processId: trcFormData.processId,
+          ocNumber: trcFormData.ocNumber,
+          findingsAfterDiagnosis: trcFormData.findingsAfterDiagnosis,
+          problemType: trcFormData.problemType,
+          problemCategory: trcFormData.problemCategory,
+          trcStatus: trcFormData.trcStatus,
+          resolutionSteps: trcFormData.resolutionSteps,
+          componentCategory: trcFormData.componentCategory,
+          faultCategory: trcFormData.faultCategory,
+          submittedAt: new Date().toISOString(),
+        };
+        const formData = new FormData();
+        formData.append("deviceId", String(targetDeviceId));
+        formData.append("serialNumber", serialNumber);
+        formData.append("status", "TRC Resolved");
+        formData.append("trcRemarks", JSON.stringify(trcRemarkData));
+        if (trcFormData.photo) {
+          formData.append("photo", trcFormData.photo);
+        }
+        await markDeviceAsResolved(formData);
+
+        if (firstStageName) {
+          const fd = new FormData();
+          fd.append("currentStage", firstStageName);
+          fd.append("status", "TRC Resolved");
+          await updateStageByDeviceId(String(targetDeviceId), fd);
+        }
+
+        setDeviceData((prev: any) => ({
+          ...prev,
+          status: "TRC Resolved",
+          stageName: firstStageName || prev?.stageName,
+          currentStage: firstStageName || prev?.currentStage,
+        }));
+        setIsTRCFormOpen(false);
+      } else {
+        await markDeviceAsResolved({
+          deviceId: String(targetDeviceId),
+          serialNumber,
+        });
+
+        if (firstStageName) {
+          const fd = new FormData();
+          fd.append("currentStage", firstStageName);
+          fd.append("status", "Resolved");
+          await updateStageByDeviceId(String(targetDeviceId), fd);
+        }
+
+        setDeviceData((prev: any) => ({
+          ...prev,
+          status: "Resolved",
+          stageName: firstStageName || prev?.stageName,
+          currentStage: firstStageName || prev?.currentStage,
+        }));
+        setIsResolveModalOpen(false);
+      }
+    } catch (e) {
+      console.error("Error resolving device:", e);
+      alert("Failed to mark as resolved. Please try again.");
+      setIsResolveModalOpen(false);
+      setIsTRCFormOpen(false);
+    } finally {
+      setIsResolving(false);
+    }
+  };
   useEffect(() => {
     if (!deviceData) return;
 
@@ -155,7 +315,7 @@ export default function NGDeviceDetails({
           const name = res?.user?.name || id;
           setUserNames((prev) => ({ ...prev, [id]: name }));
         })
-        .catch(() => { });
+        .catch(() => {});
     });
   }, [history, deviceData]);
 
@@ -168,7 +328,7 @@ export default function NGDeviceDetails({
             res?.stages?.[0]?.stageName || res?.stages?.[0]?.name || "";
           setFirstStageName(s0 || "");
         })
-        .catch(() => { });
+        .catch(() => {});
     } else if (deviceData?.process?.stages?.length > 0) {
       const s0 =
         deviceData.process.stages[0]?.stageName ||
@@ -228,10 +388,13 @@ export default function NGDeviceDetails({
   }, [history, deviceData]);
 
   const hasQCResolvedHistory = React.useMemo(() => {
-    return Array.isArray(history) && history.some((h: any) => {
-      const s = String(h?.status || "").toLowerCase();
-      return s.includes("qc resolved");
-    });
+    return (
+      Array.isArray(history) &&
+      history.some((h: any) => {
+        const s = String(h?.status || "").toLowerCase();
+        return s.includes("qc resolved");
+      })
+    );
   }, [history]);
 
   if (loading) {
@@ -286,12 +449,13 @@ export default function NGDeviceDetails({
                 "Device Details"}
               <span
                 className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide
-                    ${deviceData.status === "Pass"
-                    ? "border-green-200 bg-green-100 text-green-700"
-                    : deviceData.status === "NG"
-                      ? "bg-red-100 text-red-700 border-red-200"
-                      : "bg-gray-100 text-gray-600 border-gray-200"
-                  }`}
+                    ${
+                      deviceData.status === "Pass"
+                        ? "border-green-200 bg-green-100 text-green-700"
+                        : deviceData.status === "NG"
+                          ? "bg-red-100 text-red-700 border-red-200"
+                          : "bg-gray-100 text-gray-600 border-gray-200"
+                    }`}
               >
                 {deviceData.status || "Unknown"}
               </span>
@@ -400,24 +564,43 @@ export default function NGDeviceDetails({
                       "No specific notes."}
                   </div>
                 </div>
-                <div className="flex items-end justify-center mt-4 pr-10 w-100">
+                <div className="mt-4 flex w-100 items-end justify-center pr-10">
                   {(() => {
-                    const statusText = String(deviceData?.status || "").toLowerCase();
+                    const statusText = String(
+                      deviceData?.status || "",
+                    ).toLowerCase();
                     const isQCResolved = statusText === "qc resolved";
                     const isAlreadyResolved = statusText === "resolved";
-                    const canMarkResolved = !(isQCResolved || isAlreadyResolved || hasQCResolvedHistory) && !isResolving;
+                    const isTRCResolved = statusText === "trc resolved";
+                    const canMarkResolved =
+                      !(
+                        isQCResolved ||
+                        isAlreadyResolved ||
+                        isTRCResolved ||
+                        hasQCResolvedHistory
+                      ) && !isResolving;
                     return (
                       <button
-                        onClick={() => setIsResolveModalOpen(true)}
-                        className={`inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold focus:outline-none focus:ring-2 ${canMarkResolved
+                        onClick={() => {
+                          const isQC =
+                            userType?.toLowerCase() === "qc" ||
+                            userType?.toLowerCase() === "quality control";
+                          if (isQC) {
+                            setIsResolveModalOpen(true);
+                          } else {
+                            setIsTRCFormOpen(true);
+                          }
+                        }}
+                        className={`inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold focus:outline-none focus:ring-2 ${
+                          canMarkResolved
                             ? "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-400"
                             : "bg-gray-300 text-gray-600 cursor-not-allowed"
-                          }`}
+                        }`}
                         disabled={!canMarkResolved}
                       >
                         Mark as Resolved
                       </button>
-                    )
+                    );
                   })()}
                 </div>
               </div>
@@ -465,7 +648,7 @@ export default function NGDeviceDetails({
                             {item.stepName || `Step ${idx + 1}`}
                             {item.stageName &&
                               item.stageName !==
-                              (item.stepName || `Step ${idx + 1}`) && (
+                                (item.stepName || `Step ${idx + 1}`) && (
                                 <span className="text-gray-500 ml-2 text-xs">
                                   Stage: {item.stageName}
                                 </span>
@@ -479,12 +662,13 @@ export default function NGDeviceDetails({
                         <div className="mb-3 flex items-center gap-2">
                           <span
                             className={`rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide
-                                      ${isPass
-                                ? "border-green-200 bg-green-50 text-green-700"
-                                : isNG
-                                  ? "bg-red-50 text-red-700 border-red-200"
-                                  : "bg-gray-100 text-gray-600 border-gray-200"
-                              }`}
+                                      ${
+                                        isPass
+                                          ? "border-green-200 bg-green-50 text-green-700"
+                                          : isNG
+                                            ? "bg-red-50 text-red-700 border-red-200"
+                                            : "bg-gray-100 text-gray-600 border-gray-200"
+                                      }`}
                           >
                             {item.status || "INFO"}
                           </span>
@@ -565,36 +749,7 @@ export default function NGDeviceDetails({
               </button>
               <button
                 onClick={async () => {
-                  try {
-                    setIsResolving(true);
-                    const targetDeviceId =
-                      deviceData?.deviceId?._id ||
-                      deviceData?.deviceId ||
-                      params.id;
-                    const serialNumber =
-                      deviceData?.serialNo || deviceData?.deviceInfo?.serialNo || "";
-                    await markDeviceAsResolved({
-                      deviceId: String(targetDeviceId),
-                      serialNumber,
-                    });
-                    if (firstStageName) {
-                      const fd = new FormData();
-                      fd.append("currentStage", firstStageName);
-                      fd.append("status", "Resolved");
-                      await updateStageByDeviceId(String(targetDeviceId), fd);
-                    }
-                    setDeviceData((prev: any) => ({
-                      ...prev,
-                      status: "Resolved",
-                      stageName: firstStageName || prev?.stageName,
-                      currentStage: firstStageName || prev?.currentStage,
-                    }));
-                    setIsResolveModalOpen(false);
-                  } catch (e) {
-                    setIsResolveModalOpen(false);
-                  } finally {
-                    setIsResolving(false);
-                  }
+                  await resolveDevice("QC");
                 }}
                 className="inline-flex items-center rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-400"
                 disabled={isResolving}
@@ -602,6 +757,325 @@ export default function NGDeviceDetails({
                 Confirm
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* TRC Form Modal */}
+      {isTRCFormOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 p-4">
+          <div className="my-8 w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h4 className="text-gray-900 text-lg font-bold">
+                TRC Resolution Form
+              </h4>
+              <button
+                onClick={() => setIsTRCFormOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+                disabled={isResolving}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                await resolveDevice("TRC");
+              }}
+            >
+              <div className="custom-scrollbar max-h-[60vh] overflow-y-auto pr-2">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {/* Model Name */}
+                  <div>
+                    <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                      Model Name
+                    </label>
+                    <input
+                      type="text"
+                      value={trcFormData.modelName}
+                      readOnly
+                      disabled
+                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="Enter model name"
+                    />
+                  </div>
+
+                  {/* Troubleshooted By */}
+                  <div>
+                    <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                      Troubleshooted By
+                    </label>
+                    <input
+                      type="text"
+                      value={trcFormData.troubleshootedBy}
+                      readOnly
+                      disabled
+                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="Enter name"
+                    />
+                  </div>
+
+                  {/* PCB Serial */}
+                  <div>
+                    <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                      PCB Serial
+                    </label>
+                    <input
+                      type="text"
+                      value={trcFormData.pcbSerial}
+                      readOnly
+                      disabled
+                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="Scan QR or fill complete PCB serial number"
+                    />
+                  </div>
+
+                  {/* IMEI */}
+                  <div>
+                    <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                      IMEI
+                    </label>
+                    <input
+                      type="text"
+                      value={trcFormData.imei}
+                      readOnly
+                      disabled
+                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="Enter IMEI"
+                    />
+                  </div>
+
+                  {/* Process ID (PID) */}
+                  <div>
+                    <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                      Process ID (PID)
+                    </label>
+                    <input
+                      type="text"
+                      value={trcFormData.processId}
+                      readOnly
+                      disabled
+                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="Enter process ID"
+                    />
+                  </div>
+
+                  {/* OC Number */}
+                  <div>
+                    <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                      OC Number
+                    </label>
+                    <input
+                      type="text"
+                      value={trcFormData.ocNumber}
+                      readOnly
+                      disabled
+                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="Enter OC number"
+                    />
+                  </div>
+
+                  {/* Problem Type */}
+                  <div>
+                    <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                      Problem Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={trcFormData.problemType}
+                      onChange={(e) =>
+                        setTrcFormData({
+                          ...trcFormData,
+                          problemType: e.target.value,
+                        })
+                      }
+                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="">Select problem type</option>
+                      <option value="Hardware">Hardware</option>
+                      <option value="Software">Software</option>
+                      <option value="Firmware">Firmware</option>
+                      <option value="Assembly">Assembly</option>
+                      <option value="Component">Component</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  {/* Problem Category */}
+                  <div>
+                    <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                      Problem Category <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={trcFormData.problemCategory}
+                      onChange={(e) =>
+                        setTrcFormData({
+                          ...trcFormData,
+                          problemCategory: e.target.value,
+                        })
+                      }
+                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="">Select problem category</option>
+                      <option value="Display Issue">Display Issue</option>
+                      <option value="Battery Issue">Battery Issue</option>
+                      <option value="Connectivity Issue">
+                        Connectivity Issue
+                      </option>
+                      <option value="Audio Issue">Audio Issue</option>
+                      <option value="Camera Issue">Camera Issue</option>
+                      <option value="Power Issue">Power Issue</option>
+                      <option value="Sensor Issue">Sensor Issue</option>
+                      <option value="Physical Damage">Physical Damage</option>
+                      <option value="Performance Issue">
+                        Performance Issue
+                      </option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  {/* TRC Status */}
+                  <div>
+                    <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                      TRC Status <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={trcFormData.trcStatus}
+                      onChange={(e) =>
+                        setTrcFormData({
+                          ...trcFormData,
+                          trcStatus: e.target.value,
+                        })
+                      }
+                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="">Select status</option>
+                      <option value="Resolved">Resolved</option>
+                      <option value="Pending">Pending</option>
+                      <option value="In Progress">In Progress</option>
+                    </select>
+                  </div>
+
+                  {/* Component Category */}
+                  <div>
+                    <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                      Component Category, if any changed / Re-soldered?
+                    </label>
+                    <input
+                      type="text"
+                      value={trcFormData.componentCategory}
+                      onChange={(e) =>
+                        setTrcFormData({
+                          ...trcFormData,
+                          componentCategory: e.target.value,
+                        })
+                      }
+                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="Enter component details"
+                    />
+                  </div>
+
+                  {/* Fault Category */}
+                  <div>
+                    <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                      Fault Category <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={trcFormData.faultCategory}
+                      onChange={(e) =>
+                        setTrcFormData({
+                          ...trcFormData,
+                          faultCategory: e.target.value,
+                        })
+                      }
+                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="Enter fault category"
+                    />
+                  </div>
+                </div>
+
+                {/* Findings after diagnosis - Full width */}
+                <div className="mt-4">
+                  <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                    Findings after diagnosis{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    required
+                    value={trcFormData.findingsAfterDiagnosis}
+                    onChange={(e) =>
+                      setTrcFormData({
+                        ...trcFormData,
+                        findingsAfterDiagnosis: e.target.value,
+                      })
+                    }
+                    className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    rows={3}
+                    placeholder="Describe findings after diagnosis"
+                  />
+                </div>
+
+                {/* Resolution Steps - Full width */}
+                <div className="mt-4">
+                  <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                    How it is resolved? (Mention all the steps followed){" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    required
+                    value={trcFormData.resolutionSteps}
+                    onChange={(e) =>
+                      setTrcFormData({
+                        ...trcFormData,
+                        resolutionSteps: e.target.value,
+                      })
+                    }
+                    className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    rows={4}
+                    placeholder="Describe all steps followed to resolve the issue"
+                  />
+                </div>
+
+                {/* Photo Upload */}
+                <div className="mt-4">
+                  <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                    Photo or screenshot for reference (optional)
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      setTrcFormData({ ...trcFormData, photo: file });
+                    }}
+                    className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="border-gray-200 mt-6 flex items-center justify-end gap-3 border-t pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsTRCFormOpen(false)}
+                  className="border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg border px-4 py-2 text-sm font-semibold"
+                  disabled={isResolving}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="disabled:bg-gray-400 inline-flex items-center rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-400 disabled:cursor-not-allowed"
+                  disabled={isResolving}
+                >
+                  {isResolving ? "Submitting..." : "Submit & Resolve"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

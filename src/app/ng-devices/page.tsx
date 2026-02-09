@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
@@ -30,10 +30,21 @@ export default function NGDevicesPage() {
   const [allProcesses, setAllProcesses] = useState<any[]>([]);
   const [selectedProcess, setSelectedProcess] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [currentUserType, setCurrentUserType] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
     getProcessData();
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("userDetails");
+      const parsed = raw ? JSON.parse(raw) : null;
+      setCurrentUserType(parsed?.userType || null);
+    } catch (e) {
+      setCurrentUserType(null);
+    }
   }, []);
 
   const getProcessData = async () => {
@@ -66,6 +77,10 @@ export default function NGDevicesPage() {
   const filteredEntries = useMemo(() => {
     const q = (searchQuery || "").trim().toLowerCase();
     return entries.filter((e) => {
+      if (currentUserType && ["QC", "TRC"].includes(String(currentUserType).toUpperCase())) {
+        const assigned = (e.assignedDeviceTo || e.operatorId || "").toString().toUpperCase();
+        if (assigned !== String(currentUserType).toUpperCase()) return false;
+      }
       // Filter by selected process
       if (selectedProcess) {
         const pid = e.processId || e.process?._id || "";
@@ -82,7 +97,7 @@ export default function NGDevicesPage() {
       }
       return true;
     });
-  }, [entries, selectedProcess, searchQuery]);
+  }, [entries, selectedProcess, searchQuery, currentUserType]);
 
   const processes = useMemo(() => {
     const map = new Map<string, string>();
