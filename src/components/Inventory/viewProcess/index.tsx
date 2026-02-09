@@ -133,7 +133,7 @@ const ViewProcessInventory = () => {
       const result = await updateInventoryById(inventoryID, formData);
 
       if (result && result.status === 200) {
-        
+
         setIsInventoryModel(false);
         getInventory();
       } else {
@@ -143,7 +143,7 @@ const ViewProcessInventory = () => {
       console.error("Error updating inventory", error);
     }
   };
-  const getProcesses = async (id: String) => {
+  const getProcesses = async (id: string) => {
     try {
       let result = await getProcessByProductID(id);
       let process = result.ProcessByProductID.filter(

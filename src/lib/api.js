@@ -453,6 +453,24 @@ export const getAllMenus = async () => {
           icon: "",
           children: [],
         },
+        {
+          label: "Manage ESIM Makes",
+          route: "/esim-make",
+          icon: "",
+          children: [],
+        },
+        {
+          label: "Manage ESIM Profiles",
+          route: "/esim-profile",
+          icon: "",
+          children: [],
+        },
+        {
+          label: "Manage ESIM APNs",
+          route: "/esim-apn",
+          icon: "",
+          children: [],
+        },
       ],
     };
 
@@ -961,7 +979,6 @@ export const updateStageBySerialNo = async (id, formData) => {
     let response = await api.patch(`/updateStageBySerialNo/${id}`, formData);
     return response.data;
   } catch (error) {
-
     throw error?.response?.data || { message: `Error Updating Device status` };
   }
 }
@@ -974,6 +991,7 @@ export const markDeviceAsResolved = async (data) => {
     throw error?.response?.data || { message: `Error Marking Device As Resolved` };
   }
 }
+
 export const createReport = async (formData) => {
   try {
     let response = await api.post(`/createReport`, formData);
@@ -1404,6 +1422,168 @@ export const syncJigData = async (data) => {
   } catch (error) {
     console.error("Failed to sync jig data:", error);
     throw error;
+  }
+};
+
+export const createEsimMaster = async (data) => {
+  try {
+    const response = await api.post("/esim-master/create", data);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error creating ESIM master" };
+  }
+};
+
+export const updateEsimMaster = async (id, data) => {
+  try {
+    const response = await api.put(`/esim-master/update/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error updating ESIM master" };
+  }
+};
+
+export const deleteEsimMaster = async (id) => {
+  try {
+    const response = await api.delete(`/esim-master/delete/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error deleting ESIM master" };
+  }
+};
+
+export const bulkDeleteEsimMaster = async (ids) => {
+  try {
+    const response = await api.post("/esim-master/bulk-delete", { ids });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error deleting ESIM masters" };
+  }
+};
+
+
+export const getEsimMasterByCcid = async (ccid) => {
+  try {
+    const response = await api.get(`/esim-master/ccid/${ccid}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error fetching ESIM master by CCID" };
+  }
+};
+
+export const createEsimMake = async (data) => {
+  try {
+    const response = await api.post("/esim-make/create", data);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error creating ESIM make" };
+  }
+};
+
+export const viewEsimMakes = async () => {
+  try {
+    const response = await api.get("/esim-make/view");
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error fetching ESIM makes" };
+  }
+};
+
+export const updateEsimMake = async (id, data) => {
+  try {
+    const response = await api.put(`/esim-make/update/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error updating ESIM make" };
+  }
+};
+
+export const deleteEsimMake = async (id) => {
+  try {
+    const response = await api.delete(`/esim-make/delete/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error deleting ESIM make" };
+  }
+};
+
+export const createEsimProfile = async (data) => {
+  try {
+    const response = await api.post("/esim-profile/create", data);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error creating ESIM profile" };
+  }
+};
+
+export const viewEsimProfiles = async () => {
+  try {
+    const response = await api.get("/esim-profile/view");
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error fetching ESIM profiles" };
+  }
+};
+
+export const updateEsimProfile = async (id, data) => {
+  try {
+    const response = await api.put(`/esim-profile/update/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error updating ESIM profile" };
+  }
+};
+
+export const deleteEsimProfile = async (id) => {
+  try {
+    const response = await api.delete(`/esim-profile/delete/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error deleting ESIM profile" };
+  }
+};
+
+export const createEsimApn = async (data) => {
+  try {
+    const response = await api.post("/esim-apn/create", data);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error creating ESIM APN" };
+  }
+};
+
+export const viewEsimApns = async () => {
+  try {
+    const response = await api.get("/esim-apn/view");
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error fetching ESIM APNs" };
+  }
+};
+
+export const updateEsimApn = async (id, data) => {
+  try {
+    const response = await api.put(`/esim-apn/update/${id}`, data);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error updating ESIM APN" };
+  }
+};
+
+export const deleteEsimApn = async (id) => {
+  try {
+    const response = await api.delete(`/esim-apn/delete/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error deleting ESIM APN" };
+  }
+};
+export const getAPNByMakeAndProfile = async (esimMake, esimProfile) => {
+  try {
+    const response = await api.get(`/esim-apn/getAPNByMakeAndProfile/${esimMake}/${esimProfile}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error fetching ESIM APNs" };
   }
 };
 

@@ -237,6 +237,7 @@ export default function DeviceTestComponent({
   const [manualErrors, setManualErrors] = useState<Record<string, string | null>>({});
   const [isManualValuesModalOpen, setIsManualValuesModalOpen] = useState(false);
   const [hasManualValues, setHasManualValues] = useState(false);
+  const [generatedCommand, setGeneratedCommand] = useState<string>("");
 
   const handleVerifyCarton = (scannedValue: string) => {
     if (scannedValue === selectedCarton) {
@@ -489,6 +490,7 @@ export default function DeviceTestComponent({
     setStepTimeLeft(null);
     pendingJigErrorRef.current = null;
     setPendingJigErrorState(null);
+    setGeneratedCommand("");
     stepStartTimeRef.current = Date.now();
   }, [searchResult]);
 
@@ -765,13 +767,13 @@ export default function DeviceTestComponent({
     const currentStageIndex = processStagesName.indexOf(currentStageName);
     const qcStageIndex = processStagesName.indexOf("Functional Quality Check");
     options.push({ label: "QC", value: "QC" });
-    if (
-      currentStageIndex !== -1 &&
-      qcStageIndex !== -1 &&
-      currentStageIndex <= qcStageIndex
-    ) {
-      options.unshift({ label: "TRC", value: "TRC" });
-    }
+    // if (
+    //   currentStageIndex !== -1 &&
+    //   qcStageIndex !== -1 &&
+    //   currentStageIndex <= qcStageIndex
+    // ) {
+    options.unshift({ label: "TRC", value: "TRC" });
+    // }
     if (currentStageIndex > 0) {
       const previousStages = processStagesName.slice(0, currentStageIndex);
 
@@ -805,6 +807,7 @@ export default function DeviceTestComponent({
     setStepTimeLeft(null);
     pendingJigErrorRef.current = null;
     setPendingJigErrorState(null);
+    setGeneratedCommand("");
     stepStartTimeRef.current = Date.now();
 
     // Close modal
@@ -1620,6 +1623,8 @@ export default function DeviceTestComponent({
                                             onStatusUpdate={(status: string) => {
                                               pendingJigErrorRef.current = status;
                                             }}
+                                            generatedCommand={generatedCommand}
+                                            setGeneratedCommand={setGeneratedCommand}
                                           />
                                         </div>
                                       )}
@@ -2269,6 +2274,7 @@ export default function DeviceTestComponent({
                                 setJigDecision(null);
                                 setCurrentJigStepIndex(0);
                                 setJigResults({});
+                                setGeneratedCommand("");
                                 window.scrollTo(0, 0);
                               }}
                             >

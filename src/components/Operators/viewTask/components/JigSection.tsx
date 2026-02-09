@@ -1,6 +1,6 @@
 ﻿import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Cable, Square, Terminal, Trash2, Download, Play, Activity } from "lucide-react";
-import { updateStageBySerialNo } from "@/lib/api";
+import { updateStageBySerialNo, getEsimMasterByCcid } from "@/lib/api";
 import { toast } from "react-toastify";
 
 // --- Types ---
@@ -17,6 +17,8 @@ interface JigSectionProps {
   finalReason?: string | null;
   onStatusUpdate?: (reason: string) => void;
   expanded?: boolean;
+  generatedCommand?: string;
+  setGeneratedCommand?: (cmd: string) => void;
 }
 
 interface LogEntry {
@@ -81,7 +83,7 @@ const parseJigOutput = (text: string) => {
   return [result];
 };
 
-const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisconnect, onConnectionChange, searchQuery, finalResult, finalReason, onStatusUpdate }: JigSectionProps) => {
+const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisconnect, onConnectionChange, searchQuery, finalResult, finalReason, onStatusUpdate, generatedCommand, setGeneratedCommand }: JigSectionProps) => {
   const [isConnected, setIsConnected] = useState(false);
 
   // Notify parent of connection status changes
@@ -104,6 +106,10 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
   const onStatusUpdateRef = useRef(onStatusUpdate);
   const isCommandBusyRef = useRef(false);
   const persistentLogsRef = useRef<LogEntry[]>([]);
+  const setGeneratedCommandRef = useRef(setGeneratedCommand);
+  useEffect(() => {
+    setGeneratedCommandRef.current = setGeneratedCommand;
+  }, [setGeneratedCommand]);
 
 
 
@@ -279,6 +285,100 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
         }
       });
 
+      // --- NEW: ESIM Settings logic ---
+      if (currentSubStep?.stepFields?.actionType === "ESIM Settings" && matchCount > 0) {
+        const ccid = parsedData["CCID"] || parsedData["ccid"] || parsedData["PARAMETERS"]?.["CCID"] || parsedData["PARAMETERS"]?.["ccid"];
+        if (ccid) {
+          addLog(`Found CCID: ${ccid}. Checking ESIM Master...`, "info");
+          (async () => {
+            try {
+              const res = await getEsimMasterByCcid(ccid);
+              if (res && res.data) {
+                const d = res.data;
+                const cmd = `+#SIM#${d.esimMakeId},${d.profile1Id},${d.profile2Id},${d.apnProfile1},${d.apnProfile2};`;
+                addLog(`ESIM Master match found! Generated command: ${cmd}`, "success");
+                if (setGeneratedCommandRef.current) {
+                  setGeneratedCommandRef.current(cmd);
+                }
+                onDecisionRef.current?.("Pass", undefined, { ccid, generatedCommand: cmd, parsedData });
+              } else {
+                addLog(`ESIM Master NOT found for CCID: ${ccid}`, "error");
+                onDecisionRef.current?.("NG", `ESIM Master for CCID ${ccid} not found`, { ccid, parsedData });
+              }
+            } catch (err: any) {
+              addLog(`Error checking CCID: ${err.message || err}`, "error");
+              onDecisionRef.current?.("NG", `Database error: ${err.message || "Unknown error"}`, { ccid, parsedData });
+            }
+          })();
+          accumulatedDataRef.current = "";
+          return;
+        }
+      }
+
+      // --- NEW: Esim Settings validation logic ---
+      if (currentSubStep?.stepFields?.actionType === "Esim Settings validation" && matchCount > 0) {
+        const ccid = parsedData["CCID"] || parsedData["ccid"] || parsedData["PARAMETERS"]?.["CCID"] || parsedData["PARAMETERS"]?.["ccid"];
+        if (ccid) {
+          addLog(`Validating CCID: ${ccid}. Checking ESIM Master...`, "info");
+          (async () => {
+            try {
+              const res = await getEsimMasterByCcid(ccid);
+              if (res && res.data) {
+                const d = res.data;
+                const masterFieldsMapping: any = {
+                  "Esim Make": d.esimMakeId,
+                  "PFID1": d.profile1Id,
+                  "PFID2": d.profile2Id,
+                  "APN1": d.apnProfile1,
+                  "APN2": d.apnProfile2
+                };
+
+                let validationPassed = true;
+                const validationErrors: string[] = [];
+
+                currentSubStep.jigFields.forEach((field: any) => {
+                  const expected = masterFieldsMapping[field.jigName];
+                  if (expected !== undefined) {
+                    const received = String(parsedData['SETTINGS']?.[field.jigName] || "").trim();
+                    console.log("field.jigName ==>", field.jigName);
+                    console.log("parsedData ==>", parsedData);
+                    console.log(`${field.jigName}`, "===", "received values from jig  ==>", received);
+
+                    if (String(expected).trim() !== received) {
+                      validationPassed = false;
+                      validationErrors.push(`${field.jigName} mismatch (Expected: ${expected}, Got: ${received})`);
+                    }
+                  }
+                });
+
+                if (validationPassed) {
+                  addLog("ESIM Settings Validation Passed!", "success");
+                  onDecisionRef.current?.("Pass", undefined, { ccid, parsedData, masterData: d });
+                } else {
+                  const errorMsg = validationErrors.join(", ");
+                  addLog(`Validation Failed: ${errorMsg}`, "error");
+                  onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { ccid, parsedData, masterData: d }, false);
+                }
+              } else {
+                addLog(`ESIM Master NOT found for CCID: ${ccid}`, "error");
+                onDecisionRef.current?.("NG", `ESIM Master for CCID ${ccid} not found`, { ccid, parsedData });
+              }
+            } catch (err: any) {
+              addLog(`Error during validation: ${err.message || err}`, "error");
+              onDecisionRef.current?.("NG", `Validation error: ${err.message || "Unknown error"}`, { ccid, parsedData });
+            }
+          })();
+          accumulatedDataRef.current = "";
+          return;
+        } else if (matchCount >= requiredFieldsCount) {
+          // If we have all fields but no CCID, mark as NG as per requirement
+          addLog("Validation Failed: CCID missing in jig output", "error");
+          onDecisionRef.current?.("NG", "CCID missing in jig output", { parsedData });
+          accumulatedDataRef.current = "";
+          return;
+        }
+      }
+
 
       if (matchCount < requiredFieldsCount) {
         const missing = currentSubStep.jigFields.filter((field: any) => {
@@ -435,9 +535,14 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
 
     const currentStepId = subStep?._id || subStep?.stepName || subStep?.name;
     const actionType = subStep?.stepFields?.actionType;
-    const command = subStep?.stepFields?.command;
+    let command = subStep?.stepFields?.command;
 
-    if (isConnected && (actionType === "Command" || actionType === "Custom Fields") && command && lastSentCommandStepRef.current !== currentStepId) {
+    // Use generated command if placeholder is used or if it's Esim Settings validation with no command
+    if ((command === "@GENERATED_COMMAND" || (actionType === "Esim Settings validation" && !command)) && generatedCommand) {
+      command = generatedCommand;
+    }
+
+    if (isConnected && (actionType === "Command" || actionType === "Custom Fields" || actionType === "switch profile 2" || actionType === "switch profile 1" || actionType === "Esim Settings validation") && command && lastSentCommandStepRef.current !== currentStepId) {
       addLog(`Auto-sending command: ${command}`, 'info');
       isCommandBusyRef.current = true;
       sendCommand(command).then(() => {

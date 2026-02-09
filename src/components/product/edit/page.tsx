@@ -11,6 +11,8 @@ import {
 
   viewProcessByProductId,
   updateProcess,
+  viewEsimMakes,
+  viewEsimProfiles,
 } from "../../../lib/api";
 import CloneProcessModal from "./CloneProcessModal";
 import { ToastContainer, toast } from "react-toastify";
@@ -54,6 +56,11 @@ interface SubStep {
     value?: string;
     rangeFrom?: string;
     rangeTo?: string;
+    esimSettings?: {
+      make: string;
+      profile1: string;
+      profile2: string;
+    };
   };
 }
 
@@ -98,6 +105,8 @@ const EditProduct = () => {
   }]);
   const [skillData, setSkillFieldData] = useState<any[]>([]);
   const [userType, setUserType] = useState<any[]>([]);
+  const [esimMakes, setEsimMakes] = useState<any[]>([]);
+  const [esimProfiles, setEsimProfiles] = useState<any[]>([]);
   const [stickerDimensions, setStickerDimensions] = useState({
     width: 100,
     height: 100,
@@ -207,6 +216,7 @@ const EditProduct = () => {
           getStickerField(),
           getSkillField(),
           getUserRoles(),
+          fetchEsimMasters(),
         ]);
       } catch (error) {
         console.error("Error fetching initial product data:", error);
@@ -217,6 +227,16 @@ const EditProduct = () => {
     fetchData();
     setMounted(true);
   }, []);
+
+  const fetchEsimMasters = async () => {
+    try {
+      const [mRes, pRes] = await Promise.all([viewEsimMakes(), viewEsimProfiles()]);
+      setEsimMakes(mRes.data || []);
+      setEsimProfiles(pRes.data || []);
+    } catch (err) {
+      console.error("Error fetching esim masters:", err);
+    }
+  };
   const getUserRoles = async () => {
     try {
       let result = await getUserType();
@@ -564,8 +584,178 @@ const EditProduct = () => {
     param: string,
   ) => {
     const newStages = [...stages];
-    (newStages[stageIndex].subSteps[subStepIndex].stepFields as any)[param] =
-      event.target.value;
+    const subStep = newStages[stageIndex].subSteps[subStepIndex];
+    const value = event.target.value;
+    (subStep.stepFields as any)[param] = value;
+
+    // Auto-generate steps and CCID if ESIM Settings is selected
+    if (param === "actionType" && value === "ESIM Settings") {
+      // 1. Add CCID field to current step if not present
+      const hasCCID = subStep.jigFields.some(
+        (f) => f.jigName.toUpperCase() === "CCID",
+      );
+      if (!hasCCID) {
+        subStep.jigFields.push({
+          jigName: "CCID",
+          isSubExpand: true,
+          validationType: "value",
+          value: "",
+          rangeFrom: "",
+          rangeTo: "",
+          lengthFrom: "",
+          lengthTo: "",
+        });
+      }
+
+      // 2. Auto-generate the validation and switch steps immediately after this step
+      const timestamp = Date.now();
+      const step1Name = "Esim Settings validation";
+      const step2Name = "Switch Profile 2";
+      const step3Name = "Switch Profile 1";
+
+      const existingSteps = newStages[stageIndex].subSteps.map(s => s.stepName);
+      let insertionIndex = subStepIndex + 1;
+      let addedSteps = [];
+
+      if (!existingSteps.includes(step1Name)) {
+        newStages[stageIndex].subSteps.splice(insertionIndex, 0, {
+          dragId: `step-${timestamp}-v1`,
+          stepName: step1Name,
+          isSubExpand: true,
+          isPrinterEnable: false,
+          isPackagingStatus: false,
+          isCheckboxNGStatus: false,
+          ngTimeout: 60,
+          packagingData: {
+            packagingType: "",
+            cartonWidth: 0,
+            cartonHeight: 0,
+            maxCapacity: 0,
+            cartonWeight: 0,
+          },
+          stepType: "jig",
+          printerFields: [],
+          jigFields: [
+            { jigName: "Esim Make", isSubExpand: true, validationType: "value", value: "", rangeFrom: "", rangeTo: "", lengthFrom: "", lengthTo: "" },
+            { jigName: "Esim Make ID", isSubExpand: true, validationType: "value", value: "", rangeFrom: "", rangeTo: "", lengthFrom: "", lengthTo: "" },
+            { jigName: "PFID1", isSubExpand: true, validationType: "value", value: "", rangeFrom: "", rangeTo: "", lengthFrom: "", lengthTo: "" },
+            { jigName: "PFID2", isSubExpand: true, validationType: "value", value: "", rangeFrom: "", rangeTo: "", lengthFrom: "", lengthTo: "" },
+            { jigName: "APN1", isSubExpand: true, validationType: "value", value: "iot.com", rangeFrom: "", rangeTo: "", lengthFrom: "", lengthTo: "" },
+            { jigName: "APN2", isSubExpand: true, validationType: "value", value: "bsnlnet", rangeFrom: "", rangeTo: "", lengthFrom: "", lengthTo: "" },
+          ],
+          ngStatusData: [],
+          stepFields: {
+            actionType: "Esim Settings validation",
+            command: "",
+          },
+        });
+        insertionIndex++;
+        addedSteps.push(step1Name);
+      }
+
+      if (!existingSteps.includes(step2Name)) {
+        newStages[stageIndex].subSteps.splice(insertionIndex, 0, {
+          dragId: `step-${timestamp}-v2`,
+          stepName: step2Name,
+          isSubExpand: true,
+          isPrinterEnable: false,
+          isPackagingStatus: false,
+          isCheckboxNGStatus: false,
+          ngTimeout: 60,
+          packagingData: {
+            packagingType: "",
+            cartonWidth: 0,
+            cartonHeight: 0,
+            maxCapacity: 0,
+            cartonWeight: 0,
+          },
+          stepType: "jig",
+          printerFields: [],
+          jigFields: [
+            { jigName: "N/W", isSubExpand: true, validationType: "value", value: "", rangeFrom: "", rangeTo: "", lengthFrom: "", lengthTo: "" },
+            { jigName: "APN", isSubExpand: true, validationType: "value", value: "", rangeFrom: "", rangeTo: "", lengthFrom: "", lengthTo: "" },
+            { jigName: "PF", isSubExpand: true, validationType: "value", value: "", rangeFrom: "", rangeTo: "", lengthFrom: "", lengthTo: "" },
+          ],
+          ngStatusData: [],
+          stepFields: {
+            actionType: "switch profile 2",
+            command: "+#SWITCHPF2;",
+          },
+        });
+        insertionIndex++;
+        addedSteps.push(step2Name);
+      }
+
+      if (!existingSteps.includes(step3Name)) {
+        newStages[stageIndex].subSteps.splice(insertionIndex, 0, {
+          dragId: `step-${timestamp}-v3`,
+          stepName: step3Name,
+          isSubExpand: true,
+          isPrinterEnable: false,
+          isPackagingStatus: false,
+          isCheckboxNGStatus: false,
+          ngTimeout: 60,
+          packagingData: {
+            packagingType: "",
+            cartonWidth: 0,
+            cartonHeight: 0,
+            maxCapacity: 0,
+            cartonWeight: 0,
+          },
+          stepType: "jig",
+          printerFields: [],
+          jigFields: [
+            { jigName: "N/W", isSubExpand: true, validationType: "value", value: "", rangeFrom: "", rangeTo: "", lengthFrom: "", lengthTo: "" },
+            { jigName: "APN", isSubExpand: true, validationType: "value", value: "", rangeFrom: "", rangeTo: "", lengthFrom: "", lengthTo: "" },
+            { jigName: "PF", isSubExpand: true, validationType: "value", value: "", rangeFrom: "", rangeTo: "", lengthFrom: "", lengthTo: "" },
+          ],
+          ngStatusData: [],
+          stepFields: {
+            actionType: "switch profile 1",
+            command: "+#SWITCHPF1;",
+          },
+        });
+        addedSteps.push(step3Name);
+      }
+
+      if (addedSteps.length > 0) {
+        toast.success("ESIM steps added automatically");
+      }
+    }
+
+    setStages(newStages);
+  };
+
+  const handleEsimSettingChange = (
+    stageIndex: number,
+    subStepIndex: number,
+    param: string,
+    value: string
+  ) => {
+    const newStages = [...stages];
+    const subStep = newStages[stageIndex].subSteps[subStepIndex];
+    if (!subStep.stepFields.esimSettings) {
+      subStep.stepFields.esimSettings = { make: "", profile1: "", profile2: "" };
+    }
+    (subStep.stepFields.esimSettings as any)[param] = value;
+
+    // Generate command based on settings
+    const settings = subStep.stepFields.esimSettings;
+    if (settings.make && settings.profile1 && settings.profile2) {
+      const selectedMake = esimMakes.find((m: any) => m.name === settings.make);
+      const selectedP1 = esimProfiles.find(
+        (p: any) => p.name === settings.profile1,
+      );
+      const selectedP2 = esimProfiles.find(
+        (p: any) => p.name === settings.profile2,
+      );
+
+      const simId = selectedMake?.simId || "0";
+      const p1Id = selectedP1?.profileId || "0";
+      const p2Id = selectedP2?.profileId || "0";
+      subStep.stepFields.command = `+#SIM#${simId},${p1Id},${p2Id};`;
+    }
+
     setStages(newStages);
   };
   const handleCommonStageChange = (
@@ -822,7 +1012,7 @@ const EditProduct = () => {
     stageIndex: number,
     subStepIndex: number,
     ngIndex: number,
-    newValue: String,
+    newValue: string,
   ) => {
     setStages((prevStages) => {
       const updatedStages = [...prevStages];
@@ -1522,10 +1712,36 @@ const EditProduct = () => {
                                                           >
                                                             Store to DB
                                                           </option>
+                                                          <option
+                                                            value="ESIM Settings"
+                                                            className="text-body dark:text-bodydark"
+                                                          >
+                                                            ESIM Settings
+                                                          </option>
+                                                          <option
+                                                            value="Esim Settings validation"
+                                                            className="text-body dark:text-bodydark"
+                                                          >
+                                                            Esim Settings validation
+                                                          </option>
+                                                          <option
+                                                            value="switch profile 2"
+                                                            className="text-body dark:text-bodydark"
+                                                          >
+                                                            switch profile 2
+                                                          </option>
+                                                          <option
+                                                            value="switch profile 1"
+                                                            className="text-body dark:text-bodydark"
+                                                          >
+                                                            switch profile 1
+                                                          </option>
                                                         </select>
                                                       </div>
-                                                      {subStep.stepFields.actionType ===
-                                                        "Command" && (
+                                                      {(subStep.stepFields.actionType === "Command" ||
+                                                        subStep.stepFields.actionType === "switch profile 2" ||
+                                                        subStep.stepFields.actionType === "switch profile 1" ||
+                                                        subStep.stepFields.actionType === "Esim Settings validation") && (
                                                           <div>
                                                             <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
                                                               Command

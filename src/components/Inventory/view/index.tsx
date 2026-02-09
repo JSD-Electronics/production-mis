@@ -63,7 +63,7 @@ const ViewInventory = () => {
       setLoading(false);
     }
   };
-  const getProcesses = async (id: String) => {
+  const getProcesses = async (id: string) => {
     try {
       let result = await getProcessByProductID(id);
       let process = result.ProcessByProductID.filter(
@@ -185,7 +185,7 @@ const ViewInventory = () => {
     }
   };
   const handleIssueKit = (selectedProcess, event) => {
-    
+
 
     setIssueKitProcess(e.target.value);
   };
