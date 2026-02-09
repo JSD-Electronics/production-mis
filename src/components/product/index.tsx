@@ -1343,832 +1343,547 @@ const AddProduct = () => {
                                           ref={subStepProvided.innerRef}
                                           className="space-y-4"
                                         >
-                                          {stage.subSteps.map((subStep, subIndex) => (
-                                            <Draggable key={subStep.dragId} draggableId={subStep.dragId} index={subIndex}>
-                                              {(subStepDraggableProvided) => (
-                                                <div
-                                                  ref={subStepDraggableProvided.innerRef}
-                                                  {...subStepDraggableProvided.draggableProps}
-                                                  className="border-gray-200 rounded-lg border p-2 p-5 dark:border-form-strokedark dark:border-strokedark"
-                                                >
-                                                  <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-2">
-                                                    <div className="flex items-center gap-3">
-                                                      <div
-                                                        {...subStepDraggableProvided.dragHandleProps}
-                                                        className="cursor-grab hover:text-primary"
-                                                      >
-                                                        <FontAwesomeIcon icon={faGripLines} />
+                                          {stage.subSteps.map((subStep, subIndex) => {
+                                            const isEsimValidationAction =
+                                              subStep.stepFields.actionType === "Esim Settings validation" ||
+                                              subStep.stepFields.actionType === "switch profile 1" ||
+                                              subStep.stepFields.actionType === "switch profile 2";
+                                            return (
+                                              <Draggable key={subStep.dragId} draggableId={subStep.dragId} index={subIndex}>
+                                                {(subStepDraggableProvided) => (
+                                                  <div
+                                                    ref={subStepDraggableProvided.innerRef}
+                                                    {...subStepDraggableProvided.draggableProps}
+                                                    className="border-gray-200 rounded-lg border p-2 p-5 dark:border-form-strokedark dark:border-strokedark"
+                                                  >
+                                                    <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-2">
+                                                      <div className="flex items-center gap-3">
+                                                        <div
+                                                          {...subStepDraggableProvided.dragHandleProps}
+                                                          className="cursor-grab hover:text-primary"
+                                                        >
+                                                          <FontAwesomeIcon icon={faGripLines} />
+                                                        </div>
+                                                        <h5 className="text-gray-900 text-md block font-semibold dark:text-white">
+                                                          Step {subIndex + 1}{" "}
+                                                          <span className="text-primary">
+                                                            {" "}
+                                                            {subStep?.stepName}{" "}
+                                                          </span>
+                                                        </h5>
                                                       </div>
-                                                      <h5 className="text-gray-900 text-md block font-semibold dark:text-white">
-                                                        Step {subIndex + 1}{" "}
-                                                        <span className="text-primary">
-                                                          {" "}
-                                                          {subStep?.stepName}{" "}
-                                                        </span>
-                                                      </h5>
-                                                    </div>
-                                                    <div className="text-right">
-                                                      <button
-                                                        type="button"
-                                                        className="text-gray-900 text-lg font-semibold dark:text-white "
-                                                        onClick={() =>
-                                                          toggleSubStageExpand(index, subIndex)
-                                                        }
-                                                      >
-                                                        <FontAwesomeIcon
-                                                          icon={
-                                                            subStep.isSubExpand
-                                                              ? faChevronUp
-                                                              : faChevronDown
+                                                      <div className="text-right">
+                                                        <button
+                                                          type="button"
+                                                          className="text-gray-900 text-lg font-semibold dark:text-white "
+                                                          onClick={() =>
+                                                            toggleSubStageExpand(index, subIndex)
                                                           }
-                                                        />
-                                                      </button>
+                                                        >
+                                                          <FontAwesomeIcon
+                                                            icon={
+                                                              subStep.isSubExpand
+                                                                ? faChevronUp
+                                                                : faChevronDown
+                                                            }
+                                                          />
+                                                        </button>
+                                                      </div>
                                                     </div>
-                                                  </div>
-                                                  {subStep.isSubExpand && (
-                                                    <>
-                                                      <div className="mt-6 rounded-xl dark:bg-boxdark">
-                                                        {/* Grid Layout */}
-                                                        <div className="grid gap-6 sm:grid-cols-2">
-                                                          {/* Step Name */}
-                                                          <div>
-                                                            <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                              Step Name
-                                                            </label>
-                                                            <input
-                                                              type="text"
-                                                              value={subStep.stepName}
-                                                              onChange={(e) =>
-                                                                handleSubStepChange(
-                                                                  index,
-                                                                  subIndex,
-                                                                  e,
-                                                                  "stepName",
-                                                                )
-                                                              }
-                                                              placeholder="Enter step name"
-                                                              className={`w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white ${errors?.stages[index]?.subSteps[
-                                                                subIndex
-                                                              ]
-                                                                ? "border-red-500"
-                                                                : ""
-                                                                }`}
-                                                            />
-                                                          </div>
-
-
-
-                                                          {/* Step Type */}
-                                                          <div>
-                                                            <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                              Step Type
-                                                            </label>
-                                                            <select
-                                                              value={subStep.stepType}
-                                                              onChange={(e) =>
-                                                                handlestepTypeChange(index, subIndex, e)
-                                                              }
-                                                              className="border-gray-300 bg-gray-50 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
-                                                            >
-                                                              <option value="jig">Jig</option>
-                                                              <option value="manual">Manual</option>
-                                                            </select>
-                                                          </div>
-
-                                                          {/* NG Timeout */}
-                                                          {subStep.stepType === "jig" && (
+                                                    {subStep.isSubExpand && (
+                                                      <>
+                                                        <div className="mt-6 rounded-xl dark:bg-boxdark">
+                                                          {/* Grid Layout */}
+                                                          <div className="grid gap-6 sm:grid-cols-2">
+                                                            {/* Step Name */}
                                                             <div>
                                                               <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                                NG Timeout (Seconds)
+                                                                Step Name
                                                               </label>
                                                               <input
-                                                                type="number"
-                                                                value={subStep.ngTimeout || 0}
+                                                                type="text"
+                                                                value={subStep.stepName}
                                                                 onChange={(e) =>
                                                                   handleSubStepChange(
                                                                     index,
                                                                     subIndex,
                                                                     e,
-                                                                    "ngTimeout",
+                                                                    "stepName",
                                                                   )
                                                                 }
-                                                                placeholder="0"
-                                                                className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                                                placeholder="Enter step name"
+                                                                className={`w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white ${errors?.stages[index]?.subSteps[
+                                                                  subIndex
+                                                                ]
+                                                                  ? "border-red-500"
+                                                                  : ""
+                                                                  }`}
                                                               />
                                                             </div>
-                                                          )}
 
-                                                          {/* Action Type and Command */}
-                                                          <>
+
+
+                                                            {/* Step Type */}
                                                             <div>
                                                               <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                                Action Type
+                                                                Step Type
                                                               </label>
                                                               <select
-                                                                value={subStep.stepFields.actionType || ""}
+                                                                value={subStep.stepType}
                                                                 onChange={(e) =>
-                                                                  handleSubStepFieldChange(
-                                                                    index,
-                                                                    subIndex,
-                                                                    e,
-                                                                    "actionType",
-                                                                  )
+                                                                  handlestepTypeChange(index, subIndex, e)
                                                                 }
-                                                                className={`w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white`}
+                                                                className="border-gray-300 bg-gray-50 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
                                                               >
-                                                                <option
-                                                                  value=""
-                                                                  className="text-body dark:text-bodydark"
-                                                                >
-                                                                  None
-                                                                </option>
-                                                                {subStep.stepType === "jig" && (
-                                                                  <option
-                                                                    value="Command"
-                                                                    className="text-body dark:text-bodydark"
-                                                                  >
-                                                                    Command
-                                                                  </option>
-                                                                )}
-                                                                <option
-                                                                  value="Store to DB"
-                                                                  className="text-body dark:text-bodydark"
-                                                                >
-                                                                  Store to DB
-                                                                </option>
-                                                                <option
-                                                                  value="ESIM Settings"
-                                                                  className="text-body dark:text-bodydark"
-                                                                >
-                                                                  ESIM Settings
-                                                                </option>
-                                                                <option
-                                                                  value="Esim Settings validation"
-                                                                  className="text-body dark:text-bodydark"
-                                                                >
-                                                                  Esim Settings validation
-                                                                </option>
-                                                                <option
-                                                                  value="switch profile 2"
-                                                                  className="text-body dark:text-bodydark"
-                                                                >
-                                                                  switch profile 2
-                                                                </option>
-                                                                <option
-                                                                  value="switch profile 1"
-                                                                  className="text-body dark:text-bodydark"
-                                                                >
-                                                                  switch profile 1
-                                                                </option>
+                                                                <option value="jig">Jig</option>
+                                                                <option value="manual">Manual</option>
                                                               </select>
                                                             </div>
-                                                            {(subStep.stepFields.actionType === "Command" ||
-                                                              subStep.stepFields.actionType === "switch profile 2" ||
-                                                              subStep.stepFields.actionType === "switch profile 1" ||
-                                                              subStep.stepFields.actionType === "Esim Settings validation") && (
-                                                                <div>
-                                                                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                                    Command
-                                                                  </label>
-                                                                  <input
-                                                                    type="text"
-                                                                    value={subStep.stepFields.command}
-                                                                    onChange={(e) =>
-                                                                      handleSubStepFieldChange(
-                                                                        index,
-                                                                        subIndex,
-                                                                        e,
-                                                                        "command",
-                                                                      )
-                                                                    }
-                                                                    placeholder={`Enter Command`}
-                                                                    className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
-                                                                  />
-                                                                </div>
-                                                              )}
-                                                          </>
 
-                                                          {/* Validation (only for manual) */}
-                                                          {subStep.stepType === "manual" && (
-                                                            <>
+                                                            {/* NG Timeout */}
+                                                            {subStep.stepType === "jig" && (
                                                               <div>
                                                                 <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                                  Validation Type
+                                                                  NG Timeout (Seconds)
                                                                 </label>
-                                                                <select
-                                                                  value={
-                                                                    subStep.stepFields.validationType
-                                                                  }
+                                                                <input
+                                                                  type="number"
+                                                                  value={subStep.ngTimeout || 0}
                                                                   onChange={(e) =>
-                                                                    handleValidationTypeChange(
+                                                                    handleSubStepChange(
                                                                       index,
                                                                       subIndex,
                                                                       e,
+                                                                      "ngTimeout",
                                                                     )
                                                                   }
-                                                                  className="border-gray-300 bg-gray-50 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                                                  placeholder="0"
+                                                                  className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                                                />
+                                                              </div>
+                                                            )}
+
+                                                            {/* Action Type and Command */}
+                                                            <>
+                                                              <div>
+                                                                <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                                                  Action Type
+                                                                </label>
+                                                                <select
+                                                                  value={subStep.stepFields.actionType || ""}
+                                                                  onChange={(e) =>
+                                                                    handleSubStepFieldChange(
+                                                                      index,
+                                                                      subIndex,
+                                                                      e,
+                                                                      "actionType",
+                                                                    )
+                                                                  }
+                                                                  className={`w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white`}
                                                                 >
-                                                                  <option value="value">Value</option>
-                                                                  <option value="range">Range</option>
+                                                                  <option
+                                                                    value=""
+                                                                    className="text-body dark:text-bodydark"
+                                                                  >
+                                                                    None
+                                                                  </option>
+                                                                  {subStep.stepType === "jig" && (
+                                                                    <option
+                                                                      value="Command"
+                                                                      className="text-body dark:text-bodydark"
+                                                                    >
+                                                                      Command
+                                                                    </option>
+                                                                  )}
+                                                                  <option
+                                                                    value="Store to DB"
+                                                                    className="text-body dark:text-bodydark"
+                                                                  >
+                                                                    Store to DB
+                                                                  </option>
+                                                                  <option
+                                                                    value="ESIM Settings"
+                                                                    className="text-body dark:text-bodydark"
+                                                                  >
+                                                                    ESIM Settings
+                                                                  </option>
+                                                                  <option
+                                                                    value="Esim Settings validation"
+                                                                    className="text-body dark:text-bodydark"
+                                                                  >
+                                                                    Esim Settings validation
+                                                                  </option>
+                                                                  <option
+                                                                    value="switch profile 2"
+                                                                    className="text-body dark:text-bodydark"
+                                                                  >
+                                                                    switch profile 2
+                                                                  </option>
+                                                                  <option
+                                                                    value="switch profile 1"
+                                                                    className="text-body dark:text-bodydark"
+                                                                  >
+                                                                    switch profile 1
+                                                                  </option>
                                                                 </select>
                                                               </div>
-
-                                                              {subStep.stepFields.validationType ===
-                                                                "value" && (
+                                                              {(subStep.stepFields.actionType === "Command" ||
+                                                                subStep.stepFields.actionType === "switch profile 2" ||
+                                                                subStep.stepFields.actionType === "switch profile 1" ||
+                                                                subStep.stepFields.actionType === "Esim Settings validation") && (
                                                                   <div>
                                                                     <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                                      Validation Value
+                                                                      Command
                                                                     </label>
                                                                     <input
                                                                       type="text"
-                                                                      value={subStep.stepFields.value}
+                                                                      value={subStep.stepFields.command}
                                                                       onChange={(e) =>
                                                                         handleSubStepFieldChange(
                                                                           index,
                                                                           subIndex,
                                                                           e,
-                                                                          "value",
+                                                                          "command",
                                                                         )
                                                                       }
-                                                                      placeholder="Enter value"
+                                                                      placeholder={`Enter Command`}
                                                                       className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
                                                                     />
                                                                   </div>
                                                                 )}
-
-                                                              {subStep.stepFields.validationType ===
-                                                                "range" && (
-                                                                  <>
-                                                                    <div>
-                                                                      <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                                        Range From
-                                                                      </label>
-                                                                      <input
-                                                                        type="number"
-                                                                        value={
-                                                                          subStep.stepFields.rangeFrom
-                                                                        }
-                                                                        onChange={(e) =>
-                                                                          handleSubStepFieldChange(
-                                                                            index,
-                                                                            subIndex,
-                                                                            e,
-                                                                            "rangeFrom",
-                                                                          )
-                                                                        }
-                                                                        placeholder="Min"
-                                                                        className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
-                                                                      />
-                                                                    </div>
-                                                                    <div>
-                                                                      <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                                        Range To
-                                                                      </label>
-                                                                      <input
-                                                                        type="number"
-                                                                        value={subStep.stepFields.rangeTo}
-                                                                        onChange={(e) =>
-                                                                          handleSubStepFieldChange(
-                                                                            index,
-                                                                            subIndex,
-                                                                            e,
-                                                                            "rangeTo",
-                                                                          )
-                                                                        }
-                                                                        placeholder="Max"
-                                                                        className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
-                                                                      />
-                                                                    </div>
-                                                                  </>
-                                                                )}
                                                             </>
-                                                          )}
 
-                                                          {/* Packaging Stage */}
-                                                          {subStep?.isPackagingStatus && (
-                                                            <div>
-                                                              <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                                Packaging Type
-                                                              </label>
-                                                              <select
-                                                                value={
-                                                                  subStep?.packagingData.packagingType
-                                                                }
-                                                                onChange={(e) =>
-                                                                  handlePackagingFieldTypeChange(
-                                                                    index,
-                                                                    subIndex,
-                                                                    e.target.value,
-                                                                  )
-                                                                }
-                                                                className="border-gray-300 bg-gray-50 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
-                                                              >
-                                                                <option value="">Select</option>
-                                                                <option value="Single">Single</option>
-                                                                <option value="Carton">Carton</option>
-                                                              </select>
-                                                            </div>
-                                                          )}
-                                                        </div>
+                                                            {/* Validation (only for manual) */}
+                                                            {subStep.stepType === "manual" && !isEsimValidationAction && (
+                                                              <>
+                                                                <div>
+                                                                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                                                    Validation Type
+                                                                  </label>
+                                                                  <select
+                                                                    value={
+                                                                      subStep.stepFields.validationType
+                                                                    }
+                                                                    onChange={(e) =>
+                                                                      handleValidationTypeChange(
+                                                                        index,
+                                                                        subIndex,
+                                                                        e,
+                                                                      )
+                                                                    }
+                                                                    className="border-gray-300 bg-gray-50 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                                                  >
+                                                                    <option value="value">Value</option>
+                                                                    <option value="range">Range</option>
+                                                                  </select>
+                                                                </div>
 
-                                                        <div className="flex gap-9">
-                                                          <div className="mt-6.5 flex items-center space-x-2">
-                                                            <input
-                                                              type="checkbox"
-                                                              checked={subStep?.isPrinterEnable || false}
-                                                              onChange={() =>
-                                                                handleCheckboxPrinter(
-                                                                  index,
-                                                                  subIndex,
-                                                                )
-                                                              }
-                                                              className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
-                                                            />
-                                                            <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
-                                                              Enable Printing Option
-                                                            </label>
-                                                          </div>
-                                                          <div className="mt-6.5 flex items-center space-x-2">
-                                                            <input
-                                                              type="checkbox"
-                                                              checked={subStep?.isCheckboxNGStatus || false}
-                                                              onChange={() =>
-                                                                handleCheckboxNGStatus(
-                                                                  index,
-                                                                  subIndex,
-                                                                )
-                                                              }
-                                                              className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
-                                                            />
-                                                            <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
-                                                              Mark As NG
-                                                            </label>
-                                                          </div>
-                                                          <div className="mt-6.5 flex items-center space-x-2">
-                                                            <input
-                                                              type="checkbox"
-                                                              checked={subStep?.isPackagingStatus || false}
-                                                              onChange={() =>
-                                                                handlePackagingStatus(
-                                                                  index,
-                                                                  subIndex,
-                                                                )
-                                                              }
-                                                              className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
-                                                            />
-                                                            <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
-                                                              Packaging Stage
-                                                            </label>
-                                                          </div>
-                                                        </div>
-                                                      </div>
-                                                      {subStep?.isPackagingStatus &&
-                                                        subStep?.packagingData.packagingType ===
-                                                        "Carton" && (
-                                                          <div className="border-gray-200 dark:bg-gray-800 mt-6 rounded-xl border bg-white p-6 shadow-sm dark:border-strokedark">
-                                                            <div className="mb-4 flex items-center gap-2">
-                                                              <Box className="h-5 w-5 text-primary" />
-                                                              <h3 className="text-gray-800 dark:text-gray-100 text-lg font-semibold">
-                                                                Carton Details
-                                                              </h3>
-                                                            </div>
+                                                                {subStep.stepFields.validationType ===
+                                                                  "value" && (
+                                                                    <div>
+                                                                      <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                                                        Validation Value
+                                                                      </label>
+                                                                      <input
+                                                                        type="text"
+                                                                        value={subStep.stepFields.value}
+                                                                        onChange={(e) =>
+                                                                          handleSubStepFieldChange(
+                                                                            index,
+                                                                            subIndex,
+                                                                            e,
+                                                                            "value",
+                                                                          )
+                                                                        }
+                                                                        placeholder="Enter value"
+                                                                        className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                                                      />
+                                                                    </div>
+                                                                  )}
 
-                                                            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                                                              {/* Carton Width */}
+                                                                {subStep.stepFields.validationType ===
+                                                                  "range" && (
+                                                                    <>
+                                                                      <div>
+                                                                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                                                          Range From
+                                                                        </label>
+                                                                        <input
+                                                                          type="number"
+                                                                          value={
+                                                                            subStep.stepFields.rangeFrom
+                                                                          }
+                                                                          onChange={(e) =>
+                                                                            handleSubStepFieldChange(
+                                                                              index,
+                                                                              subIndex,
+                                                                              e,
+                                                                              "rangeFrom",
+                                                                            )
+                                                                          }
+                                                                          placeholder="Min"
+                                                                          className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                                                        />
+                                                                      </div>
+                                                                      <div>
+                                                                        <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                                                          Range To
+                                                                        </label>
+                                                                        <input
+                                                                          type="number"
+                                                                          value={subStep.stepFields.rangeTo}
+                                                                          onChange={(e) =>
+                                                                            handleSubStepFieldChange(
+                                                                              index,
+                                                                              subIndex,
+                                                                              e,
+                                                                              "rangeTo",
+                                                                            )
+                                                                          }
+                                                                          placeholder="Max"
+                                                                          className="w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                                                        />
+                                                                      </div>
+                                                                    </>
+                                                                  )}
+                                                              </>
+                                                            )}
+
+                                                            {/* Packaging Stage */}
+                                                            {subStep?.isPackagingStatus && !isEsimValidationAction && (
                                                               <div>
                                                                 <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                                  Carton Width (mm)
+                                                                  Packaging Type
                                                                 </label>
-                                                                <input
-                                                                  type="number"
+                                                                <select
                                                                   value={
-                                                                    subStep?.packagingData
-                                                                      ?.cartonWidth || ""
+                                                                    subStep?.packagingData.packagingType
                                                                   }
                                                                   onChange={(e) =>
-                                                                    handleCartonInputs(
+                                                                    handlePackagingFieldTypeChange(
                                                                       index,
                                                                       subIndex,
                                                                       e.target.value,
-                                                                      "cartonWidth",
                                                                     )
                                                                   }
-                                                                  placeholder="Enter width"
-                                                                  className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
-                                                                />
-                                                              </div>
-
-                                                              {/* Carton Height */}
-                                                              <div>
-                                                                <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                                  Carton Height (mm)
-                                                                </label>
-                                                                <input
-                                                                  type="number"
-                                                                  value={
-                                                                    subStep?.packagingData
-                                                                      ?.cartonHeight || ""
-                                                                  }
-                                                                  onChange={(e) =>
-                                                                    handleCartonInputs(
-                                                                      index,
-                                                                      subIndex,
-                                                                      e.target.value,
-                                                                      "cartonHeight",
-                                                                    )
-                                                                  }
-                                                                  placeholder="Enter height"
-                                                                  className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
-                                                                />
-                                                              </div>
-
-                                                              {/* Max Capacity */}
-                                                              <div>
-                                                                <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                                  Max Capacity
-                                                                </label>
-                                                                <input
-                                                                  type="number"
-                                                                  value={
-                                                                    subStep?.packagingData
-                                                                      ?.maxCapacity || ""
-                                                                  }
-                                                                  onChange={(e) =>
-                                                                    handleCartonInputs(
-                                                                      index,
-                                                                      subIndex,
-                                                                      e.target.value,
-                                                                      "maxCapacity",
-                                                                    )
-                                                                  }
-                                                                  placeholder="Enter max capacity"
-                                                                  className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
-                                                                />
-                                                              </div>
-
-                                                              {/* Carton Weight */}
-                                                              <div>
-                                                                <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                                  Carton Weight (Kg)
-                                                                </label>
-                                                                <input
-                                                                  type="number"
-                                                                  value={
-                                                                    subStep?.packagingData
-                                                                      ?.cartonWeight || ""
-                                                                  }
-                                                                  onChange={(e) =>
-                                                                    handleCartonInputs(
-                                                                      index,
-                                                                      subIndex,
-                                                                      e.target.value,
-                                                                      "cartonWeight",
-                                                                    )
-                                                                  }
-                                                                  placeholder="Enter weight"
-                                                                  className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
-                                                                />
-                                                              </div>
-                                                            </div>
-                                                          </div>
-                                                        )}
-                                                      {subStep?.isCheckboxNGStatus && (
-                                                        <div className="mt-6.5 rounded-lg border border-[#eee] px-3">
-                                                          <div className="flex justify-center pt-2">
-                                                            <h5 className="text-gray-900 text-md block font-semibold dark:text-white">
-                                                              NG Fields
-                                                            </h5>
-                                                          </div>
-                                                          {subStep?.isCheckboxNGStatus &&
-                                                            subStep?.ngStatusData?.map(
-                                                              (ngField, ngIndex) => (
-                                                                <div
-                                                                  key={ngIndex}
-                                                                  className="mt-2.5 flex gap-4 rounded-lg px-2 py-3"
+                                                                  className="border-gray-300 bg-gray-50 w-full rounded-lg border px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
                                                                 >
-                                                                  <div className="w-full">
-                                                                    <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                      NG Field {ngIndex + 1}
-                                                                    </label>
-                                                                    <input
-                                                                      type="text"
-                                                                      value={ngField.value}
-                                                                      onChange={(e) =>
-                                                                        updateNGField(
+                                                                  <option value="">Select</option>
+                                                                  <option value="Single">Single</option>
+                                                                  <option value="Carton">Carton</option>
+                                                                </select>
+                                                              </div>
+                                                            )}
+                                                          </div>
+
+                                                          <div className="flex gap-9">
+                                                            {!isEsimValidationAction && (
+                                                              <div className="mt-6.5 flex items-center space-x-2">
+                                                                <input
+                                                                  type="checkbox"
+                                                                  checked={subStep?.isPrinterEnable || false}
+                                                                  onChange={() =>
+                                                                    handleCheckboxPrinter(
+                                                                      index,
+                                                                      subIndex,
+                                                                    )
+                                                                  }
+                                                                  className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
+                                                                />
+                                                                <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                                                                  Enable Printing Option
+                                                                </label>
+                                                              </div>
+                                                            )}
+                                                            {!isEsimValidationAction && (
+                                                              <div className="mt-6.5 flex items-center space-x-2">
+                                                                <input
+                                                                  type="checkbox"
+                                                                  checked={subStep?.isCheckboxNGStatus || false}
+                                                                  onChange={() =>
+                                                                    handleCheckboxNGStatus(
+                                                                      index,
+                                                                      subIndex,
+                                                                    )
+                                                                  }
+                                                                  className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
+                                                                />
+                                                                <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                                                                  Mark As NG
+                                                                </label>
+                                                              </div>
+                                                            )}
+                                                            {!isEsimValidationAction && (
+                                                              <div className="mt-6.5 flex items-center space-x-2">
+                                                                <input
+                                                                  type="checkbox"
+                                                                  checked={subStep?.isPackagingStatus || false}
+                                                                  onChange={() =>
+                                                                    handlePackagingStatus(
+                                                                      index,
+                                                                      subIndex,
+                                                                    )
+                                                                  }
+                                                                  className="border-gray-300 dark:border-gray-600 dark:bg-gray-700 ml-2 h-4 w-4 rounded focus:ring-blue-500"
+                                                                />
+                                                                <label className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+                                                                  Packaging Stage
+                                                                </label>
+                                                              </div>
+                                                            )}
+                                                          </div>
+                                                        </div>
+                                                        {subStep?.isPackagingStatus && !isEsimValidationAction &&
+                                                          subStep?.packagingData.packagingType ===
+                                                          "Carton" && (
+                                                            <div className="border-gray-200 dark:bg-gray-800 mt-6 rounded-xl border bg-white p-6 shadow-sm dark:border-strokedark">
+                                                              <div className="mb-4 flex items-center gap-2">
+                                                                <Box className="h-5 w-5 text-primary" />
+                                                                <h3 className="text-gray-800 dark:text-gray-100 text-lg font-semibold">
+                                                                  Carton Details
+                                                                </h3>
+                                                              </div>
+
+                                                              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                                                                {/* Carton Width */}
+                                                                <div>
+                                                                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                                                    Carton Width (mm)
+                                                                  </label>
+                                                                  <input
+                                                                    type="number"
+                                                                    value={
+                                                                      subStep?.packagingData
+                                                                        ?.cartonWidth || ""
+                                                                    }
+                                                                    onChange={(e) =>
+                                                                      handleCartonInputs(
+                                                                        index,
+                                                                        subIndex,
+                                                                        e.target.value,
+                                                                        "cartonWidth",
+                                                                      )
+                                                                    }
+                                                                    placeholder="Enter width"
+                                                                    className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                                                  />
+                                                                </div>
+
+                                                                {/* Carton Height */}
+                                                                <div>
+                                                                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                                                    Carton Height (mm)
+                                                                  </label>
+                                                                  <input
+                                                                    type="number"
+                                                                    value={
+                                                                      subStep?.packagingData
+                                                                        ?.cartonHeight || ""
+                                                                    }
+                                                                    onChange={(e) =>
+                                                                      handleCartonInputs(
+                                                                        index,
+                                                                        subIndex,
+                                                                        e.target.value,
+                                                                        "cartonHeight",
+                                                                      )
+                                                                    }
+                                                                    placeholder="Enter height"
+                                                                    className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                                                  />
+                                                                </div>
+
+                                                                {/* Max Capacity */}
+                                                                <div>
+                                                                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                                                    Max Capacity
+                                                                  </label>
+                                                                  <input
+                                                                    type="number"
+                                                                    value={
+                                                                      subStep?.packagingData
+                                                                        ?.maxCapacity || ""
+                                                                    }
+                                                                    onChange={(e) =>
+                                                                      handleCartonInputs(
+                                                                        index,
+                                                                        subIndex,
+                                                                        e.target.value,
+                                                                        "maxCapacity",
+                                                                      )
+                                                                    }
+                                                                    placeholder="Enter max capacity"
+                                                                    className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                                                  />
+                                                                </div>
+
+                                                                {/* Carton Weight */}
+                                                                <div>
+                                                                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                                                    Carton Weight (Kg)
+                                                                  </label>
+                                                                  <input
+                                                                    type="number"
+                                                                    value={
+                                                                      subStep?.packagingData
+                                                                        ?.cartonWeight || ""
+                                                                    }
+                                                                    onChange={(e) =>
+                                                                      handleCartonInputs(
+                                                                        index,
+                                                                        subIndex,
+                                                                        e.target.value,
+                                                                        "cartonWeight",
+                                                                      )
+                                                                    }
+                                                                    placeholder="Enter weight"
+                                                                    className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                                                  />
+                                                                </div>
+                                                              </div>
+                                                            </div>
+                                                          )}
+                                                        {subStep?.isCheckboxNGStatus && !isEsimValidationAction && (
+                                                          <div className="mt-6.5 rounded-lg border border-[#eee] px-3">
+                                                            <div className="flex justify-center pt-2">
+                                                              <h5 className="text-gray-900 text-md block font-semibold dark:text-white">
+                                                                NG Fields
+                                                              </h5>
+                                                            </div>
+                                                            {subStep?.isCheckboxNGStatus &&
+                                                              subStep?.ngStatusData?.map(
+                                                                (ngField, ngIndex) => (
+                                                                  <div
+                                                                    key={ngIndex}
+                                                                    className="mt-2.5 flex gap-4 rounded-lg px-2 py-3"
+                                                                  >
+                                                                    <div className="w-full">
+                                                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                        NG Field {ngIndex + 1}
+                                                                      </label>
+                                                                      <input
+                                                                        type="text"
+                                                                        value={ngField.value}
+                                                                        onChange={(e) =>
+                                                                          updateNGField(
+                                                                            index,
+                                                                            subIndex,
+                                                                            ngIndex,
+                                                                            e.target.value,
+                                                                          )
+                                                                        }
+                                                                        placeholder="Value"
+                                                                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                      />
+                                                                    </div>
+                                                                    <button
+                                                                      type="button"
+                                                                      className="mt-6.5 flex items-center text-danger"
+                                                                      onClick={() =>
+                                                                        removeNGField(
                                                                           index,
                                                                           subIndex,
                                                                           ngIndex,
-                                                                          e.target.value,
-                                                                        )
-                                                                      }
-                                                                      placeholder="Value"
-                                                                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                    />
-                                                                  </div>
-                                                                  <button
-                                                                    type="button"
-                                                                    className="mt-6.5 flex items-center text-danger"
-                                                                    onClick={() =>
-                                                                      removeNGField(
-                                                                        index,
-                                                                        subIndex,
-                                                                        ngIndex,
-                                                                      )
-                                                                    }
-                                                                  >
-                                                                    <FontAwesomeIcon
-                                                                      icon={faTrash}
-                                                                      className="mr-2"
-                                                                    />
-                                                                  </button>
-                                                                </div>
-                                                              ),
-                                                            )}
-                                                          <div className="flex justify-end pb-2 pr-1">
-                                                            <button
-                                                              type="button"
-                                                              className="mt-4 flex items-center text-blue-500"
-                                                              onClick={() =>
-                                                                addNGField(index, subIndex)
-                                                              }
-                                                            >
-                                                              <FontAwesomeIcon
-                                                                icon={faPlus}
-                                                                className="mr-2"
-                                                              />
-                                                              Add NG Field
-                                                            </button>
-                                                          </div>
-                                                        </div>
-                                                      )}
-                                                      {subStep?.isPrinterEnable &&
-                                                        subStep?.printerFields?.map(
-                                                          (field: any, fieldIndex: number) => (
-                                                            <div key={fieldIndex}>
-                                                              <PrintTableComponent
-                                                                stages={stages}
-                                                                setStages={setStages}
-                                                                stickerFields={stickerFields}
-                                                                stickerDimensions={field.dimensions}
-                                                                setStickerDimensions={
-                                                                  setStickerDimensions
-                                                                }
-                                                                index={index}
-                                                                subIndex1={subIndex}
-                                                                fieldIndex={fieldIndex}
-                                                                stickerData={stickerData}
-                                                                setStickerData={setStickerData}
-                                                              />
-                                                            </div>
-                                                          ),
-                                                        )}
-
-
-                                                      <>
-                                                        {subStep.jigFields.map(
-                                                          (jigField: any, jigIndex: number) => (
-                                                            <div
-                                                              key={jigIndex}
-                                                              className="mt-6 rounded-lg border border-[#eee] p-2 p-5 dark:border-form-strokedark"
-                                                            >
-                                                              <div className="grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
-                                                                <h5 className="text-gray-900 text-md block font-semibold dark:text-white">
-                                                                  Jig Field {jigIndex + 1}{" "}
-                                                                  {jigField?.jigName}
-                                                                </h5>
-                                                                <div className="text-right">
-                                                                  <button
-                                                                    type="button"
-                                                                    className="text-gray-900 text-lg font-semibold dark:text-white "
-                                                                    onClick={() =>
-                                                                      toggleJigExpand(
-                                                                        index,
-                                                                        subIndex,
-                                                                        jigIndex,
-                                                                      )
-                                                                    }
-                                                                  >
-                                                                    <FontAwesomeIcon
-                                                                      icon={
-                                                                        jigField.isSubExpand
-                                                                          ? faChevronUp
-                                                                          : faChevronDown
-                                                                      }
-                                                                    />
-                                                                  </button>
-                                                                </div>
-                                                              </div>
-                                                              {jigField.isSubExpand && (
-                                                                <>
-                                                                  <div className="mt-6 grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
-                                                                    <div>
-                                                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                        Name
-                                                                      </label>
-                                                                      <input
-                                                                        type="text"
-                                                                        value={jigField.jigName}
-                                                                        onChange={(e) =>
-                                                                          handleJigSubStepChange(
-                                                                            index,
-                                                                            subIndex,
-                                                                            jigIndex,
-                                                                            e,
-                                                                            "jigName",
-                                                                          )
-                                                                        }
-                                                                        placeholder={`Name`}
-                                                                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                      />
-                                                                    </div>
-                                                                    <div>
-                                                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                        Unit
-                                                                      </label>
-                                                                      <input
-                                                                        type="text"
-                                                                        value={jigField?.unit}
-                                                                        onChange={(e) =>
-                                                                          handleJigSubStepChange(
-                                                                            index,
-                                                                            subIndex,
-                                                                            jigIndex,
-                                                                            e,
-                                                                            "unit",
-                                                                          )
-                                                                        }
-                                                                        placeholder={`Unit (Leave Blank if not need to add unit)`}
-                                                                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                      />
-                                                                    </div>
-
-                                                                    <div>
-                                                                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                        Validation Type
-                                                                      </label>
-                                                                      <select
-                                                                        value={
-                                                                          jigField.validationType
-                                                                        }
-                                                                        onChange={(e) =>
-                                                                          handleJigValidationTypeChange(
-                                                                            index,
-                                                                            subIndex,
-                                                                            jigIndex,
-                                                                            e,
-                                                                          )
-                                                                        }
-                                                                        className={`relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
-                                                                      >
-                                                                        <option
-                                                                          value="value"
-                                                                          className="text-body dark:text-bodydark"
-                                                                        >
-                                                                          Value
-                                                                        </option>
-                                                                        <option
-                                                                          value="range"
-                                                                          className="text-body dark:text-bodydark"
-                                                                        >
-                                                                          Range
-                                                                        </option>
-                                                                        <option
-                                                                          value="length"
-                                                                          className="text-body dark:text-bodydark"
-                                                                        >
-                                                                          Length
-                                                                        </option>
-                                                                      </select>
-                                                                    </div>
-
-                                                                    <div className="mt-3 items-center gap-3 ">
-                                                                      {jigField.validationType ===
-                                                                        "value" && (
-                                                                          <>
-                                                                            <div>
-                                                                              <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                                Validation Value
-                                                                              </label>
-                                                                              <input
-                                                                                type="text"
-                                                                                value={jigField.value}
-                                                                                onChange={(e) =>
-                                                                                  handleJigSubStepChange(
-                                                                                    index,
-                                                                                    subIndex,
-                                                                                    jigIndex,
-                                                                                    e,
-                                                                                    "value",
-                                                                                  )
-                                                                                }
-                                                                                placeholder={`Validation Value`}
-                                                                                className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                              />
-                                                                            </div>
-                                                                          </>
-                                                                        )}
-                                                                    </div>
-                                                                    {jigField.validationType ===
-                                                                      "range" && (
-                                                                        <>
-                                                                          <div>
-                                                                            <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                              Range From
-                                                                            </label>
-                                                                            <input
-                                                                              type="number"
-                                                                              value={jigField.rangeFrom}
-                                                                              onChange={(e) =>
-                                                                                handleJigSubStepChange(
-                                                                                  index,
-                                                                                  subIndex,
-                                                                                  jigIndex,
-                                                                                  e,
-                                                                                  "rangeFrom",
-                                                                                )
-                                                                              }
-                                                                              placeholder={`min`}
-                                                                              className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                            />
-                                                                          </div>
-                                                                          <div>
-                                                                            <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                              Range To
-                                                                            </label>
-                                                                            <input
-                                                                              type="number"
-                                                                              value={jigField.rangeTo}
-                                                                              onChange={(e) =>
-                                                                                handleJigSubStepChange(
-                                                                                  index,
-                                                                                  subIndex,
-                                                                                  jigIndex,
-                                                                                  e,
-                                                                                  "rangeTo",
-                                                                                )
-                                                                              }
-                                                                              placeholder={`max`}
-                                                                              className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                            />
-                                                                          </div>
-                                                                        </>
-                                                                      )}
-                                                                    {jigField.validationType ===
-                                                                      "length" && (
-                                                                        <>
-                                                                          <div>
-                                                                            <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                              Length From
-                                                                            </label>
-                                                                            <input
-                                                                              type="number"
-                                                                              value={jigField.lengthFrom}
-                                                                              onChange={(e) =>
-                                                                                handleJigSubStepChange(
-                                                                                  index,
-                                                                                  subIndex,
-                                                                                  jigIndex,
-                                                                                  e,
-                                                                                  "lengthFrom",
-                                                                                )
-                                                                              }
-                                                                              placeholder={`Length From`}
-                                                                              className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                            />
-                                                                          </div>
-                                                                          <div>
-                                                                            <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                                                                              Length To
-                                                                            </label>
-                                                                            <input
-                                                                              type="number"
-                                                                              value={jigField.lengthTo}
-                                                                              onChange={(e) =>
-                                                                                handleJigSubStepChange(
-                                                                                  index,
-                                                                                  subIndex,
-                                                                                  jigIndex,
-                                                                                  e,
-                                                                                  "lengthTo",
-                                                                                )
-                                                                              }
-                                                                              placeholder={`Length To`}
-                                                                              className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                            />
-                                                                          </div>
-                                                                        </>
-                                                                      )}
-                                                                  </div>
-
-                                                                  <div className="col-span-12 flex justify-end">
-                                                                    <button
-                                                                      type="button"
-                                                                      className="mt-4 flex items-center text-danger"
-                                                                      onClick={() =>
-                                                                        handleRemoveJigSubStep(
-                                                                          index,
-                                                                          subIndex,
-                                                                          jigIndex,
                                                                         )
                                                                       }
                                                                     >
@@ -2176,52 +1891,337 @@ const AddProduct = () => {
                                                                         icon={faTrash}
                                                                         className="mr-2"
                                                                       />
-                                                                      Remove Jig Field
                                                                     </button>
                                                                   </div>
-                                                                </>
+                                                                ),
                                                               )}
-                                                            </div>
-                                                          )
+                                                            {!isEsimValidationAction && (
+                                                              <div className="flex justify-end pb-2 pr-1">
+                                                                <button
+                                                                  type="button"
+                                                                  className="mt-4 flex items-center text-blue-500"
+                                                                  onClick={() =>
+                                                                    addNGField(index, subIndex)
+                                                                  }
+                                                                >
+                                                                  <FontAwesomeIcon
+                                                                    icon={faPlus}
+                                                                    className="mr-2"
+                                                                  />
+                                                                  Add NG Field
+                                                                </button>
+                                                              </div>
+                                                            )}
+                                                          </div>
                                                         )}
-                                                      </>
+                                                        {subStep?.isPrinterEnable && !isEsimValidationAction &&
+                                                          subStep?.printerFields?.map(
+                                                            (field: any, fieldIndex: number) => (
+                                                              <div key={fieldIndex}>
+                                                                <PrintTableComponent
+                                                                  stages={stages}
+                                                                  setStages={setStages}
+                                                                  stickerFields={stickerFields}
+                                                                  stickerDimensions={field.dimensions}
+                                                                  setStickerDimensions={
+                                                                    setStickerDimensions
+                                                                  }
+                                                                  index={index}
+                                                                  subIndex1={subIndex}
+                                                                  fieldIndex={fieldIndex}
+                                                                  stickerData={stickerData}
+                                                                  setStickerData={setStickerData}
+                                                                />
+                                                              </div>
+                                                            ),
+                                                          )}
 
-                                                      <div className="col-span-12 flex justify-end gap-3">
-                                                        {subStep.isSubExpand && (
+
+                                                        <>
+                                                          {subStep.jigFields.map(
+                                                            (jigField: any, jigIndex: number) => (
+                                                              <div
+                                                                key={jigIndex}
+                                                                className="mt-6 rounded-lg border border-[#eee] p-2 p-5 dark:border-form-strokedark"
+                                                              >
+                                                                <div className="grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
+                                                                  <h5 className="text-gray-900 text-md block font-semibold dark:text-white">
+                                                                    Jig Field {jigIndex + 1}{" "}
+                                                                    {jigField?.jigName}
+                                                                  </h5>
+                                                                  <div className="text-right">
+                                                                    <button
+                                                                      type="button"
+                                                                      className="text-gray-900 text-lg font-semibold dark:text-white "
+                                                                      onClick={() =>
+                                                                        toggleJigExpand(
+                                                                          index,
+                                                                          subIndex,
+                                                                          jigIndex,
+                                                                        )
+                                                                      }
+                                                                    >
+                                                                      <FontAwesomeIcon
+                                                                        icon={
+                                                                          jigField.isSubExpand
+                                                                            ? faChevronUp
+                                                                            : faChevronDown
+                                                                        }
+                                                                      />
+                                                                    </button>
+                                                                  </div>
+                                                                </div>
+                                                                {jigField.isSubExpand && (
+                                                                  <>
+                                                                    <div className="mt-6 grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
+                                                                      <div>
+                                                                        <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                          Name
+                                                                        </label>
+                                                                        <input
+                                                                          type="text"
+                                                                          value={jigField.jigName}
+                                                                          onChange={(e) =>
+                                                                            handleJigSubStepChange(
+                                                                              index,
+                                                                              subIndex,
+                                                                              jigIndex,
+                                                                              e,
+                                                                              "jigName",
+                                                                            )
+                                                                          }
+                                                                          placeholder={`Name`}
+                                                                          className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                        />
+                                                                      </div>
+
+                                                                      {!isEsimValidationAction && (
+                                                                        <div>
+                                                                          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                            Validation Type
+                                                                          </label>
+                                                                          <select
+                                                                            value={
+                                                                              jigField.validationType
+                                                                            }
+                                                                            onChange={(e) =>
+                                                                              handleJigValidationTypeChange(
+                                                                                index,
+                                                                                subIndex,
+                                                                                jigIndex,
+                                                                                e,
+                                                                              )
+                                                                            }
+                                                                            className={`relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input`}
+                                                                          >
+                                                                            <option
+                                                                              value="value"
+                                                                              className="text-body dark:text-bodydark"
+                                                                            >
+                                                                              Value
+                                                                            </option>
+                                                                            <option
+                                                                              value="range"
+                                                                              className="text-body dark:text-bodydark"
+                                                                            >
+                                                                              Range
+                                                                            </option>
+                                                                            <option
+                                                                              value="length"
+                                                                              className="text-body dark:text-bodydark"
+                                                                            >
+                                                                              Length
+                                                                            </option>
+                                                                          </select>
+                                                                        </div>
+                                                                      )}
+
+                                                                      {!isEsimValidationAction && (
+                                                                        <>
+                                                                          <div className="mt-3 items-center gap-3 ">
+                                                                            {jigField.validationType ===
+                                                                              "value" && (
+                                                                                <>
+                                                                                  <div>
+                                                                                    <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                                      Validation Value
+                                                                                    </label>
+                                                                                    <input
+                                                                                      type="text"
+                                                                                      value={jigField.value}
+                                                                                      onChange={(e) =>
+                                                                                        handleJigSubStepChange(
+                                                                                          index,
+                                                                                          subIndex,
+                                                                                          jigIndex,
+                                                                                          e,
+                                                                                          "value",
+                                                                                        )
+                                                                                      }
+                                                                                      placeholder={`Validation Value`}
+                                                                                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                                    />
+                                                                                  </div>
+                                                                                </>
+                                                                              )}
+                                                                          </div>
+                                                                          {jigField.validationType ===
+                                                                            "range" && (
+                                                                              <>
+                                                                                <div>
+                                                                                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                                    Range From
+                                                                                  </label>
+                                                                                  <input
+                                                                                    type="number"
+                                                                                    value={jigField.rangeFrom}
+                                                                                    onChange={(e) =>
+                                                                                      handleJigSubStepChange(
+                                                                                        index,
+                                                                                        subIndex,
+                                                                                        jigIndex,
+                                                                                        e,
+                                                                                        "rangeFrom",
+                                                                                      )
+                                                                                    }
+                                                                                    placeholder={`min`}
+                                                                                    className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                                  />
+                                                                                </div>
+                                                                                <div>
+                                                                                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                                    Range To
+                                                                                  </label>
+                                                                                  <input
+                                                                                    type="number"
+                                                                                    value={jigField.rangeTo}
+                                                                                    onChange={(e) =>
+                                                                                      handleJigSubStepChange(
+                                                                                        index,
+                                                                                        subIndex,
+                                                                                        jigIndex,
+                                                                                        e,
+                                                                                        "rangeTo",
+                                                                                      )
+                                                                                    }
+                                                                                    placeholder={`max`}
+                                                                                    className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                                  />
+                                                                                </div>
+                                                                              </>
+                                                                            )}
+                                                                          {jigField.validationType ===
+                                                                            "length" && (
+                                                                              <>
+                                                                                <div>
+                                                                                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                                    Length From
+                                                                                  </label>
+                                                                                  <input
+                                                                                    type="number"
+                                                                                    value={jigField.lengthFrom}
+                                                                                    onChange={(e) =>
+                                                                                      handleJigSubStepChange(
+                                                                                        index,
+                                                                                        subIndex,
+                                                                                        jigIndex,
+                                                                                        e,
+                                                                                        "lengthFrom",
+                                                                                      )
+                                                                                    }
+                                                                                    placeholder={`Length From`}
+                                                                                    className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                                  />
+                                                                                </div>
+                                                                                <div>
+                                                                                  <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                                                                                    Length To
+                                                                                  </label>
+                                                                                  <input
+                                                                                    type="number"
+                                                                                    value={jigField.lengthTo}
+                                                                                    onChange={(e) =>
+                                                                                      handleJigSubStepChange(
+                                                                                        index,
+                                                                                        subIndex,
+                                                                                        jigIndex,
+                                                                                        e,
+                                                                                        "lengthTo",
+                                                                                      )
+                                                                                    }
+                                                                                    placeholder={`Length To`}
+                                                                                    className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                                  />
+                                                                                </div>
+                                                                              </>
+                                                                            )}
+                                                                        </>
+                                                                      )}
+                                                                    </div>
+
+                                                                    <div className="col-span-12 flex justify-end">
+                                                                      <button
+                                                                        type="button"
+                                                                        className="mt-4 flex items-center text-danger"
+                                                                        onClick={() =>
+                                                                          handleRemoveJigSubStep(
+                                                                            index,
+                                                                            subIndex,
+                                                                            jigIndex,
+                                                                          )
+                                                                        }
+                                                                      >
+                                                                        <FontAwesomeIcon
+                                                                          icon={faTrash}
+                                                                          className="mr-2"
+                                                                        />
+                                                                        Remove Jig Field
+                                                                      </button>
+                                                                    </div>
+                                                                  </>
+                                                                )}
+                                                              </div>
+                                                            )
+                                                          )}
+                                                        </>
+
+                                                        <div className="col-span-12 flex justify-end gap-3">
+                                                          {subStep.isSubExpand && (
+                                                            <button
+                                                              type="button"
+                                                              className="mt-4 flex items-center text-blue-500"
+                                                              onClick={() =>
+                                                                handleAddJig(index, subIndex)
+                                                              }
+                                                            >
+                                                              <FontAwesomeIcon
+                                                                icon={faPlus}
+                                                                className="mr-2"
+                                                              />
+                                                              Add Jig Fields
+                                                            </button>
+                                                          )}
                                                           <button
                                                             type="button"
-                                                            className="mt-4 flex items-center text-blue-500"
+                                                            className="mt-4 flex items-center text-danger"
                                                             onClick={() =>
-                                                              handleAddJig(index, subIndex)
+                                                              handleRemoveSubStep(index, subIndex)
                                                             }
                                                           >
                                                             <FontAwesomeIcon
-                                                              icon={faPlus}
+                                                              icon={faTrash}
                                                               className="mr-2"
                                                             />
-                                                            Add Jig Fields
+                                                            Remove Step
                                                           </button>
-                                                        )}
-                                                        <button
-                                                          type="button"
-                                                          className="mt-4 flex items-center text-danger"
-                                                          onClick={() =>
-                                                            handleRemoveSubStep(index, subIndex)
-                                                          }
-                                                        >
-                                                          <FontAwesomeIcon
-                                                            icon={faTrash}
-                                                            className="mr-2"
-                                                          />
-                                                          Remove Step
-                                                        </button>
-                                                      </div>
-                                                    </>
-                                                  )}
-                                                </div>
-                                              )}
-                                            </Draggable>
-                                          ))}
+                                                        </div>
+                                                      </>
+                                                    )}
+                                                  </div>
+                                                )}
+                                              </Draggable>
+                                            );
+                                          })}
                                           {subStepProvided.placeholder}
                                         </div>
                                       )}

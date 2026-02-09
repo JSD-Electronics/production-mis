@@ -1,6 +1,6 @@
 ﻿import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Cable, Square, Terminal, Trash2, Download, Play, Activity } from "lucide-react";
-import { updateStageBySerialNo, getEsimMasterByCcid } from "@/lib/api";
+import { updateStageBySerialNo, getEsimMasterByCcid, viewEsimProfiles, viewEsimApns } from "@/lib/api";
 import { toast } from "react-toastify";
 
 // --- Types ---
@@ -379,8 +379,82 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
         }
       }
 
+      // --- NEW: Switch Profile validation logic ---
+      const actionType = currentSubStep?.stepFields?.actionType;
+      const normalizedActionType = actionType?.toLowerCase();
+      if ((normalizedActionType === "switch profile 1" || normalizedActionType === "switch profile 2") && matchCount > 0) {
+        const findVal = (key: string) => (parsedData[key] || parsedData["SETTINGS"]?.[key] || parsedData["PARAMETERS"]?.[key] || "").trim();
+        const nwValue = findVal("N/W");
+        const apnValue = findVal("APN");
+        const pfValue = findVal("PF");
 
-      if (matchCount < requiredFieldsCount) {
+        if (nwValue || apnValue || pfValue) {
+          addLog(`Validating ${actionType}: N/W=${nwValue}, APN=${apnValue}, PF=${pfValue}`, "info");
+          (async () => {
+            try {
+              const [profilesRes, apnsRes] = await Promise.all([
+                viewEsimProfiles(),
+                viewEsimApns()
+              ]);
+
+              const profiles = profilesRes.data || [];
+              const apns = apnsRes.data || [];
+
+              let validationPassed = true;
+              let errors: string[] = [];
+
+              // 1. Check N/W in profiles.name array
+              if (nwValue) {
+                const found = profiles.some((p: any) =>
+                  Array.isArray(p.name) ? p.name.includes(nwValue) : p.name === nwValue
+                );
+                if (!found) {
+                  validationPassed = false;
+                  errors.push(`N/W mismatch: ${nwValue} not found in master records`);
+                }
+              }
+
+              // 2. Check APN in apns.apnName
+              if (apnValue) {
+                const found = apns.some((a: any) => a.apnName === apnValue);
+                if (!found) {
+                  validationPassed = false;
+                  errors.push(`APN mismatch: ${apnValue} not found in master records`);
+                }
+              }
+
+              // 3. Check PF in profiles.profileId
+              if (pfValue) {
+                const found = profiles.some((p: any) => p.profileId === pfValue);
+                if (!found) {
+                  validationPassed = false;
+                  errors.push(`PF mismatch: ${pfValue} not found in master records`);
+                }
+              }
+
+              if (validationPassed) {
+                addLog(`${actionType} Validation Passed!`, "success");
+                onDecisionRef.current?.("Pass", undefined, { parsedData }, true);
+              } else {
+                const errorMsg = errors.join(", ");
+                addLog(`Validation Failed: ${errorMsg}`, "error");
+                onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { parsedData }, false);
+              }
+            } catch (err: any) {
+              addLog(`Error during validation: ${err.message || err}`, "error");
+              onDecisionRef.current?.("NG", `Validation error: ${err.message || "Unknown error"}`, { parsedData });
+            }
+          })();
+          accumulatedDataRef.current = "";
+          return;
+        } else if (matchCount >= requiredFieldsCount) {
+          // If we have all fields but no relevant eSIM fields, fail
+          addLog("Validation Failed: Relevant fields (N/W, APN, PF) missing in jig output", "error");
+          onDecisionRef.current?.("NG", "Relevant fields missing in jig output", { parsedData });
+          accumulatedDataRef.current = "";
+          return;
+        }
+      } if (matchCount < requiredFieldsCount) {
         const missing = currentSubStep.jigFields.filter((field: any) => {
           let found = false;
           if (parsedData[field.jigName]) found = true;
@@ -542,7 +616,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       command = generatedCommand;
     }
 
-    if (isConnected && (actionType === "Command" || actionType === "Custom Fields" || actionType === "switch profile 2" || actionType === "switch profile 1" || actionType === "Esim Settings validation") && command && lastSentCommandStepRef.current !== currentStepId) {
+    if (isConnected && (actionType === "Command" || actionType === "Custom Fields" || actionType?.toLowerCase() === "switch profile 2" || actionType?.toLowerCase() === "switch profile 1" || actionType === "Esim Settings validation") && command && lastSentCommandStepRef.current !== currentStepId) {
       addLog(`Auto-sending command: ${command}`, 'info');
       isCommandBusyRef.current = true;
       sendCommand(command).then(() => {
