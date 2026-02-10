@@ -1,35 +1,72 @@
 ﻿"use client";
-import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
-import React, { useState, useEffect } from "react";
+
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import DataTable from "react-data-table-component";
 import { getTaskByUserId, updateStatusRecivedKitToLine } from "@/lib/api";
 import Modal from "@/components/Modal/page";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { FiCheck, FiEye, FiX } from "react-icons/fi";
+import {
+  Eye,
+  CheckCircle2,
+  XCircle,
+  Layers,
+  MapPin,
+  Clock,
+  Package,
+  AlertCircle,
+  Search,
+  CheckCircle,
+  ClipboardList,
+  Calendar,
+  UserCheck
+} from "lucide-react";
+import { BallTriangle } from "react-loader-spinner";
+
 const TaskComponent = () => {
   const router = useRouter();
-  const [taskList, setTaskList] = useState([]);
-  const [isOperatorAssignedKitModel, setOperatorAssignedKitModel] =
-    useState(false);
+
+  // State
+  const [taskList, setTaskList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isOperatorAssignedKitModel, setOperatorAssignedKitModel] = useState(false);
   const [selectRecievedId, setSelectedRecievedId] = useState("");
   const [selectedProcessId, setSelectedProcessId] = useState("");
-  const [seatDetails, setSeatDetails] = useState({});
-  const [assignTaskDetails, setAssignTaskDetails] = useState({});
+  const [seatDetails, setSeatDetails] = useState<any>({});
+  const [assignTaskDetails, setAssignTaskDetails] = useState<any>({});
 
   useEffect(() => {
-    const userDetails = JSON.parse(localStorage.getItem("userDetails"));
-    getOperatorTask(userDetails._id);
+    const userDetailsStr = localStorage.getItem("userDetails");
+    if (userDetailsStr) {
+      const userDetails = JSON.parse(userDetailsStr);
+      getOperatorTask(userDetails._id);
+    }
   }, []);
+
+  const getOperatorTask = async (id: any) => {
+    try {
+      setLoading(true);
+      const result = await getTaskByUserId(id);
+      setTaskList(result?.task || []);
+    } catch (error) {
+      console.error("Error fetching tasks:", error);
+      toast.error("Failed to load tasks");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleOperatorRecievedKit = (data: any) => {
     setSeatDetails({});
     setSelectedRecievedId("");
     setAssignTaskDetails(data);
-    data.kitRecievedSeatDetails.map((value, index) => {
+
+    data.kitRecievedSeatDetails?.forEach((value: any) => {
       if (
-        data?.seatDetails?.rowNumber == value?.rowNumber &&
-        data?.seatDetails?.seatNumber == value?.seatNumber
+        data?.seatDetails?.rowNumber === value?.rowNumber &&
+        data?.seatDetails?.seatNumber === value?.seatNumber
       ) {
         setSelectedProcessId(data.processId);
         setSeatDetails(value);
@@ -38,396 +75,342 @@ const TaskComponent = () => {
     });
     setOperatorAssignedKitModel(true);
   };
-  const handleOperatorAssignedKit = () => { };
-  const closeOperatorAssignedKit = () => {
-    setOperatorAssignedKitModel(false);
-  };
-  // const updateStatusRecievedKits = async (id, status) => {
-  //   try {
-  //     // ðŸ” Override rejected status
-  //     const finalStatus =
-  //       status === "rejected" ? "waiting_for_line_feeding" : status;
 
-  //     let formData = new FormData();
-  //     formData.append("status", finalStatus);
-  //     formData.append("processId", selectedProcessId);
-  //     formData.append("processStatus", "active");
-
-  //     let result = await updateStatusRecivedKitToLine(id, formData);
-
-  //     if (result && result.status === 200) {
-  //       toast.success("Task Updated Successfully!");
-  //       setOperatorAssignedKitModel(false);
-
-  //       const userDetails = JSON.parse(localStorage.getItem("userDetails"));
-  //       getOperatorTask(userDetails._id);
-  //     }
-  //   } catch (error) {
-  //     
-  //   }
-  // };  
-
-  const updateStatusRecievedKits = async (id, status) => {
+  const updateStatusRecievedKits = async (id: string, status: string) => {
     try {
-      let formData = new FormData();
+      const formData = new FormData();
       formData.append("status", status);
       formData.append("processId", selectedProcessId);
+
       if (status === "CONFIRM") {
         formData.append('processStatus', 'active');
       } else {
-        formData.append("issuedKitsStatus", "REJECTED")
+        formData.append("issuedKitsStatus", "REJECTED");
         formData.append('processStatus', 'waiting_for_line_feeding');
       }
-      let result = await updateStatusRecivedKitToLine(id, formData);
-      if (result && result.status == 200) {
-        toast.success("Task Updated Successfully!");
+
+      const result = await updateStatusRecivedKitToLine(id, formData);
+      if (result && result.status === 200) {
+        toast.success(status === "CONFIRM" ? "Kits accepted successfully!" : "Kits rejected");
         setOperatorAssignedKitModel(false);
-        const userDetails = JSON.parse(localStorage.getItem("userDetails"));
-        getOperatorTask(userDetails._id);
+        const userDetailsStr = localStorage.getItem("userDetails");
+        if (userDetailsStr) {
+          const userDetails = JSON.parse(userDetailsStr);
+          getOperatorTask(userDetails._id);
+        }
       }
     } catch (error) {
-      
+      console.error("Error updating kit status:", error);
+      toast.error("Failed to update status");
     }
   };
-  const getOperatorTask = async (id: any) => {
-    try {
-      let result = await getTaskByUserId(id);
-      // 
-      setTaskList(result?.task);
-    } catch (error) {
-      
-    }
-  };
-  const handleViewProcess = async (id: any) => {
+
+  const handleViewProcess = (id: any) => {
     router.push(`/operators/task/${id}`);
   };
+
+  // Memoized Calculations
+  const filteredTasks = useMemo(() => {
+    return taskList.filter(task =>
+      task.processName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.roomDetails?.floorName?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [taskList, searchTerm]);
+
+  const stats = useMemo(() => {
+    const total = taskList.length;
+    const active = taskList.filter(t => t.status === "active").length;
+    const pendingKits = taskList.filter(t => t.kitRecievedConfirmationStatus === "PENDING").length;
+    const completed = taskList.filter(t => t.status === "completed").length;
+    return { total, active, pendingKits, completed };
+  }, [taskList]);
+
   const columns = [
     {
-      name: "ID",
-      selector: (row: taskList, index: number) => index + 1,
+      name: "Task Details",
+      selector: (row: any) => row.processName,
       sortable: true,
-    },
-    {
-      name: "Process Name",
-      selector: (row: taskList) => row.processName,
-      sortable: true,
-    },
-    {
-      name: "Room Details",
-      selector: (row: taskList) => (
-        <div
-          style={{
-            whiteSpace: "normal",
-            wordWrap: "break-word",
-            overflowWrap: "break-word",
-            maxWidth: "250px",
-            padding: "5px",
-          }}
-          title={row.description}
-        >
-          <span>
-            {" "}
-            {row?.roomDetails?.floorName} ({row?.seatDetails?.rowNumber} -{" "}
-            {row?.seatDetails?.seatNumber})
-          </span>
+      grow: 2,
+      cell: (row: any) => (
+        <div className="flex flex-col py-3">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-gray-900 dark:text-white">{row.processName}</span>
+          </div>
+          <div className="mt-1 flex items-center gap-3 text-[11px] text-gray-500">
+            <div className="flex items-center gap-1">
+              <MapPin size={12} className="text-primary" />
+              <span>{row?.roomDetails?.floorName}</span>
+            </div>
+            {row.stageType?.toLowerCase() !== "common" && (
+              <div className="flex items-center gap-1">
+                <Layers size={12} className="text-amber-500" />
+                <span>Seat {row?.seatDetails?.rowNumber}-{row?.seatDetails?.seatNumber}</span>
+              </div>
+            )}
+          </div>
         </div>
       ),
-      sortable: true,
     },
     {
-      name: "Shift",
-      selector: (row: taskList) => (
-        <div>
-          ({row?.ProcessShiftMappings?.startTime} -{" "}
-          {row?.ProcessShiftMappings?.endTime})
+      name: "Shift Timing",
+      sortable: true,
+      cell: (row: any) => (
+        <div className="flex flex-col text-xs">
+          <div className="flex items-center gap-1.5 font-medium text-gray-700 dark:text-gray-300">
+            <Clock size={12} className="text-blue-500" />
+            <span>{row?.ProcessShiftMappings?.startTime} - {row?.ProcessShiftMappings?.endTime}</span>
+          </div>
+          <div className="mt-1 flex items-center gap-1 text-[10px] text-gray-500 italic">
+            <Calendar size={10} />
+            {new Date(row?.planDetails?.startDate).toLocaleDateString()}
+          </div>
         </div>
       ),
-      sortable: true,
     },
     {
-      name: "Issued Kits to Operator",
-      selector: (row: taskList) => <div>{row?.assignedKitsToOperator}</div>,
+      name: "Kits Info",
       sortable: true,
+      cell: (row: any) => (
+        <div className="flex flex-col">
+          <div className="flex items-center gap-1.5 font-bold text-gray-900 dark:text-white">
+            <Package size={14} className="text-indigo-500" />
+            <span>{row?.assignedKitsToOperator || 0}</span>
+          </div>
+          <p className="text-[10px] text-gray-400 uppercase font-medium tracking-tight">Units Assigned</p>
+        </div>
+      ),
     },
     {
-      name: "From Date",
-      selector: (row: taskList) =>
-        new Date(row?.planDetails?.startDate).toLocaleDateString(),
+      name: "Kit Status",
+      selector: (row: any) => row.issuedKitsStatus,
       sortable: true,
-    },
-    {
-      name: "To Date",
-      selector: (row: taskList) =>
-        new Date(row?.planDetails?.estimatedEndDate).toLocaleDateString(),
-      sortable: true,
-    },
-    {
-      name: "Issued Kit Status",
-      selector: (row: Inventory) => {
-        const statusColorMap: Record<string, string> = {
-          ISSUED: "#28a745",
-          PARTIALLY_ISSUED: "#ffc107",
-          NOT_ISSUED: "#dc3545",
-          REJECTED: "#ff5733",
+      cell: (row: any) => {
+        const statuses: Record<string, { label: string; color: string }> = {
+          ISSUED: { label: "Issued", color: "bg-emerald-100 text-emerald-700 ring-emerald-500/20" },
+          PARTIALLY_ISSUED: { label: "Partial", color: "bg-amber-100 text-amber-700 ring-amber-500/20" },
+          REJECTED: { label: "Rejected", color: "bg-rose-100 text-rose-700 ring-rose-500/20" },
+          NOT_ISSUED: { label: "Pending", color: "bg-gray-100 text-gray-700 ring-gray-500/20" },
         };
-        const labelMap: Record<string, string> = {
-          ISSUED: "Issued",
-          PARTIALLY_ISSUED: "Partially Issued",
-          NOT_ISSUED: "Not Issued",
-          REJECTED: "Rejected",
-        };
-        const backgroundColor =
-          statusColorMap[row.issuedKitsStatus] || "#6c757d";
-        const displayLabel = labelMap[row.issuedKitsStatus] || "Unknown";
+        const s = statuses[row.issuedKitsStatus] || { label: "Unknown", color: "bg-gray-100 text-gray-600" };
         return (
-          <span
-            style={{
-              backgroundColor,
-              color: "#fff",
-              padding: "10px 5px",
-              borderRadius: "6px",
-              fontSize: "11px",
-              fontWeight: 600,
-              display: "inline-block",
-              textAlign: "center",
-              wordBreak: "break-word",
-              whiteSpace: "normal",
-            }}
-          >
-            {displayLabel}
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ring-1 ring-inset ${s.color}`}>
+            {s.label}
           </span>
         );
       },
-      sortable: true,
     },
     {
-      name: "Status",
-      selector: (row: taskList) => {
-        const statusStyles = {
-          waiting_schedule: {
-            label: "Waiting Schedule",
-            backgroundColor: "#f39c12",
-          },
-          Waiting_Kits_allocation: {
-            label: "Waiting Kits Allocation",
-            backgroundColor: "#9b59b6",
-          },
-          Waiting_Kits_approval: {
-            label: "Waiting Kits Approval",
-            backgroundColor: "#1abc9c",
-          },
-          waiting_for_line_feeding: {
-            label: "Waiting For Line Feeding",
-            backgroundColor: "#3498db",
-          },
-          waiting_for_kits_confirmation: {
-            label: "Waiting For Kits Confirmation",
-            backgroundColor: "#e67e22",
-          },
-          active: {
-            label: "Active",
-            backgroundColor: "#f1c40f",
-          },
-          down_time_hold: {
-            label: "Down Time Hold",
-            backgroundColor: "#e74c3c",
-          },
-          completed: {
-            label: "Completed",
-            backgroundColor: "#2ecc71",
-          },
-          default: {
-            label: "Process Created",
-            backgroundColor: "#95a5a6",
-          },
+      name: "Work Status",
+      selector: (row: any) => row.status,
+      sortable: true,
+      cell: (row: any) => {
+        const statuses: Record<string, { label: string; color: string; icon: any }> = {
+          active: { label: "In Progress", color: "bg-blue-100 text-blue-700", icon: Clock },
+          completed: { label: "Completed", color: "bg-emerald-100 text-emerald-700", icon: CheckCircle2 },
+          waiting_for_kits_confirmation: { label: "Confirm Kits", color: "bg-orange-100 text-orange-700", icon: AlertCircle },
+          waiting_for_line_feeding: { label: "Line Feeding", color: "bg-indigo-100 text-indigo-700", icon: Layers },
+          default: { label: row.status?.replace(/_/g, " ") || "Draft", color: "bg-gray-100 text-gray-600", icon: ClipboardList }
         };
-
-        const status = row?.status;
-        const { label, backgroundColor } =
-          statusStyles[status] || statusStyles.default;
-
+        const s = statuses[row.status] || statuses.default;
+        const Icon = s.icon;
         return (
-          <span
-            style={{
-              backgroundColor,
-              color: "#fff",
-              padding: "5px 5px",
-              borderRadius: "5px",
-              fontSize: "11px",
-              fontWeight: "bold",
-              textAlign: "center",
-            }}
-          >
-            {label}
-          </span>
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${s.color}`}>
+            <Icon size={12} />
+            <span className="capitalize">{s.label}</span>
+          </div>
         );
       },
-      sortable: true,
     },
     {
       name: "Actions",
-      cell: (row: taskList) => {
-        return row.status != "Completed" &&
-          row.kitRecievedConfirmationStatus != "ASSIGN_TO_OPERATOR" && row.kitRecievedConfirmationStatus != "REJECT" ? (
-          <div className="flex items-center space-x-3.5">
-            <button
-              onClick={() => handleViewProcess(row.planId)}
-              className="transform rounded-full bg-danger p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
-            >
-              <FiEye size={12} />
-            </button>
-          </div>
-        ) : (
-          <div className="flex space-x-1">
-            {row.kitRecievedConfirmationStatus != "REJECT" && (
+      cell: (row: any) => {
+        const canView = row.status !== "Completed" &&
+          row.kitRecievedConfirmationStatus !== "ASSIGN_TO_OPERATOR" &&
+          row.kitRecievedConfirmationStatus !== "REJECT";
+
+        const needsConfirmation = row.kitRecievedConfirmationStatus !== "REJECT";
+
+        return (
+          <div className="flex items-center gap-2">
+            {canView ? (
+              <button
+                onClick={() => handleViewProcess(row.planId)}
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary transition hover:bg-primary hover:text-white"
+                title="Open Task"
+              >
+                <Eye size={18} />
+              </button>
+            ) : needsConfirmation ? (
               <button
                 onClick={() => handleOperatorRecievedKit(row)}
-                className="transform rounded-full bg-blue-500 p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-100 text-orange-600 transition hover:bg-orange-600 hover:text-white"
+                title="Verify Kits"
               >
-                <svg
-                  fill="#ffffff"
-                  width="15px"
-                  height="15px"
-                  viewBox="0 0 36 36"
-                  version="1.1"
-                  preserveAspectRatio="xMidYMid meet"
-                  xmlns="http://www.w3.org/2000/svg"
-                  stroke="#ffffff"
-                >
-                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                  <g
-                    id="SVGRepo_tracerCarrier"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  ></g>
-                  <g id="SVGRepo_iconCarrier">
-                    {" "}
-                    <title>assign-user-solid</title>{" "}
-                    <circle
-                      cx="17.99"
-                      cy="10.36"
-                      r="6.81"
-                      className="clr-i-solid clr-i-solid-path-1"
-                    ></circle>
-                    <path
-                      d="M12,26.65a2.8,2.8,0,0,1,4.85-1.8L20.71,29l6.84-7.63A16.81,16.81,0,0,0,18,18.55,16.13,16.13,0,0,0,5.5,24a1,1,0,0,0-.2.61V30a2,2,0,0,0,1.94,2h8.57l-3.07-3.3A2.81,2.81,0,0,1,12,26.65Z"
-                      className="clr-i-solid clr-i-solid-path-2"
-                    ></path>
-                    <path
-                      d="M28.76,32a2,2,0,0,0,1.94-2V26.24L25.57,32Z"
-                      className="clr-i-solid clr-i-solid-path-3"
-                    ></path>
-                    <path
-                      d="M33.77,18.62a1,1,0,0,0-1.42.08l-11.62,13-5.2-5.59A1,1,0,0,0,14.12,26a1,1,0,0,0,0,1.42l6.68,7.2L33.84,20A1,1,0,0,0,33.77,18.62Z"
-                      className="clr-i-solid clr-i-solid-path-4"
-                    ></path>{" "}
-                    <rect
-                      x="0"
-                      y="0"
-                      width="36"
-                      height="36"
-                      fill-opacity="0"
-                    ></rect>{" "}
-                  </g>
-                </svg>
+                <UserCheck size={18} />
               </button>
+            ) : (
+              <span className="text-xs text-gray-400 font-medium italic">No Actions</span>
             )}
           </div>
         );
       },
     },
   ];
+
+  const customStyles = {
+    headRow: {
+      style: {
+        backgroundColor: "#f9fafb",
+        borderTopWidth: "1px",
+        borderTopColor: "rgba(0,0,0,0.05)",
+      },
+    },
+    headCells: {
+      style: {
+        fontWeight: "700",
+        fontSize: "0.7rem",
+        color: "#6b7280",
+        textTransform: "uppercase" as const,
+        letterSpacing: "0.05em",
+      },
+    },
+    rows: {
+      style: {
+        minHeight: "80px",
+        "&:hover": {
+          backgroundColor: "#f9fafb !important",
+        }
+      },
+    },
+  };
+
   return (
-    <>
-      <div className="bg-gray-100 min-h-screen p-6">
-        <Breadcrumb pageName="View Task" parentName="Task Management" />
-        <div className="mt-6 rounded-lg bg-white p-6 shadow-lg">
-          <DataTable
-            className="dark:bg-bodyDark"
-            columns={columns}
-            data={taskList}
-            pagination
-            selectableRows
-            //  onSelectedRowsChange={handleRowSelected}
-            highlightOnHover
-            pointerOnHover
-            customStyles={{
-              headCells: {
-                style: {
-                  fontWeight: "bold",
-                  backgroundColor: "#f8f9fa",
-                  padding: "12px",
-                },
-              },
-              rows: {
-                style: {
-                  minHeight: "72px",
-                  "&:hover": {
-                    backgroundColor: "#f1f5f9",
-                  },
-                },
-              },
-              cells: {
-                style: {
-                  "& > div:first-child": {
-                    whiteSpace: "break-spaces",
-                    overflow: "hidden",
-                    textOverflow: "inherit",
-                  },
-                },
-              },
-            }}
-          />
-          <Modal
-            isOpen={isOperatorAssignedKitModel}
-            onSubmit={handleOperatorAssignedKit}
-            onClose={closeOperatorAssignedKit}
-            title={"Operator Assign Kits to Line"}
-            submitOption={false}
-          >
-            <div className="grid py-2 sm:grid-cols-2">
-              <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                <strong className="font-medium">Row Number :</strong>{" "}
-                {seatDetails?.rowNumber}
-              </div>
-              <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                <strong className="font-medium">Seat Number :</strong>{" "}
-                {seatDetails?.seatNumber}
-              </div>
-              <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                <strong className="font-medium">Issued Kit :</strong>{" "}
-                {seatDetails?.issuedKits}
-              </div>
-              <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                <strong className="font-medium">Kits Shortage :</strong>{" "}
-                {assignTaskDetails.requiredKits - seatDetails?.issuedKits}
-              </div>
-            </div>
-            <div className="flex items-center justify-center gap-2">
-              <button
-                onClick={() =>
-                  updateStatusRecievedKits(selectRecievedId, "CONFIRM")
-                }
-                className="flex transform items-center rounded-md bg-blue-500 p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
-              >
-                <FiCheck size={16} /> Accept
-              </button>
-              <button
-                onClick={() =>
-                  updateStatusRecievedKits(
-                    selectRecievedId,
-                    "REJECT",
-                  )
-                }
-                className="flex transform items-center rounded-md bg-danger p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-danger"
-              >
-                <FiX size={16} /> Reject
-              </button>
-            </div>
-          </Modal>
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Header */}
+      <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white uppercase">My Production Tasks</h1>
+          <p className="mt-1 text-sm text-gray-500 font-medium">Manage your assigned production processes and kit verifications.</p>
         </div>
       </div>
-    </>
+
+      {/* Stats Cards */}
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: "Total Assignments", value: stats.total, icon: ClipboardList, color: "text-blue-600", bg: "bg-blue-50" },
+          { label: "Currently Active", value: stats.active, icon: Clock, color: "text-indigo-600", bg: "bg-indigo-50" },
+          { label: "Kits Pending", value: stats.pendingKits, icon: Package, color: "text-orange-600", bg: "bg-orange-50" },
+          { label: "Tasks Completed", value: stats.completed, icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-50" },
+        ].map((stat, i) => (
+          <div key={i} className="flex items-center rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-200 dark:bg-boxdark dark:ring-strokedark transition hover:shadow-md">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${stat.bg} ${stat.color} mr-4`}>
+              <stat.icon size={24} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">{stat.label}</p>
+              <h3 className="text-2xl font-black text-gray-900 dark:text-white">{stat.value}</h3>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Main Content */}
+      <div className="overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-black/5 dark:bg-boxdark">
+        {/* Search Bar */}
+        <div className="flex border-b border-gray-100 p-6 dark:border-strokedark">
+          <div className="relative w-full max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              placeholder="Search tasks or rooms..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm focus:border-primary focus:bg-white focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all dark:border-strokedark dark:bg-form-input dark:text-white font-medium"
+            />
+          </div>
+        </div>
+
+        <div className="relative">
+          {loading ? (
+            <div className="flex h-64 items-center justify-center">
+              <BallTriangle height={80} width={80} color="#3c50e0" />
+            </div>
+          ) : (
+            <DataTable
+              columns={columns}
+              data={filteredTasks}
+              pagination
+              highlightOnHover
+              customStyles={customStyles}
+              noDataComponent={
+                <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                  <ClipboardList size={48} strokeWidth={1} className="mb-2" />
+                  <p className="text-sm font-medium">No tasks found for today.</p>
+                </div>
+              }
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Kit Verification Modal */}
+      <Modal
+        isOpen={isOperatorAssignedKitModel}
+        onSubmit={() => { }}
+        onClose={() => setOperatorAssignedKitModel(false)}
+        title="Verify Assigned Kits"
+        submitOption={false}
+      >
+        <div className="space-y-6 pt-2">
+          {assignTaskDetails?.stageType?.toLowerCase() !== "common" && (
+            <div className="flex items-center gap-4 rounded-xl bg-primary/5 p-4 ring-1 ring-primary/10">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-white">
+                <MapPin size={24} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-primary uppercase tracking-wider">Assigned Workstation</p>
+                <h4 className="text-lg font-bold text-gray-900 dark:text-white">
+                  Row {seatDetails?.rowNumber} • Seat {seatDetails?.seatNumber}
+                </h4>
+              </div>
+            </div>
+          )}
+
+          {/* Allocation Info */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded-xl border border-gray-100 p-4 dark:border-strokedark">
+              <p className="text-xs font-bold text-gray-400 uppercase">Received Kits</p>
+              <p className="mt-1 text-2xl font-black text-emerald-600">{seatDetails?.issuedKits || 0}</p>
+            </div>
+            <div className="rounded-xl border border-gray-100 p-4 dark:border-strokedark">
+              <p className="text-xs font-bold text-gray-400 uppercase">Shortage</p>
+              <p className="mt-1 text-2xl font-black text-rose-600">
+                {Math.max(0, (assignTaskDetails.requiredKits || 0) - (seatDetails?.issuedKits || 0))}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center gap-3 pt-4 border-t dark:border-strokedark">
+            <button
+              onClick={() => updateStatusRecievedKits(selectRecievedId, "CONFIRM")}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 font-bold text-white transition hover:bg-emerald-700 active:scale-95"
+            >
+              <CheckCircle2 size={18} />
+              Accept Kits
+            </button>
+            <button
+              onClick={() => updateStatusRecievedKits(selectRecievedId, "REJECT")}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-rose-50 px-6 py-3 font-bold text-rose-600 border border-rose-200 transition hover:bg-rose-100 active:scale-95"
+            >
+              <XCircle size={18} />
+              Reject
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <ToastContainer position="top-right" autoClose={3000} />
+    </div>
   );
 };
 

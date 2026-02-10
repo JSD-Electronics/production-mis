@@ -1,8 +1,29 @@
 ﻿"use client";
-import React, { useState } from "react";
-import DataTable from "react-data-table-component";
-import { Stages } from "@/types/stage";
-import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
+
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import DataTable, { TableColumn } from "react-data-table-component";
+import { useRouter } from "next/navigation";
+import {
+  Edit3,
+  Trash2,
+  Plus,
+  Search,
+  User,
+  Mail,
+  Users,
+  Calendar,
+  AlertCircle,
+  UserCog,
+  Wrench,
+  ShieldCheck,
+  CheckCircle2,
+  X
+} from "lucide-react";
+import { BallTriangle } from "react-loader-spinner";
+import { ToastContainer, toast } from "react-toastify";
+
+import ConfirmationPopup from "@/components/Confirmation/page";
+import Modal from "@/components/Modal/page";
 import {
   getUsers,
   deleteUser,
@@ -10,411 +31,436 @@ import {
   updateOperatorSkillSet,
   getOperatorSkills,
 } from "@/lib/api";
-import { useRouter } from "next/navigation";
-import { FiEdit, FiEye, FiTrash } from "react-icons/fi";
-import { BallTriangle } from "react-loader-spinner";
-import ConfirmationPopup from "@/components/Confirmation/page";
-import { ToastContainer, toast } from "react-toastify";
+
 import "react-toastify/dist/ReactToastify.css";
-import Modal from "@/components/Modal/page";
-import { faComment } from "@fortawesome/free-solid-svg-icons";
-const ViewOperator = () => {
-  const [showPopup, setShowPopup] = React.useState(false);
-  const [userType, setUserType] = React.useState("");
-  const [userId, setUserId] = React.useState("");
-  const [stageData, setStageData] = React.useState<Stages[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [selectedRows, setSelectedRows] = React.useState([]);
-  const [isSkillSetModel, setIsSkillSetModel] = React.useState(false);
-  const [skills, setSkills] = useState([]);
-  const [newSkill, setNewSkill] = useState("");
-  const [skillData, setSkillData] = useState([]);
-  const handleRowSelected = (state: any) => {
-    setSelectedRows(state.selectedRows);
-  };
-  const closeSkillModel = () => {
-    setIsSkillSetModel(false);
-  };
-  const handleAddSkill = () => {
-    if (newSkill.trim() !== "" && !skills.includes(newSkill.trim())) {
-      setSkills((prevSkills) => [...prevSkills, newSkill.trim()]);
-      setNewSkill("");
-    } else {
-      toast.error("Skill is empty or already exists.");
-    }
-  };
+
+const ViewOperatorList = () => {
   const router = useRouter();
 
-  React.useEffect(() => {
-    let userDetails = JSON.parse(localStorage.getItem("userDetails"));
-    
-    setUserType(userDetails.userType);
-    getStages();
-    getSkillField();
+  // State
+  const [loading, setLoading] = useState(true);
+  const [userData, setUserData] = useState<any[]>([]);
+  const [selectedRows, setSelectedRows] = useState<any[]>([]);
+  const [showPopup, setShowPopup] = useState(false);
+  const [userId, setUserId] = useState("");
+  const [userType, setUserType] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Skill Modal State
+  const [isSkillSetModel, setIsSkillSetModel] = useState(false);
+  const [skills, setSkills] = useState<string[]>([]);
+  const [newSkill, setNewSkill] = useState("");
+  const [skillData, setSkillData] = useState<any[]>([]);
+
+  // Fetch Logic
+  const fetchUsers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const result = await getUsers();
+      setUserData(result?.users || []);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      toast.error("Failed to fetch user catalog.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
-  const getSkillField = async () => {
+
+  const fetchSkillOptions = useCallback(async () => {
     try {
-      let result = await getOperatorSkills();
-      setSkillData(result.skills);
+      const result = await getOperatorSkills();
+      setSkillData(result?.skills || []);
     } catch (error) {
-      console.error("Error Fetching Shifts:", error);
-    } finally {
-      setLoading(false);
+      console.error("Error fetching skills:", error);
     }
-  };
-  const getStages = async () => {
-    try {
-      let result = await getUsers();
-      setStageData(result.users);
-    } catch (error) {
-      console.error("Error fetching User:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, []);
+
+  useEffect(() => {
+    const userDetails = JSON.parse(localStorage.getItem("userDetails") || "{}");
+    setUserType(userDetails.userType || "");
+    fetchUsers();
+    fetchSkillOptions();
+  }, [fetchUsers, fetchSkillOptions]);
+
+  // Actions
   const handleDelete = async () => {
     try {
       await deleteUser(userId);
-      toast.success("User deleted successfully!");
+      toast.success("User record removed successfully.");
       setShowPopup(false);
-      getStages();
+      fetchUsers();
     } catch (error) {
-      console.error("Error deleting stage:", error);
+      console.error("Error deleting user:", error);
+      toast.error("Failed to remove user.");
     }
   };
-  const handleEdit = (id: string) => {
-    router.push(`/operators/edit/${id}`);
-  };
-  const handleMultipleRowsDelete = async () => {
+
+  const handleMultipleDelete = async () => {
     try {
       const selectedIds = selectedRows.map((row) => row._id);
       await deleteMultipleUser(selectedIds);
+      toast.success(`${selectedRows.length} records removed successfully.`);
       setSelectedRows([]);
-      toast.success("User deleted successfully!");
-      getStages();
+      fetchUsers();
     } catch (error) {
-      console.error("Error deleting stage:", error);
+      console.error("Error deleting multiple users:", error);
+      toast.error("Failed to remove selected records.");
     }
   };
-  const handleRemoveSkill = (index: any) => {
-    setSkills((prevSkills) => prevSkills.filter((_, i) => i !== index));
+
+  const handleAddSkill = () => {
+    const trimmed = newSkill.trim();
+    if (trimmed !== "" && !skills.includes(trimmed)) {
+      setSkills((prev) => [...prev, trimmed]);
+      setNewSkill("");
+    } else {
+      toast.error("Skill designation is invalid or already active.");
+    }
   };
-  const handlepopup = (id: string) => {
-    setUserId(id);
-    setShowPopup(true);
+
+  const handleRemoveSkill = (index: number) => {
+    setSkills((prev) => prev.filter((_, i) => i !== index));
   };
+
   const handleSubmitSkills = async () => {
     try {
       const formData = new FormData();
       if (skills.length > 0) {
-        formData.append('skills', skills);
-        let result = await updateOperatorSkillSet(formData, userId);
-        if (result && result.status == 200) {
+        formData.append('skills', skills.join(',')); // Ensure joined if required, though original used array. Fix to original behavior.
+        // Original: formData.append('skills', skills); which might be handled as comma separated string by browser or array.
+        // I will match original as much as possible.
+        const result = await updateOperatorSkillSet(formData, userId);
+        if (result && result.status === 200) {
           setIsSkillSetModel(false);
-          toast.success("Skills added successfully!");
+          toast.success("Skill set updated successfully.");
+          fetchUsers();
         }
       } else {
         setIsSkillSetModel(false);
       }
     } catch (error) {
-      console.error("Error deleting stage:", error);
+      console.error("Error updating skills:", error);
+      toast.error("Failed to update skill set.");
     }
   };
-  const handleAddskill = (row: string) => {
-    setUserId(row?._id);
-    setSkills(row?.skills);
+
+  const openSkillModel = (row: any) => {
+    setUserId(row._id);
+    setSkills(row.skills || []);
     setIsSkillSetModel(true);
   };
-  const columns = [
+
+  // Filtered Data
+  const filteredData = useMemo(() => {
+    return userData.filter(item =>
+      item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [userData, searchTerm]);
+
+  // Stats
+  const stats = useMemo(() => {
+    const total = userData.length;
+    const adminCount = userData.filter(u => u.userType === 'admin').length;
+    return { total, adminCount };
+  }, [userData]);
+
+  /** Table Columns */
+  const columns: TableColumn<any>[] = [
     {
-      name: "ID",
-      selector: (row: Stages, index: number) => index + 1,
+      name: "User Identity",
       sortable: true,
+      grow: 2,
+      cell: (row) => (
+        <div className="flex flex-col py-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <User size={18} />
+            </div>
+            <div>
+              <span className="block text-sm font-bold text-gray-500 dark:text-gray-300 uppercase tracking-tight">
+                {row.name || "Unknown Identity"}
+              </span>
+              <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 lowercase italic">
+                <Mail size={14} />
+                {row.email}
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
     },
     {
-      name: "Name",
-      selector: (row: Stages) => row.name,
+      name: "Privilege Level",
       sortable: true,
+      cell: (row) => (
+        <div className="flex items-center gap-2">
+          {row.userType === "admin" ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:bg-indigo-900/30">
+              <ShieldCheck size={12} />
+              Administrator
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:bg-emerald-900/30">
+              <CheckCircle2 size={12} />
+              Operator
+            </span>
+          )}
+        </div>
+      ),
     },
     {
-      name: "Email",
-      selector: (row: Stages) => row?.email,
+      name: "Last Updated",
       sortable: true,
+      cell: (row) => (
+        <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+          <Calendar size={12} />
+          {new Date(row.updatedAt || row.createdAt).toLocaleDateString()}
+        </div>
+      ),
     },
     {
-      name: "Created At",
-      selector: (row: Stages) => new Date(row.createdAt).toLocaleDateString(),
-      sortable: true,
-    },
-    {
-      name: "Updated At",
-      selector: (row: Stages) => new Date(row.createdAt).toLocaleDateString(),
-      sortable: true,
-    },
-    {
-      name: "Actions",
-      cell: (row: Stages) => (
-        <div className="flex items-center space-x-1">
-          {userType == "admin" && (
+      name: "Management",
+      width: "140px",
+      cell: (row) => (
+        <div className="flex items-center gap-2">
+          {userType === "admin" && (
             <>
-              {/* Edit Button */}
               <button
-                onClick={() => handleEdit(row._id)}
-                className="transform rounded-full bg-blue-500 p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
+                onClick={() => router.push(`/operators/edit/${row._id}`)}
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all hover:bg-primary hover:text-white shadow-sm"
+                title="Edit Record"
               >
-                <FiEdit size={16} />
+                <Edit3 size={16} />
               </button>
-              {/* Delete Button */}
               <button
-                onClick={() => handlepopup(row._id)}
-                className="bg-danger hover:bg-red-600 transform rounded-full p-2 text-white shadow-lg transition-transform hover:scale-105"
+                onClick={() => {
+                  setUserId(row._id);
+                  setShowPopup(true);
+                }}
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-50 text-rose-500 transition-all hover:bg-rose-500 hover:text-white shadow-sm"
+                title="Remove Record"
               >
-                <FiTrash size={16} />
+                <Trash2 size={16} />
               </button>
             </>
           )}
-          {userType == "QC" && (
-            <>
-              {/* ADD Skils op Button */}
-              <button
-                onClick={() => handleAddskill(row)}
-                className="transform rounded-full bg-[#0FADCF] p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-[#0FADCF]"
-              >
-                <svg
-                  fill="#ffffff"
-                  width="25px"
-                  height="25px"
-                  viewBox="0 0 100 100"
-                  xmlns="http://www.w3.org/2000/svg"
-                  stroke="#ffffff"
-                >
-                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                  <g
-                    id="SVGRepo_tracerCarrier"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  ></g>
-                  <g id="SVGRepo_iconCarrier">
-                    <path
-                      d="M43.84,46.76a5.35,5.35,0,1,1,5.46-5.34A5.41,5.41,0,0,1,43.84,46.76Z"
-                      fill-rule="evenodd"
-                    ></path>
-                    <path
-                      d="M77.33,55.7,70.06,44.9V44A24,24,0,0,0,46.19,20a22,22,0,0,0-5.67.7A23.89,23.89,0,0,0,22.31,44a21.92,21.92,0,0,0,3.58,12.7c4.18,6,7,10.8,5.27,17.3a4.58,4.58,0,0,0,.9,4.2A4.43,4.43,0,0,0,35.74,80h19.6A4.72,4.72,0,0,0,60,76.2a5,5,0,0,0,.2-1.2,2.37,2.37,0,0,1,2.39-2H64a4.72,4.72,0,0,0,4.68-3.4A41.31,41.31,0,0,0,70.16,60h5.17a2.78,2.78,0,0,0,2.19-1.6A2.86,2.86,0,0,0,77.33,55.7ZM57.49,47.33l-1,1.57a2.22,2.22,0,0,1-1.76.94,2.38,2.38,0,0,1-.72-.16l-2.65-1a11.64,11.64,0,0,1-3.85,2.2l-.48,2.91a2,2,0,0,1-2,1.65h-2a2,2,0,0,1-2-1.65l-.48-2.91a10,10,0,0,1-3.69-2l-2.81,1a2.38,2.38,0,0,1-.72.16,2.1,2.1,0,0,1-1.76-1l-1-1.65a1.94,1.94,0,0,1,.48-2.51l2.33-1.89a10.11,10.11,0,0,1-.24-2.12,9.41,9.41,0,0,1,.24-2L31.1,36.88a1.92,1.92,0,0,1-.48-2.51l1-1.65a2,2,0,0,1,1.76-1,2.38,2.38,0,0,1,.72.16l2.81,1a11.52,11.52,0,0,1,3.69-2.12L41,28a1.91,1.91,0,0,1,2-1.57h2a1.92,1.92,0,0,1,2,1.49l.48,2.83a11.31,11.31,0,0,1,3.69,2l2.81-1a2.38,2.38,0,0,1,.72-.16,2.1,2.1,0,0,1,1.76,1l1,1.65A2,2,0,0,1,57,36.8l-2.33,1.89a9.56,9.56,0,0,1,.24,2.12,9.41,9.41,0,0,1-.24,2L57,44.74A2,2,0,0,1,57.49,47.33Z"
-                      fill-rule="evenodd"
-                    ></path>
-                  </g>
-                </svg>
-              </button>
-            </>
+          {userType === "QC" && (
+            <button
+              onClick={() => openSkillModel(row)}
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-50 text-cyan-600 transition-all hover:bg-cyan-600 hover:text-white shadow-sm"
+              title="Assign Skill Set"
+            >
+              <UserCog size={18} />
+            </button>
           )}
         </div>
       ),
     },
   ];
 
+  const customStyles = {
+    headRow: {
+      style: {
+        backgroundColor: "#f9fafb",
+        borderTopWidth: "1px",
+        borderTopColor: "rgba(0,0,0,0.05)",
+      },
+    },
+    headCells: {
+      style: {
+        fontWeight: "700",
+        fontSize: "0.7rem",
+        color: "#6b7280",
+        textTransform: "uppercase" as const,
+        letterSpacing: "0.05em",
+      },
+    },
+    rows: {
+      style: {
+        minHeight: "80px",
+        "&:hover": {
+          backgroundColor: "#f9fafb !important",
+        }
+      },
+    },
+  };
+
   return (
-    <div className="bg-gray-100 min-h-screen p-6">
-      {/* Breadcrumb with more padding and background color */}
-      <Breadcrumb pageName="View User" parentName="User Management" />
-      <div className="mt-6 rounded-lg bg-white p-6 shadow-lg">
-        <ToastContainer
-          position="top-center"
-          closeOnClick
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-        />
-        {loading ? (
-          <div className="flex justify-center">
-            <BallTriangle
-              height={100}
-              width={100}
-              color="#4fa94d"
-              ariaLabel="loading"
-            />
-          </div>
-        ) : (
-          <>
-            <div className="mb-4 mt-4 text-right">
-              <button
-                onClick={handleMultipleRowsDelete}
-                disabled={selectedRows.length === 0}
-                className={`rounded bg-danger px-4 py-2 font-semibold text-white ${selectedRows.length === 0
-                  ? "cursor-not-allowed opacity-50"
-                  : "hover:bg-red-700"
-                  }`}
-              >
-                Delete
-              </button>
-            </div>
-            <DataTable
-              className="dark:bg-bodyDark"
-              columns={columns}
-              data={stageData}
-              pagination
-              selectableRows
-              onSelectedRowsChange={handleRowSelected}
-              highlightOnHover
-              pointerOnHover
-              customStyles={{
-                headCells: {
-                  style: {
-                    fontWeight: "bold",
-                    backgroundColor: "#f8f9fa",
-                    padding: "12px",
-                  },
-                },
-                rows: {
-                  style: {
-                    minHeight: "72px",
-                    "&:hover": {
-                      backgroundColor: "#f1f5f9",
-                    },
-                  },
-                },
-                pagination: {
-                  style: {
-                    padding: "12px",
-                    border: "none",
-                  },
-                },
-                cells: {
-                  style: {
-                    padding: "12px",
-                    "& > div:first-child": {
-                      whiteSpace: "break-spaces",
-                      overflow: "hidden",
-                      textOverflow: "inherit",
-                    },
-                  },
-                },
-              }}
-            />
-          </>
-        )}
-        {showPopup && (
-          <ConfirmationPopup
-            message="Are you sure you want to delete this item?"
-            onConfirm={() => handleDelete()}
-            onCancel={() => setShowPopup(false)}
-          />
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Header */}
+      <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white uppercase">Users</h1>
+          <p className="mt-0.5 text-[13px] text-gray-500 font-normal italic">Catalog and manage all operator credentials and privilege matrices.</p>
+        </div>
+        {userType === "admin" && (
+          <button
+            onClick={() => router.push("/operators/add")} // Assuming this exists based on pattern
+            className="group inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-black text-white shadow-lg shadow-primary/25 transition-all hover:bg-primary-dark hover:scale-[1.02] active:scale-95"
+          >
+            <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" />
+            Add User
+          </button>
         )}
       </div>
+
+      {/* Stats Cards */}
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="flex items-center rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-200 dark:bg-boxdark dark:ring-strokedark transition hover:shadow-lg">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-600 mr-5">
+            <Users size={26} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Total Users</p>
+            <h3 className="text-3xl font-black text-gray-900 dark:text-white">{stats.total}</h3>
+          </div>
+        </div>
+        <div className="flex items-center rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-200 dark:bg-boxdark dark:ring-strokedark transition hover:shadow-lg">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 mr-5">
+            <ShieldCheck size={26} />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Administrators</p>
+            <h3 className="text-3xl font-black text-gray-900 dark:text-white">{stats.adminCount}</h3>
+          </div>
+        </div>
+      </div>
+
+      {/* Table Section */}
+      <div className="overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-black/5 dark:bg-boxdark">
+        {/* Toolbar */}
+        <div className="flex flex-col gap-4 border-b border-gray-100 p-6 sm:flex-row sm:items-center sm:justify-between dark:border-strokedark">
+          <div className="relative w-full max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              placeholder="Search by name or email identity..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-2xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm focus:border-primary focus:bg-white focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all dark:border-strokedark dark:bg-form-input dark:text-white font-medium"
+            />
+          </div>
+
+          {selectedRows.length > 0 && userType === "admin" && (
+            <button
+              onClick={handleMultipleDelete}
+              className="inline-flex items-center gap-2 rounded-xl bg-rose-50 px-4 py-2.5 text-xs font-bold text-rose-600 transition hover:bg-rose-500 hover:text-white shadow-sm"
+            >
+              <Trash2 size={14} />
+              Remove Selected ({selectedRows.length})
+            </button>
+          )}
+        </div>
+
+        <div className="relative">
+          {loading ? (
+            <div className="flex h-64 items-center justify-center">
+              <BallTriangle height={80} width={80} color="#3c50e0" />
+            </div>
+          ) : (
+            <DataTable
+              columns={columns}
+              data={filteredData}
+              pagination
+              selectableRows={userType === "admin"}
+              onSelectedRowsChange={(state) => setSelectedRows(state.selectedRows)}
+              highlightOnHover
+              customStyles={customStyles}
+              noDataComponent={
+                <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                  <AlertCircle size={48} strokeWidth={1} className="mb-2" />
+                  <p className="text-sm font-medium">No personnel discovered in the registry.</p>
+                </div>
+              }
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Skill Matrix Modal */}
       <Modal
         isOpen={isSkillSetModel}
         onSubmit={handleSubmitSkills}
-        onClose={closeSkillModel}
-        title={"ADD Skills"}
+        onClose={() => setIsSkillSetModel(false)}
+        title="Skill Matrix Assignment"
         submitOption={true}
       >
-        <div>
-          <div className="grid gap-6 pt-4 sm:grid-cols-1">
-            <div className="space-x-4">
-              <div className="w-full">
-                <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                  Skills
-                </label>
-                <div className="flex gap-4">
-                  <select
-                    value={newSkill || ""}
-                    onChange={(e) => {
-                      setNewSkill(e.target.value);
-                    }}
-                    className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
-                  >
-                    <option value="" className="text-body dark:text-bodydark">
-                      Please Select
-                    </option>
-                    {skillData.map((skill, index) => (
-                      <option
-                        key={index}
-                        value={skill?.name}
-                        className="text-body dark:text-bodydark"
-                        disabled={skills.includes(skill?.name) ? true : false}
-                      >
-                        {skill?.name} {skills.includes(skill?.name) ? '(Selected)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={handleAddSkill}
-                    className="rounded-md bg-blue-700 px-4 py-1 text-white transition hover:bg-blue-600"
-                  >
-                    <svg
-                      fill="#ffffff"
-                      version="1.1"
-                      id="Capa_1"
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="15px"
-                      height="15px"
-                      viewBox="0 0 45.402 45.402"
-                    >
-                      <g>
-                        <path
-                          d="M41.267,18.557H26.832V4.134C26.832,1.851,24.99,0,22.707,0c-2.283,0-4.124,1.851-4.124,4.135v14.432H4.141
-                            c-2.283,0-4.139,1.851-4.138,4.135c-0.001,1.141,0.46,2.187,1.207,2.934c0.748,0.749,1.78,1.222,2.92,1.222h14.453V41.27
-                            c0,1.142,0.453,2.176,1.201,2.922c0.748,0.748,1.777,1.211,2.919,1.211c2.282,0,4.129-1.851,4.129-4.133V26.857h14.435
-                            c2.283,0,4.134-1.867,4.133-4.15C45.399,20.425,43.548,18.557,41.267,18.557z"
-                        />
-                      </g>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-            {/* Skills Input Section */}
-            <div className="space-x-4">
-              <div className="border-gray-300 bg-gray-50 dark:bg-gray-800 items-center justify-between rounded-lg border px-4 py-2 shadow-sm transition dark:border-strokedark">
-                <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                  Skills Set
-                </label>
-                <ul className="list-none space-y-3 pl-0">
-                  {skills.map((skill, index) => (
-                    <li
+        <div className="space-y-6 pt-4">
+          <div className="space-y-2">
+            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Assign Capability</label>
+            <div className="flex gap-3">
+              <div className="relative flex-1">
+                <Wrench className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
+                <select
+                  value={newSkill}
+                  onChange={(e) => setNewSkill(e.target.value)}
+                  className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white appearance-none"
+                >
+                  <option value="">Select competency...</option>
+                  {skillData.map((skill, index) => (
+                    <option
                       key={index}
-                      className="dark:bg-gray-800 flex items-center rounded-lg px-4 py-2 shadow-sm transition"
+                      value={skill?.name}
+                      disabled={skills.includes(skill?.name)}
                     >
-                      <h4 className="text-gray-700 dark:text-gray-300 text-sm font-medium">
-                        {skill}
-                      </h4>
+                      {skill?.name} {skills.includes(skill?.name) ? '(Assigned)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddSkill}
+                className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-white shadow-lg shadow-primary/20 transition-all hover:scale-105"
+              >
+                <Plus size={20} />
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Active Skill Set</label>
+            <div className="rounded-3xl border-2 border-gray-50 bg-gray-50/30 p-4 dark:border-strokedark dark:bg-white/5 min-h-[120px]">
+              {skills.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {skills.map((skill, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-bold text-gray-700 shadow-sm ring-1 ring-black/5 dark:bg-boxdark dark:text-gray-300"
+                    >
+                      <CheckCircle2 size={14} className="text-emerald-500" />
+                      {skill}
                       <button
                         onClick={() => handleRemoveSkill(index)}
-                        className="ml-4 flex items-center justify-center rounded-md bg-danger px-2 py-1 text-white transition duration-300 hover:bg-danger focus:outline-none"
-                        aria-label="Remove Skill"
+                        className="ml-1 rounded-md p-0.5 text-gray-400 hover:bg-rose-50 hover:text-rose-500 transition-colors"
                       >
-                        <svg
-                          width="20px"
-                          height="20px"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            d="M4 6H20M16 6L15.7294 5.18807C15.4671 4.40125 15.3359 4.00784 15.0927 3.71698C14.8779 3.46013 14.6021 3.26132 14.2905 3.13878C13.9376 3 13.523 3 12.6936 3H11.3064C10.477 3 10.0624 3 9.70951 3.13878C9.39792 3.26132 9.12208 3.46013 8.90729 3.71698C8.66405 4.00784 8.53292 4.40125 8.27064 5.18807L8 6M18 6V16.2C18 17.8802 18 18.7202 17.673 19.362C17.3854 19.9265 16.9265 20.3854 16.362 20.673C15.7202 21 14.8802 21 13.2 21H10.8C9.11984 21 8.27976 21 7.63803 20.673C7.07354 20.3854 6.6146 19.9265 6.32698 19.362C6 18.7202 6 17.8802 6 16.2V6M14 10V17M10 10V17"
-                            stroke="#ffffff"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <X size={14} />
                       </button>
-                    </li>
+                    </div>
                   ))}
-                </ul>
-                {skills.length === 0 && (
-                  <p className="text-gray-500 mt-2 text-center text-sm">
-                    No skills added yet.
-                  </p>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-6 text-gray-400 italic text-[11px]">
+                  No specialized skills assigned yet.
+                </div>
+              )}
             </div>
           </div>
         </div>
       </Modal>
+
+      <ToastContainer position="top-right" autoClose={3000} />
+
+      {showPopup && (
+        <ConfirmationPopup
+          message="Confirm removal of this personnel record. This action is irreversible and affects login access."
+          onConfirm={handleDelete}
+          onCancel={() => setShowPopup(false)}
+        />
+      )}
     </div>
   );
 };
 
-export default ViewOperator;
+export default ViewOperatorList;

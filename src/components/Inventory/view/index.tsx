@@ -1,5 +1,6 @@
 ﻿"use client";
-import React, { useState } from "react";
+
+import React, { useState, useEffect, useMemo } from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import {
@@ -10,659 +11,610 @@ import {
   updateIssueCarton,
 } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { FiEdit, FiTrash } from "react-icons/fi";
+import {
+  Search,
+  Plus,
+  Box,
+  Truck,
+  AlertCircle,
+  CheckCircle2,
+  MoreVertical,
+  Edit,
+  PackagePlus,
+  Archive,
+  ArrowRight
+} from "lucide-react";
 import { BallTriangle } from "react-loader-spinner";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import Modal from "@/components/Modal/page";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-const ViewInventory = () => {
-  const [showPopup, setShowPopup] = React.useState(false);
-  const [productId, setProductId] = React.useState("");
-  const [inventoryData, setInventoryData] = React.useState([]);
-  const [isInventoryModel, setIsInventoryModel] = React.useState(false);
-  const [inventoryID, setInventoryID] = useState("");
-  const [updatedQuantity, setUpdatedQuantity] = React.useState(0);
-  const [updatedCartonQuantity, setUpdatedCartonQuantity] = React.useState(0);
-  const [loading, setLoading] = React.useState(true);
-  const [processes, setProcesses] = React.useState([]);
-  const [selectedProcess, setSelectedProcess] = React.useState("");
-  const [selectedProcessDetails, setSelectedProcessDetails] = React.useState(
-    {},
-  );
-  const [issueKit, setIssueKit] = React.useState("");
-  const [issueKitProcess, setIssueKitProcess] = React.useState("");
-  const [issueCartonProcess, setIssueCartonProcess] = React.useState("");
-  const [selectedRows, setSelectedRows] = React.useState([]);
-  const [productName, setProductName] = React.useState("");
-  const [isIssueKitModel, setIsIssueKitModel] = React.useState(false);
-  const [isIssueCartonModel, setIsIssueCartonModel] = React.useState(false);
-  const handleRowSelected = (state: any) => {
-    setSelectedRows(state.selectedRows);
-  };
+
+interface Inventory {
+  _id: string;
+  productName: string;
+  productType: string;
+  quantity: string | number;
+  cartonQuantity: string | number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const InventoryManagement = () => {
   const router = useRouter();
-  const closeIssuedKitsModal = () => {
-    setIsIssueKitModel(false);
-  };
-  const closeInventoryModal = () => {
-    setIsInventoryModel(false);
-  };
-  const closeIssuedCartonModal = () => {
-    setIsIssueCartonModel(false);
-  };
-  React.useEffect(() => {
+
+  // State Management
+  const [inventoryData, setInventoryData] = useState<Inventory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+
+  // Selection & Action State
+  const [selectedInventory, setSelectedInventory] = useState<Inventory | null>(null);
+  const [isInventoryModel, setIsInventoryModel] = useState(false);
+  const [isIssueKitModel, setIsIssueKitModel] = useState(false);
+  const [isIssueCartonModel, setIsIssueCartonModel] = useState(false);
+  const [showPopup, setShowPopup] = useState(false);
+
+  // Form State
+  const [updatedQuantity, setUpdatedQuantity] = useState(0);
+  const [updatedCartonQuantity, setUpdatedCartonQuantity] = useState(0);
+  const [issueKitProcess, setIssueKitProcess] = useState("");
+  const [issueCartonProcess, setIssueCartonProcess] = useState("");
+  const [processes, setProcesses] = useState<any[]>([]);
+  const [selectedProcess, setSelectedProcess] = useState("");
+  const [selectedProcessDetails, setSelectedProcessDetails] = useState<any>({});
+
+  useEffect(() => {
     getInventory();
   }, []);
+
   const getInventory = async () => {
     try {
-      let result = await fetchList("/inventory/view");
+      setLoading(true);
+      const result = await fetchList("/inventory/view");
       setInventoryData(result.Inventory);
     } catch (error) {
       console.error("Error Fetching Inventory:", error);
+      toast.error("Failed to fetch inventory data");
     } finally {
       setLoading(false);
     }
   };
+
   const getProcesses = async (id: string) => {
     try {
-      let result = await getProcessByProductID(id);
-      let process = result.ProcessByProductID.filter(
-        (value) =>
-          value.status == "Waiting_Kits_allocation" ||
-          value.kitStatus == "partially_issued",
+      const result = await getProcessByProductID(id);
+      const filteredProcesses = result.ProcessByProductID.filter(
+        (value: any) =>
+          value.status === "Waiting_Kits_allocation" ||
+          value.kitStatus === "partially_issued"
       );
-      setProcesses(process);
+      setProcesses(filteredProcesses);
     } catch (error) {
       console.error("Error Fetching Process:", error);
     }
   };
-  const handleDelete = async () => {
-    try {
-      await deleteProcess(productId);
-      toast.success("Process deleted successfully!");
-      setShowPopup(false);
-      getInventory();
-    } catch (error) {
-      console.error("Error deleting Process:", error);
-    }
-  };
-  const handleProcessType = (event: string) => {
-    let process = processes.filter(
-      (value: any) =>
-        (value.status == "Waiting_Kits_allocation" || value.kitStatus == "partially_issued") && value._id === event,
-    );
-    setSelectedProcess(event);
-    setSelectedProcessDetails(process[0]);
-  };
-  const handleEdit = (inventory: string) => {
-    setInventoryID(inventory?._id);
-    setProductName(inventory?.productName);
-    setIsInventoryModel(true);
+
+  const handleEdit = (inventory: Inventory) => {
+    setSelectedInventory(inventory);
     setUpdatedQuantity(0);
     setUpdatedCartonQuantity(0);
+    setIsInventoryModel(true);
   };
-  const openIssueKits = (inventory: any) => {
-    setInventoryID(inventory._id);
-    setProductName(inventory?.productName);
-    getProcesses(inventory?.productType);
-    setIsIssueKitModel(true);
-  };
-  const openIssueCarton = (inventory: any) => {
-    setInventoryID(inventory._id);
-    setProductName(inventory?.productName);
-    getProcesses(inventory?.productType);
-    setIsIssueCartonModel(true);
-  };
-  const handleSubmitInventory = async () => {
-    try {
-      setIsInventoryModel(true);
-      if (!inventoryID) {
-        console.error("Inventory ID is missing");
-        return;
-      }
-      const existingItem = inventoryData.find(
-        (value) => value._id === inventoryID,
-      );
-      const currentQuantity = existingItem
-        ? parseInt(existingItem.quantity) || 0
-        : 0;
-      const currentCartonQuantity = existingItem
-        ? parseInt(existingItem.cartonQuantity) || 0
-        : 0;
-      const additionalQuantity = parseInt(updatedQuantity) || 0;
-      const additionalCartonQuantity = parseInt(updatedCartonQuantity) || 0;
-      const finalCartonQuantity =
-        currentCartonQuantity + additionalCartonQuantity;
-      const finalQuantity = currentQuantity + additionalQuantity;
 
-      let formData = new FormData();
-      formData.append("quantity", finalQuantity);
-      formData.append("cartonQuantity", finalCartonQuantity);
+  const openIssueKits = (inventory: Inventory) => {
+    setSelectedInventory(inventory);
+    getProcesses(inventory.productType);
+    setIsIssueKitModel(true);
+    setIssueKitProcess("");
+    setSelectedProcess("");
+    setSelectedProcessDetails({});
+  };
+
+  const openIssueCarton = (inventory: Inventory) => {
+    setSelectedInventory(inventory);
+    getProcesses(inventory.productType);
+    setIsIssueCartonModel(true);
+    setIssueCartonProcess("");
+    setSelectedProcess("");
+    setSelectedProcessDetails({});
+  };
+
+  const handleProcessTypeChange = (processId: string) => {
+    const process = processes.find((p) => p._id === processId);
+    setSelectedProcess(processId);
+    setSelectedProcessDetails(process || {});
+  };
+
+  const handleSubmitInventory = async () => {
+    if (!selectedInventory) return;
+    try {
+      const currentQuantity = parseInt(selectedInventory.quantity.toString()) || 0;
+      const currentCartonQuantity = parseInt(selectedInventory.cartonQuantity.toString()) || 0;
+
+      const finalQuantity = currentQuantity + (parseInt(updatedQuantity.toString()) || 0);
+      const finalCartonQuantity = currentCartonQuantity + (parseInt(updatedCartonQuantity.toString()) || 0);
+
+      const formData = new FormData();
+      formData.append("quantity", finalQuantity.toString());
+      formData.append("cartonQuantity", finalCartonQuantity.toString());
       if (finalQuantity > 0) {
         formData.append("status", "In Stock");
       }
-      const result = await updateInventoryById(inventoryID, formData);
+
+      const result = await updateInventoryById(selectedInventory._id, formData);
       if (result && result.status === 200) {
+        toast.success("Inventory updated successfully");
         setIsInventoryModel(false);
         getInventory();
-      } else {
-        console.error("Failed to update inventory", result);
       }
     } catch (error) {
       console.error("Error updating inventory", error);
+      toast.error("Failed to update inventory");
     }
   };
+
   const handleSubmitCarton = async () => {
     try {
-      let data = new FormData();
+      if (!selectedProcess || !issueCartonProcess) {
+        toast.error("Please select a process and enter quantity");
+        return;
+      }
+      const data = new FormData();
       data.append("process", selectedProcess);
       data.append("issueCartonProcess", issueCartonProcess);
-      let result = await updateIssueCarton(data);
+      await updateIssueCarton(data);
+      toast.success("Cartons Issued Successfully!");
+      setIsIssueCartonModel(false);
       getInventory();
-      toast.success(result?.message || "Kits Issued Successfully !!");
-      setIsIssueKitModel(false);
     } catch (error) {
-      console.error("Error Fetching Process:", error);
+      console.error("Error issuing carton:", error);
+      toast.error("Failed to issue cartons");
     }
   };
+
   const handleSubmitIssuedKit = async () => {
     try {
-      let data = new FormData();
+      if (!selectedProcess || !issueKitProcess) {
+        toast.error("Please select a process and enter quantity");
+        return;
+      }
+      const data = new FormData();
       data.append("process", selectedProcess);
       data.append("issuedKits", issueKitProcess);
-      if (issueKitProcess === selectedProcessDetails?.quantity) {
+
+      const needed = parseInt(selectedProcessDetails.quantity) - parseInt(selectedProcessDetails.issuedKits);
+      if (parseInt(issueKitProcess) >= needed) {
         data.append("kitStatus", "issued");
       } else {
         data.append("kitStatus", "partially_issued");
       }
       data.append("status", "Waiting_Kits_approval");
-      let result = await updateIssueKit(data);
-      getInventory();
-      toast.success(result?.message || "Kits Issued Successfully !!");
+
+      await updateIssueKit(data);
+      toast.success("Kits Issued Successfully!");
       setIsIssueKitModel(false);
+      getInventory();
     } catch (error) {
-      console.error("Error Fetching Process:", error);
+      console.error("Error issuing kits:", error);
+      toast.error("Failed to issue kits");
     }
   };
-  const handleIssueKit = (selectedProcess, event) => {
 
+  // Filtered Data
+  const filteredData = useMemo(() => {
+    return inventoryData.filter((item) => {
+      const matchesSearch = item.productName.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = statusFilter === "All" || item.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [inventoryData, searchTerm, statusFilter]);
 
-    setIssueKitProcess(e.target.value);
-  };
+  // Stats
+  const stats = useMemo(() => {
+    const total = inventoryData.length;
+    const lowStock = inventoryData.filter(item => parseInt(item.quantity.toString()) < 10).length;
+    const inStock = inventoryData.filter(item => item.status === "In Stock").length;
+    const totalQty = inventoryData.reduce((acc, item) => acc + (parseInt(item.quantity.toString()) || 0), 0);
+
+    return { total, lowStock, inStock, totalQty };
+  }, [inventoryData]);
 
   const columns = [
     {
-      name: "ID",
-      selector: (row: Inventory, index: number) => index + 1,
+      name: "Product Details",
+      selector: (row: Inventory) => row.productName,
       sortable: true,
-    },
-    {
-      name: "Product Name",
-      selector: (row: Inventory) => row?.productName,
-      sortable: true,
-    },
-    {
-      name: "Quantity",
-      selector: (row: Inventory) => row?.quantity,
-      sortable: true,
-    },
-    {
-      name: "Carton Quantity",
-      selector: (row: Inventory) => row?.cartonQuantity,
-      sortable: true,
-    },
-    {
-      name: "Status",
-      selector: (row: Inventory) => row?.status,
-      sortable: true,
+      grow: 2,
       cell: (row: Inventory) => (
-        <span
-          style={{
-            padding: "5px 10px",
-            borderRadius: "5px",
-            fontWeight: "bold",
-            color: "white",
-            backgroundColor: row?.status === "In Stock" ? "green" : "red",
-          }}
-        >
-          {row?.status}
-        </span>
+        <div className="flex items-center py-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary mr-3">
+            <Box size={20} />
+          </div>
+          <div>
+            <div className="font-semibold text-black dark:text-white">{row.productName}</div>
+            <div className="text-xs text-gray-500">{row.productType}</div>
+          </div>
+        </div>
       ),
     },
     {
-      name: "Created At",
-      selector: (row: Inventory) =>
-        new Date(row.createdAt).toLocaleDateString(),
+      name: "Inventory Levels",
       sortable: true,
+      cell: (row: Inventory) => (
+        <div className="space-y-1">
+          <div className="flex items-center text-sm font-medium">
+            <Archive size={14} className="mr-1.5 text-blue-500" />
+            <span className="text-gray-700 dark:text-gray-300">{row.quantity} Kits</span>
+          </div>
+          <div className="flex items-center text-xs text-gray-500">
+            <Truck size={14} className="mr-1.5 text-emerald-500" />
+            <span>{row.cartonQuantity} Cartons</span>
+          </div>
+        </div>
+      ),
     },
     {
-      name: "Updated At",
-      selector: (row: Inventory) =>
-        new Date(row.createdAt).toLocaleDateString(),
+      name: "Status",
+      selector: (row: Inventory) => row.status,
       sortable: true,
+      cell: (row: Inventory) => {
+        const isInStock = row.status === "In Stock";
+        return (
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isInStock
+              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+              : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+            }`}>
+            {isInStock ? <CheckCircle2 size={12} className="mr-1" /> : <AlertCircle size={12} className="mr-1" />}
+            {row.status}
+          </span>
+        );
+      },
+    },
+    {
+      name: "Timeline",
+      selector: (row: Inventory) => row.createdAt,
+      sortable: true,
+      cell: (row: Inventory) => (
+        <div className="text-xs text-gray-500">
+          <div>Updated: {new Date(row.updatedAt || row.createdAt).toLocaleDateString()}</div>
+          <div className="mt-0.5">Created: {new Date(row.createdAt).toLocaleDateString()}</div>
+        </div>
+      ),
     },
     {
       name: "Actions",
       cell: (row: Inventory) => (
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => handleEdit(row)}
-            className="transform rounded-full bg-blue-500 p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
+            className="group relative flex h-8 w-8 items-center justify-center rounded-md bg-blue-50 text-blue-600 transition-all hover:bg-blue-600 hover:text-white dark:bg-blue-900/20"
+            title="Add Stock"
           >
-            <FiEdit size={12} />
+            <PackagePlus size={16} />
+            <span className="absolute -top-8 left-1/2 -translate-x-1/2 scale-0 rounded bg-gray-900 px-2 py-1 text-[10px] text-white transition-all group-hover:scale-100 whitespace-nowrap">Add Stock</span>
           </button>
+
           <button
             onClick={() => openIssueKits(row)}
-            className="transform rounded-full bg-warning p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-warning"
+            className="group relative flex h-8 w-8 items-center justify-center rounded-md bg-amber-50 text-amber-600 transition-all hover:bg-amber-600 hover:text-white dark:bg-amber-900/20"
+            title="Issue Kits"
           >
-            <svg
-              width="12px"
-              height="12px"
-              viewBox="0 0 48 48"
-              fill="#ffffff"
-              stroke="#ffffff"
-            >
-              <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-              <g
-                id="SVGRepo_tracerCarrier"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              ></g>
-              <g id="SVGRepo_iconCarrier">
-                {" "}
-                <g id="Layer_2" data-name="Layer 2">
-                  {" "}
-                  <g id="invisible_box" data-name="invisible box">
-                    {" "}
-                    <rect width="48" height="48" fill="none"></rect>{" "}
-                  </g>{" "}
-                  <g id="Medical">
-                    {" "}
-                    <g>
-                      {" "}
-                      <path d="M19,29h3v3a2,2,0,0,0,4,0V29h3a2,2,0,0,0,0-4H26V22a2,2,0,0,0-4,0v3H19a2,2,0,0,0,0,4Z"></path>{" "}
-                      <path d="M42,12H33V8a4,4,0,0,0-4-4H19a4,4,0,0,0-4,4v4H6a4,4,0,0,0-4,4V39a4,4,0,0,0,4,4H42a4,4,0,0,0,4-4V16A4,4,0,0,0,42,12ZM19,8H29v4H19Zm16,8V39H13V16ZM6,16H9V39H6ZM42,39H39V16h3Z"></path>{" "}
-                    </g>{" "}
-                  </g>{" "}
-                </g>{" "}
-              </g>
-            </svg>
+            <Box size={16} />
+            <span className="absolute -top-8 left-1/2 -translate-x-1/2 scale-0 rounded bg-gray-900 px-2 py-1 text-[10px] text-white transition-all group-hover:scale-100 whitespace-nowrap">Issue Kits</span>
           </button>
+
           <button
             onClick={() => openIssueCarton(row)}
-            className="transform rounded-full bg-success p-2 text-white shadow-lg transition-transform hover:scale-105 hover:bg-success"
+            className="group relative flex h-8 w-8 items-center justify-center rounded-md bg-emerald-50 text-emerald-600 transition-all hover:bg-emerald-600 hover:text-white dark:bg-emerald-900/20"
+            title="Issue Carton"
           >
-            <svg
-              fill="#ffffff"
-              height="12px"
-              width="12px"
-              version="1.1"
-              id="Capa_1"
-              viewBox="0 0 491.616 491.616"
-              stroke="#ffffff"
-            >
-              <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-              <g
-                id="SVGRepo_tracerCarrier"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              ></g>
-              <g id="SVGRepo_iconCarrier">
-                {" "}
-                <g>
-                  {" "}
-                  <g id="Icons_4_">
-                    {" "}
-                    <g>
-                      {" "}
-                      <path d="M428.202,176.195c-0.006-5.52-1.263-10.965-3.678-15.928L358.202,23.95C351.105,9.399,336.068,0,319.89,0H171.724 c-16.177,0-31.213,9.399-38.31,23.964L67.025,160.678c-2.408,4.958-3.662,10.398-3.666,15.911l-0.242,288.588 c0,14.574,11.869,26.439,26.449,26.439H402.05c14.58,0,26.449-11.866,26.449-26.439L428.202,176.195z M328.223,38.533 l56.964,117.196H262.464V33.331h57.426C323.405,33.331,326.693,35.383,328.223,38.533z M163.394,38.55 c1.529-3.167,4.817-5.219,8.33-5.219h57.41v122.398H106.429L163.394,38.55z M395.162,458.282H96.45V189.06h298.712V458.282z"></path>{" "}
-                      <path d="M147.199,255.865c0,13.813,11.199,25,25,25h147.219c13.801,0,25.001-11.188,25.001-25c0-13.81-11.2-25-25.001-25H172.199 C158.398,230.865,147.199,242.055,147.199,255.865z"></path>{" "}
-                    </g>{" "}
-                  </g>{" "}
-                </g>{" "}
-              </g>
-            </svg>
+            <Truck size={16} />
+            <span className="absolute -top-8 left-1/2 -translate-x-1/2 scale-0 rounded bg-gray-900 px-2 py-1 text-[10px] text-white transition-all group-hover:scale-100 whitespace-nowrap">Issue Carton</span>
           </button>
         </div>
       ),
     },
   ];
 
+  const customStyles = {
+    header: {
+      style: {
+        minHeight: "56px",
+      },
+    },
+    headRow: {
+      style: {
+        borderTopStyle: "solid" as const,
+        borderTopWidth: "1px",
+        borderTopColor: "rgba(0,0,0,0.05)",
+        backgroundColor: "#f9fafb",
+      },
+    },
+    headCells: {
+      style: {
+        fontWeight: "600",
+        textTransform: "uppercase" as const,
+        fontSize: "0.75rem",
+        letterSpacing: "0.05em",
+        color: "#6b7280",
+        paddingLeft: "16px",
+        paddingRight: "16px",
+      },
+    },
+    cells: {
+      style: {
+        paddingLeft: "16px",
+        paddingRight: "16px",
+      },
+    },
+    rows: {
+      style: {
+        minHeight: "72px",
+        "&:not(:last-of-type)": {
+          borderBottomStyle: "solid" as const,
+          borderBottomWidth: "1px",
+          borderBottomColor: "rgba(0,0,0,0.05)",
+        },
+        "&:hover": {
+          backgroundColor: "#f9fafb !important",
+          transition: "all 0.2s ease",
+        }
+      },
+    },
+    pagination: {
+      style: {
+        borderTop: "none",
+        minHeight: "56px",
+      },
+    },
+  };
+
   return (
-    <div className="bg-gray-100 min-h-screen p-6">
-      {/* Breadcrumb with more padding and background color */}
-      <Breadcrumb pageName="View Inventory" parentName="Inventory" />
-      <div className="mt-6 rounded-lg bg-white p-6 shadow-lg">
-        <ToastContainer
-          position="top-center"
-          closeOnClick
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-        />
-        {loading ? (
-          <div className="flex justify-center">
-            <BallTriangle
-              height={100}
-              width={100}
-              color="#4fa94d"
-              ariaLabel="loading"
-            />
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Header Section */}
+      <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Inventory Control</h1>
+          <p className="mt-1 text-sm text-gray-500">Manage your product stock levels and distribution flow.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.push("/inventory/viewProcess")}
+            className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-strokedark dark:bg-boxdark dark:text-white"
+          >
+            Allocation View
+            <ArrowRight size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Stats Section */}
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: "Total Products", value: stats.total, icon: Archive, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-900/20" },
+          { label: "Items in Stock", value: stats.inStock, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-900/20" },
+          { label: "Total Quantity", value: stats.totalQty, icon: Box, color: "text-purple-600", bg: "bg-purple-50 dark:bg-purple-900/20" },
+          { label: "Low Stock Alerts", value: stats.lowStock, icon: AlertCircle, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-900/20" },
+        ].map((stat, i) => (
+          <div key={i} className="flex items-center rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-200 transition hover:shadow-md dark:bg-boxdark dark:ring-strokedark">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${stat.bg} ${stat.color} mr-4`}>
+              <stat.icon size={24} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">{stat.label}</p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{stat.value}</h3>
+            </div>
           </div>
-        ) : (
-          <>
+        ))}
+      </div>
+
+      {/* Table Section */}
+      <div className="rounded-2xl bg-white shadow-xl ring-1 ring-black/5 dark:bg-boxdark">
+        <div className="flex flex-col border-b border-gray-100 p-6 md:flex-row md:items-center md:justify-between dark:border-strokedark">
+          <div className="flex flex-1 items-center gap-4">
+            <div className="relative w-full max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm focus:border-primary focus:bg-white focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all dark:border-strokedark dark:bg-form-input dark:text-white"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-700 outline-none transition hover:bg-gray-100 dark:border-strokedark dark:bg-boxdark dark:text-white"
+            >
+              <option value="All">All Status</option>
+              <option value="In Stock">In Stock</option>
+              <option value="Out of Stock">Low Stock</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="relative overflow-hidden">
+          {loading ? (
+            <div className="flex h-64 items-center justify-center">
+              <BallTriangle height={80} width={80} color="#3c50e0" />
+            </div>
+          ) : (
             <DataTable
-              className="dark:bg-bodyDark"
               columns={columns}
-              data={inventoryData}
+              data={filteredData}
               pagination
-              selectableRows
-              onSelectedRowsChange={handleRowSelected}
               highlightOnHover
               pointerOnHover
-              customStyles={{
-                headCells: {
-                  style: {
-                    fontWeight: "bold",
-                    backgroundColor: "#f8f9fa",
-                    padding: "12px",
-                  },
-                },
-                rows: {
-                  style: {
-                    minHeight: "72px",
-                    "&:hover": {
-                      backgroundColor: "#f1f5f9",
-                    },
-                  },
-                },
-                pagination: {
-                  style: {
-                    padding: "12px",
-                    border: "none",
-                  },
-                },
-                cells: {
-                  style: {
-                    padding: "12px",
-                    "& > div:first-child": {
-                      whiteSpace: "break-spaces",
-                      overflow: "hidden",
-                      textOverflow: "inherit",
-                    },
-                  },
-                },
-              }}
+              customStyles={customStyles}
             />
-            <Modal
-              isOpen={isIssueCartonModel}
-              onSubmit={handleSubmitCarton}
-              onClose={closeIssuedCartonModal}
-              title={"Issue Carton (" + productName + ")"}
-            >
-              {processes.length > 0 ? (
-                <div className="pb-3">
-                  <div className="justify-between">
-                    <div className="w-full px-2">
-                      <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                        Process Type
-                      </label>
-                      <select
-                        value={selectedProcess || ""}
-                        onChange={(e) => handleProcessType(e.target.value)}
-                        className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
-                      >
-                        <option
-                          value=""
-                          className="text-body dark:text-bodydark"
-                        >
-                          Please Select
-                        </option>
-                        {processes.map((process, index) => (
-                          <option
-                            key={index}
-                            value={process?._id}
-                            className="text-body dark:text-bodydark"
-                          >
-                            {process?.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="w-full px-2 pt-4">
-                      <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                        Issue Cartons
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="Issue Kit"
-                        min="1"
-                        max={
-                          parseInt(selectedProcessDetails?.quantity) >
-                            parseInt(selectedProcessDetails?.issuedKits)
-                            ? parseInt(selectedProcessDetails?.quantity) -
-                            parseInt(selectedProcessDetails?.issuedKits)
-                            : parseInt(selectedProcessDetails?.quantity)
-                        }
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          const maxLimit =
-                            parseInt(selectedProcessDetails?.
-                              cartonQuantity
-                            ) >
-                              parseInt(selectedProcessDetails?.issuedKits)
-                              ? parseInt(selectedProcessDetails?.cartonQuantity) -
-                              parseInt(selectedProcessDetails?.issuedKits)
-                              : parseInt(selectedProcessDetails?.cartonQuantity);
-                          if (
-                            value === "" ||
-                            (parseInt(value) > 0 && parseInt(value) <= maxLimit)
-                          ) {
-                            setIssueCartonProcess(value);
-                          } else {
-                            alert(
-                              "Kits assigned cannot exceed the required amount.",
-                            );
-                          }
-                        }}
-                        value={issueCartonProcess}
-                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                      />
-                      {/* <input
-                        type="number"
-                        placeholder="Issue Cartons"
-                        onChange={(e) => {
-                          setIssueCartonProcess(e.target.value);
-                        }}
-                        value={issueCartonProcess}
-                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                      /> */}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center">
-                  <p>No Running Processes Available!</p>
-                </div>
-              )}
-            </Modal>
-            <Modal
-              isOpen={isIssueKitModel}
-              onSubmit={handleSubmitIssuedKit}
-              onClose={closeIssuedKitsModal}
-              title={"Issue Kits (" + productName + ")"}
-            >
-              {processes.length > 0 ? (
-                <div className="pb-3">
-                  <div className="justify-between">
-                    <div className="w-full px-2">
-                      <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                        Process Type
-                      </label>
-                      <select
-                        value={selectedProcess || ""}
-                        onChange={(e) => handleProcessType(e.target.value)}
-                        className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
-                      >
-                        <option
-                          value=""
-                          className="text-body dark:text-bodydark"
-                        >
-                          Please Select
-                        </option>
-                        {processes.map((process, index) => (
-                          <option
-                            key={index}
-                            value={process?._id}
-                            className="text-body dark:text-bodydark"
-                          >
-                            {process?.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {selectedProcessDetails &&
-                      Object.keys(selectedProcessDetails).length > 0 && (
-                        <>
-                          <div className="grid px-3 py-3 sm:grid-cols-2">
-                            <div className="text-gray-700 dark:text-gray-300 mb-2">
-                              <strong className="font-medium">
-                                Process Name:
-                              </strong>{" "}
-                              {selectedProcessDetails?.name}
-                            </div>
-                            <div className="text-gray-700 dark:text-gray-300 mb-2">
-                              <strong className="font-medium">
-                                Kits Needed:
-                              </strong>{" "}
-                              {parseInt(selectedProcessDetails?.quantity) -
-                                parseInt(selectedProcessDetails?.issuedKits)}
-                            </div>
-                            <div className="text-gray-700 dark:text-gray-300 mb-2">
-                              <strong className="font-medium">
-                                Kits Issued:
-                              </strong>{" "}
-                              {parseInt(selectedProcessDetails?.issuedKits)}
-                            </div>
-                          </div>
-                          <div className="w-full px-2 pt-4">
-                            <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                              Issue Kit
-                            </label>
-                            <input
-                              type="number"
-                              placeholder="Issue Kit"
-                              min="1"
-                              max={
-                                parseInt(selectedProcessDetails?.quantity) >
-                                  parseInt(selectedProcessDetails?.issuedKits)
-                                  ? parseInt(selectedProcessDetails?.quantity) -
-                                  parseInt(selectedProcessDetails?.issuedKits)
-                                  : parseInt(selectedProcessDetails?.quantity)
-                              }
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                const maxLimit =
-                                  parseInt(selectedProcessDetails?.quantity) >
-                                    parseInt(selectedProcessDetails?.issuedKits)
-                                    ? parseInt(
-                                      selectedProcessDetails?.quantity,
-                                    ) -
-                                    parseInt(
-                                      selectedProcessDetails?.issuedKits,
-                                    )
-                                    : parseInt(
-                                      selectedProcessDetails?.quantity,
-                                    );
-                                if (
-                                  value === "" ||
-                                  (parseInt(value) > 0 &&
-                                    parseInt(value) <= maxLimit)
-                                ) {
-                                  setIssueKitProcess(value);
-                                } else {
-                                  alert(
-                                    "Kits assigned cannot exceed the required amount.",
-                                  );
-                                }
-                              }}
-                              value={issueKitProcess}
-                              className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                            />
-                            {issueKitProcess &&
-                              (parseInt(issueKitProcess) < 1 ||
-                                parseInt(issueKitProcess) >
-                                parseInt(selectedProcessDetails?.quantity) -
-                                parseInt(
-                                  selectedProcessDetails?.issuedKits,
-                                )) && (
-                                <p className="text-red-500 mt-1 text-sm">
-                                  Invalid quantity. Please enter a value between
-                                  1 and{" "}
-                                  {parseInt(selectedProcessDetails?.quantity) -
-                                    parseInt(
-                                      selectedProcessDetails?.issuedKits,
-                                    )}
-                                  .
-                                </p>
-                              )}
-                          </div>
-                        </>
-                      )}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center">
-                  <p>No Running Processes Available!</p>
-                </div>
-              )}
-            </Modal>
-
-            <Modal
-              isOpen={isInventoryModel}
-              onSubmit={handleSubmitInventory}
-              onClose={closeInventoryModal}
-              title={"Inventory (" + productName + ")"}
-            >
-              <div className="pb-3">
-                <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                  Quantity
-                </label>
-                <input
-                  type="number"
-                  placeholder="Quantity"
-                  onChange={(e) => {
-                    setUpdatedQuantity(e.target.value);
-                  }}
-                  className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                />
-              </div>
-              <div>
-                <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                  Carton Quantity
-                </label>
-                <input
-                  type="number"
-                  placeholder="Carton Quantity"
-                  onChange={(e) => {
-                    setUpdatedCartonQuantity(e.target.value);
-                  }}
-                  className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                />
-              </div>
-            </Modal>
-          </>
-        )}
-        {showPopup && (
-          <ConfirmationPopup
-            message="Are you sure you want to delete this item?"
-            onConfirm={() => handleDelete()}
-            onCancel={() => setShowPopup(false)}
-          />
-        )}
+          )}
+        </div>
       </div>
+
+      {/* Modals */}
+      <Modal
+        isOpen={isInventoryModel}
+        onSubmit={handleSubmitInventory}
+        onClose={() => setIsInventoryModel(false)}
+        title={`Add Stock for ${selectedInventory?.productName}`}
+      >
+        <div className="space-y-4 pt-2">
+          <div className="rounded-lg bg-blue-50 p-4 text-sm text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
+            Adding to current: <strong>{selectedInventory?.quantity}</strong> Kits & <strong>{selectedInventory?.cartonQuantity}</strong> Cartons
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+              Additional Kits
+            </label>
+            <input
+              type="number"
+              placeholder="0"
+              value={updatedQuantity || ""}
+              onChange={(e) => setUpdatedQuantity(parseInt(e.target.value) || 0)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+              Additional Cartons
+            </label>
+            <input
+              type="number"
+              placeholder="0"
+              value={updatedCartonQuantity || ""}
+              onChange={(e) => setUpdatedCartonQuantity(parseInt(e.target.value) || 0)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Issue Kits Modal */}
+      <Modal
+        isOpen={isIssueKitModel}
+        onSubmit={handleSubmitIssuedKit}
+        onClose={() => setIsIssueKitModel(false)}
+        title={`Issue Kits: ${selectedInventory?.productName}`}
+      >
+        <div className="space-y-5 pt-2">
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+              Select Destination Process
+            </label>
+            {processes.length > 0 ? (
+              <select
+                value={selectedProcess}
+                onChange={(e) => handleProcessTypeChange(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
+              >
+                <option value="">Choose a running process...</option>
+                {processes.map((p) => (
+                  <option key={p._id} value={p._id}>{p.name}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="rounded-lg bg-amber-50 p-4 text-center text-sm text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
+                No active processes available for this product type.
+              </div>
+            )}
+          </div>
+
+          {selectedProcess && (
+            <div className="rounded-xl bg-gray-50 p-5 space-y-3 border border-gray-100 dark:bg-meta-4 dark:border-strokedark">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Kits Needed:</span>
+                <span className="font-bold text-gray-900 dark:text-white">
+                  {parseInt(selectedProcessDetails.quantity) - parseInt(selectedProcessDetails.issuedKits)}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Available in Master:</span>
+                <span className="font-bold text-gray-900 dark:text-white">{selectedInventory?.quantity}</span>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-strokedark">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
+                  Issue Quantity
+                </label>
+                <input
+                  type="number"
+                  placeholder="Enter amount to issue"
+                  max={Math.min(
+                    parseInt(selectedInventory?.quantity?.toString() || "0"),
+                    parseInt(selectedProcessDetails.quantity) - parseInt(selectedProcessDetails.issuedKits)
+                  )}
+                  value={issueKitProcess}
+                  onChange={(e) => setIssueKitProcess(e.target.value)}
+                  className="w-full rounded-lg border border-primary bg-white px-4 py-3 text-sm focus:outline-none focus:ring-4 focus:ring-primary/10 dark:bg-form-input dark:text-white"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Issue Carton Modal - Similar structure but for cartons */}
+      <Modal
+        isOpen={isIssueCartonModel}
+        onSubmit={handleSubmitCarton}
+        onClose={() => setIsIssueCartonModel(false)}
+        title={`Issue Carton: ${selectedInventory?.productName}`}
+      >
+        <div className="space-y-5 pt-2">
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
+              Select Destination Process
+            </label>
+            {processes.length > 0 ? (
+              <select
+                value={selectedProcess}
+                onChange={(e) => handleProcessTypeChange(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
+              >
+                <option value="">Choose a running process...</option>
+                {processes.map((p) => (
+                  <option key={p._id} value={p._id}>{p.name}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="rounded-lg bg-amber-50 p-4 text-center text-sm text-amber-700 dark:bg-amber-900/20 dark:text-amber-400">
+                No active processes available for this product type.
+              </div>
+            )}
+          </div>
+
+          {selectedProcess && (
+            <div className="rounded-xl bg-gray-50 p-5 space-y-3 border border-gray-100 dark:bg-meta-4 dark:border-strokedark">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">Available in Master:</span>
+                <span className="font-bold text-gray-900 dark:text-white">{selectedInventory?.cartonQuantity}</span>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-strokedark">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
+                  Issue Cartons
+                </label>
+                <input
+                  type="number"
+                  placeholder="Enter amount to issue"
+                  value={issueCartonProcess}
+                  onChange={(e) => setIssueCartonProcess(e.target.value)}
+                  className="w-full rounded-lg border border-primary bg-white px-4 py-3 text-sm focus:outline-none focus:ring-4 focus:ring-primary/10 dark:bg-form-input dark:text-white"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      <ToastContainer position="top-right" autoClose={3000} />
     </div>
   );
 };
 
-export default ViewInventory;
+export default InventoryManagement;
+

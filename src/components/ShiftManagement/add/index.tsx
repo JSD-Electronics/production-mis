@@ -1,24 +1,29 @@
 ﻿"use client";
 
-import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
-import { useState } from "react";
-import { createShift } from "../../../lib/api";
-import {
-  DragDropContext,
-  Droppable,
-  Draggable,
-  DropResult,
-} from "react-beautiful-dnd";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-import CheckboxOne from "@/components/Checkboxes/CheckboxOne";
+import React, { useState } from "react";
 import {
   Clock,
   FileText,
   CalendarDays,
   PlusCircle,
   Trash2,
+  Save,
+  Plus,
+  Coffee,
+  GripVertical,
+  Info
 } from "lucide-react";
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  DropResult
+} from "react-beautiful-dnd";
+import { ToastContainer, toast } from "react-toastify";
+import { createShift } from "../../../lib/api";
+import CheckboxOne from "@/components/Checkboxes/CheckboxOne";
+
+import "react-toastify/dist/ReactToastify.css";
 
 const AddShiftManagement = () => {
   const [name, setName] = useState("");
@@ -48,7 +53,7 @@ const AddShiftManagement = () => {
 
   // Handle week day checkbox
   const handleCheckboxChange = (day: string) => {
-    setWeekDays((prev) => ({
+    setWeekDays((prev: any) => ({
       ...prev,
       [day]: !prev[day],
     }));
@@ -79,8 +84,7 @@ const AddShiftManagement = () => {
         if (!interval.startTime || !interval.endTime) {
           newErrors[`interval-${i}`] = "Start & End time are required";
         } else if (interval.startTime >= interval.endTime) {
-          newErrors[`interval-${i}`] =
-            "Start time must be earlier than end time";
+          newErrors[`interval-${i}`] = "Start time must be earlier than end time";
         }
 
         if (i > 0) {
@@ -97,7 +101,7 @@ const AddShiftManagement = () => {
   };
 
   // Handle form submit
-  const handleSubmit = async (e: any) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) {
       toast.error("Please fix form errors before submitting");
@@ -106,7 +110,7 @@ const AddShiftManagement = () => {
 
     try {
       // Sort intervals
-      const sortedIntervals = intervals.sort((a, b) => {
+      const sortedIntervals = [...intervals].sort((a, b) => {
         const [ah, am] = a.startTime.split(":").map(Number);
         const [bh, bm] = b.startTime.split(":").map(Number);
         return ah * 60 + am - (bh * 60 + bm);
@@ -132,12 +136,10 @@ const AddShiftManagement = () => {
         }
       }
 
-      // Calculate break time
       const totalBreakTime = sortedIntervals
         .filter((interval) => interval.breakTime)
         .reduce(
-          (total, br) =>
-            total + calculateTimeDifference(br.startTime, br.endTime),
+          (total, br) => total + calculateTimeDifference(br.startTime, br.endTime),
           0,
         );
 
@@ -154,23 +156,9 @@ const AddShiftManagement = () => {
       await createShift(formData);
       toast.success("Shift created successfully!");
 
-      // Reset form
-      setName("");
-      setDescription("");
-      setIntervals([
-        { startTime: "00:00", endTime: "00:00", breakTime: false },
-      ]);
-      setWeekDays({
-        sun: false,
-        mon: false,
-        tue: false,
-        wed: false,
-        thu: false,
-        fri: false,
-        sat: false,
-      });
-      setErrors({});
-      window.location.href ="/shift-management/view";
+      setTimeout(() => {
+        window.location.href = "/shift-management/view";
+      }, 1500);
     } catch (err) {
       console.error("Error creating shift:", err);
       toast.error("Failed to create shift. Please try again.");
@@ -178,23 +166,15 @@ const AddShiftManagement = () => {
   };
 
   // Interval handlers
-  const handleIntervalChange = (
-    index: number,
-    field: string,
-    value: string,
-  ) => {
+  const handleIntervalChange = (index: number, field: string, value: string) => {
     const updated = [...intervals];
-    updated[index][field] = value;
+    (updated[index] as any)[field] = value;
     setIntervals(updated);
   };
 
-  const handleCheckboxBreakTime = (
-    index: number,
-    field: string,
-    value: boolean,
-  ) => {
+  const handleCheckboxBreakTime = (index: number, field: string, value: boolean) => {
     const updated = [...intervals];
-    updated[index][field] = value;
+    (updated[index] as any)[field] = value;
     setIntervals(updated);
   };
 
@@ -205,207 +185,215 @@ const AddShiftManagement = () => {
   const addInterval = () => {
     setIntervals([
       ...intervals,
-      { startTime: "00:00", endTime: "00:00", breakTime: false },
+      { startTime: "08:00", endTime: "12:00", breakTime: false },
     ]);
   };
 
+  const dayNames = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
   return (
-    <>
-      <Breadcrumb parentName="Shift Management" pageName="Create Shift" />
-      <div className="grid gap-9">
-        <ToastContainer position="top-center" />
-        <div className="flex flex-col gap-9">
-          <div className="rounded-lg border border-stroke bg-white shadow-md dark:border-strokedark dark:bg-boxdark">
-            <div className="border-b border-stroke px-6.5 py-4 dark:border-strokedark">
-              <h3 className="flex items-center gap-2 font-medium text-black dark:text-white">
-                <Clock size={18} /> Create Shift
-              </h3>
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Header Section */}
+      <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white uppercase">Create Shift</h1>
+          <p className="mt-0.5 text-[13px] text-gray-500 font-normal italic">Define operational hours, work days, and break intervals.</p>
+        </div>
+        <button
+          onClick={handleSubmit}
+          className="group inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-black text-white shadow-lg shadow-primary/25 transition-all hover:bg-primary-dark hover:scale-[1.02] active:scale-95"
+        >
+          <Save className="h-5 w-5" />
+          Save Shift
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+        <div className="lg:col-span-12 space-y-8">
+          {/* Core Configuration Card */}
+          <div className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-black/5 dark:bg-boxdark dark:ring-strokedark">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <Info size={20} />
+              </div>
+              <div>
+                <h2 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Shift Configuration</h2>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Core identity and schedule</p>
+              </div>
             </div>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Name */}
-              <div className="px-8 pt-4">
-                <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                  <FileText size={16} className="mr-1 inline-block" /> Name
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Enter Shift Name"
-                  className="w-full rounded-lg border px-5 py-3 text-black dark:bg-form-input dark:text-white"
-                />
-                {errors.name && (
-                  <p className="text-danger mt-1 text-sm">{errors.name}</p>
-                )}
+
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Shift Name</label>
+                <div className="relative">
+                  <FileText className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Day Shift A"
+                    className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
+                  />
+                </div>
+                {errors.name && <p className="text-[10px] font-bold text-rose-500 uppercase tracking-tight ml-1">{errors.name}</p>}
               </div>
 
-              {/* Description */}
-              <div className="px-8">
-                <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                  <FileText size={16} className="mr-1 inline-block" />{" "}
-                  Description
-                </label>
-                <textarea
-                  rows={4}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Description"
-                  className="w-full rounded-lg border px-5 py-3 text-black dark:bg-form-input dark:text-white"
-                />
-                {errors.description && (
-                  <p className="text-danger mt-1 text-sm">
-                    {errors.description}
-                  </p>
-                )}
-              </div>
-
-              {/* Week Days */}
-              <div className="px-8">
-                <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                  <CalendarDays size={16} className="mr-1 inline-block" /> Days
-                  of Week
-                </label>
-                <div className="grid grid-cols-7 gap-2">
-                  {Object.keys(weekDays).map((day) => (
-                    <CheckboxOne
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Working Days</label>
+                <div className="flex flex-wrap gap-2">
+                  {dayNames.map((day) => (
+                    <button
                       key={day}
-                      id={day}
-                      value={day}
-                      checked={weekDays[day]}
-                      setValue={() => handleCheckboxChange(day)}
-                      label={day.charAt(0).toUpperCase() + day.slice(1)}
-                    />
+                      type="button"
+                      onClick={() => handleCheckboxChange(day)}
+                      className={`flex h-10 w-10 items-center justify-center rounded-xl text-xs font-black transition-all ${(weekDays as any)[day]
+                          ? "bg-primary text-white shadow-lg shadow-primary/20 scale-105"
+                          : "bg-gray-50 text-gray-400 hover:bg-gray-100 dark:bg-white/5"
+                        }`}
+                      title={day.charAt(0).toUpperCase() + day.slice(1)}
+                    >
+                      {day.charAt(0).toUpperCase()}
+                    </button>
                   ))}
                 </div>
-                {errors.weekDays && (
-                  <p className="text-danger mt-1 text-sm">{errors.weekDays}</p>
-                )}
+                {errors.weekDays && <p className="text-[10px] font-bold text-rose-500 uppercase tracking-tight ml-1">{errors.weekDays}</p>}
               </div>
 
-              {/* Intervals */}
-              <div className="px-8">
-                <h3 className="mb-2 font-medium text-black dark:text-white">
-                  Shift Intervals
-                </h3>
-                {errors.intervals && (
-                  <p className="text-danger mb-2 text-sm">
-                    {errors.intervals}
-                  </p>
-                )}
-                <DragDropContext onDragEnd={onDragEnd}>
-                  <Droppable droppableId="intervals">
-                    {(provided) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.droppableProps}
-                        className="space-y-2"
+              <div className="md:col-span-2 space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Shift Objectives / Description</label>
+                <textarea
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Outline the primary goals or personnel requirements for this shift..."
+                  className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 px-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
+                />
+                {errors.description && <p className="text-[10px] font-bold text-rose-500 uppercase tracking-tight ml-1">{errors.description}</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Intervals & Timeline Card */}
+          <div className="rounded-3xl bg-white p-8 shadow-2xl ring-1 ring-gray-100 dark:bg-boxdark dark:ring-strokedark">
+            <div className="mb-6 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+                  <Clock size={20} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Timeline & Breaks</h2>
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Chronological workspace logic</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={addInterval}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-50 px-4 py-2 text-xs font-black text-blue-600 transition-all hover:bg-blue-600 hover:text-white shadow-sm"
+              >
+                <Plus size={14} />
+                Add Segment
+              </button>
+            </div>
+
+            {errors.intervals && (
+              <div className="mb-4 rounded-xl bg-rose-50 p-3 text-[10px] font-bold text-rose-600 uppercase tracking-widest">
+                <AlertCircle size={14} className="mr-2 inline" /> {errors.intervals}
+              </div>
+            )}
+
+            <DragDropContext onDragEnd={onDragEnd}>
+              <Droppable droppableId="intervals">
+                {(provided) => (
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className="space-y-3"
+                  >
+                    {intervals.map((interval, index) => (
+                      <Draggable
+                        key={`interval-${index}`}
+                        draggableId={`interval-${index}`}
+                        index={index}
                       >
-                        {intervals.map((interval, index) => (
-                          <Draggable
-                            key={index.toString()}
-                            draggableId={index.toString()}
-                            index={index}
+                        {(provided, snapshot) => (
+                          <div
+                            ref={provided.innerRef}
+                            {...provided.draggableProps}
+                            className={`group relative flex flex-col gap-4 rounded-2xl border-2 p-5 transition-all md:flex-row md:items-center ${snapshot.isDragging
+                                ? "border-primary bg-white shadow-2xl scale-[1.02] z-50"
+                                : interval.breakTime
+                                  ? "border-amber-100 bg-amber-50/30 dark:border-amber-900/20 dark:bg-amber-900/5"
+                                  : "border-gray-50 bg-gray-50/30 dark:border-strokedark dark:bg-white/5"
+                              }`}
                           >
-                            {(provided, snapshot) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className={`flex items-center gap-3 rounded-lg border p-3 ${
-                                  snapshot.isDragging
-                                    ? "border-blue-400 bg-blue-50 dark:bg-blue-900"
-                                    : "border-gray-200 dark:bg-gray-800"
-                                }`}
-                              >
+                            <div {...provided.dragHandleProps} className="hidden cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 md:block">
+                              <GripVertical size={20} />
+                            </div>
+
+                            <div className="flex flex-1 items-center gap-4">
+                              <div className="flex flex-1 flex-col gap-1.5">
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Start Time</label>
                                 <input
                                   type="time"
                                   value={interval.startTime}
-                                  onChange={(e) =>
-                                    handleIntervalChange(
-                                      index,
-                                      "startTime",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="dark:bg-gray-700 rounded border px-2 py-1 text-sm dark:text-white"
-                                  required
+                                  onChange={(e) => handleIntervalChange(index, "startTime", e.target.value)}
+                                  className="w-full rounded-xl border-2 border-transparent bg-white py-2 px-3 text-sm font-bold shadow-sm outline-none transition-all focus:border-primary dark:bg-boxdark dark:text-white"
                                 />
-                                <span className="text-sm">to</span>
+                              </div>
+                              <div className="mt-5 text-gray-300">—</div>
+                              <div className="flex flex-1 flex-col gap-1.5">
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">End Time</label>
                                 <input
                                   type="time"
                                   value={interval.endTime}
-                                  onChange={(e) =>
-                                    handleIntervalChange(
-                                      index,
-                                      "endTime",
-                                      e.target.value,
-                                    )
-                                  }
-                                  className="dark:bg-gray-700 rounded border px-2 py-1 text-sm dark:text-white"
-                                  required
+                                  onChange={(e) => handleIntervalChange(index, "endTime", e.target.value)}
+                                  className="w-full rounded-xl border-2 border-transparent bg-white py-2 px-3 text-sm font-bold shadow-sm outline-none transition-all focus:border-primary dark:bg-boxdark dark:text-white"
                                 />
-                                <label className="ml-4 flex items-center gap-1 text-sm">
-                                  <input
-                                    type="checkbox"
-                                    checked={interval.breakTime}
-                                    onChange={(e) =>
-                                      handleCheckboxBreakTime(
-                                        index,
-                                        "breakTime",
-                                        e.target.checked,
-                                      )
-                                    }
-                                  />
-                                  Break
-                                </label>
-                                <button
-                                  type="button"
-                                  onClick={() => removeInterval(index)}
-                                  className="bg-red-600 hover:bg-red-700 ml-auto flex items-center gap-1 rounded px-3 py-1 text-sm text-white"
-                                >
-                                  <Trash2 size={14} /> Remove
-                                </button>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-4 md:justify-end">
+                              <button
+                                type="button"
+                                onClick={() => handleCheckboxBreakTime(index, "breakTime", !interval.breakTime)}
+                                className={`flex items-center gap-2 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${interval.breakTime
+                                    ? "bg-amber-500 text-white shadow-lg shadow-amber-500/20"
+                                    : "bg-white text-gray-400 ring-1 ring-gray-100 dark:bg-boxdark dark:ring-strokedark"
+                                  }`}
+                              >
+                                <Coffee size={14} />
+                                {interval.breakTime ? "Break Active" : "Work Period"}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => removeInterval(index)}
+                                className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-500 transition-all hover:bg-rose-500 hover:text-white dark:bg-rose-900/20"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+
+                            {errors[`interval-${index}`] && (
+                              <div className="absolute -bottom-2 right-6 rounded bg-rose-500 px-2 py-0.5 text-[8px] font-black text-white uppercase tracking-tighter">
+                                {errors[`interval-${index}`]}
                               </div>
                             )}
-                          </Draggable>
-                        ))}
-                        {provided.placeholder}
-                      </div>
-                    )}
-                  </Droppable>
-                </DragDropContext>
-                {intervals.map((_, i) =>
-                  errors[`interval-${i}`] ? (
-                    <p key={i} className="text-danger mt-1 text-sm">
-                      {errors[`interval-${i}`]}
-                    </p>
-                  ) : null,
+                          </div>
+                        )}
+                      </Draggable>
+                    ))}
+                    {provided.placeholder}
+                  </div>
                 )}
-                <div className="mt-3 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={addInterval}
-                    className="flex items-center gap-1 rounded bg-blue-600 px-3 py-1 text-sm text-white hover:bg-blue-700"
-                  >
-                    <PlusCircle size={14} /> Add Interval
-                  </button>
-                </div>
-              </div>
-
-              {/* Submit */}
-              <div className="flex justify-end px-8 pb-6">
-                <button
-                  type="submit"
-                  className="rounded-md bg-green-700 px-4 py-2 text-white hover:bg-green-800"
-                >
-                  Create Shift
-                </button>
-              </div>
-            </form>
+              </Droppable>
+            </DragDropContext>
           </div>
         </div>
       </div>
-    </>
+
+      <ToastContainer position="top-right" autoClose={3000} />
+    </div>
   );
 };
 

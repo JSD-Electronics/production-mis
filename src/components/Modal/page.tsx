@@ -6,6 +6,7 @@ const Modal = ({
   onClose,
   title,
   submitOption = true,
+  submitDisabled = false,
   closeOption = true,
   children,
 }) => {
@@ -24,19 +25,23 @@ const Modal = ({
         <div className="text-gray-700 mb-6">{children}</div>
         <div className="flex justify-end space-x-2">
           {closeOption && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="border-gray-300 text-gray-700 hover:bg-gray-100 rounded-lg border bg-white px-4 py-2 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-          >
-            Close
-          </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="border-gray-300 text-gray-700 hover:bg-gray-100 rounded-lg border bg-white px-4 py-2 transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            >
+              Close
+            </button>
           )}
           {submitOption && (
             <button
               type="button"
               onClick={onSubmit}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-white transition duration-200 ease-in-out hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+              disabled={submitDisabled}
+              className={`rounded-lg px-4 py-2 text-white transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 ${submitDisabled
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700"
+                }`}
             >
               Submit
             </button>

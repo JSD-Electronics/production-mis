@@ -1,413 +1,366 @@
 ﻿"use client";
-import React, { useState } from "react";
+
+import React, { useState, useEffect, useMemo } from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import { fetchList, updateInventoryById, updateKitsEntry } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { FiEye, FiCheck, FiTrash, FiX } from "react-icons/fi";
+import {
+  CheckCircle2,
+  Package,
+  RotateCcw,
+  LayoutGrid,
+  Box,
+  Warehouse,
+  Search,
+  ArrowRight,
+  ClipboardList,
+  AlertTriangle,
+  History,
+  Check,
+  X,
+  Plus
+} from "lucide-react";
 import { BallTriangle } from "react-loader-spinner";
-import ConfirmationPopup from "@/components/Confirmation/page";
 import Modal from "@/components/Modal/page";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+
 const ViewReturnedKits = () => {
-  const [showPopup, setShowPopup] = React.useState(false);
-  const [productId, setProductId] = React.useState("");
-  const [productionManagerData, setProductionManagerData] = React.useState([]);
-  const [isInventoryModel, setIsInventoryModel] = React.useState(false);
-  const [inventoryDetails, setInventoryDetails] = React.useState({});
-  const [inventoryID, setInventoryID] = useState("");
-  const [updatedQuantity, setUpdatedQuantity] = React.useState(0);
-  const [updatedCartonQuantity, setUpdatedCartonQuantity] = React.useState(0);
-  const [loading, setLoading] = React.useState(true);
-  const [selectedRows, setSelectedRows] = React.useState([]);
-  const [packagingData, setPackagingData] = useState([]);
+  const [productionManagerData, setProductionManagerData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
   const [isReturnedKitModel, setReturnedKitModel] = useState(false);
-  const [kitsRecieved, setKitRecieved] = useState(0);
-  const [cartonRecieved, setCartonRecieved] = useState(0);
-  const [processName, setProcessName] = React.useState("");
-  const [processDetails, setProcessDetails] = useState({});
-  const closeReturnedKitModel = () => {
-    setReturnedKitModel(false);
-  }
-  const handleRowSelected = (state: any) => {
-    setSelectedRows(state.selectedRows);
-  };
-  const closeInventoryModal = () => {
-    setIsInventoryModel(false);
-  };
-  React.useEffect(() => {
+  const [kitsRecieved, setKitRecieved] = useState<any>(0);
+  const [cartonRecieved, setCartonRecieved] = useState<any>(0);
+  const [processDetails, setProcessDetails] = useState<any>({});
+
+  useEffect(() => {
     getRemainingKitsToProcess();
   }, []);
+
   const getRemainingKitsToProcess = async () => {
     try {
-      let result = await fetchList("/process/viewReturnToStore");
-      setProductionManagerData(result.kits);
+      setLoading(true);
+      const result = await fetchList("/process/viewReturnToStore");
+      setProductionManagerData(result.kits || []);
     } catch (error) {
       console.error("Error Fetching Inventory:", error);
+      toast.error("Failed to load returned kits data");
     } finally {
       setLoading(false);
     }
   };
-  const handleSubmitInventory = async () => {
-    try {
-      setIsInventoryModel(true);
 
-      if (!inventoryID) {
-        console.error("Inventory ID is missing");
-        return;
-      }
-
-      const existingItem = inventoryData.find(
-        (value) => value._id === inventoryID,
-      );
-      const currentQuantity = existingItem
-        ? parseInt(existingItem.quantity) || 0
-        : 0;
-      const currentCartonQuantity = existingItem
-        ? parseInt(existingItem.cartonQuantity) || 0
-        : 0;
-      const additionalQuantity = parseInt(updatedQuantity) || 0;
-      const additionalCartonQuantity = parseInt(updatedCartonQuantity) || 0;
-
-      const finalCartonQuantity =
-        currentCartonQuantity + additionalCartonQuantity;
-      const finalQuantity = currentQuantity + additionalQuantity;
-
-      let formData = new FormData();
-      formData.append("quantity", finalQuantity);
-      formData.append("cartonQuantity", finalCartonQuantity);
-
-      if (finalQuantity > 0) {
-        formData.append("status", "In Stock");
-      }
-
-      const result = await updateInventoryById(inventoryID, formData);
-
-      if (result && result.status === 200) {
-        
-        setIsInventoryModel(false);
-        getRemainingKitsToProcess();
-      } else {
-        console.error("Failed to update inventory", result);
-      }
-    } catch (error) {
-      console.error("Error updating inventory", error);
-    }
-  };
   const handleReturnKits = async () => {
     try {
-      let userDetails = JSON.parse(localStorage.getItem("userDetails") ?? "{}");
+      const userDetailsStr = localStorage.getItem("userDetails");
+      const userDetails = userDetailsStr ? JSON.parse(userDetailsStr) : null;
+
       if (!userDetails?._id) {
         toast.error("User details not found. Please log in again.");
         return;
       }
-      let form = new FormData();
+
+      const form = new FormData();
       form.append("processID", processDetails.pID);
       form.append("selectedProduct", processDetails.selectedProduct);
       form.append("returnedKits", kitsRecieved);
       form.append("returnedCarton", cartonRecieved);
       form.append("userId", userDetails._id);
       form.append("status", "RECIVED");
-      let result = await updateKitsEntry(form, processDetails._id);
+
+      const result = await updateKitsEntry(form, processDetails._id);
       if (result?.status === 200) {
-        toast.success("Kits Entry Created Successfully !!");
+        toast.success("Kits returned to store successfully!");
         setReturnedKitModel(false);
+        getRemainingKitsToProcess(); // Refresh list
       } else {
-        toast.error("Failed to create kits entry. Please try again.");
+        toast.error("Failed to process return. Please try again.");
       }
     } catch (error) {
-      console.error("Error while creating kits entry:", error?.message);
-      toast.error("An error occurred while creating kits entry.");
+      console.error("Error while creating kits entry:", error);
+      toast.error("An error occurred while processing return.");
     }
   };
+
   const handleReturnedKitsModel = (data: any) => {
     setProcessDetails(data);
+    // Auto-fill with the expected amounts
+    setKitRecieved(data.issuedKits - data.consumedKits);
+    setCartonRecieved(data.issuedCartons - data.consumedCartons);
     setReturnedKitModel(true);
-  }
+  };
+
+  // Memoized Filter
+  const filteredData = useMemo(() => {
+    return productionManagerData.filter(item =>
+      item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.processName?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [productionManagerData, searchTerm]);
+
+  // Memoized Stats
+  const stats = useMemo(() => {
+    const totalItems = productionManagerData.length;
+    const totalReturnedKits = productionManagerData.reduce((sum, item) => sum + (item.issuedKits - item.consumedKits), 0);
+    const pendingCount = productionManagerData.filter(item => item.returnKitsStatus === "SEND_TO_STORE").length;
+    return { totalItems, totalReturnedKits, pendingCount };
+  }, [productionManagerData]);
 
   const columns = [
     {
-      name: "ID",
-      selector: (row: Inventory, index: number) => index + 1,
+      name: "Process & Product",
       sortable: true,
+      grow: 2,
+      cell: (row: any) => (
+        <div className="flex flex-col py-3">
+          <span className="font-bold text-gray-900 dark:text-white uppercase tracking-tight text-xs">
+            {row.processName || "Process Name"}
+          </span>
+          <div className="mt-1 flex items-center gap-1.5 text-[10px] text-gray-500 font-medium">
+            <LayoutGrid size={12} className="text-primary" />
+            <span>{row.name}</span>
+          </div>
+        </div>
+      ),
     },
     {
-      name: "Product Name",
-      selector: (row: Inventory) => row?.name,
+      name: "Kit Breakdown",
       sortable: true,
+      cell: (row: any) => (
+        <div className="flex flex-col py-2">
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col">
+              <span className="text-[9px] font-bold text-gray-400 uppercase leading-none mb-1">Issued</span>
+              <span className="text-sm font-medium text-gray-700">{row.issuedKits}</span>
+            </div>
+            <ArrowRight size={12} className="text-gray-300" />
+            <div className="flex flex-col">
+              <span className="text-[9px] font-bold text-gray-400 uppercase leading-none mb-1">Used</span>
+              <span className="text-sm font-medium text-gray-700">{row.consumedKits}</span>
+            </div>
+          </div>
+        </div>
+      ),
     },
     {
-      name: "Returned kits",
-      selector: (row: Inventory) => row?.issuedKits - row?.consumedKits,
+      name: "Returned (Net)",
       sortable: true,
-    },
-    {
-      name: "Returned Cartons",
-      selector: (row: Inventory) => row.issuedCartons - row.consumedCartons,
-      sortable: true,
+      cell: (row: any) => {
+        const netKits = row.issuedKits - row.consumedKits;
+        const netCartons = row.issuedCartons - row.consumedCartons;
+        return (
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1 font-bold text-emerald-600">
+                <RotateCcw size={14} />
+                <span>{netKits} Kits</span>
+              </div>
+              {netCartons > 0 && (
+                <div className="mt-0.5 flex items-center gap-1 text-[10px] font-medium text-gray-500">
+                  <Box size={10} />
+                  <span>{netCartons} Cartons</span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      },
     },
     {
       name: "Status",
-      selector: (row: Inventory) => row?.status,
       sortable: true,
-      cell: (row: Inventory) => {
-        const statusStyles = {
-          SEND_TO_STORE: {
-            label: "Send to Store",
-            backgroundColor: "#17a2b8",
-          },
-          RECIVED: {
-            label: "Recieved",
-            backgroundColor: "#248f0d",
-          },
-          DEFAULT: {
-            label: "Process Completed",
-            backgroundColor: "#27968f",
-          },
+      cell: (row: any) => {
+        const statuses: Record<string, { label: string; color: string; icon: any }> = {
+          SEND_TO_STORE: { label: "In Transit", color: "bg-blue-100 text-blue-700 ring-blue-500/20", icon: RotateCcw },
+          RECIVED: { label: "Accepted", color: "bg-emerald-100 text-emerald-700 ring-emerald-500/20", icon: CheckCircle2 },
+          DEFAULT: { label: "Completed", color: "bg-gray-100 text-gray-600 ring-gray-200", icon: ClipboardList }
         };
-        const status = row.returnKitsStatus;
-        const { label, backgroundColor } =
-          statusStyles[status] || statusStyles.DEFAULT;
+        const s = statuses[row.returnKitsStatus] || statuses.DEFAULT;
+        const Icon = s.icon;
         return (
-          <span
-            style={{
-              backgroundColor,
-              color: "#fff",
-              padding: "5px 10px",
-              borderRadius: "5px",
-              fontSize: "12px",
-              fontWeight: "bold",
-            }}
-          >
-            {label}
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ring-1 ring-inset ${s.color}`}>
+            <Icon size={10} />
+            {s.label}
           </span>
         );
       },
     },
     {
       name: "Actions",
-      cell: (row: Inventory) => (
-        <div className="flex items-center space-x-1">
-          <button
-            onClick={() => handleReturnedKitsModel(row)}
-            className="transform rounded-full bg-blue-500 p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
-          >
-            <FiCheck size={16} />
-          </button>
+      cell: (row: any) => (
+        <div className="flex items-center gap-2">
+          {row.returnKitsStatus !== "RECIVED" ? (
+            <button
+              onClick={() => handleReturnedKitsModel(row)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary transition hover:bg-primary hover:text-white"
+              title="Process Return"
+            >
+              <Check size={16} />
+            </button>
+          ) : (
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+              <CheckCircle2 size={16} />
+            </div>
+          )}
         </div>
       ),
     },
   ];
 
+  const customStyles = {
+    headRow: {
+      style: {
+        backgroundColor: "#f9fafb",
+        borderTopWidth: "1px",
+        borderTopColor: "rgba(0,0,0,0.05)",
+      },
+    },
+    headCells: {
+      style: {
+        fontWeight: "700",
+        fontSize: "0.7rem",
+        color: "#6b7280",
+        textTransform: "uppercase" as const,
+        letterSpacing: "0.05em",
+      },
+    },
+    rows: {
+      style: {
+        minHeight: "72px",
+        "&:hover": {
+          backgroundColor: "#f9fafb !important",
+        }
+      },
+    },
+  };
+
   return (
-    <div className="bg-gray-100 min-h-screen p-6">
-      <Breadcrumb pageName="View Returned Kits" parentName="Store Manager" />
-      <div className="mt-6 rounded-lg bg-white p-6 shadow-lg">
-        <ToastContainer
-          position="top-center"
-          closeOnClick
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-        />
-        {loading ? (
-          <div className="flex justify-center">
-            <BallTriangle
-              height={100}
-              width={100}
-              color="#4fa94d"
-              ariaLabel="loading"
-            />
-          </div>
-        ) : (
-          <>
-            <DataTable
-              className="dark:bg-bodyDark"
-              columns={columns}
-              data={productionManagerData}
-              pagination
-              selectableRows
-              onSelectedRowsChange={handleRowSelected}
-              highlightOnHover
-              pointerOnHover
-              customStyles={{
-                headCells: {
-                  style: {
-                    fontWeight: "bold",
-                    backgroundColor: "#f8f9fa",
-                    padding: "12px",
-                  },
-                },
-                rows: {
-                  style: {
-                    minHeight: "72px",
-                    "&:hover": {
-                      backgroundColor: "#f1f5f9",
-                    },
-                  },
-                },
-                pagination: {
-                  style: {
-                    padding: "12px",
-                    border: "none",
-                  },
-                },
-                cells: {
-                  style: {
-                    padding: "12px",
-                    "& > div:first-child": {
-                      whiteSpace: "break-spaces",
-                      overflow: "hidden",
-                      textOverflow: "inherit",
-                    },
-                  },
-                },
-              }}
-            />
-            <Modal
-              isOpen={isInventoryModel}
-              onSubmit={handleSubmitInventory}
-              onClose={closeInventoryModal}
-              title={"Inventory Details (" + processName + ")"}
-              submitOption={false}
-            >
-              <div>
-                <div>
-                  <strong>Process Details </strong>
-                </div>
-                <div className="grid py-2 sm:grid-cols-2">
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Process Name :</strong>{" "}
-                    {inventoryDetails?.name}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Process Id :</strong>{" "}
-                    {inventoryDetails?.processID}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Required kits :</strong>{" "}
-                    {inventoryDetails?.processQuantity}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Issued Kits :</strong>{" "}
-                    {inventoryDetails?.issuedKits}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Kits Shortage :</strong>{" "}
-                    {Math.abs(
-                      inventoryDetails?.processQuantity -
-                      inventoryDetails?.issuedKits,
-                    )}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Surplus Kits :</strong>{" "}
-                    {inventoryDetails?.issuedKits >
-                      inventoryDetails?.processQuantity
-                      ? Math.abs(
-                        inventoryDetails?.inventoryQuantity -
-                        inventoryDetails?.processQuantity,
-                      )
-                      : 0}
-                  </div>
-                </div>
-                {packagingData.length > 0 && (
-                  <>
-                    <div>
-                      <strong>Carton Details</strong>
-                    </div>
-                    <div className="grid py-2 sm:grid-cols-2">
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">
-                          Required Cartons :
-                        </strong>{" "}
-                        {parseInt(inventoryDetails?.processQuantity) /
-                          packagingData[0]?.packagingData?.maxCapacity}
-                      </div>
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">
-                          Cartons Shortage :
-                        </strong>{" "}
-                        {Math.abs(
-                          parseInt(inventoryDetails?.processQuantity) /
-                          packagingData[0]?.packagingData?.maxCapacity -
-                          inventoryDetails?.cartonQuantity,
-                        )}
-                      </div>
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">
-                          Surplus Cartons :
-                        </strong>{" "}
-                        {inventoryDetails?.cartonQuantity >
-                          inventoryDetails?.processQuantity /
-                          packagingData[0]?.packagingData?.maxCapacity
-                          ? Math.abs(
-                            parseInt(inventoryDetails?.processQuantity) /
-                            packagingData[0]?.packagingData?.maxCapacity -
-                            inventoryDetails?.cartonQuantity,
-                          )
-                          : 0}
-                      </div>
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">Updated At :</strong>{" "}
-                        {new Date(
-                          inventoryDetails?.updatedAt,
-                        ).toLocaleDateString()}
-                      </div>
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">Created At :</strong>{" "}
-                        {new Date(
-                          inventoryDetails?.createdAt,
-                        ).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </Modal>
-          </>
-        )}
-        {showPopup && (
-          <ConfirmationPopup
-            message="Are you sure you want to delete this item?"
-            onConfirm={() => handleDelete()}
-            onCancel={() => setShowPopup(false)}
-          />
-        )}
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white uppercase">Return Kit Intake</h1>
+        <p className="mt-0.5 text-[13px] text-gray-500 font-normal italic">Process and verify kits returning from production floor to storage.</p>
       </div>
-      <Modal
-        isOpen={isReturnedKitModel}
-        onSubmit={handleReturnKits}
-        onClose={closeReturnedKitModel}
-        title={"Recieved Kits"}
-      >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-1">
-          <div>
-            <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-              No of Kit Recieved
-            </label>
-            <input
-              type="number"
-              value={kitsRecieved}
-              onChange={(e) => setKitRecieved(e.target.value)}
-              placeholder="No of kits Recieved"
-              className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-            />
+
+      {/* Stats Cards */}
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {[
+          { label: "Pending Returns", value: stats.pendingCount, icon: RotateCcw, color: "text-blue-600", bg: "bg-blue-50" },
+          { label: "Total Kits Returning", value: stats.totalReturnedKits, icon: Box, color: "text-indigo-600", bg: "bg-indigo-50" },
+          { label: "Active Processes", value: stats.totalItems, icon: Warehouse, color: "text-emerald-600", bg: "bg-emerald-50" },
+        ].map((stat, i) => (
+          <div key={i} className="flex items-center rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-200 dark:bg-boxdark dark:ring-strokedark transition hover:shadow-lg">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${stat.bg} ${stat.color} mr-5`}>
+              <stat.icon size={26} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{stat.label}</p>
+              <h3 className="text-3xl font-black text-gray-900 dark:text-white">{stat.value}</h3>
+            </div>
           </div>
-          <div>
-            <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-              No of Carton Recieved
-            </label>
+        ))}
+      </div>
+
+      {/* Table Section */}
+      <div className="overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-black/5 dark:bg-boxdark">
+        <div className="flex border-b border-gray-100 p-6 dark:border-strokedark">
+          <div className="relative w-full max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
-              type="number"
-              value={cartonRecieved}
-              onChange={(e) => setCartonRecieved(e.target.value)}
-              placeholder="No of kits Recieved"
-              className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+              type="text"
+              placeholder="Search by product or process..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm focus:border-primary focus:bg-white focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all dark:border-strokedark dark:bg-form-input dark:text-white font-medium"
             />
           </div>
         </div>
+
+        <div className="relative">
+          {loading ? (
+            <div className="flex h-64 items-center justify-center">
+              <BallTriangle height={80} width={80} color="#3c50e0" />
+            </div>
+          ) : (
+            <DataTable
+              columns={columns}
+              data={filteredData}
+              pagination
+              highlightOnHover
+              customStyles={customStyles}
+              noDataComponent={
+                <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                  <Package size={48} strokeWidth={1} className="mb-2" />
+                  <p className="text-sm font-medium">No returned kits found.</p>
+                </div>
+              }
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Return Confirmation Modal */}
+      <Modal
+        isOpen={isReturnedKitModel}
+        onSubmit={handleReturnKits}
+        onClose={() => setReturnedKitModel(false)}
+        title="Verify Returned Stock"
+      >
+        <div className="space-y-6 pt-2">
+          {/* Process Context */}
+          <div className="flex items-center gap-4 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-100 dark:bg-meta-4 dark:ring-strokedark">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-white text-primary shadow-sm">
+              <ClipboardList size={24} />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase leading-none mb-1">Incoming From</p>
+              <h4 className="text-base font-black text-gray-900 dark:text-white">{processDetails?.processName}</h4>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                <Box size={14} className="text-blue-500" />
+                Kits Received
+              </label>
+              <input
+                type="number"
+                value={kitsRecieved}
+                onChange={(e) => setKitRecieved(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all dark:bg-form-input dark:text-white"
+              />
+              <p className="text-[10px] text-gray-400 italic">Expected: {processDetails.issuedKits - processDetails.consumedKits}</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                <LayoutGrid size={14} className="text-emerald-500" />
+                Cartons Received
+              </label>
+              <input
+                type="number"
+                value={cartonRecieved}
+                onChange={(e) => setCartonRecieved(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 font-bold text-gray-900 outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all dark:bg-form-input dark:text-white"
+              />
+              <p className="text-[10px] text-gray-400 italic">Expected: {processDetails.issuedCartons - processDetails.consumedCartons}</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-amber-100 bg-amber-50 p-4 dark:bg-amber-900/10 dark:border-amber-900/20">
+            <div className="flex gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+              <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                Confirming this will return these quantities back into the available stock inventory for future processes.
+              </p>
+            </div>
+          </div>
+        </div>
       </Modal>
+
+      <ToastContainer position="top-right" autoClose={3000} />
     </div>
   );
 };

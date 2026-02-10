@@ -1,17 +1,28 @@
 ﻿"use client";
 
-import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
-import DatePickerOne from "@/components/FormElements/DatePicker/DatePickerOne";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Select from "react-select";
+import { ToastContainer, toast } from "react-toastify";
 import {
   updateUser,
   getUserDetail,
   getOperatorSkills,
   getUserType,
 } from "../../../lib/api";
-import { Trash2, User, Mail, Lock, Calendar, Users } from "lucide-react";
-import { ToastContainer, toast } from "react-toastify";
+import DatePickerOne from "@/components/FormElements/DatePicker/DatePickerOne";
+import {
+  User,
+  Hash,
+  Mail,
+  Lock,
+  Briefcase,
+  Users,
+  Wrench,
+  CheckCircle2,
+  Save,
+  Calendar
+} from "lucide-react";
+
 import "react-toastify/dist/ReactToastify.css";
 
 const EditOperators = () => {
@@ -24,54 +35,20 @@ const EditOperators = () => {
   const [gender, setGender] = useState("M");
   const [userRoles, setUserRole] = useState([]);
   const [userType, setUserType] = useState("Operator");
-  const [skills, setSkills] = useState([]);
-  const [newSkill, setNewSkill] = useState("");
+  const [skills, setSkills] = useState<string[]>([]);
   const [skillData, setSkillFieldData] = useState([]);
-  const customStyles = {
-    control: (provided, state) => ({
-      ...provided,
-      backgroundColor: "#fff",
-      borderColor: state.isFocused ? "#6366F1" : "#D1D5DB",
-      borderWidth: "1.5px",
-      borderRadius: "0.75rem",
-      padding: "0.25rem 0.5rem",
-      boxShadow: state.isFocused ? "0 0 0 1px #6366F1" : "none",
-      "&:hover": {
-        borderColor: "#6366F1",
-      },
-    }),
-    placeholder: (provided) => ({
-      ...provided,
-      color: "#6B7280",
-      fontSize: "0.875rem",
-    }),
-    multiValue: (provided) => ({
-      ...provided,
-      backgroundColor: "#E0E7FF",
-      borderRadius: "0.375rem",
-    }),
-    multiValueLabel: (provided) => ({
-      ...provided,
-      color: "#3730A3",
-      fontWeight: 500,
-    }),
-    multiValueRemove: (provided) => ({
-      ...provided,
-      color: "#4F46E5",
-      cursor: "pointer",
-      ":hover": {
-        backgroundColor: "#C7D2FE",
-        color: "#1E3A8A",
-      },
-    }),
-  };
-  React.useEffect(() => {
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
     const pathname = window.location.pathname;
     const id = pathname.split("/").pop();
-    getUser(id);
+    if (id) {
+      getUser(id);
+    }
     getSkillField();
     getUserTypeRoles();
   }, []);
+
   const getUserTypeRoles = async () => {
     try {
       let result = await getUserType();
@@ -81,47 +58,54 @@ const EditOperators = () => {
       toast.error("Error Fetching user Roles.");
     }
   };
+
   const getSkillField = async () => {
     try {
       let result = await getOperatorSkills();
       let options = [];
-      result.skills.map((value, index) => {
+      result.skills.map((value: any) => {
         options.push({ value: value._id, label: value.name });
       });
-      setSkillFieldData(options);
+      setSkillFieldData(options as any);
     } catch (error) {
-      console.error("Error Fetching Shifts:", error);
+      console.error("Error Fetching Skills:", error);
     }
   };
-  const getUser = async (id: any) => {
-    let result = await getUserDetail(id);
-    setName(result.user.name);
-    setEmail(result.user.email);
-    setEmployeeCode(result.user.employeeCode);
-    setPassword(result.user.password);
-    setDateOfBirth(result.user.dateOfBirth);
-    setPhoneNumber(result.user.phoneNumber);
-    setGender(result.user.gender);
-    setUserType(result.user.userType);
-    // let options = []
-    // result.user.skills.map((value, index) => {
 
-    // })
-    setSkills(result.user.skills);
-  };
-  const handleAddSkill = () => {
-    if (newSkill.trim() !== "" && !skills.includes(newSkill.trim())) {
-      setSkills((prevSkills) => [...prevSkills, newSkill.trim()]);
-      setNewSkill("");
-    } else {
-      toast.error("Skill is empty or already exists.");
+  const getUser = async (id: string) => {
+    try {
+      setLoading(true);
+      let result = await getUserDetail(id);
+      if (result?.user) {
+        setName(result.user.name || "");
+        setEmail(result.user.email || "");
+        setEmployeeCode(result.user.employeeCode || "");
+        setPassword(result.user.password || ""); // Often APIs don't return passwords for security, but keeping logic
+        setDateOfBirth(result.user.dateOfBirth || "");
+        setPhoneNumber(result.user.phoneNumber || "");
+        setGender(result.user.gender || "M");
+        setUserType(result.user.userType || "Operator");
+        setSkills(result.user.skills || []);
+      }
+    } catch (error) {
+      console.error("Error fetching user details:", error);
+      toast.error("Failed to load user details.");
+    } finally {
+      setLoading(false);
     }
   };
-  const handleRemoveSkill = (index: any) => {
-    setSkills((prevSkills) => prevSkills.filter((_, i) => i !== index));
+
+  const handleChange = (selected) => {
+    const selectedValues = selected ? selected.map((opt: any) => opt.label) : [];
+    setSkills(selectedValues);
   };
+
+  const selectedSkillOptions = skillData.filter((opt: any) => skills.includes(opt.label));
+
   const handleSubmit = async (e: any) => {
     e.preventDefault();
+    setLoading(true);
+
     try {
       const pathname = window.location.pathname;
       const id = pathname.split("/").pop();
@@ -137,219 +121,289 @@ const EditOperators = () => {
         skills,
       };
 
-      const result = await updateUser(formData, id);
-      toast.success("User details submitted successfully!");
+      await updateUser(formData, id);
+      toast.success("User identity updated successfully!");
+
+      setTimeout(() => {
+        window.location.href = "/operators/view";
+      }, 1500);
+
     } catch (error) {
-      console.error("Error submitting form:");
-      toast.error("Failed to submit user details. Please try again.");
+      console.error("Error submitting form:", error);
+      toast.error("Failed to update user details. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
-  const handleChange = (selected) => {
-    const selectedValues = selected ? selected.map((opt) => opt.label) : [];
-    
-    setSkills(selectedValues);
+
+  const customStyles = {
+    control: (provided: any, state: any) => ({
+      ...provided,
+      backgroundColor: "transparent",
+      borderColor: "transparent",
+      borderWidth: 0,
+      boxShadow: "none",
+      padding: "2px 0",
+    }),
+    placeholder: (provided: any) => ({
+      ...provided,
+      color: "#9ca3af",
+      fontSize: "0.875rem",
+      fontWeight: 600,
+    }),
+    multiValue: (provided: any) => ({
+      ...provided,
+      backgroundColor: "#eff6ff",
+      borderRadius: "0.5rem",
+      border: "1px solid #bfdbfe",
+    }),
+    multiValueLabel: (provided: any) => ({
+      ...provided,
+      color: "#1d4ed8",
+      fontWeight: 700,
+      fontSize: "0.75rem",
+      textTransform: "uppercase",
+      padding: "2px 6px",
+    }),
+    multiValueRemove: (provided: any) => ({
+      ...provided,
+      color: "#1d4ed8",
+      ":hover": {
+        backgroundColor: "#dbeafe",
+        color: "#1e40af",
+        borderTopRightRadius: "0.5rem",
+        borderBottomRightRadius: "0.5rem",
+      },
+    }),
+    input: (provided: any) => ({
+      ...provided,
+      color: "#111827",
+      fontWeight: 600,
+    }),
+    menu: (provided: any) => ({
+      ...provided,
+      borderRadius: "1rem",
+      boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+      border: "1px solid #f3f4f6",
+      overflow: "hidden",
+      zIndex: 50,
+    }),
+    option: (provided: any, state: any) => ({
+      ...provided,
+      backgroundColor: state.isFocused ? "#eff6ff" : "white",
+      color: state.isFocused ? "#1d4ed8" : "#374151",
+      fontWeight: state.isSelected ? 700 : 500,
+      cursor: "pointer",
+      padding: "10px 16px",
+    }),
   };
 
   return (
-    <>
-      <Breadcrumb parentName="User Management" pageName="Edit User" />
-      <div className="grid gap-9 pt-5">
-        <div className="flex flex-col gap-9">
-          <div className="rounded-2xl border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark">
-            {/* Header */}
-            <div className="border-b border-stroke px-6.5 py-4 dark:border-strokedark">
-              <h3 className="flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
-                <Users size={18} /> User Management
-              </h3>
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Header Section */}
+      <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white uppercase">Edit User</h1>
+          <p className="mt-0.5 text-[13px] text-gray-500 font-normal italic">Update personnel credentials and operational privileges.</p>
+        </div>
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          className="group inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-black text-white shadow-lg shadow-primary/25 transition-all hover:bg-primary-dark hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+        >
+          <Save className="h-5 w-5" />
+          {loading ? "Updating..." : "Update User"}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+        <div className="lg:col-span-12 space-y-8">
+
+          {/* Identity Card */}
+          <div className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-black/5 dark:bg-boxdark dark:ring-strokedark">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <User size={20} />
+              </div>
+              <div>
+                <h2 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">User Identity</h2>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Personal & Access Credentials</p>
+              </div>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleSubmit}>
-              <div className="grid gap-6 px-8 pr-8 pt-6 sm:grid-cols-2">
-                {/* Name */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                    Name
-                  </label>
-                  <div className="relative">
-                    <User
-                      className="text-gray-400 absolute left-3 top-3"
-                      size={18}
-                    />
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Enter Name"
-                      className="w-full rounded-lg border border-stroke bg-transparent py-3 pl-10 pr-5 text-black outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
-                    />
-                  </div>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Full Name</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. John Doe"
+                    className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
+                  />
                 </div>
+              </div>
 
-                {/* Employee Code */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                    Employee Code
-                  </label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Employee Code</label>
+                <div className="relative">
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
                   <input
                     type="text"
                     value={employeeCode}
                     onChange={(e) => setEmployeeCode(e.target.value)}
-                    placeholder="Enter Employee Code"
-                    className="w-full rounded-lg border border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                    placeholder="e.g. EMP-2024-001"
+                    className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
                   />
                 </div>
+              </div>
 
-                {/* Email */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail
-                      className="text-gray-400 absolute left-3 top-3"
-                      size={18}
-                    />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="Enter Email"
-                      className="w-full rounded-lg border border-stroke bg-transparent py-3 pl-10 pr-5 text-black outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
-                    />
-                  </div>
-                </div>
-
-                {/* Password */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Lock
-                      className="text-gray-400 absolute left-3 top-3"
-                      size={18}
-                    />
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter Password"
-                      className="w-full rounded-lg border border-stroke bg-transparent py-3 pl-10 pr-5 text-black outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
-                    />
-                  </div>
-                </div>
-
-                {/* Date of Birth */}
-                <div>
-                  <DatePickerOne
-                    formLabel="Date of Birth"
-                    name="dateOfBirth"
-                    id="dateOfBirth"
-                    value={dateOfBirth}
-                    setValue={setDateOfBirth}
-                    icon={<Calendar className="text-gray-400" size={18} />}
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="e.g. john.doe@company.com"
+                    className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
                   />
                 </div>
+              </div>
 
-                {/* Gender */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                    Gender
-                  </label>
-                  <select
-                    value={gender}
-                    onChange={(e) => setGender(e.target.value)}
-                    className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 text-black outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
-                  >
-                    <option value="M">Male</option>
-                    <option value="F">Female</option>
-                  </select>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
+                  />
                 </div>
+              </div>
+            </div>
 
-                {/* User Type */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                    User Type
-                  </label>
+            <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="space-y-2">
+                <DatePickerOne
+                  formLabel="Date Of Birth"
+                  name="dateOfBirth"
+                  id="dateOfBirth"
+                  value={dateOfBirth}
+                  setValue={setDateOfBirth}
+                  labelClass="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1 mb-2 block"
+                  inputClass="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
+                  icon={<Calendar className="text-gray-300" size={18} />}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Gender</label>
+                <div className="relative">
+                  <div className="flex gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setGender("M")}
+                      className={`flex-1 rounded-2xl py-3 text-sm font-bold transition-all ${gender === "M"
+                        ? "bg-blue-50 text-blue-600 ring-2 ring-blue-100 dark:bg-blue-900/20 dark:text-blue-400"
+                        : "bg-gray-50 text-gray-400 hover:bg-gray-100 dark:bg-white/5"
+                        }`}
+                    >
+                      Male
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGender("F")}
+                      className={`flex-1 rounded-2xl py-3 text-sm font-bold transition-all ${gender === "F"
+                        ? "bg-pink-50 text-pink-600 ring-2 ring-pink-100 dark:bg-pink-900/20 dark:text-pink-400"
+                        : "bg-gray-50 text-gray-400 hover:bg-gray-100 dark:bg-white/5"
+                        }`}
+                    >
+                      Female
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Role & Skills Card */}
+          <div className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-black/5 dark:bg-boxdark dark:ring-strokedark">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+                <Briefcase size={20} />
+              </div>
+              <div>
+                <h2 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Role & Competency</h2>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Privileges and Operational Skills</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6">
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">System Role</label>
+                <div className="relative">
+                  <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
                   <select
                     value={userType}
                     onChange={(e) => setUserType(e.target.value)}
-                    className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 text-black outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                    className="w-full appearance-none rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
                   >
-                    {userRoles.map((userRole, index) => (
-                      <option key={index} value={userRole?.name}>
-                        {userRole?.name}
+                    <option value="">Select privilege level...</option>
+                    {userRoles.map((role: any, index) => (
+                      <option key={index} value={role.name}>
+                        {role.name}
                       </option>
                     ))}
                   </select>
                 </div>
               </div>
 
-              {/* Skills */}
-              <div className="grid gap-6 px-8 pr-8 pt-6 sm:grid-cols-1">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                    Skills
-                  </label>
-                  <Select
-                    options={skillData}
-                    isMulti
-                    styles={customStyles}
-                    onChange={handleChange}
-                    className="w-full rounded-lg border border-stroke bg-transparent text-black outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
-                    classNamePrefix="select"
-                    placeholder="Select Skills"
-                  />
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Assigned Skills</label>
+                <div className="relative rounded-2xl border-2 border-gray-50 bg-gray-50/50 p-2 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10 dark:border-strokedark dark:bg-form-input">
+                  <div className="flex items-center pl-2">
+                    <Wrench className="text-gray-300 mr-2" size={18} />
+                    <div className="flex-1">
+                      <Select
+                        options={skillData}
+                        isMulti
+                        value={selectedSkillOptions}
+                        onChange={handleChange}
+                        styles={customStyles}
+                        className="w-full"
+                        classNamePrefix="select"
+                        placeholder="Update operational competencies..."
+                        isLoading={skillData.length === 0}
+                      />
+                    </div>
+                  </div>
                 </div>
-
-                {/* Skills Set */}
-                <div className="border-gray-300 bg-gray-50 dark:bg-gray-800 rounded-lg border px-4 py-3 shadow-sm dark:border-strokedark">
-                  <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                    Skills Set
-                  </label>
-                  <ul className="list-none space-y-3">
+                {skills.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
                     {skills.map((skill, index) => (
-                      <li
-                        key={index}
-                        className="flex items-center justify-between rounded-md bg-white px-4 py-2 shadow-sm dark:bg-form-input"
-                      >
-                        <span className="text-gray-700 dark:text-gray-300 text-sm font-medium">
-                          {skill}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSkill(index)}
-                          className="flex items-center justify-center rounded-md bg-danger px-2 py-1 text-white transition duration-300 hover:opacity-80"
-                          aria-label="Remove Skill"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </li>
+                      <div key={index} className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:bg-indigo-900/30">
+                        <CheckCircle2 size={12} />
+                        {skill}
+                      </div>
                     ))}
-                  </ul>
-                  {skills.length === 0 && (
-                    <p className="text-gray-500 mt-2 text-center text-sm">
-                      No skills added yet.
-                    </p>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
-
-              {/* Submit */}
-              <div className="flex justify-end px-8 py-6">
-                <button
-                  type="submit"
-                  className="rounded-lg bg-green-600 px-6 py-2 font-medium text-white shadow-md transition hover:bg-green-700"
-                >
-                  Submit
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
+
         </div>
       </div>
-    </>
+
+      <ToastContainer position="top-right" autoClose={3000} />
+    </div>
   );
 };
 
