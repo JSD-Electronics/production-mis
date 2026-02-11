@@ -1,11 +1,24 @@
 ﻿"use client";
 
-import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
-import DatePickerOne from "@/components/FormElements/DatePicker/DatePickerOne";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Select from "react-select";
-import { createUser, getUserType, getOperatorSkills } from "../../../lib/api";
 import { ToastContainer, toast } from "react-toastify";
+import { createUser, getUserType, getOperatorSkills } from "../../../lib/api";
+import DatePickerOne from "@/components/FormElements/DatePicker/DatePickerOne";
+import {
+  User,
+  Hash,
+  Mail,
+  Lock,
+  Calendar,
+  Users,
+  Briefcase,
+  Save,
+  Wrench,
+  CheckCircle2,
+  AlertCircle
+} from "lucide-react";
+
 import "react-toastify/dist/ReactToastify.css";
 
 const AddOperators = () => {
@@ -18,51 +31,15 @@ const AddOperators = () => {
   const [gender, setGender] = useState("M");
   const [userRoles, setUserRole] = useState([]);
   const [userType, setUserType] = useState("Operator");
-  const [skills, setSkills] = useState([]);
-  const [newSkill, setNewSkill] = useState("");
+  const [skills, setSkills] = useState<string[]>([]);
   const [skillData, setSkillFieldData] = useState([]);
-  const customStyles = {
-    control: (provided, state) => ({
-      ...provided,
-      backgroundColor: "#fff",
-      borderColor: state.isFocused ? "#6366F1" : "#D1D5DB",
-      borderWidth: "1.5px",
-      borderRadius: "0.75rem",
-      padding: "0.25rem 0.5rem",
-      boxShadow: state.isFocused ? "0 0 0 1px #6366F1" : "none",
-      "&:hover": {
-        borderColor: "#6366F1",
-      },
-    }),
-    placeholder: (provided) => ({
-      ...provided,
-      color: "#6B7280",
-      fontSize: "0.875rem",
-    }),
-    multiValue: (provided) => ({
-      ...provided,
-      backgroundColor: "#E0E7FF",
-      borderRadius: "0.375rem",
-    }),
-    multiValueLabel: (provided) => ({
-      ...provided,
-      color: "#3730A3",
-      fontWeight: 500,
-    }),
-    multiValueRemove: (provided) => ({
-      ...provided,
-      color: "#4F46E5",
-      cursor: "pointer",
-      ":hover": {
-        backgroundColor: "#C7D2FE",
-        color: "#1E3A8A",
-      },
-    }),
-  };
-  React.useEffect(() => {
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
     getUserTypeRoles();
     getSkillField();
   }, []);
+
   const getUserTypeRoles = async () => {
     try {
       let result = await getUserType();
@@ -72,37 +49,38 @@ const AddOperators = () => {
       toast.error("Error Fetching user Roles.");
     }
   };
-  const handleAddSkill = () => {
-    if (newSkill.trim() !== "" && !skills.includes(newSkill.trim())) {
-      setSkills((prevSkills) => [...prevSkills, newSkill.trim()]);
-      setNewSkill("");
-    } else {
-      toast.error("Skill is empty or already exists.");
-    }
-  };
+
   const getSkillField = async () => {
     try {
       let result = await getOperatorSkills();
       let options = [];
-      result.skills.map((value, index) => {
+      result.skills.map((value: any) => {
         options.push({ value: value._id, label: value.name });
       });
-      setSkillFieldData(options);
+      setSkillFieldData(options as any);
     } catch (error) {
-      console.error("Error Fetching Shifts:", error);
+      console.error("Error Fetching Skills:", error);
     }
   };
-  const handleRemoveSkill = (index: any) => {
-    setSkills((prevSkills) => prevSkills.filter((_, i) => i !== index));
+
+  const handleChange = (selected) => {
+    const selectedValues = selected ? selected.map((opt: any) => opt.label) : [];
+    setSkills(selectedValues);
   };
-  const handleStageChange = (index: any, event: any, param: any) => {
-    const newStages = [...stages];
-    newStages[index][param] = event.target.value;
-    // setStages(newStages);
-  };
+
+  const selectedSkillOptions = skillData.filter((opt: any) => skills.includes(opt.label));
+
   const handleSubmit = async (e: any) => {
     e.preventDefault();
+    setLoading(true);
+
     try {
+      if (!name || !employeeCode || !email || !password || !userType) {
+        toast.error("Please fill in all required fields.");
+        setLoading(false);
+        return;
+      }
+
       const formData = {
         name,
         employeeCode,
@@ -115,417 +93,300 @@ const AddOperators = () => {
         skills,
       };
 
-      const result = await createUser(formData);
-      toast.success("User details submitted successfully!");
+      await createUser(formData);
+      toast.success("User successfully provisioned!");
+
+      // Reset form
       setName("");
       setEmployeeCode("");
       setEmail("");
       setPassword("");
       setDateOfBirth("");
       setPhoneNumber("");
-      setGender("");
-      setUserType("");
+      setGender("M");
+      setUserType("Operator");
       setSkills([]);
+
+      setTimeout(() => {
+        window.location.href = "/operators/view";
+      }, 1500);
+
     } catch (error) {
-      console.error("Error submitting form:");
-      toast.error("Failed to submit user details. Please try again.");
+      console.error("Error submitting form:", error);
+      toast.error("Failed to provision user. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
-  const handleChange = (selected) => {
-    //setSkills(selected); // update local state
-    const selectedValues = selected ? selected.map((opt) => opt.label) : [];
-    
-    setSkills(selectedValues);
+
+  const customStyles = {
+    control: (provided: any, state: any) => ({
+      ...provided,
+      backgroundColor: "transparent",
+      borderColor: "transparent",
+      borderWidth: 0,
+      boxShadow: "none",
+      padding: "2px 0",
+    }),
+    placeholder: (provided: any) => ({
+      ...provided,
+      color: "#9ca3af",
+      fontSize: "0.875rem",
+      fontWeight: 600,
+    }),
+    multiValue: (provided: any) => ({
+      ...provided,
+      backgroundColor: "#eff6ff",
+      borderRadius: "0.5rem",
+      border: "1px solid #bfdbfe",
+    }),
+    multiValueLabel: (provided: any) => ({
+      ...provided,
+      color: "#1d4ed8",
+      fontWeight: 700,
+      fontSize: "0.75rem",
+      textTransform: "uppercase",
+      padding: "2px 6px",
+    }),
+    multiValueRemove: (provided: any) => ({
+      ...provided,
+      color: "#1d4ed8",
+      ":hover": {
+        backgroundColor: "#dbeafe",
+        color: "#1e40af",
+        borderTopRightRadius: "0.5rem",
+        borderBottomRightRadius: "0.5rem",
+      },
+    }),
+    input: (provided: any) => ({
+      ...provided,
+      color: "#111827",
+      fontWeight: 600,
+    }),
+    menu: (provided: any) => ({
+      ...provided,
+      borderRadius: "1rem",
+      boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+      border: "1px solid #f3f4f6",
+      overflow: "hidden",
+      zIndex: 50,
+    }),
+    option: (provided: any, state: any) => ({
+      ...provided,
+      backgroundColor: state.isFocused ? "#eff6ff" : "white",
+      color: state.isFocused ? "#1d4ed8" : "#374151",
+      fontWeight: state.isSelected ? 700 : 500,
+      cursor: "pointer",
+      padding: "10px 16px",
+    }),
   };
 
   return (
-    <>
-      <Breadcrumb parentName="User Management" pageName="Add User" />
-      <div className="grid gap-9">
-        <ToastContainer
-          position="top-center"
-          closeOnClick
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-        />
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Header Section */}
+      <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white uppercase">Add User</h1>
+          <p className="mt-0.5 text-[13px] text-gray-500 font-normal italic">Provision new personnel and assign operational privileges.</p>
+        </div>
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          className="group inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-3 text-sm font-black text-white shadow-lg shadow-primary/25 transition-all hover:bg-primary-dark hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+        >
+          <Save className="h-5 w-5" />
+          {loading ? "Saving..." : "Save User"}
+        </button>
+      </div>
 
-        <div className="flex flex-col gap-9">
-          <div className="border-gray-200 dark:border-gray-700 rounded-2xl border bg-white shadow-xl dark:bg-boxdark">
-            {/* Header */}
-            <div className="border-gray-200 dark:border-gray-700 border-b px-8 py-5">
-              <h3 className="text-gray-900 text-lg font-semibold dark:text-white">
-                User Management
-              </h3>
-              <p className="text-gray-500 dark:text-gray-400 text-sm">
-                Add or update user details with required fields
-              </p>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+        <div className="lg:col-span-12 space-y-8">
+
+          {/* Identity Card */}
+          <div className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-black/5 dark:bg-boxdark dark:ring-strokedark">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <User size={20} />
+              </div>
+              <div>
+                <h2 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">User Identity</h2>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Personal & Access Credentials</p>
+              </div>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-8 px-8 py-6">
-              {/* Basic Info */}
-              <div className="grid gap-6 sm:grid-cols-2">
-                {/* Name */}
-                <div>
-                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                    Name
-                  </label>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Full Name</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter full name"
-                    className="border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-800 w-full rounded-lg border px-4 py-3 text-sm focus:border-primary focus:ring focus:ring-primary/30 dark:text-white"
+                    placeholder="e.g. John Doe"
+                    className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
                   />
                 </div>
+              </div>
 
-                {/* Employee Code */}
-                <div>
-                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                    Employee Code
-                  </label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Employee Code</label>
+                <div className="relative">
+                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
                   <input
                     type="text"
                     value={employeeCode}
                     onChange={(e) => setEmployeeCode(e.target.value)}
-                    placeholder="Enter employee code"
-                    className="border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-800 w-full rounded-lg border px-4 py-3 text-sm focus:border-primary focus:ring focus:ring-primary/30 dark:text-white"
+                    placeholder="e.g. EMP-2024-001"
+                    className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
                   />
                 </div>
+              </div>
 
-                {/* Email */}
-                <div>
-                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                    Email Address
-                  </label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Enter email address"
-                    className="border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-800 w-full rounded-lg border px-4 py-3 text-sm focus:border-primary focus:ring focus:ring-primary/30 dark:text-white"
+                    placeholder="e.g. john.doe@company.com"
+                    className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
                   />
                 </div>
+              </div>
 
-                {/* Password */}
-                <div>
-                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                    Password
-                  </label>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter password"
-                    className="border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-800 w-full rounded-lg border px-4 py-3 text-sm focus:border-primary focus:ring focus:ring-primary/30 dark:text-white"
+                    placeholder="••••••••"
+                    className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
                   />
                 </div>
+              </div>
+            </div>
 
-                {/* Date of Birth */}
-                <div>
-                  <DatePickerOne
-                    formLabel="Date Of Birth"
-                    name="dateOfBirth"
-                    id="dateOfBirth"
-                    value={dateOfBirth}
-                    setValue={setDateOfBirth}
-                  />
+            <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="space-y-2">
+                <DatePickerOne
+                  formLabel="Date Of Birth"
+                  name="dateOfBirth"
+                  id="dateOfBirth"
+                  value={dateOfBirth}
+                  setValue={setDateOfBirth}
+                  labelClass="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1 mb-2 block"
+                  inputClass="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 px-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
+                  icon={<Calendar className="text-gray-300" size={18} />}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Gender</label>
+                <div className="relative">
+                  <div className="flex gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setGender("M")}
+                      className={`flex-1 rounded-2xl py-3 text-sm font-bold transition-all ${gender === "M"
+                        ? "bg-blue-50 text-blue-600 ring-2 ring-blue-100 dark:bg-blue-900/20 dark:text-blue-400"
+                        : "bg-gray-50 text-gray-400 hover:bg-gray-100 dark:bg-white/5"
+                        }`}
+                    >
+                      Male
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGender("F")}
+                      className={`flex-1 rounded-2xl py-3 text-sm font-bold transition-all ${gender === "F"
+                        ? "bg-pink-50 text-pink-600 ring-2 ring-pink-100 dark:bg-pink-900/20 dark:text-pink-400"
+                        : "bg-gray-50 text-gray-400 hover:bg-gray-100 dark:bg-white/5"
+                        }`}
+                    >
+                      Female
+                    </button>
+                  </div>
                 </div>
+              </div>
+            </div>
+          </div>
 
-                {/* Gender */}
-                <div>
-                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                    Gender
-                  </label>
-                  <select
-                    value={gender}
-                    onChange={(e) => setGender(e.target.value)}
-                    className="border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-800 w-full rounded-lg border px-4 py-3 text-sm focus:border-primary focus:ring focus:ring-primary/30 dark:text-white"
-                  >
-                    <option value="">Select gender</option>
-                    <option value="M">Male</option>
-                    <option value="F">Female</option>
-                  </select>
-                </div>
+          {/* Role & Skills Card */}
+          <div className="rounded-3xl bg-white p-8 shadow-xl ring-1 ring-black/5 dark:bg-boxdark dark:ring-strokedark">
+            <div className="mb-6 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+                <Briefcase size={20} />
+              </div>
+              <div>
+                <h2 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">Role & Competency</h2>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Privileges and Operational Skills</p>
+              </div>
+            </div>
 
-                {/* User Type */}
-                <div>
-                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                    User Type
-                  </label>
+            <div className="grid grid-cols-1 gap-6">
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">System Role</label>
+                <div className="relative">
+                  <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
                   <select
                     value={userType}
                     onChange={(e) => setUserType(e.target.value)}
-                    className="border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-800 w-full rounded-lg border px-4 py-3 text-sm focus:border-primary focus:ring focus:ring-primary/30 dark:text-white"
+                    className="w-full appearance-none rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
                   >
-                    <option value="">Select user type</option>
-                    {userRoles.map((userRole, index) => (
-                      <option key={index} value={userRole?.name}>
-                        {userRole?.name}
+                    <option value="">Select privilege level...</option>
+                    {userRoles.map((role: any, index) => (
+                      <option key={index} value={role.name}>
+                        {role.name}
                       </option>
                     ))}
                   </select>
                 </div>
               </div>
 
-              {/* Skills Section */}
-              <div className="space-y-4">
-                <label className="text-gray-700 dark:text-gray-300 block text-sm font-medium">
-                  Skills
-                </label>
-                <Select
-                  options={skillData}
-                  isMulti
-                  styles={customStyles}
-                  onChange={handleChange}
-                  className="basic-multi-select w-full"
-                  classNamePrefix="select"
-                  placeholder="Select skills..."
-                />
-
-                {/* Skills Set */}
-                <div className="border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-800 rounded-lg border p-4">
-                  <h4 className="text-gray-700 dark:text-gray-300 mb-3 text-sm font-medium">
-                    Selected Skills
-                  </h4>
-                  <ul className="space-y-2">
-                    {skills.map((skill, index) => (
-                      <li
-                        key={index}
-                        className="dark:bg-gray-700 flex items-center justify-between rounded-md bg-white px-3 py-2 shadow-sm"
-                      >
-                        <span className="text-gray-800 dark:text-gray-200 text-sm">
-                          {skill}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSkill(index)}
-                          className="bg-danger hover:bg-danger rounded px-2 py-1 text-xs text-white"
-                        >
-                          Remove
-                        </button>
-                      </li>
-                    ))}
-                    {skills.length === 0 && (
-                      <p className="text-gray-500 dark:text-gray-400 text-center text-sm">
-                        No skills added yet.
-                      </p>
-                    )}
-                  </ul>
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Assigned Skills</label>
+                <div className="relative rounded-2xl border-2 border-gray-50 bg-gray-50/50 p-2 focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10 dark:border-strokedark dark:bg-form-input">
+                  <div className="flex items-center pl-2">
+                    <Wrench className="text-gray-300 mr-2" size={18} />
+                    <div className="flex-1">
+                      <Select
+                        options={skillData}
+                        isMulti
+                        value={selectedSkillOptions}
+                        onChange={handleChange}
+                        styles={customStyles}
+                        className="w-full"
+                        classNamePrefix="select"
+                        placeholder="Select operational competencies..."
+                        isLoading={skillData.length === 0}
+                      />
+                    </div>
+                  </div>
                 </div>
+                {skills.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {skills.map((skill, index) => (
+                      <div key={index} className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:bg-indigo-900/30">
+                        <CheckCircle2 size={12} />
+                        {skill}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-
-              {/* Submit */}
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  className="rounded-lg bg-green-600 px-6 py-2 text-sm font-medium text-white shadow hover:bg-green-700"
-                >
-                  Save User
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
+
         </div>
       </div>
 
-      {/* <div className="grid gap-9">
-        <ToastContainer
-          position="top-center"
-          closeOnClick
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-        />
-        <div className="flex flex-col gap-9">
-          <div className="rounded-sm border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark">
-            <div className="border-b border-stroke px-6.5 py-4 dark:border-strokedark">
-              <h3 className="font-medium text-black dark:text-white">
-                User Management
-              </h3>
-            </div>
-            <form onSubmit={handleSubmit}>
-              <div className="grid gap-6 px-8 pr-8 pt-4 sm:grid-cols-2">
-                <div className="space-x-4">
-                  <div>
-                    <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                      Name
-                    </label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Enter Name"
-                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                    />
-                  </div>
-                </div>
-                <div className="space-x-4">
-                  <div>
-                    <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                      Employee Code
-                    </label>
-                    <input
-                      type="text"
-                      value={employeeCode}
-                      onChange={(e) => setEmployeeCode(e.target.value)}
-                      placeholder="Enter Employee Code"
-                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                    />
-                  </div>
-                </div>
-                <div className="space-x-4">
-                  <div>
-                    <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="Enter Email Address"
-                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                    />
-                  </div>
-                </div>
-                <div className="space-x-4">
-                  <div>
-                    <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                      Password
-                    </label>
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter Password"
-                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                    />
-                  </div>
-                </div>
-                <div className="space-x-4">
-                  <DatePickerOne
-                    formLabel="Date Of Birth"
-                    name="dateOfBirth"
-                    id="dateOfBirth"
-                    value={dateOfBirth}
-                    setValue={setDateOfBirth}
-                  />
-                </div>
-                <div className="space-x-4">
-                  <div>
-                    <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                      Gender
-                    </label>
-                    <select
-                      value={gender}
-                      onChange={(e) => setGender(e.target.value)}
-                      className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-6 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-                    >
-                      <option value="M">Male</option>
-                      <option value="F">Female</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="space-x-4">
-                  <div>
-                    <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                      User Type
-                    </label>
-                    <select
-                      value={userType}
-                      onChange={(e) => setUserType(e.target.value)}
-                      className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-6 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-                    >
-                      {userRoles.map((userRole, index) => (
-                        <option
-                          key={index}
-                          value={userRole?.name}
-                          className="text-body dark:text-bodydark"
-                        >
-                          {userRole?.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-              <div className="grid gap-6 px-8 pr-8 pt-4 sm:grid-cols-1">
-                <div className="space-x-4">
-                  <div>
-                    <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                      Skills
-                    </label>
-                    <Select
-                      options={skillData}
-                      isMulti
-                      styles={customStyles}
-                      onChange={handleChange}
-                      className="basic-multi-select w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                      classNamePrefix="select"
-                      placeholder="Select Skills"
-                    />
-                  </div>
-                </div>
-                <div className="space-x-4">
-                  <div className="border-gray-300 bg-gray-50 dark:bg-gray-800 items-center justify-between rounded-lg border px-4 py-2 shadow-sm transition dark:border-strokedark">
-                    <label className="mb-3 block text-sm font-medium text-black dark:text-white">
-                      Skills Set
-                    </label>
-                    <ul className="list-none space-y-3 pl-0">
-                      {skills.map((skill, index) => (
-                        <li
-                          key={index}
-                          className="dark:bg-gray-800 flex items-center rounded-lg px-4 py-2 shadow-sm transition"
-                        >
-                          <h4 className="text-gray-700 dark:text-gray-300 text-sm font-medium">
-                            {skill}
-                          </h4>
-                          <button
-                            onClick={() => handleRemoveSkill(index)}
-                            className="ml-4 flex items-center justify-center rounded-md bg-danger px-2 py-1 text-white transition duration-300 hover:bg-danger focus:outline-none"
-                            aria-label="Remove Skill"
-                          >
-                            <svg
-                              width="20px"
-                              height="20px"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              xmlns="http://www.w3.org/2000/svg"
-                            >
-                              <path
-                                d="M4 6H20M16 6L15.7294 5.18807C15.4671 4.40125 15.3359 4.00784 15.0927 3.71698C14.8779 3.46013 14.6021 3.26132 14.2905 3.13878C13.9376 3 13.523 3 12.6936 3H11.3064C10.477 3 10.0624 3 9.70951 3.13878C9.39792 3.26132 9.12208 3.46013 8.90729 3.71698C8.66405 4.00784 8.53292 4.40125 8.27064 5.18807L8 6M18 6V16.2C18 17.8802 18 18.7202 17.673 19.362C17.3854 19.9265 16.9265 20.3854 16.362 20.673C15.7202 21 14.8802 21 13.2 21H10.8C9.11984 21 8.27976 21 7.63803 20.673C7.07354 20.3854 6.6146 19.9265 6.32698 19.362C6 18.7202 6 17.8802 6 16.2V6M14 10V17M10 10V17"
-                                stroke="#ffffff"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                    {skills.length === 0 && (
-                      <p className="text-gray-500 mt-2 text-center text-sm">
-                        No skills added yet.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="col-span-2 flex justify-end p-8 pr-8">
-                <button
-                  type="submit"
-                  className="rounded-md bg-green-700 px-4 py-2 text-white transition hover:bg-green-800"
-                >
-                  Submit
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div> */}
-    </>
+      <ToastContainer position="top-right" autoClose={3000} />
+    </div>
   );
 };
 

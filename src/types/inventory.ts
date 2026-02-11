@@ -18,4 +18,5 @@
         stages: any[];
     };
     orderConfirmationNo?: string;
+    fgCount?: number;
 }

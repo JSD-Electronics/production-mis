@@ -1,5 +1,6 @@
 ﻿"use client";
-import React, { useState } from "react";
+
+import React, { useState, useEffect, useMemo } from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import {
@@ -12,771 +13,578 @@ import {
 } from "@/lib/api";
 import { Inventory } from "@/types/inventory";
 import { useRouter } from "next/navigation";
-import { FiEye, FiTrash } from "react-icons/fi";
+import {
+  Eye,
+  Trash2,
+  Box,
+  Truck,
+  Search,
+  ArrowLeft,
+  AlertTriangle,
+  CheckCircle2,
+  Layers,
+  Hash,
+  Calendar,
+  AlertCircle,
+  PackageCheck
+} from "lucide-react";
 import { BallTriangle } from "react-loader-spinner";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import Modal from "@/components/Modal/page";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-const ViewProcessInventory = () => {
-  const [showPopup, setShowPopup] = React.useState(false);
-  const [productId, setProductId] = React.useState("");
-  const [inventoryData, setInventoryData] = React.useState<Inventory[]>([]);
-  const [isInventoryModel, setIsInventoryModel] = React.useState(false);
-  const [inventoryDetails, setInventoryDetails] = React.useState<any>({});
-  const [inventoryID, setInventoryID] = useState("");
-  const [updatedQuantity, setUpdatedQuantity] = React.useState(0);
-  const [updatedCartonQuantity, setUpdatedCartonQuantity] = React.useState(0);
-  const [loading, setLoading] = React.useState(true);
-  const [selectedRows, setSelectedRows] = React.useState<Inventory[]>([]);
-  const [processes, setProcesses] = React.useState<any[]>([]);
-  const [productName, setProductName] = React.useState("");
-  const [packagingData, setPackagingData] = useState<any[]>([]);
-  const [processName, setProcessName] = React.useState("");
-  const [isIssueKitModel, setIsIssueKitModel] = React.useState(false);
-  const [isIssueCartonModel, setIsIssueCartonModel] = React.useState(false);
-  const [selectedProcess, setSelectedProcess] = React.useState("");
-  const [selectedProcessDetails, setSelectedProcessDetails] = React.useState<any>(
-    {},
-  );
-  const [issueKitProcess, setIssueKitProcess] = React.useState("");
-  const [issueCartonProcess, setIssueCartonProcess] = React.useState("");
-  const handleRowSelected = (state: any) => {
-    setSelectedRows(state.selectedRows);
-  };
+
+const AllocationManagement = () => {
   const router = useRouter();
-  const closeIssuedKitsModal = () => {
-    setIsIssueKitModel(false);
-  };
-  const closeIssuedCartonModal = () => {
-    setIsIssueCartonModel(false);
-  };
-  const closeInventoryModal = () => {
-    setIsInventoryModel(false);
-  };
-  React.useEffect(() => {
+
+  // State Management
+  const [inventoryData, setInventoryData] = useState<Inventory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedInventory, setSelectedInventory] = useState<Inventory | null>(null);
+  const [isDetailsModel, setIsDetailsModel] = useState(false);
+  const [isIssueKitModel, setIsIssueKitModel] = useState(false);
+  const [isIssueCartonModel, setIsIssueCartonModel] = useState(false);
+  const [showPopup, setShowPopup] = useState(false);
+
+  // Form State
+  const [processes, setProcesses] = useState<any[]>([]);
+  const [selectedProcess, setSelectedProcess] = useState("");
+  const [selectedProcessDetails, setSelectedProcessDetails] = useState<any>({});
+  const [issueKitProcess, setIssueKitProcess] = useState("");
+  const [issueCartonProcess, setIssueCartonProcess] = useState("");
+  const [packagingData, setPackagingData] = useState<any[]>([]);
+
+  useEffect(() => {
     getInventory();
   }, []);
+
   const getInventory = async () => {
     try {
-      let result = await fetchList("/inventory/process/get");
+      setLoading(true);
+      const result = await fetchList("/inventory/process/get");
       setInventoryData(result.processInventory);
     } catch (error) {
       console.error("Error Fetching Inventory:", error);
+      toast.error("Failed to fetch process inventory");
     } finally {
       setLoading(false);
     }
   };
-  const handleDelete = async () => {
+
+  const getProcesses = async (id: string) => {
     try {
-      await deleteProcess(productId);
-      toast.success("Process deleted successfully!");
-      setShowPopup(false);
-      getInventory();
+      const result = await getProcessByProductID(id);
+      const filtered = result.ProcessByProductID.filter(
+        (value: any) => value.status === "Waiting_Kits_allocation" || value.kitStatus === "partially_issued"
+      );
+      setProcesses(filtered);
     } catch (error) {
-      console.error("Error deleting Process:", error);
+      console.error("Error Fetching Process:", error);
     }
   };
-  const handleEdit = (process: any) => {
-    setInventoryID(process._id);
-    setProcessName(process.name);
-    setIsInventoryModel(true);
-    setUpdatedQuantity(0);
-    setUpdatedCartonQuantity(0);
-    setPackagingData([]);
-    inventoryData.forEach((value: Inventory) => {
-      if (value._id === process._id) {
-        value?.productDetails?.stages.forEach((stage: any) => {
-          stage?.subSteps
-            .filter((value1: any) => value1.isPackagingStatus)
-            .forEach((value1: any) => {
-              setPackagingData((prev) => [...prev, value1]);
-            });
-        });
-        setInventoryDetails(value);
-      }
-    });
-  };
-  const handleSubmitInventory = async () => {
-    try {
-      setIsInventoryModel(true);
 
-      if (!inventoryID) {
-        console.error("Inventory ID is missing");
+  const handleOpenDetails = (process: Inventory) => {
+    setSelectedInventory(process);
+    setIsDetailsModel(true);
+
+    // Extract packaging data if exists
+    const packData: any[] = [];
+    process.productDetails?.stages.forEach((stage: any) => {
+      stage?.subSteps
+        .filter((step: any) => step.isPackagingStatus)
+        .forEach((step: any) => packData.push(step));
+    });
+    setPackagingData(packData);
+  };
+
+  const openIssueKits = (inventory: Inventory) => {
+    setSelectedInventory(inventory);
+    setSelectedProcess(inventory._id);
+    setSelectedProcessDetails(inventory);
+    setIsIssueKitModel(true);
+    setIssueKitProcess("");
+  };
+
+  const openIssueCarton = (inventory: Inventory) => {
+    setSelectedInventory(inventory);
+    setSelectedProcess(inventory._id);
+    setSelectedProcessDetails(inventory);
+    setIsIssueCartonModel(true);
+    setIssueCartonProcess("");
+  };
+
+  const handleSubmitCarton = async () => {
+    try {
+      const data = new FormData();
+      data.append("process", selectedProcess);
+      data.append("issueCartonProcess", issueCartonProcess);
+      await updateIssueCarton(data);
+      toast.success("Cartons Issued Successfully!");
+      setIsIssueCartonModel(false);
+      getInventory();
+    } catch (error) {
+      console.error("Error issuing cartons:", error);
+      toast.error("Failed to issue cartons");
+    }
+  };
+
+  const handleSubmitIssuedKit = async () => {
+    try {
+      const data = new FormData();
+      data.append("process", selectedProcess);
+      data.append("issuedKits", issueKitProcess);
+
+      const needed = (selectedProcessDetails.processQuantity || 0) - (selectedProcessDetails.issuedKits || 0);
+      const input = parseInt(issueKitProcess) || 0;
+
+      if (needed <= 0) {
+        toast.error("Allocation already complete");
         return;
       }
 
-      const existingItem = inventoryData.find(
-        (value: Inventory) => value._id === inventoryID,
-      );
-      const currentQuantity = existingItem
-        ? parseInt(String(existingItem.processQuantity)) || 0
-        : 0;
-      const currentCartonQuantity = existingItem
-        ? parseInt(String(existingItem.cartonQuantity)) || 0
-        : 0;
-      const additionalQuantity = parseInt(String(updatedQuantity)) || 0;
-      const additionalCartonQuantity = parseInt(String(updatedCartonQuantity)) || 0;
-
-      const finalCartonQuantity =
-        currentCartonQuantity + additionalCartonQuantity;
-      const finalQuantity = currentQuantity + additionalQuantity;
-
-      let formData = new FormData();
-      formData.append("quantity", String(finalQuantity));
-      formData.append("cartonQuantity", String(finalCartonQuantity));
-
-      if (finalQuantity > 0) {
-        formData.append("status", "In Stock");
+      if (input <= 0) {
+        toast.error("Please enter a valid quantity");
+        return;
       }
 
-      const result = await updateInventoryById(inventoryID, formData);
-
-      if (result && result.status === 200) {
-
-        setIsInventoryModel(false);
-        getInventory();
-      } else {
-        console.error("Failed to update inventory", result);
+      if (input > needed) {
+        toast.error("Cannot allocate more than required");
+        return;
       }
-    } catch (error) {
-      console.error("Error updating inventory", error);
-    }
-  };
-  const getProcesses = async (id: string) => {
-    try {
-      let result = await getProcessByProductID(id);
-      let process = result.ProcessByProductID.filter(
-        (value) =>
-          value.status == "Waiting_Kits_allocation" ||
-          value.kitStatus == "partially_issued",
-      );
-      setProcesses(process);
-    } catch (error) {
-      console.error("Error Fetching Process:", error);
-    }
-  };
-  const handleProcessType = (event: string) => {
-    let process = processes.filter(
-      (value: any) =>
-        (value.status == "Waiting_Kits_allocation" ||
-          value.kitStatus == "partially_issued") &&
-        value._id === event,
-    );
-    setSelectedProcess(event);
-    setSelectedProcessDetails(process[0]);
-  };
-  const handleSubmitCarton = async () => {
-    try {
-      let data = new FormData();
-      data.append("process", selectedProcess);
-      data.append("issueCartonProcess", issueCartonProcess);
-      let result = await updateIssueCarton(data);
-      getInventory();
-      toast.success(result?.message || "Kits Issued Successfully !!");
-      setIsIssueKitModel(false);
-    } catch (error) {
-      console.error("Error Fetching Process:", error);
-    }
-  };
-  const handleSubmitIssuedKit = async () => {
-    try {
-      let data = new FormData();
-      data.append("process", selectedProcess);
-      data.append("issuedKits", issueKitProcess);
-      if (issueKitProcess === selectedProcessDetails?.quantity) {
-        data.append("kitStatus", "issued");
-      } else {
-        data.append("kitStatus", "partially_issued");
-      }
+
+      data.append("kitStatus", input >= needed ? "issued" : "partially_issued");
       data.append("status", "Waiting_Kits_approval");
-      let result = await updateIssueKit(data);
-      getInventory();
-      toast.success(result?.message || "Kits Issued Successfully !!");
+
+      await updateIssueKit(data);
+      toast.success("Kits Issued Successfully!");
       setIsIssueKitModel(false);
+      getInventory();
     } catch (error) {
-      console.error("Error Fetching Process:", error);
+      console.error("Error issuing kits:", error);
+      toast.error("Failed to issue kits");
     }
   };
-  const openIssueKits = (inventory: any) => {
-    setInventoryID(inventory._id);
-    setProductName(inventory?.productName);
-    getProcesses(inventory?.productDetails?._id);
-    setIsIssueKitModel(true);
-  };
-  const openIssueCarton = (inventory: any) => {
-    setInventoryID(inventory._id);
-    setProductName(inventory?.productName);
-    getProcesses(inventory?.productType);
-    setIsIssueCartonModel(true);
-  };
+
+  // Filtered Data
+  const filteredData = useMemo(() => {
+    return inventoryData.filter((item) => {
+      const searchStr = `${item.productName} ${item.name} ${item.orderConfirmationNo} ${item.processID}`.toLowerCase();
+      return searchStr.includes(searchTerm.toLowerCase());
+    });
+  }, [inventoryData, searchTerm]);
+
+  // Stats
+  const stats = useMemo(() => {
+    const total = inventoryData.length;
+    const critical = inventoryData.filter(item => (item.processQuantity - item.issuedKits) > 50).length;
+    const pendingApproval = inventoryData.filter(item => item.status === "Waiting_Kits_approval").length;
+    const completed = inventoryData.reduce((sum, item) => sum + (item.fgCount || 0), 0);
+
+    return { total, critical, pendingApproval, completed };
+  }, [inventoryData]);
 
   const columns = [
     {
-      name: "ID",
-      selector: (row: Inventory, index: number) => index + 1,
+      name: "Process Information",
+      selector: (row: Inventory) => row.name,
       sortable: true,
+      grow: 2,
+      cell: (row: Inventory) => (
+        <div className="flex flex-col py-3">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-gray-900 dark:text-white">{row.name}</span>
+            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+              {row.processID}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+            <Layers size={12} />
+            <span>{row.productName}</span>
+            <span className="text-gray-300">|</span>
+            <Hash size={12} />
+            <span>OC: {row.orderConfirmationNo || "N/A"}</span>
+          </div>
+        </div>
+      ),
     },
     {
-      name: "OC No",
-      selector: (row: Inventory, index: number) => row?.orderConfirmationNo,
+      name: "Allocation Progress",
       sortable: true,
-    },
-    {
-      name: "PID",
-      selector: (row: Inventory, index: number) => row?.processID,
-      sortable: true,
-    },
-    {
-      name: "Product",
-      selector: (row: Inventory, index: number) => row?.productName,
-      sortable: true,
-    },
-    {
-      name: "Process Name",
-      selector: (row: Inventory) => row?.name,
-      sortable: true,
-    },
-    {
-      name: "Quantity",
-      selector: (row: Inventory) => parseInt(row?.processQuantity),
-      sortable: true,
-    },
-    {
-      name: "Issued kits",
-      selector: (row: Inventory) => parseInt(row?.issuedKits),
-      sortable: true,
-    },
-    {
-      name: "Required Kits",
-      selector: (row: Inventory, index: number) =>
-        parseInt(row?.processQuantity),
-      sortable: true,
-    },
-    {
-      name: "Available Kits",
-      selector: (row: Inventory, index: number) =>
-        parseInt(row?.inventoryQuantity),
-      sortable: true,
-    },
-    {
-      name: "Shortage",
-      selector: (row: Inventory, index: number) =>
-        Math.abs(row?.processQuantity - row?.issuedKits),
-      sortable: true,
-    },
-    {
-      name: "Surplus",
-      selector: (row: Inventory, index: number) => {
-        return row?.issuedKits > row?.processQuantity
-          ? Math.abs(row?.inventoryQuantity - row?.processQuantity)
-          : 0;
+      grow: 1.5,
+      cell: (row: Inventory) => {
+        const percent = Math.min(100, Math.round((row.issuedKits / row.processQuantity) * 100));
+        const shortage = Math.max(0, row.processQuantity - row.issuedKits);
+        return (
+          <div className="w-full pr-4">
+            <div className="mb-1.5 flex items-center justify-between text-[10px]">
+              <span className="font-semibold text-gray-700 dark:text-gray-300">
+                {row.issuedKits} / {row.processQuantity} Kits
+              </span>
+              <span className={shortage > 0 ? "text-amber-600 font-bold" : "text-emerald-600"}>
+                {shortage > 0 ? `-${shortage} Short` : "Ready"}
+              </span>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+              <div
+                className={`h-full transition-all duration-500 ${percent === 100 ? "bg-emerald-500" : percent > 50 ? "bg-blue-500" : "bg-amber-500"}`}
+                style={{ width: `${percent}%` }}
+              />
+            </div>
+          </div>
+        );
       },
+    },
+    {
+      name: "Completed (FG)",
+      selector: (row: Inventory) => row.fgToStore || 0,
       sortable: true,
+      cell: (row: Inventory) => (
+        <div className="flex items-center gap-1.5 font-bold text-emerald-600">
+          <PackageCheck size={14} />
+          <span>{row.fgToStore || 0}</span>
+        </div>
+      ),
     },
     {
       name: "Status",
-      selector: (row: Inventory) => row?.status,
+      selector: (row: Inventory) => row.status,
       sortable: true,
       cell: (row: Inventory) => {
-        const statusStyles = {
-          waiting_schedule: {
-            label: "Waiting Schedule",
-            backgroundColor: "#f39c12",
-          },
-          Waiting_Kits_allocation: {
-            label: "Waiting Kits Allocation",
-            backgroundColor: "#9b59b6",
-          },
-          Waiting_Kits_approval: {
-            label: "Waiting Kits Approval",
-            backgroundColor: "#1abc9c",
-          },
-          waiting_for_line_feeding: {
-            label: "Waiting For Line Feeding",
-            backgroundColor: "#3498db",
-          },
-          waiting_for_kits_confirmation: {
-            label: "Waiting For Kits Confirmation",
-            backgroundColor: "#e67e22",
-          },
-          active: {
-            label: "Active",
-            backgroundColor: "#f1c40f",
-          },
-          down_time_hold: {
-            label: "Down Time Hold",
-            backgroundColor: "#e74c3c",
-          },
-          completed: {
-            label: "Completed",
-            backgroundColor: "#2ecc71",
-          },
-          default: {
-            label: "Process Created",
-            backgroundColor: "#95a5a6",
-          },
+        const statusMap: Record<string, { label: string; color: string }> = {
+          Waiting_Kits_allocation: { label: "Allocation Pending", color: "bg-amber-100 text-amber-800" },
+          Waiting_Kits_approval: { label: "Awaiting Approval", color: "bg-blue-100 text-blue-800" },
+          completed: { label: "Fully Allocated", color: "bg-emerald-100 text-emerald-800" },
+          active: { label: "Active Production", color: "bg-purple-100 text-purple-800" },
         };
-        const status = row?.status;
-        const { label, backgroundColor } = statusStyles[status] || statusStyles.default;
+        const s = statusMap[row.status] || { label: row.status.replace(/_/g, " "), color: "bg-gray-100 text-gray-800" };
         return (
-          <span
-            style={{
-              backgroundColor,
-              color: "#fff",
-              padding: "5px 10px",
-              borderRadius: "5px",
-              fontSize: "12px",
-              fontWeight: "bold",
-            }}
-          >
-            {label}
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${s.color}`}>
+            {s.label}
           </span>
         );
       },
     },
     {
       name: "Actions",
-      cell: (row: Inventory) => (
-        <div className="flex items-center space-x-1">
-          <button
-            onClick={() => handleEdit(row)}
-            className="transform rounded-full bg-blue-500 p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
-          >
-            <FiEye size={14} />
-          </button>
-          <button
-            onClick={() => openIssueKits(row)}
-            className="transform rounded-full bg-warning p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-warning"
-          >
-            <svg
-              width="12px"
-              height="12px"
-              viewBox="0 0 48 48"
-              fill="#ffffff"
-              stroke="#ffffff"
+      cell: (row: Inventory) => {
+        const kitComplete = row.issuedKits >= row.processQuantity;
+
+        // Calculate estimated cartons needed if packaging info exists
+        let cartonsNeeded = 0;
+        const packStep = row.productDetails?.stages
+          ?.flatMap((s: any) => s.subSteps || [])
+          .find((step: any) => step.isPackagingStatus);
+
+        if (packStep?.packagingData?.maxCapacity) {
+          cartonsNeeded = Math.ceil(row.processQuantity / packStep.packagingData.maxCapacity);
+        }
+
+        const cartonComplete = cartonsNeeded > 0 && row.cartonQuantity >= cartonsNeeded;
+
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleOpenDetails(row)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-50 text-gray-600 transition hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400"
+              title="View Details"
             >
-              <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-              <g
-                id="SVGRepo_tracerCarrier"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              ></g>
-              <g id="SVGRepo_iconCarrier">
-                {" "}
-                <g id="Layer_2" data-name="Layer 2">
-                  {" "}
-                  <g id="invisible_box" data-name="invisible box">
-                    {" "}
-                    <rect width="48" height="48" fill="none"></rect>{" "}
-                  </g>{" "}
-                  <g id="Medical">
-                    {" "}
-                    <g>
-                      {" "}
-                      <path d="M19,29h3v3a2,2,0,0,0,4,0V29h3a2,2,0,0,0,0-4H26V22a2,2,0,0,0-4,0v3H19a2,2,0,0,0,0,4Z"></path>{" "}
-                      <path d="M42,12H33V8a4,4,0,0,0-4-4H19a4,4,0,0,0-4,4v4H6a4,4,0,0,0-4,4V39a4,4,0,0,0,4,4H42a4,4,0,0,0,4-4V16A4,4,0,0,0,42,12ZM19,8H29v4H19Zm16,8V39H13V16ZM6,16H9V39H6ZM42,39H39V16h3Z"></path>{" "}
-                    </g>{" "}
-                  </g>{" "}
-                </g>{" "}
-              </g>
-            </svg>
-          </button>
-          <button
-            onClick={() => openIssueCarton(row)}
-            className="transform rounded-full bg-success p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-success"
-          >
-            <svg
-              fill="#ffffff"
-              height="12px"
-              width="12px"
-              version="1.1"
-              id="Capa_1"
-              viewBox="0 0 491.616 491.616"
-              stroke="#ffffff"
-            >
-              <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-              <g
-                id="SVGRepo_tracerCarrier"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              ></g>
-              <g id="SVGRepo_iconCarrier">
-                {" "}
-                <g>
-                  {" "}
-                  <g id="Icons_4_">
-                    {" "}
-                    <g>
-                      {" "}
-                      <path d="M428.202,176.195c-0.006-5.52-1.263-10.965-3.678-15.928L358.202,23.95C351.105,9.399,336.068,0,319.89,0H171.724 c-16.177,0-31.213,9.399-38.31,23.964L67.025,160.678c-2.408,4.958-3.662,10.398-3.666,15.911l-0.242,288.588 c0,14.574,11.869,26.439,26.449,26.439H402.05c14.58,0,26.449-11.866,26.449-26.439L428.202,176.195z M328.223,38.533 l56.964,117.196H262.464V33.331h57.426C323.405,33.331,326.693,35.383,328.223,38.533z M163.394,38.55 c1.529-3.167,4.817-5.219,8.33-5.219h57.41v122.398H106.429L163.394,38.55z M395.162,458.282H96.45V189.06h298.712V458.282z"></path>{" "}
-                      <path d="M147.199,255.865c0,13.813,11.199,25,25,25h147.219c13.801,0,25.001-11.188,25.001-25c0-13.81-11.2-25-25.001-25H172.199 C158.398,230.865,147.199,242.055,147.199,255.865z"></path>{" "}
-                    </g>{" "}
-                  </g>{" "}
-                </g>{" "}
-              </g>
-            </svg>
-          </button>
-        </div>
-      ),
+              <Eye size={16} />
+            </button>
+
+            {!kitComplete && (
+              <button
+                onClick={() => openIssueKits(row)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary transition hover:bg-primary hover:text-white"
+                title="Issue Kits"
+              >
+                <Box size={16} />
+              </button>
+            )}
+
+            {!cartonComplete && (
+              <button
+                onClick={() => openIssueCarton(row)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition hover:bg-emerald-600 hover:text-white dark:bg-emerald-900/20"
+                title="Issue Carton"
+              >
+                <Truck size={16} />
+              </button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
+  const customStyles = {
+    headRow: {
+      style: {
+        backgroundColor: "#f9fafb",
+        borderTopWidth: "1px",
+        borderTopColor: "rgba(0,0,0,0.05)",
+      },
+    },
+    headCells: {
+      style: {
+        fontWeight: "700",
+        fontSize: "0.7rem",
+        color: "#6b7280",
+        textTransform: "uppercase" as const,
+        letterSpacing: "0.05em",
+      },
+    },
+    rows: {
+      style: {
+        minHeight: "80px",
+        "&:hover": {
+          backgroundColor: "#f9fafb !important",
+        }
+      },
+    },
+  };
+
   return (
-    <div className="bg-gray-100 min-h-screen p-6">
-      <Breadcrumb
-        pageName="View Process Inventory"
-        parentName="Process Inventory"
-      />
-      <div className="mt-6 rounded-lg bg-white p-6 shadow-lg">
-        <ToastContainer
-          position="top-center"
-          closeOnClick
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-        />
-        {loading ? (
-          <div className="flex justify-center">
-            <BallTriangle
-              height={100}
-              width={100}
-              color="#4fa94d"
-              ariaLabel="loading"
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Header */}
+      <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Process Allocation</h1>
+          <p className="mt-1 text-sm text-gray-500">Monitor and fulfill kit requirements for active production lines.</p>
+        </div>
+        <button
+          onClick={() => router.push("/inventory/view")}
+          className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-strokedark dark:bg-boxdark dark:text-white"
+        >
+          <ArrowLeft size={16} />
+          Back to Stock Master
+        </button>
+      </div>
+
+      {/* Stats */}
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: "Active Processes", value: stats.total, icon: Layers, color: "text-blue-600", bg: "bg-blue-50" },
+          { label: "Shortage Alerts", value: stats.critical, icon: AlertTriangle, color: "text-rose-600", bg: "bg-rose-50" },
+          { label: "Approval Pending", value: stats.pendingApproval, icon: AlertCircle, color: "text-amber-600", bg: "bg-amber-50" },
+          { label: "Devices Completed", value: stats.completed, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50" },
+        ].map((stat, i) => (
+          <div key={i} className="flex items-center rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-200 dark:bg-boxdark dark:ring-strokedark">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${stat.bg} ${stat.color} mr-4`}>
+              <stat.icon size={24} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">{stat.label}</p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{stat.value}</h3>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div className="overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-black/5 dark:bg-boxdark">
+        <div className="flex border-b border-gray-100 p-6 dark:border-strokedark">
+          <div className="relative w-full max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              placeholder="Search by Process, Product or OC..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm focus:border-primary focus:bg-white focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all dark:border-strokedark dark:bg-form-input dark:text-white"
             />
           </div>
-        ) : (
-          <>
+        </div>
+
+        <div className="relative">
+          {loading ? (
+            <div className="flex h-64 items-center justify-center">
+              <BallTriangle height={80} width={80} color="#3c50e0" />
+            </div>
+          ) : (
             <DataTable
-              className="dark:bg-bodyDark"
               columns={columns}
-              data={inventoryData}
+              data={filteredData}
               pagination
-              selectableRows
-              onSelectedRowsChange={handleRowSelected}
               highlightOnHover
-              pointerOnHover
-              customStyles={{
-                headCells: {
-                  style: {
-                    fontWeight: "bold",
-                    backgroundColor: "#f8f9fa",
-                    padding: "12px",
-                  },
-                },
-                rows: {
-                  style: {
-                    minHeight: "72px",
-                    "&:hover": {
-                      backgroundColor: "#f1f5f9",
-                    },
-                  },
-                },
-                pagination: {
-                  style: {
-                    padding: "12px",
-                    border: "none",
-                  },
-                },
-                cells: {
-                  style: {
-                    "& > div:first-child": {
-                      whiteSpace: "break-spaces",
-                      overflow: "hidden",
-                      textOverflow: "inherit",
-                    },
-                  },
-                },
-              }}
+              customStyles={customStyles}
             />
-            <Modal
-              isOpen={isIssueCartonModel}
-              onSubmit={handleSubmitCarton}
-              onClose={closeIssuedCartonModal}
-              title={"Issue Carton (" + productName + ")"}
-            >
-              {processes.length > 0 ? (
-                <div className="pb-3">
-                  <div className="justify-between">
-                    <div className="w-full px-2">
-                      <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                        Process Type
-                      </label>
-                      <select
-                        value={selectedProcess || ""}
-                        onChange={(e) => handleProcessType(e.target.value)}
-                        className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
-                      >
-                        <option
-                          value=""
-                          className="text-body dark:text-bodydark"
-                        >
-                          Please Select
-                        </option>
-                        {processes.map((process, index) => (
-                          <option
-                            key={index}
-                            value={process?._id}
-                            className="text-body dark:text-bodydark"
-                          >
-                            {process?.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="w-full px-2 pt-4">
-                      <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                        Issue Cartons
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="Issue Cartons"
-                        onChange={(e) => {
-                          setIssueCartonProcess(e.target.value);
-                        }}
-                        value={issueCartonProcess}
-                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center">
-                  <p>No Running Processes Available!</p>
-                </div>
-              )}
-            </Modal>
-            <Modal
-              isOpen={isIssueKitModel}
-              onSubmit={handleSubmitIssuedKit}
-              onClose={closeIssuedKitsModal}
-              title={"Issue Kits (" + productName + ")"}
-            >
-              {processes.length > 0 ? (
-                <div className="pb-3">
-                  <div className="justify-between">
-                    <div className="w-full px-2">
-                      <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                        Process Type
-                      </label>
-                      <select
-                        value={selectedProcess || ""}
-                        onChange={(e) => handleProcessType(e.target.value)}
-                        className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
-                      >
-                        <option
-                          value=""
-                          className="text-body dark:text-bodydark"
-                        >
-                          Please Select
-                        </option>
-                        {processes.map((process, index) => (
-                          <option
-                            key={index}
-                            value={process?._id}
-                            className="text-body dark:text-bodydark"
-                          >
-                            {process?.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {selectedProcessDetails &&
-                      Object.keys(selectedProcessDetails).length > 0 && (
-                        <>
-                          <div className="grid px-3 py-3 sm:grid-cols-2">
-                            <div className="text-gray-700 dark:text-gray-300 mb-2">
-                              <strong className="font-medium">
-                                Process Name:
-                              </strong>{" "}
-                              {selectedProcessDetails?.name}
-                            </div>
-                            <div className="text-gray-700 dark:text-gray-300 mb-2">
-                              <strong className="font-medium">
-                                Kits Needed:
-                              </strong>{" "}
-                              {parseInt(selectedProcessDetails?.quantity) -
-                                parseInt(selectedProcessDetails?.issuedKits)}
-                            </div>
-                            <div className="text-gray-700 dark:text-gray-300 mb-2">
-                              <strong className="font-medium">
-                                Kits Issued:
-                              </strong>{" "}
-                              {parseInt(selectedProcessDetails?.issuedKits)}
-                            </div>
-                          </div>
-                          <div className="w-full px-2 pt-4">
-                            <label className="mb-2 block text-sm font-medium text-black dark:text-white">
-                              Issue Kit
-                            </label>
-                            <input
-                              type="number"
-                              placeholder="Issue Kit"
-                              min="1"
-                              max={
-                                parseInt(selectedProcessDetails?.quantity) -
-                                parseInt(selectedProcessDetails?.issuedKits)
-                              }
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                const maxLimit =
-                                  parseInt(selectedProcessDetails?.quantity) -
-                                  parseInt(selectedProcessDetails?.issuedKits);
-                                if (
-                                  value === "" ||
-                                  (parseInt(value) > 0 &&
-                                    parseInt(value) <= maxLimit)
-                                ) {
-                                  setIssueKitProcess(value);
-                                } else {
-                                  alert(
-                                    "Kits assigned cannot exceed the required amount.",
-                                  );
-                                }
-                              }}
-                              value={issueKitProcess}
-                              className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                            />
-                            {issueKitProcess &&
-                              (parseInt(issueKitProcess) < 1 ||
-                                parseInt(issueKitProcess) >
-                                parseInt(selectedProcessDetails?.quantity) -
-                                parseInt(
-                                  selectedProcessDetails?.issuedKits,
-                                )) && (
-                                <p className="text-red-500 mt-1 text-sm">
-                                  Invalid quantity. Please enter a value between
-                                  1 and{" "}
-                                  {parseInt(selectedProcessDetails?.quantity) -
-                                    parseInt(
-                                      selectedProcessDetails?.issuedKits,
-                                    )}
-                                  .
-                                </p>
-                              )}
-                          </div>
-                        </>
-                      )}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center">
-                  <p>No Running Processes Available!</p>
-                </div>
-              )}
-            </Modal>
-            <Modal
-              isOpen={isInventoryModel}
-              onSubmit={handleSubmitInventory}
-              onClose={closeInventoryModal}
-              title={"Inventory Details (" + processName + ")"}
-              submitOption={false}
-            >
-              <div>
-                <div>
-                  <strong>Process Details </strong>
-                </div>
-                <div className="grid py-2 sm:grid-cols-2">
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Process Name :</strong>{" "}
-                    {inventoryDetails?.name}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Process Id :</strong>{" "}
-                    {inventoryDetails?.processID}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Required kits :</strong>{" "}
-                    {inventoryDetails?.processQuantity}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Issued Kits :</strong>{" "}
-                    {inventoryDetails?.issuedKits}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Kits Shortage :</strong>{" "}
-                    {Math.abs(
-                      inventoryDetails?.processQuantity -
-                      inventoryDetails?.issuedKits,
-                    )}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Surplus Kits :</strong>{" "}
-                    {inventoryDetails?.issuedKits >
-                      inventoryDetails?.processQuantity
-                      ? Math.abs(
-                        inventoryDetails?.inventoryQuantity -
-                        inventoryDetails?.processQuantity,
-                      )
-                      : 0}
-                  </div>
-                </div>
-                {packagingData.length > 0 && (
-                  <>
-                    <div>
-                      <strong>Carton Details</strong>
-                    </div>
-                    <div className="grid py-2 sm:grid-cols-2">
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">
-                          Required Cartons :
-                        </strong>{" "}
-                        {parseInt(inventoryDetails?.processQuantity) /
-                          packagingData[0]?.packagingData?.maxCapacity}
-                      </div>
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">
-                          Cartons Shortage :
-                        </strong>{" "}
-                        {Math.abs(
-                          parseInt(inventoryDetails?.processQuantity) /
-                          packagingData[0]?.packagingData?.maxCapacity -
-                          inventoryDetails?.cartonQuantity,
-                        )}
-                      </div>
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">
-                          Surplus Cartons :
-                        </strong>{" "}
-                        {inventoryDetails?.cartonQuantity >
-                          inventoryDetails?.processQuantity /
-                          packagingData[0]?.packagingData?.maxCapacity
-                          ? Math.abs(
-                            parseInt(inventoryDetails?.processQuantity) /
-                            packagingData[0]?.packagingData?.maxCapacity -
-                            inventoryDetails?.cartonQuantity,
-                          )
-                          : 0}
-                      </div>
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">Updated At :</strong>{" "}
-                        {new Date(
-                          inventoryDetails?.updatedAt,
-                        ).toLocaleDateString()}
-                      </div>
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">Created At :</strong>{" "}
-                        {new Date(
-                          inventoryDetails?.createdAt,
-                        ).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </Modal>
-          </>
-        )}
-        {showPopup && (
-          <ConfirmationPopup
-            message="Are you sure you want to delete this item?"
-            onConfirm={() => handleDelete()}
-            onCancel={() => setShowPopup(false)}
-          />
-        )}
+          )}
+        </div>
       </div>
+
+      {/* Details Modal */}
+      <Modal
+        isOpen={isDetailsModel}
+        onSubmit={() => setIsDetailsModel(false)}
+        onClose={() => setIsDetailsModel(false)}
+        title="Process Inventory Details"
+        submitOption={false}
+      >
+        {selectedInventory && (
+          <div className="space-y-6 pt-2">
+            <div className="grid grid-cols-2 gap-4 rounded-xl bg-gray-50 p-4 dark:bg-meta-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Process Name</p>
+                <p className="mt-1 font-semibold text-gray-900 dark:text-white">{selectedInventory.name}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Process ID</p>
+                <p className="mt-1 font-semibold text-gray-900 dark:text-white">{selectedInventory.processID}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
+                <Box size={16} className="text-primary" />
+                Kit Allocation Summary
+              </h4>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-4 rounded-xl border border-gray-100 p-4 text-sm dark:border-strokedark">
+                <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                  <span className="text-gray-500">Required:</span>
+                  <span className="font-bold">{selectedInventory.processQuantity}</span>
+                </div>
+                <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                  <span className="text-gray-500">Issued:</span>
+                  <span className="font-bold text-emerald-600">{selectedInventory.issuedKits}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 text-rose-500">Shortage:</span>
+                  <span className="font-bold text-rose-600">
+                    {Math.max(0, selectedInventory.processQuantity - selectedInventory.issuedKits)}
+                  </span>
+                </div>
+                <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                  <span className="text-gray-500">Available Stock:</span>
+                  <span className="font-bold">{selectedInventory.inventoryQuantity}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Completed (FG):</span>
+                  <span className="font-bold text-emerald-600">{selectedInventory.fgCount || 0}</span>
+                </div>
+              </div>
+            </div>
+
+            {packagingData.length > 0 && (
+              <div className="space-y-3 border-t pt-6 dark:border-strokedark">
+                <h4 className="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
+                  <Truck size={16} className="text-emerald-500" />
+                  Carton Fulfillment
+                </h4>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4 rounded-xl border border-gray-100 p-4 text-sm dark:border-strokedark">
+                  <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                    <span className="text-gray-500">Est. Needed:</span>
+                    <span className="font-bold">
+                      {Math.ceil(selectedInventory.processQuantity / (packagingData[0]?.packagingData?.maxCapacity || 1))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                    <span className="text-gray-500">Allocated:</span>
+                    <span className="font-bold">{selectedInventory.cartonQuantity}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-4 rounded-lg bg-blue-50/50 p-3 text-[10px] text-gray-500 dark:bg-white/5">
+              <div className="flex items-center gap-1.5">
+                <Calendar size={12} />
+                Created: {new Date(selectedInventory.createdAt).toLocaleDateString()}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Calendar size={12} />
+                Updated: {new Date(selectedInventory.updatedAt).toLocaleDateString()}
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Allocation Modals (Kit/Carton) */}
+
+      {/* Issue Kits Modal */}
+      <Modal
+        isOpen={isIssueKitModel}
+        onSubmit={handleSubmitIssuedKit}
+        onClose={() => setIsIssueKitModel(false)}
+        title={`Allocate Kits: ${selectedInventory?.productName}`}
+        submitDisabled={
+          (() => {
+            const needed = (selectedInventory?.processQuantity || 0) - (selectedInventory?.issuedKits || 0);
+            const input = parseInt(issueKitProcess) || 0;
+            return needed <= 0 || input <= 0 || input > needed;
+          })()
+        }
+      >
+        <div className="space-y-5 pt-2">
+          <div className="rounded-xl bg-gray-50 p-5 space-y-3 dark:bg-meta-4 ring-1 ring-gray-100 dark:ring-strokedark">
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500 font-bold uppercase">Process Name:</span>
+              <span className="font-bold text-gray-900 dark:text-white">{selectedInventory?.name}</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500 font-bold uppercase">Pending Requirement:</span>
+              <span className={`font-bold ${((selectedInventory?.processQuantity || 0) - (selectedInventory?.issuedKits || 0)) === 0 ? "text-emerald-500" : "text-rose-500"}`}>
+                {Math.max(0, (selectedInventory?.processQuantity || 0) - (selectedInventory?.issuedKits || 0))} Kits
+              </span>
+            </div>
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-strokedark">
+              <label className="mb-2 block text-xs font-bold uppercase text-gray-500">Amount to Allocate</label>
+              <div className="relative">
+                <Box className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  type="number"
+                  placeholder={((selectedInventory?.processQuantity || 0) - (selectedInventory?.issuedKits || 0)) === 0 ? "Allocation Complete" : "Enter quantity"}
+                  value={issueKitProcess}
+                  onChange={(e) => setIssueKitProcess(e.target.value)}
+                  disabled={((selectedInventory?.processQuantity || 0) - (selectedInventory?.issuedKits || 0)) <= 0}
+                  className={`w-full rounded-lg border py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-4 focus:ring-primary/10 dark:bg-form-input dark:text-white disabled:bg-gray-100 disabled:cursor-not-allowed ${parseInt(issueKitProcess) > ((selectedInventory?.processQuantity || 0) - (selectedInventory?.issuedKits || 0))
+                    ? "border-rose-500 ring-rose-500/10 focus:border-rose-500 focus:ring-rose-500/10 bg-white"
+                    : "border-primary bg-white"
+                    }`}
+                />
+              </div>
+              {parseInt(issueKitProcess) > ((selectedInventory?.processQuantity || 0) - (selectedInventory?.issuedKits || 0)) && (
+                <p className="mt-1 text-[10px] font-bold text-rose-500">Cannot allocate more than pending requirement</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Issue Carton Modal */}
+      <Modal
+        isOpen={isIssueCartonModel}
+        onSubmit={handleSubmitCarton}
+        onClose={() => setIsIssueCartonModel(false)}
+        title={`Allocate Cartons: ${selectedInventory?.productName}`}
+      >
+        <div className="space-y-5 pt-2">
+          <div className="rounded-xl bg-gray-50 p-5 space-y-3 dark:bg-meta-4 ring-1 ring-gray-100 dark:ring-strokedark">
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500 font-bold uppercase">Process Name:</span>
+              <span className="font-bold text-gray-900 dark:text-white">{selectedInventory?.name}</span>
+            </div>
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-strokedark">
+              <label className="mb-2 block text-xs font-bold uppercase text-gray-500">Carton Quantity</label>
+              <div className="relative">
+                <Truck className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  type="number"
+                  placeholder="Enter cartons"
+                  value={issueCartonProcess}
+                  onChange={(e) => setIssueCartonProcess(e.target.value)}
+                  className="w-full rounded-lg border border-primary bg-white py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-4 focus:ring-primary/10 dark:bg-form-input dark:text-white"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <ToastContainer position="top-right" autoClose={3000} />
     </div>
   );
 };
 
-export default ViewProcessInventory;
+export default AllocationManagement;
