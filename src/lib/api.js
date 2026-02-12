@@ -1515,7 +1515,16 @@ export const createEsimProfile = async (data) => {
     throw error.response?.data || { message: "Error creating ESIM profile" };
   }
 };
+export const viewEsimProfilesById = async (pfValue) => {
+  try {
+    const response = await api.get(`/esim-profile/view/${pfValue}`);
+    console.log("response.data ==>", response.data);
+    return response.data;
 
+  } catch (error) {
+    throw error.response?.data || { message: "Error fetching ESIM profiles" };
+  }
+};
 export const viewEsimProfiles = async () => {
   try {
     const response = await api.get("/esim-profile/view");
@@ -1549,6 +1558,15 @@ export const createEsimApn = async (data) => {
     return response.data;
   } catch (error) {
     throw error.response?.data || { message: "Error creating ESIM APN" };
+  }
+};
+
+export const viewEsimApnsByID = async (apnValue, nwValue) => {
+  try {
+    const response = await api.get(`/esim-apn/view/${apnValue}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error fetching ESIM APNs" };
   }
 };
 

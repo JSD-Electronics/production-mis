@@ -230,6 +230,7 @@ export default function DeviceTestComponent({
   const [isJigConnected, setIsJigConnected] = useState(false);
   const pendingJigErrorRef = React.useRef<string | null>(null);
   const [pendingJigErrorState, setPendingJigErrorState] = useState<string | null>(null); // For UI feedback if needed
+  const totalProcessStartTimeRef = React.useRef<number>(Date.now());
   const [isPreviousStagesModalOpen, setIsPreviousStagesModalOpen] = useState(false);
   const [isCartonDevicesModalOpen, setIsCartonDevicesModalOpen] = useState(false);
   const [isVerifyCartonModal, setIsVerifyCartonModal] = useState(false);
@@ -424,9 +425,9 @@ export default function DeviceTestComponent({
       pendingJigErrorRef.current = null;
       setPendingJigErrorState(null);
       // Disconnect jig if active
-      if (jigDisconnectRef.current) {
-        jigDisconnectRef.current();
-      }
+      // if (jigDisconnectRef.current) {
+      //   jigDisconnectRef.current();
+      // }
       return; // Stop further processing/advancing
     }
 
@@ -441,8 +442,10 @@ export default function DeviceTestComponent({
       const finalStatus = allPassed ? "Pass" : "NG";
       setJigDecision(finalStatus);
 
+      const totalProcessTime = Math.round((Date.now() - totalProcessStartTimeRef.current) / 1000);
+
       if (finalStatus === "Pass") {
-        handleUpdateStatus("Pass", "", newResults);
+        handleUpdateStatus("Pass", "", { ...newResults, totalProcessTime });
       } else {
         setShowNGModal(true);
       }
@@ -491,7 +494,9 @@ export default function DeviceTestComponent({
     pendingJigErrorRef.current = null;
     setPendingJigErrorState(null);
     setGeneratedCommand("");
+    setGeneratedCommand("");
     stepStartTimeRef.current = Date.now();
+    totalProcessStartTimeRef.current = Date.now();
   }, [searchResult]);
 
   useEffect(() => {

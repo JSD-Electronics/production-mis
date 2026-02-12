@@ -1742,8 +1742,8 @@ const EditProduct = () => {
                                                         </div>
                                                         {(subStep.stepFields.actionType === "Command" ||
                                                           subStep.stepFields.actionType === "switch profile 2" ||
-                                                          subStep.stepFields.actionType === "switch profile 1" ||
-                                                          subStep.stepFields.actionType === "Esim Settings validation") && (
+                                                          subStep.stepFields.actionType === "switch profile 1"
+                                                        ) && (
                                                             <div>
                                                               <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
                                                                 Command
