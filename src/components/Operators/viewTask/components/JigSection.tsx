@@ -111,6 +111,29 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
     setGeneratedCommandRef.current = setGeneratedCommand;
   }, [setGeneratedCommand]);
 
+  const stepStartTime = useRef<number>(Date.now());
+
+  const isLocallyGeneratedRef = useRef(false);
+
+  const generatedCommandRef = useRef(generatedCommand);
+  useEffect(() => {
+    // Only update ref if generatedCommand is truthy (preserves local updates during race conditions)
+    // or if we explicitly want to handle resets (which usually happen with component remounts anyway)
+
+    // If we just generated a command locally (isLocallyGeneratedRef is true), 
+    // we should IGNORE the prop update if it doesn't match our new local value (implying it's stale/lagging).
+    // Once the prop matches our local value (parent caught up), we can clear the flag.
+    if (isLocallyGeneratedRef.current) {
+      if (generatedCommand === generatedCommandRef.current) {
+        isLocallyGeneratedRef.current = false;
+      }
+    } else {
+      if (generatedCommand !== undefined) {
+        generatedCommandRef.current = generatedCommand;
+      }
+    }
+  }, [generatedCommand]);
+
 
 
   useEffect(() => {
@@ -145,7 +168,9 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
   // No longer clearing logs on subStep change to preserve history for download
   useEffect(() => {
     accumulatedDataRef.current = "";
+    accumulatedDataRef.current = "";
     if (subStep) {
+      stepStartTime.current = Date.now();
       const stepName = subStep.stepName || subStep.name || "Unknown Step";
       const actionType = subStep.stepFields?.actionType || "Process";
       addLog(`--- STARTING STEP: ${stepName} (${actionType}) ---`, "info");
@@ -217,6 +242,11 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
 
   const processData = useCallback(
     (text: string) => {
+      // Ignore specific unwanted responses
+      if (text.includes("PANIC BUTTON PRESSED")) {
+        return;
+      }
+
       accumulatedDataRef.current += text + "\n";
       const newData = accumulatedDataRef.current;
 
@@ -296,7 +326,14 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
               if (res && res.data) {
                 const d = res.data;
                 const cmd = `+#SIM#${d.esimMakeId},${d.profile1Id},${d.profile2Id},${d.apnProfile1},${d.apnProfile2};`;
+                const duration = ((Date.now() - stepStartTime.current) / 1000).toFixed(2);
                 addLog(`ESIM Master match found! Generated command: ${cmd}`, "success");
+                addLog(`Step Duration: ${duration}s`, "success");
+
+                // Update local ref immediately to ensure next step has access even if prop update is delayed
+                generatedCommandRef.current = cmd;
+                isLocallyGeneratedRef.current = true;
+
                 if (setGeneratedCommandRef.current) {
                   setGeneratedCommandRef.current(cmd);
                 }
@@ -319,18 +356,32 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       if (currentSubStep?.stepFields?.actionType === "Esim Settings validation" && matchCount > 0) {
         const ccid = parsedData["CCID"] || parsedData["ccid"] || parsedData["PARAMETERS"]?.["CCID"] || parsedData["PARAMETERS"]?.["ccid"];
         if (ccid) {
-          addLog(`Validating CCID: ${ccid}. Checking ESIM Master...`, "info");
-          (async () => {
+          // addLog(`Validating CCID: ${ccid}. Checking generated command...`, "info");
+          const cmd = generatedCommandRef.current;
+          console.log("cmd ===>", cmd);
+
+          if (cmd) {
             try {
-              const res = await getEsimMasterByCcid(ccid);
-              if (res && res.data) {
-                const d = res.data;
+              // Expected format: +#SIM#Make,PF1,PF2,APN1,APN2;
+              const cleanCmd = cmd.replace(/^[+#]+SIM#/i, '').replace(/;$/, '').trim();
+              const parts = cleanCmd.split(',').map(p => p.trim());
+
+              if (parts.length >= 5) {
                 const masterFieldsMapping: any = {
-                  "Esim Make": d.esimMakeId,
-                  "PFID1": d.profile1Id,
-                  "PFID2": d.profile2Id,
-                  "APN1": d.apnProfile1,
-                  "APN2": d.apnProfile2
+                  "Esim Make": parts[0],
+                  "PFID1": parts[1],
+                  "PFID2": parts[2],
+                  "APN1": parts[3],
+                  "APN2": parts[4]
+                };
+
+                // Reconstruct master data object for logging/decision payload
+                const d = {
+                  esimMakeId: parts[0],
+                  profile1Id: parts[1],
+                  profile2Id: parts[2],
+                  apnProfile1: parts[3],
+                  apnProfile2: parts[4]
                 };
 
                 let validationPassed = true;
@@ -340,9 +391,6 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                   const expected = masterFieldsMapping[field.jigName];
                   if (expected !== undefined) {
                     const received = String(parsedData['SETTINGS']?.[field.jigName] || "").trim();
-                    console.log("field.jigName ==>", field.jigName);
-                    console.log("parsedData ==>", parsedData);
-                    console.log(`${field.jigName}`, "===", "received values from jig  ==>", received);
 
                     if (String(expected).trim() !== received) {
                       validationPassed = false;
@@ -352,7 +400,9 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                 });
 
                 if (validationPassed) {
+                  const duration = ((Date.now() - stepStartTime.current) / 1000).toFixed(2);
                   addLog("ESIM Settings Validation Passed!", "success");
+                  addLog(`Step Duration: ${duration}s`, "success");
                   onDecisionRef.current?.("Pass", undefined, { ccid, parsedData, masterData: d });
                 } else {
                   const errorMsg = validationErrors.join(", ");
@@ -360,14 +410,17 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                   onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { ccid, parsedData, masterData: d }, false);
                 }
               } else {
-                addLog(`ESIM Master NOT found for CCID: ${ccid}`, "error");
-                onDecisionRef.current?.("NG", `ESIM Master for CCID ${ccid} not found`, { ccid, parsedData });
+                addLog(`Invalid generated command format: ${cmd}`, "error");
+                onDecisionRef.current?.("NG", "Invalid generated command format", { ccid, parsedData });
               }
             } catch (err: any) {
               addLog(`Error during validation: ${err.message || err}`, "error");
               onDecisionRef.current?.("NG", `Validation error: ${err.message || "Unknown error"}`, { ccid, parsedData });
             }
-          })();
+          } else {
+            addLog(`Generated command not found for validation.`, "error");
+            onDecisionRef.current?.("NG", "Generated command missing", { ccid, parsedData });
+          }
           accumulatedDataRef.current = "";
           return;
         } else if (matchCount >= requiredFieldsCount) {
@@ -388,6 +441,8 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
         const apnValue = findVal("APN");
         const pfValue = findVal("PF");
 
+        console.log("search for value for", normalizedActionType, "== nwValue", nwValue, "apnValue", apnValue, "pfValue", pfValue);
+
         if (nwValue || apnValue || pfValue) {
           addLog(`Validating ${actionType}: N/W=${nwValue}, APN=${apnValue}, PF=${pfValue}`, "info");
           (async () => {
@@ -400,40 +455,57 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
               const profiles = profilesRes.data || [];
               const apns = apnsRes.data || [];
 
-              let validationPassed = true;
+              let validationPassedNw = true;
+              let validationPassedApn = true;
+              let validationPassedPf = true;
+
               let errors: string[] = [];
 
-              // 1. Check N/W in profiles.name array
+              // 1. Check N/W: profile.name array should include nwValue AND profileId should match pfValue
               if (nwValue) {
-                const found = profiles.some((p: any) =>
-                  Array.isArray(p.name) ? p.name.includes(nwValue) : p.name === nwValue
-                );
+                const found = profiles.some((p: any) => {
+                  const profileIdMatch = String(p.profileId) === String(pfValue);
+                  const nameMatch = Array.isArray(p.name) ? p.name.includes(nwValue) : p.name === nwValue;
+                  return profileIdMatch && nameMatch;
+                });
                 if (!found) {
-                  validationPassed = false;
-                  errors.push(`N/W mismatch: ${nwValue} not found in master records`);
+                  validationPassedNw = false;
+                  errors.push(`N/W mismatch: ${nwValue} not found for Profile ${pfValue}`);
                 }
               }
 
-              // 2. Check APN in apns.apnName
+              // 2. Check APN: apnName should match AND the profile should match nwValue
               if (apnValue) {
-                const found = apns.some((a: any) => a.apnName === apnValue);
+                const found = apns.some((a: any) => {
+                  const apnMatch = a.apnName === apnValue;
+                  // Check if either esimProfile1 or esimProfile2 matches nwValue
+                  const profileMatch = a.esimProfile1 === nwValue;
+                  return apnMatch && profileMatch;
+                });
                 if (!found) {
-                  validationPassed = false;
-                  errors.push(`APN mismatch: ${apnValue} not found in master records`);
+                  validationPassedApn = false;
+                  errors.push(`APN mismatch: ${apnValue} not found for N/W ${nwValue}`);
                 }
               }
 
-              // 3. Check PF in profiles.profileId
+              // 3. Check PF: profileId should match AND name array should include nwValue
               if (pfValue) {
-                const found = profiles.some((p: any) => p.profileId === pfValue);
+                const found = profiles.some((p: any) => {
+                  const profileIdMatch = String(p.profileId) === String(pfValue);
+                  const nameMatch = Array.isArray(p.name) ? p.name.includes(nwValue) : p.name === nwValue;
+                  return profileIdMatch && nameMatch;
+                });
+                console.log("found pfValue ==>", found, "(checking pfValue:", pfValue, "nwValue:", nwValue, ")");
                 if (!found) {
-                  validationPassed = false;
-                  errors.push(`PF mismatch: ${pfValue} not found in master records`);
+                  validationPassedPf = false;
+                  errors.push(`PF mismatch: Profile ${pfValue} not found for N/W ${nwValue}`);
                 }
               }
-
-              if (validationPassed) {
+              // return false;
+              if (validationPassedPf && validationPassedApn && validationPassedNw) {
+                const duration = ((Date.now() - stepStartTime.current) / 1000).toFixed(2);
                 addLog(`${actionType} Validation Passed!`, "success");
+                addLog(`Step Duration: ${duration}s`, "success");
                 onDecisionRef.current?.("Pass", undefined, { parsedData }, true);
               } else {
                 const errorMsg = errors.join(", ");
@@ -489,15 +561,54 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
 
       if (matchCount > 0 && onDecisionRef.current) {
         if (matchCount >= requiredFieldsCount) {
-          if (isCommandBusyRef.current) {
+          // REMOVED BLOCKING: if (isCommandBusyRef.current) { ... }
+          // We want to process data even if command was just sent, because response might be fast.
 
-            // Optionally add a small status message to notify the user
-            if (onStatusUpdateRef.current) onStatusUpdateRef.current("Waiting for command completion...");
+          // HOWEVER: If a command is DEFINED for this step, but we haven't sent it yet, we should NOT validate yet.
+          // This prevents validating "stale" or "noise" data before the command triggers the real response.
+          let stepCommand = currentSubStep?.stepFields?.command;
+          const currentStepId = currentSubStep?._id || currentSubStep?.stepName || currentSubStep?.name;
+          const actionTypeLow = currentSubStep?.stepFields?.actionType?.toLowerCase();
+
+          // Check for implicit commands (Switch Profile defaults)
+          if (!stepCommand) {
+            if (actionTypeLow === "switch profile 1") stepCommand = "+#SWITCHPF1;";
+            if (actionTypeLow === "switch profile 2") stepCommand = "+#SWITCHPF2;";
+          }
+
+          // Check if command is supposedly auto-sent but hasn't been sent yet
+          // Note: lastSentCommandStepRef is updated in the useEffect calling sendCommand.
+          // If stepCommand exists and is NOT "@GENERATED_COMMAND" (or if it is, checking effective command),stil
+          // we want to ensure we sent it.
+          // Since useEffect runs after render, there might be a gap.
+          // If we receive data, but lastSentCommandStepRef.current !== currentStepId, it means command hasn't been sent.
+          // (Unless it's a step without a command).
+
+          // Simplified check: if step has command and we haven't recorded sending it â†’ wait
+          // Simplified check: if step has command and we haven't recorded sending it -> wait
+          if (stepCommand && lastSentCommandStepRef.current !== currentStepId) {
+            if (onStatusUpdateRef.current) onStatusUpdateRef.current("Waiting for auto-command execution...");
+            return;
+          }
+
+          // BLOCKING LOGIC (Conditionally Applied):
+          // For "Switch Profile" steps, we want to IGNORE data for a short time after sending the command
+          // to avoid validating against OLD telemetry data before the switch happens.
+          // For "Validation" steps, we want to catch the fast response, so we don't block.
+          const isSwitchProfile = actionTypeLow?.includes("switch profile");
+
+          if (isSwitchProfile && isCommandBusyRef.current) {
+            if (onStatusUpdateRef.current) onStatusUpdateRef.current("Waiting for profile switch (ignoring old data)...");
             return;
           }
 
           const status = allPassed ? "Pass" : "NG";
           const reasonStr = !allPassed ? failedFields.join(", ") : undefined;
+
+          if (allPassed) {
+            const duration = ((Date.now() - stepStartTime.current) / 1000).toFixed(2);
+            addLog(`Step Duration: ${duration}s`, "success");
+          }
 
           if (!allPassed) {
             addLog(`NG Reason: ${reasonStr}`, "error");
@@ -611,15 +722,30 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
     const actionType = subStep?.stepFields?.actionType;
     let command = subStep?.stepFields?.command;
 
+
+    // Use default commands for Switch Profile if missing
+    if (actionType?.toLowerCase() === "switch profile 1" && !command) command = "+#SWITCHPF1;";
+    if (actionType?.toLowerCase() === "switch profile 2" && !command) command = "+#SWITCHPF2;";
+
     // Use generated command if placeholder is used or if it's Esim Settings validation with no command
-    if ((command === "@GENERATED_COMMAND" || (actionType === "Esim Settings validation" && !command)) && generatedCommand) {
-      command = generatedCommand;
+    // IMPORTANT: Prioritize generatedCommandRef because it captures the immediate update from the previous "ESIM Settings" step logic.
+    // The prop 'generatedCommand' might be stale or lagging from the parent.
+    const effectiveGeneratedCommand = generatedCommandRef.current || generatedCommand;
+
+    // Ensure we don't accidentally use a "waiting" or non-command value if that ever happens
+    // UPDATE: Start using generated command even if there is a stale command in the step config (removing !command check for Esim validation)
+    if ((command === "@GENERATED_COMMAND" || actionType === "Esim Settings validation") && effectiveGeneratedCommand) {
+      command = effectiveGeneratedCommand;
     }
+
+    console.log("Command execution check:", { actionType, command, isConnected, currentStepId, lastSent: lastSentCommandStepRef.current });
 
     if (isConnected && (actionType === "Command" || actionType === "Custom Fields" || actionType?.toLowerCase() === "switch profile 2" || actionType?.toLowerCase() === "switch profile 1" || actionType === "Esim Settings validation") && command && lastSentCommandStepRef.current !== currentStepId) {
       addLog(`Auto-sending command: ${command}`, 'info');
       isCommandBusyRef.current = true;
       sendCommand(command).then(() => {
+        addLog(`Command Executed: ${command}`, 'success');
+        console.log("command sent : ==>", command);
         // Wait for 1.5s after command is sent to allow jig to process/respond fully
         setTimeout(() => {
           isCommandBusyRef.current = false;
@@ -627,7 +753,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       });
       lastSentCommandStepRef.current = currentStepId;
     }
-  }, [isConnected, subStep, sendCommand]);
+  }, [isConnected, subStep, sendCommand, generatedCommand]);
 
 
   const startReading = async (port: any) => {
@@ -662,6 +788,10 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
             for (const line of lines) {
               const trimmedLine = line.trim();
               if (trimmedLine.length === 0) continue;
+
+              // Filter out unwanted messages globally
+              if (trimmedLine.includes("PANIC BUTTON PRESSED")) continue;
+
               addLog(trimmedLine, "data");
               if (onDataReceived) onDataReceived(trimmedLine);
               processData(trimmedLine);
