@@ -13,10 +13,12 @@ import {
     FlaskConical,
     Smartphone,
     X,
-    Clock
+    Clock,
+    Download
 } from "lucide-react";
 import JigSection from "../Operators/viewTask/components/JigSection";
 import Loader from "@/components/common/Loader";
+import * as XLSX from 'xlsx';
 
 interface StageSimulatorProps {
     stages: any[];
@@ -42,10 +44,13 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
     const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
     // Results for the CURRENT running test session
-    const [stepResults, setStepResults] = useState<Record<number, { status: "Pass" | "NG"; data?: any }>>({});
+    const [stepResults, setStepResults] = useState<Record<number, { status: "Pass" | "NG"; data?: any; executionTime?: number; reason?: string }>>({});
     const [logs, setLogs] = useState<string[]>([]);
     const [waitingStatus, setWaitingStatus] = useState<string | null>(null);
     const [timeLeft, setTimeLeft] = useState<number>(0);
+    const [stepStartTime, setStepStartTime] = useState<number>(0);
+    const [stageStartTime, setStageStartTime] = useState<number>(0);
+    const [totalStageTime, setTotalStageTime] = useState<number>(0);
     const ngTimeoutRef = useRef<any>(null); // Use any to match browser/node timeout types safely
 
     const activeDevice = dummyDevices.find((d) => d.id === selectedDevice);
@@ -67,6 +72,9 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
 
         const stepKv = activeStage.subSteps[currentStepIndex];
         const timeoutSeconds = Number(stepKv?.ngTimeout || 0);
+
+        // Reset step start time for this step
+        setStepStartTime(Date.now());
 
         // Clear any previous timer
         if (ngTimeoutRef.current) {
@@ -142,6 +150,10 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
         setCurrentStepIndex(0);
         setStepResults({});
         setLogs([]);
+        setTotalStageTime(0);
+        const now = Date.now();
+        setStageStartTime(now);
+        setStepStartTime(now);
         addLog(`Starting test for ${activeDevice?.serialNo} on stage: ${activeStage.stageName}`);
     };
 
@@ -158,6 +170,9 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
         const stepKv = activeStage.subSteps[currentStepIndex];
         const timeoutSeconds = Number(stepKv.ngTimeout || 0);
 
+        // Calculate execution time for this step
+        const executionTime = (Date.now() - stepStartTime) / 1000; // in seconds
+
         // Shared Failure Helper
         const confirmFailure = () => {
             if (ngTimeoutRef.current) {
@@ -166,12 +181,13 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
             }
             setStepResults((prev) => ({
                 ...prev,
-                [currentStepIndex]: { status: "NG", data },
+                [currentStepIndex]: { status: "NG", data, executionTime, reason },
             }));
-            addLog(`Step '${stepKv.stepName}': NG ${reason ? `(${reason})` : ""}`);
+            addLog(`Step '${stepKv.stepName}': NG ${reason ? `(${reason})` : ""} - Time: ${executionTime.toFixed(2)}s`);
             addLog("Test Failed (NG). Stopping.");
             setWaitingStatus(null);
-            setIsTestRunning(false);
+            // DON'T stop test running to keep jig interface visible
+            // setIsTestRunning(false);
             if (activeDevice) {
                 updateDeviceStatus(activeDevice.id, "NG");
             }
@@ -188,16 +204,19 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
 
             setStepResults((prev) => ({
                 ...prev,
-                [currentStepIndex]: { status, data },
+                [currentStepIndex]: { status, data, executionTime, reason: undefined },
             }));
 
             setWaitingStatus(null);
-            addLog(`Step '${stepKv.stepName}': ${status}`);
+            addLog(`Step '${stepKv.stepName}': ${status} - Time: ${executionTime.toFixed(2)}s`);
 
             if (currentStepIndex < activeStage.subSteps.length - 1) {
                 setCurrentStepIndex((prev) => prev + 1);
             } else {
-                addLog("All steps passed! Stage Verified.");
+                // Calculate total stage time
+                const totalTime = (Date.now() - stageStartTime) / 1000;
+                setTotalStageTime(totalTime);
+                addLog(`All steps passed! Stage Verified. Total Time: ${totalTime.toFixed(2)}s`);
                 setIsTestRunning(false);
                 if (activeDevice) {
                     updateDeviceStatus(activeDevice.id, "Pass");
@@ -226,7 +245,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
             // 4. Default: Fail immediately (No timeout config, or timeout window somehow passed without collecting)
             confirmFailure();
         }
-    }, [activeStage, currentStepIndex, activeDevice, isTestRunning]); // Added dependencies due to useCallback/useEffect splitting
+    }, [activeStage, currentStepIndex, activeDevice, isTestRunning, stepStartTime, stageStartTime]);
 
     const updateDeviceStatus = (id: string, status: "Pass" | "NG") => {
         setDummyDevices(prev => prev.map(d => d.id === id ? { ...d, status } : d));
@@ -280,6 +299,8 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                             onDecision={(status, reason, data) => handleStepDecision(status, reason, data)}
                             // Basic props mocking
                             isLastStep={currentStepIndex === activeStage.subSteps.length - 1}
+                            // Auto-connect if we're not on the first step (i.e., returning to jig after manual step)
+                            autoConnect={currentStepIndex > 0}
                         />
                     </div>
                 )}
@@ -519,9 +540,62 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
 
                 {/* RIGHT SIDEBAR: LOGS */}
                 <div className={`col-span-3 bg-[#1e1e1e] text-gray-300 font-mono text-xs flex flex-col border-l border-gray-700 ${isPageMode ? 'sticky top-0 h-screen overflow-y-auto' : ''}`}>
-                    <div className="p-3 bg-[#252526] border-b border-gray-700 font-semibold flex items-center gap-2 shrink-0">
-                        <Terminal className="h-4 w-4" />
-                        Input/Output Logs
+                    <div className="p-3 bg-[#252526] border-b border-gray-700 font-semibold flex items-center justify-between shrink-0">
+                        <div className="flex items-center gap-2">
+                            <Terminal className="h-4 w-4" />
+                            Input/Output Logs
+                        </div>
+                        {Object.keys(stepResults).length > 0 && (
+                            <button
+                                onClick={() => {
+                                    // Download Excel file
+                                    const excelData: any[] = activeStage.subSteps.map((step: any, idx: number) => {
+                                        const result = stepResults[idx];
+                                        const isJigStep = step.stepType === 'jig';
+                                        const ngTimeout = Number(step.ngTimeout || 0);
+
+                                        // Build Action column with NG timeout for jig steps
+                                        let actionText: string = result?.status || 'Pending';
+                                        if (isJigStep && ngTimeout > 0 && (result?.status === 'Pass' || result?.status === 'NG')) {
+                                            actionText = `${result.status} (NG Timeout: ${ngTimeout}s)`;
+                                        }
+
+                                        return {
+                                            'Stage': activeStage.stageName,
+                                            'Step Name': step.stepName,
+                                            'Time Execution (s)': result?.executionTime?.toFixed(2) || 'N/A',
+                                            'Action': actionText,
+                                            'Reason': result?.status === 'NG' ? (result?.reason || 'Unknown') : ''
+                                        };
+                                    });
+
+                                    // Calculate total execution time
+                                    const totalExecutionTime = activeStage.subSteps.reduce((sum: number, step: any, idx: number) => {
+                                        const result = stepResults[idx];
+                                        return sum + (result?.executionTime || 0);
+                                    }, 0);
+
+                                    // Add total row
+                                    excelData.push({
+                                        'Stage': '',
+                                        'Step Name': 'TOTAL',
+                                        'Time Execution (s)': totalExecutionTime.toFixed(2),
+                                        'Action': '',
+                                        'Reason': ''
+                                    });
+
+                                    const ws = XLSX.utils.json_to_sheet(excelData);
+                                    const wb = XLSX.utils.book_new();
+                                    XLSX.utils.book_append_sheet(wb, ws, 'Test Results');
+                                    XLSX.writeFile(wb, `${activeStage.stageName}_${activeDevice?.serialNo}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+                                }}
+                                className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                                title="Download Test Results"
+                            >
+                                <Download className="h-3 w-3" />
+                                Download
+                            </button>
+                        )}
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-2">
                         {logs.length === 0 && <span className="text-gray-600 italic">No logs...</span>}
@@ -531,9 +605,10 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                             else if (log.includes("Pass") || log.includes("Verified")) colorClass = "text-green-400 font-bold";
                             else if (log.includes("Waiting") || log.includes("Timeout")) colorClass = "text-orange-400";
                             else if (log.includes("Starting")) colorClass = "text-blue-400 font-semibold";
+                            else if (log.includes("Time:")) colorClass = "text-cyan-400 font-semibold";
 
                             return (
-                                <div key={i} className={`break-words border-l-2 pl-2 py-0.5 ${log.includes("NG") ? "border-red-500/50 bg-red-900/10" : log.includes("Pass") ? "border-green-500/50 bg-green-900/10" : "border-transparent"}`}>
+                                <div key={i} className={`break-words border-l-2 pl-2 py-0.5 ${log.includes("NG") ? "border-red-500/50 bg-red-900/10" : log.includes("Pass") ? "border-green-500/50 bg-green-900/10" : log.includes("Time:") ? "border-cyan-500/50 bg-cyan-900/10" : "border-transparent"}`}>
                                     <span className={colorClass}>{log}</span>
                                 </div>
                             );

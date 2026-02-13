@@ -19,6 +19,7 @@ interface JigSectionProps {
   expanded?: boolean;
   generatedCommand?: string;
   setGeneratedCommand?: (cmd: string) => void;
+  autoConnect?: boolean; // New prop for auto-connection
 }
 
 interface LogEntry {
@@ -83,7 +84,7 @@ const parseJigOutput = (text: string) => {
   return [result];
 };
 
-const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisconnect, onConnectionChange, searchQuery, finalResult, finalReason, onStatusUpdate, generatedCommand, setGeneratedCommand }: JigSectionProps) => {
+const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisconnect, onConnectionChange, searchQuery, finalResult, finalReason, onStatusUpdate, generatedCommand, setGeneratedCommand, autoConnect }: JigSectionProps) => {
   const [isConnected, setIsConnected] = useState(false);
 
   // Notify parent of connection status changes
@@ -832,7 +833,13 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
 
       let port = (existingPort && typeof existingPort.open === "function") ? existingPort : null;
       if (!port) {
-        port = await (navigator as any).serial.requestPort();
+        // Filter to show only USB serial ports
+        // Using empty filters array will show all available serial ports that support the Serial API
+        // The browser will automatically filter out non-USB devices
+        port = await (navigator as any).serial.requestPort({
+          // No specific filters means all USB serial devices will be shown
+          // Non-USB devices (like Bluetooth) are automatically excluded
+        });
       }
 
       await port.open({ baudRate: 115200 });
@@ -919,6 +926,57 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  // Auto-connect when component mounts if autoConnect prop is true
+  const autoConnectAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    // Only try once per mount
+    if (!autoConnect || isConnected || autoConnectAttemptedRef.current) return;
+
+    autoConnectAttemptedRef.current = true;
+
+    const tryAutoConnect = async () => {
+      // Small delay to let component stabilize
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      try {
+        if (!(navigator as any).serial) return;
+
+        // Check if already connected to avoid unnecessary disconnect/reconnect
+        if (isConnected || portRef.current) return;
+
+        const ports = await (navigator as any).serial.getPorts();
+        if (ports.length > 0) {
+          const port = ports[0];
+
+          // Check if port is already open and ready
+          if (port.readable && port.writable) {
+            // Port is already open, just reuse it
+            portRef.current = port;
+            stopRequestedRef.current = false;
+            setIsConnected(true);
+            addLog("Port Connected (Auto-Reuse) (115200 baud)", "success");
+            readingPromiseRef.current = startReading(port);
+          } else {
+            // Port needs to be opened
+            await connectToJig(port);
+          }
+        }
+      } catch (error) {
+        console.warn("Auto-connect failed:", error);
+        // Silently fail - user can manually connect if needed
+      }
+    };
+
+    tryAutoConnect();
+
+    // Reset the flag when component unmounts
+    return () => {
+      autoConnectAttemptedRef.current = false;
+    };
+  }, [autoConnect]); // Only depend on autoConnect prop
+
 
   return { isConnected, connectToJig, disconnectJig, simulateJigConnection, logs, clearLogs, downloadLogs, sendCommand };
 };
