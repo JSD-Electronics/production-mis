@@ -114,6 +114,10 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
 
   const stepStartTime = useRef<number>(Date.now());
 
+  // Refs for tracking switch profile completion
+  const switchProfileCompletedRef = useRef(false);
+  const expectedSwitchProfileRef = useRef<number | null>(null);
+
   const isLocallyGeneratedRef = useRef(false);
 
   const generatedCommandRef = useRef(generatedCommand);
@@ -246,6 +250,18 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       // Ignore specific unwanted responses
       if (text.includes("PANIC BUTTON PRESSED")) {
         return;
+      }
+
+      // Check for switch profile completion message
+      if (text.includes("MANUALLY SWITCHED TO ESIM PROFILE")) {
+        const textLower = text.toLowerCase();
+        if (textLower.includes("profile 1") && expectedSwitchProfileRef.current === 1) {
+          switchProfileCompletedRef.current = true;
+          addLog("Profile switch to Profile 1 completed!", "success");
+        } else if (textLower.includes("profile 2") && expectedSwitchProfileRef.current === 2) {
+          switchProfileCompletedRef.current = true;
+          addLog("Profile switch to Profile 2 completed!", "success");
+        }
       }
 
       accumulatedDataRef.current += text + "\n";
@@ -437,6 +453,13 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       const actionType = currentSubStep?.stepFields?.actionType;
       const normalizedActionType = actionType?.toLowerCase();
       if ((normalizedActionType === "switch profile 1" || normalizedActionType === "switch profile 2") && matchCount > 0) {
+        // Check if switch profile completion message has been received before validating
+        if (!switchProfileCompletedRef.current) {
+          // Wait for "MANUALLY SWITCHED TO ESIM PROFILE" message before validating
+          if (onStatusUpdateRef.current) onStatusUpdateRef.current("Waiting for profile switch completion message...");
+          return;
+        }
+
         const findVal = (key: string) => (parsedData[key] || parsedData["SETTINGS"]?.[key] || parsedData["PARAMETERS"]?.[key] || "").trim();
         const nwValue = findVal("N/W");
         const apnValue = findVal("APN");
@@ -469,6 +492,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                   const nameMatch = Array.isArray(p.name) ? p.name.includes(nwValue) : p.name === nwValue;
                   return profileIdMatch && nameMatch;
                 });
+                validationPassedNw = true;
                 if (!found) {
                   validationPassedNw = false;
                   errors.push(`N/W mismatch: ${nwValue} not found for Profile ${pfValue}`);
@@ -483,6 +507,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                   const profileMatch = a.esimProfile1 === nwValue;
                   return apnMatch && profileMatch;
                 });
+                validationPassedApn = true;
                 if (!found) {
                   validationPassedApn = false;
                   errors.push(`APN mismatch: ${apnValue} not found for N/W ${nwValue}`);
@@ -497,6 +522,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                   return profileIdMatch && nameMatch;
                 });
                 console.log("found pfValue ==>", found, "(checking pfValue:", pfValue, "nwValue:", nwValue, ")");
+                validationPassedPf = true;
                 if (!found) {
                   validationPassedPf = false;
                   errors.push(`PF mismatch: Profile ${pfValue} not found for N/W ${nwValue}`);
@@ -505,17 +531,26 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
               // return false;
               if (validationPassedPf && validationPassedApn && validationPassedNw) {
                 const duration = ((Date.now() - stepStartTime.current) / 1000).toFixed(2);
+
                 addLog(`${actionType} Validation Passed!`, "success");
+
                 addLog(`Step Duration: ${duration}s`, "success");
                 onDecisionRef.current?.("Pass", undefined, { parsedData }, true);
+                switchProfileCompletedRef.current = false;
+                return;
+
               } else {
                 const errorMsg = errors.join(", ");
-                addLog(`Validation Failed: ${errorMsg}`, "error");
-                onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { parsedData }, false);
+                if (switchProfileCompletedRef.current) {
+                  addLog(`Validation Failed: ${errorMsg}`, "error");
+                  onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { parsedData }, false);
+                }
               }
             } catch (err: any) {
-              addLog(`Error during validation: ${err.message || err}`, "error");
-              onDecisionRef.current?.("NG", `Validation error: ${err.message || "Unknown error"}`, { parsedData });
+              if (switchProfileCompletedRef.current) {
+                addLog(`Error during validation: ${err.message || err}`, "error");
+                onDecisionRef.current?.("NG", `Validation error: ${err.message || "Unknown error"}`, { parsedData });
+              }
             }
           })();
           accumulatedDataRef.current = "";
@@ -742,6 +777,17 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
     console.log("Command execution check:", { actionType, command, isConnected, currentStepId, lastSent: lastSentCommandStepRef.current });
 
     if (isConnected && (actionType === "Command" || actionType === "Custom Fields" || actionType?.toLowerCase() === "switch profile 2" || actionType?.toLowerCase() === "switch profile 1" || actionType === "Esim Settings validation") && command && lastSentCommandStepRef.current !== currentStepId) {
+      // Reset switch profile tracking flags before sending new command
+      if (actionType?.toLowerCase() === "switch profile 1" || actionType?.toLowerCase() === "switch profile 2") {
+        switchProfileCompletedRef.current = false;
+        if (command.includes("SWITCHPF1")) {
+          expectedSwitchProfileRef.current = 1;
+        } else if (command.includes("SWITCHPF2")) {
+          expectedSwitchProfileRef.current = 2;
+        }
+        addLog(`Waiting for profile switch to complete...`, "info");
+      }
+
       addLog(`Auto-sending command: ${command}`, 'info');
       isCommandBusyRef.current = true;
       sendCommand(command).then(() => {
