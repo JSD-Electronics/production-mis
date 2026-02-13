@@ -557,15 +557,17 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                                         // Build Action column with NG timeout for jig steps
                                         let actionText: string = result?.status || 'Pending';
                                         if (isJigStep && ngTimeout > 0 && (result?.status === 'Pass' || result?.status === 'NG')) {
-                                            actionText = `${result.status} (NG Timeout: ${ngTimeout}s)`;
+                                            actionText = result.status;
                                         }
 
                                         return {
                                             'Stage': activeStage.stageName,
                                             'Step Name': step.stepName,
                                             'Time Execution (s)': result?.executionTime?.toFixed(2) || 'N/A',
+                                            'NG Timeout (s)': ngTimeout,
                                             'Action': actionText,
-                                            'Reason': result?.status === 'NG' ? (result?.reason || 'Unknown') : ''
+                                            'Reason': result?.status === 'NG' ? (result?.reason || 'Unknown') : '',
+                                            'Buffer Time': ngTimeout - result?.executionTime?.toFixed(2),
                                         };
                                     });
 
@@ -574,14 +576,18 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                                         const result = stepResults[idx];
                                         return sum + (result?.executionTime || 0);
                                     }, 0);
-
+                                    const totalNGTimeout = activeStage.subSteps.reduce((sum: number, step: any, idx: number) => {
+                                        return sum + (step.ngTimeout || 0);
+                                    }, 0);
                                     // Add total row
                                     excelData.push({
                                         'Stage': '',
                                         'Step Name': 'TOTAL',
                                         'Time Execution (s)': totalExecutionTime.toFixed(2),
+                                        'NG Timeout (s)': totalNGTimeout.toFixed(2),
                                         'Action': '',
-                                        'Reason': ''
+                                        'Reason': '',
+                                        'Buffer Time': totalNGTimeout.toFixed(2) - totalExecutionTime.toFixed(2)
                                     });
 
                                     const ws = XLSX.utils.json_to_sheet(excelData);
