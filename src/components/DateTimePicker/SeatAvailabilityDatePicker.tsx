@@ -95,7 +95,7 @@ const SeatAvailabilityDatePicker = ({
   return (
     <div className="datepicker-container">
       <DatePicker
-        className="border-gray-300 text-gray-900 dark:border-gray-600 dark:bg-gray-700 w-full rounded-xl border bg-white py-3 pl-10 pr-4 
+        className="border-gray-300 text-gray-900 dark:border-gray-600 dark:bg-gray-700 w-full rounded-lg border bg-white py-1 text-[11px] pl-10 pr-4 
              shadow-sm transition focus:border-primary focus:ring focus:ring-primary/30 
              dark:text-white"
         selected={selectedDate}

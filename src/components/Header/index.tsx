@@ -97,7 +97,7 @@ const Header = ({
 
         {/* Right Section */}
         <div className="flex items-center gap-4 list-none">
-          <DarkModeSwitcher />
+          {/* <DarkModeSwitcher /> */}
           <DropdownNotification />
           <DropdownMessage />
           <DropdownUser />

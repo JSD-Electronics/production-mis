@@ -20,10 +20,11 @@ const EditProcess = () => {
   const [descripition, setDescripition] = useState("");
   const [processID, setProcessID] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [products, setProduct] = useState([]);
+  const [products, setProduct] = useState<any[]>([]);
+  const [errors, setErrors] = useState<any>({});
   const [selectedProduct, setSelectedProduct] = useState("");
   const [processStatus, setProcessStatus] = useState("");
-  const [addMoreQuantity, setMoreQuantity] = useState(0);
+  const [addMoreQuantity, setMoreQuantity] = useState<string | number>(0);
   const closeAddQuantityModel = () => {
     setIsAddQuantityModel(false);
   };
@@ -38,7 +39,7 @@ const EditProcess = () => {
       let result = await viewProduct();
       setProduct(result.Products);
     } catch (error) {
-      
+
     }
   };
   const getProcess = async (id: any) => {
@@ -58,6 +59,10 @@ const EditProcess = () => {
   };
   const handleSubmit = async (e: any) => {
     e.preventDefault();
+    if (!quantity || Number(quantity) <= 0) {
+      toast.error("Quantity must be greater than 0.");
+      return;
+    }
     try {
       const pathname = window.location.pathname;
       const id = pathname.split("/").pop();
@@ -65,15 +70,15 @@ const EditProcess = () => {
 
       let selectedProductObj = products.find((value) => value._id == selectedProduct);
       const formData = new FormData();
-      formData.append("name",name);
-      formData.append("selectedProduct",selectedProduct);
-      formData.append("orderConfirmationNo",orderConfirmationNo);
-      formData.append("processID",processID);
+      formData.append("name", name);
+      formData.append("selectedProduct", selectedProduct);
+      formData.append("orderConfirmationNo", orderConfirmationNo);
+      formData.append("processID", processID);
       formData.append("quantity", quantity);
-      formData.append("descripition",descripition);
-      if(processStatus != "active" || processStatus != "down_time_hold" || processStatus != "completed"){
-        formData.append("stages",JSON.stringify(selectedProductObj?.stages));
-        formData.append("commonStages",JSON.stringify(selectedProductObj?.commonStages));
+      formData.append("descripition", descripition);
+      if (processStatus !== "active" && processStatus !== "down_time_hold" && processStatus !== "completed") {
+        formData.append("stages", JSON.stringify(selectedProductObj?.stages));
+        formData.append("commonStages", JSON.stringify(selectedProductObj?.commonStages));
       }
 
       const result = await updateProcess(formData, id);
@@ -124,18 +129,22 @@ const EditProcess = () => {
     setIsAddQuantityModel(true);
   };
   const handleSubmitQuantity = async () => {
+    if (Number(addMoreQuantity) <= 0) {
+      toast.error("Please enter a quantity greater than 0.");
+      return;
+    }
     try {
       const pathname = window.location.pathname;
       const id = pathname.split("/").pop();
       let formData = new FormData();
-      formData.append("quantity", addMoreQuantity);
+      formData.append("quantity", addMoreQuantity.toString());
       let response = await updateQuantity(formData, id);
       let userDetails = JSON.parse(localStorage.getItem("userDetails"));
       const formData3 = new FormData();
       formData3.append("action", "PROCESS_EXTENDED");
       formData3.append("processId", id || "");
       formData3.append("userId", userDetails?._id || "");
-      formData3.append( "description",`${addMoreQuantity} Quantity is added into process ${name}`);
+      formData3.append("description", `${addMoreQuantity} Quantity is added into process ${name}`);
 
       try {
         const logResult = await createProcessLogs(formData3);
@@ -261,7 +270,18 @@ const EditProcess = () => {
                       <input
                         type="number"
                         value={quantity}
-                        onChange={(e) => setQuantity(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "" || /^\d+$/.test(val)) {
+                            setQuantity(val);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (["e", "E", "+", "-", "."].includes(e.key)) {
+                            e.preventDefault();
+                          }
+                        }}
+                        min="1"
                         placeholder="Enter Quantity"
                         className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
                         readOnly={
@@ -311,9 +331,18 @@ const EditProcess = () => {
                               <input
                                 type="number"
                                 value={addMoreQuantity}
-                                onChange={(e) =>
-                                  setMoreQuantity(e.target.value)
-                                }
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === "" || /^\d+$/.test(val)) {
+                                    setMoreQuantity(val);
+                                  }
+                                }}
+                                onKeyDown={(e) => {
+                                  if (["e", "E", "+", "-", "."].includes(e.key)) {
+                                    e.preventDefault();
+                                  }
+                                }}
+                                min="1"
                                 placeholder="Enter Quantity"
                                 className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
                               />
