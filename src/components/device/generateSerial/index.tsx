@@ -73,15 +73,23 @@ const GenerateSerialComponent = () => {
     let val = type === "checkbox" ? checked : value;
     const numericVal = parseInt(val as string, 10);
 
-    if (name === "noOfSerialRequired" && numericVal > 5000) {
-      val = "5000";
-      toast.error("Value should be below 5000");
+    if (name === "noOfSerialRequired") {
+      if (numericVal > 5000) {
+        val = "5000";
+        toast.error("Value should be below 5000");
+      } else if (numericVal < 0) {
+        val = "0";
+        toast.error("Value cannot be negative");
+      }
     }
     if (name === "noOfZeroRequired") {
       if (!enableZero) val = 0;
       if (numericVal > 10) {
         val = "10";
         toast.error("Value should be below 10");
+      } else if (numericVal < 0) {
+        val = "0";
+        toast.error("Value cannot be negative");
       }
     }
 
@@ -248,6 +256,7 @@ const GenerateSerialComponent = () => {
             <input
               type="number"
               name="noOfSerialRequired"
+              min={0}
               max={5000}
               value={form.noOfSerialRequired}
               onChange={handleChange}
@@ -271,6 +280,7 @@ const GenerateSerialComponent = () => {
             <input
               type="number"
               name="noOfZeroRequired"
+              min={0}
               max={10}
               value={form.noOfZeroRequired}
               onChange={handleChange}

@@ -2,6 +2,8 @@
 import React, { useState } from "react";
 import { useDrag, useDrop } from "react-dnd";
 import Modal from "@/components/Modal/page";
+import { UserPlus, Settings, Wrench } from "lucide-react";
+import { fetchJigsById } from "@/lib/api";
 const DraggableGridItem = ({
   item,
   rowIndex,
@@ -29,7 +31,7 @@ const DraggableGridItem = ({
 
   const openModal = (stages: any) => {
     const requiredSkills = stages.map((stage) => {
-      
+
       return stage.requiredSkill.toLowerCase().trim();
     });
     const assignedOperatorIds = Object.values(assignedOperators)
@@ -66,7 +68,7 @@ const DraggableGridItem = ({
   });
   const [, drop] = useDrop({
     accept: "Test",
-    hover: () => {},
+    hover: () => { },
     drop: (draggedItem) => {
       if (draggedItem?.coordinates !== coordinates) {
         moveItem(draggedItem?.coordinates, coordinates);
@@ -111,7 +113,12 @@ const DraggableGridItem = ({
     const key = `${rowIndex}-${seatIndex}`;
     setAssignedJigs((prevAssignedJigs) => {
       const newAssignedJigs = { ...prevAssignedJigs };
-      delete newAssignedJigs[key][index];
+      if (newAssignedJigs[key]) {
+        newAssignedJigs[key] = newAssignedJigs[key].filter((_, i) => i !== index);
+        if (newAssignedJigs[key].length === 0) {
+          delete newAssignedJigs[key];
+        }
+      }
       return newAssignedJigs;
     });
   };
@@ -133,20 +140,19 @@ const DraggableGridItem = ({
       let result = await fetchJigsById(id);
       setJigs(result);
     } catch (error) {
-      
+
     }
   };
   return (
     <div
       ref={(node) => drag(drop(node))}
       key={seatIndex}
-      className={`flex flex-col rounded-lg border-2 p-2 transition-all duration-300 ${
-        assignedStages[coordinates] && assignedStages[coordinates].length > 0
-          ? !assignedStages[coordinates][0]?.reserved
-            ? "border-green-500 bg-green-200 shadow-xl"
-            : "border-danger bg-[#fbc0c0] shadow-xl"
-          : "border-gray-300 bg-white hover:shadow-lg"
-      }`}
+      className={`flex flex-col h-full rounded-xl border-2 p-2 transition-all duration-300 ${assignedStages[coordinates] && assignedStages[coordinates].length > 0
+        ? !assignedStages[coordinates][0]?.reserved
+          ? "border-green-500/50 bg-green-50 shadow-sm transform hover:scale-[1.01] dark:bg-green-900/20"
+          : "border-red-500/50 bg-red-50 shadow-sm dark:bg-red-900/20"
+        : "border-dashed border-gray-300 bg-white hover:border-primary/50 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700"
+        }`}
       onDrop={handleDrop(rowIndex, seatIndex)}
       onDragOver={handleDragOver}
       title={
@@ -155,8 +161,8 @@ const DraggableGridItem = ({
           : "Drop Stage Here"
       }
     >
-      <span className="text-gray-800 flex items-center justify-between text-xs font-bold">
-        <p className="text-sm"> S{item.seatNumber} </p>
+      <span className="text-gray-800 flex items-center justify-between text-[10px] font-bold">
+        <p className="text-xs"> S{item.seatNumber} </p>
       </span>
       {assignedStages[coordinates] && assignedStages[coordinates].length > 0 ? (
         <div className="mt-1">
@@ -164,9 +170,9 @@ const DraggableGridItem = ({
             {assignedStages[coordinates].map((stage: any, stageIndex: any) => (
               <div key={stageIndex}>
                 <div className="flex items-center justify-between">
-                  <strong className="text-gray-900 text-xs">
+                  <strong className="text-gray-900 text-[10px] leading-tight">
                     {stage.name}
-                    <p>{stage.upha}</p>
+                    <p className="text-[9px] text-gray-500">{stage.upha}</p>
                   </strong>
                   {!stage?.reserved && (
                     <button
@@ -179,7 +185,7 @@ const DraggableGridItem = ({
                           rowSeatLength,
                         )
                       }
-                      className="ml-3 h-5 rounded-full bg-danger p-1 text-white transition-all duration-200 hover:bg-danger"
+                      className="ml-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-600 transition-all duration-200 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-400"
                     >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -212,7 +218,7 @@ const DraggableGridItem = ({
                         {!stage?.reserved && (
                           <button
                             type="button"
-                            className="h-5 rounded-full p-1 transition-all duration-200"
+                            className="ml-1 flex h-5 w-5 items-center justify-center rounded-full text-gray-400 transition-all duration-200 hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-900/30"
                             onClick={() =>
                               handleRemoveOperator(rowIndex, seatIndex)
                             }
@@ -250,7 +256,7 @@ const DraggableGridItem = ({
                         {!stage?.reserved && (
                           <button
                             type="button"
-                            className="h-5 rounded-full p-1 transition-all duration-200"
+                            className="ml-1 flex h-5 w-5 items-center justify-center rounded-full text-gray-400 transition-all duration-200 hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-900/30"
                             onClick={() =>
                               handleRemoveJig(rowIndex, seatIndex, index)
                             }
@@ -289,7 +295,7 @@ const DraggableGridItem = ({
             <div className="mt-1 flex justify-end">
               <button
                 type="button"
-                className="text-dark ml-3 h-6 rounded-full bg-gray p-1.5 transition-all duration-200"
+                className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition-all duration-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400"
                 onClick={() => openModal(assignedStages[coordinates])}
               >
                 <svg viewBox="0 0 24 24" fill="none" width="10px" height="10px">
@@ -351,30 +357,49 @@ const DraggableGridItem = ({
         onSubmit={handlesubmitOperator}
         onClose={closeModal}
         title="Assign Operators"
+        maxWidth="max-w-sm"
       >
-        <div>
-          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-            Operators
-          </label>
-          <select
-            onChange={(e) =>
-              handleOperator(rowIndex, seatIndex, e.target.value)
-            }
-            className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          >
-            <option value="">Please Select</option>
-            {filteredOperators?.map((operator, index) => (
-              <option
-                key={index}
-                value={operator._id}
-                className="text-body dark:text-bodydark"
-                disabled={isOperatorAssignedToAnySeat(operator.name)}
+        <div className="space-y-5">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-gray-500 dark:text-gray-400 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.1em]">
+              <UserPlus className="h-3.5 w-3.5 text-blue-500" />
+              Available Operators
+            </label>
+            <div className="group relative">
+              <select
+                onChange={(e) =>
+                  handleOperator(rowIndex, seatIndex, e.target.value)
+                }
+                className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3.5 text-sm font-semibold text-gray-800 transition-all duration-200 hover:border-blue-400 hover:bg-white focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
               >
-                {operator.name}
-                {isOperatorAssignedToAnySeat(operator.name) && "(Assigned)"}
-              </option>
-            ))}
-          </select>
+                <option value="">Select an operator...</option>
+                {filteredOperators?.map((operator, index) => (
+                  <option
+                    key={index}
+                    value={operator._id}
+                    disabled={isOperatorAssignedToAnySeat(operator.name)}
+                  >
+                    {operator.name}
+                    {isOperatorAssignedToAnySeat(operator.name) ? " — (Assigné)" : ""}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 transition-colors group-hover:text-blue-500">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 rounded-2xl bg-blue-50/50 p-4 text-[11px] leading-relaxed text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+            <div className="mt-0.5 rounded-full bg-blue-100 p-1 dark:bg-blue-800">
+              <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <p>Only operators whose skills match the <strong>{assignedStages[coordinates]?.[0]?.name || "current stage"}</strong> requirements are listed here.</p>
+          </div>
         </div>
       </Modal>
       <Modal
@@ -382,50 +407,75 @@ const DraggableGridItem = ({
         onSubmit={handlesubmitJigs}
         onClose={closeAssignJigModal}
         title="Assign Jigs"
+        maxWidth="max-w-sm"
       >
-        <div>
-          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-            Jig Category
-          </label>
-          <select
-            onChange={(e) => changeJigCategories(e.target.value)}
-            className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          >
-            <option value="">Please Select</option>
-            {jigCategories?.map((category, index) => (
-              <option
-                key={index}
-                value={category._id}
-                className="text-body dark:text-bodydark"
-                // disabled={isJigAssignedToAnySeat(category.name)}
+        <div className="space-y-5">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-gray-500 dark:text-gray-400 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.1em]">
+              <Settings className="h-3.5 w-3.5 text-purple-500" />
+              Jig Category
+            </label>
+            <div className="group relative">
+              <select
+                onChange={(e) => changeJigCategories(e.target.value)}
+                className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3.5 text-sm font-semibold text-gray-800 transition-all duration-200 hover:border-purple-400 hover:bg-white focus:border-purple-500 focus:bg-white focus:ring-4 focus:ring-purple-500/10 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
               >
-                {category.name}
-                {/* {isJigAssignedToAnySeat(category.name) && "(Assigned)"} */}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="text-gray-800 mb-3 mt-2 block text-sm font-medium dark:text-bodydark">
-            Jig
-          </label>
-          <select
-            onChange={(e) => handleJig(rowIndex, seatIndex, e.target.value)}
-            className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          >
-            <option value="">Please Select</option>
-            {jigs?.map((jig, index) => (
-              <option
-                key={index}
-                value={jig?._id}
-                className="text-body dark:text-bodydark"
-                disabled={isJigAssignedToAnySeat(jig?.name)}
+                <option value="">Select Category...</option>
+                {jigCategories?.map((category, index) => (
+                  <option
+                    key={index}
+                    value={category._id}
+                  >
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 transition-colors group-hover:text-purple-500">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-gray-500 dark:text-gray-400 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.1em]">
+              <Wrench className="h-3.5 w-3.5 text-purple-500" />
+              Machine/Tool Name
+            </label>
+            <div className="group relative">
+              <select
+                onChange={(e) => handleJig(rowIndex, seatIndex, e.target.value)}
+                className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3.5 text-sm font-semibold text-gray-800 transition-all duration-200 hover:border-purple-400 hover:bg-white focus:border-purple-500 focus:bg-white focus:ring-4 focus:ring-purple-500/10 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
               >
-                {jig?.name}
-                {isJigAssignedToAnySeat(jig?.name) && "(Assigned)"}
-              </option>
-            ))}
-          </select>
+                <option value="">Select a Jig...</option>
+                {jigs?.map((jig, index) => (
+                  <option
+                    key={index}
+                    value={jig?._id}
+                    disabled={isJigAssignedToAnySeat(jig?.name)}
+                  >
+                    {jig?.name}
+                    {isJigAssignedToAnySeat(jig?.name) ? " — (Occupé)" : ""}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 transition-colors group-hover:text-purple-500">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 rounded-2xl bg-purple-50/50 p-4 text-[11px] leading-relaxed text-purple-700 dark:bg-purple-900/20 dark:text-purple-300">
+            <div className="mt-0.5 rounded-full bg-purple-100 p-1 dark:bg-purple-800">
+              <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <p>Assign relevant equipment to this station to ensure the operator has everything needed for the <strong>{assignedStages[coordinates]?.[0]?.name || "process"}</strong>.</p>
+          </div>
         </div>
       </Modal>
     </div>

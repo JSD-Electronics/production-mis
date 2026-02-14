@@ -2,7 +2,9 @@
 import React, { useState } from "react";
 import { useDrag, useDrop } from "react-dnd";
 import Modal from "@/components/Modal/page";
-import { getUpdateStatus,fetchJigsById} from "@/lib/api";
+import { UserPlus, Settings, Wrench } from "lucide-react";
+import { getUpdateStatus, fetchJigsById, updateJigStatus } from "@/lib/api";
+
 const DraggableGridItem = ({
   item,
   rowIndex,
@@ -25,19 +27,21 @@ const DraggableGridItem = ({
   handlePlaningSubmit,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const closeModal = () => setIsModalOpen(false);
   const [isAssignJigModalOpen, setAssignJigModelOpen] = useState(false);
   const [jigs, setJigs] = useState([]);
+
+  const closeModal = () => setIsModalOpen(false);
+
   const openModal = (stages: any) => {
     const requiredSkills = stages.map((stage) =>
       stage.requiredSkill.toLowerCase().trim(),
     );
-    
+
     const assignedOperatorIds = Object.values(assignedOperators || {})
       .flat()
-      .filter((operator) => operator && operator._id) // only valid ones
+      .filter((operator) => operator && operator._id)
       .map((operator) => operator._id);
-    
+
     const compatibleOperators = operators.filter((operator) => {
       const normalizedSkills = operator.skills.map((skill) =>
         skill.toLowerCase().trim(),
@@ -55,6 +59,15 @@ const DraggableGridItem = ({
     setFilteredOperators(compatibleOperators);
     setIsModalOpen(true);
   };
+
+  const openAssignJigModal = (stages: any) => {
+    setAssignJigModelOpen(true);
+  };
+
+  const closeAssignJigModal = () => {
+    setAssignJigModelOpen(false);
+  };
+
   const [{ isDragging }, drag] = useDrag({
     type: "Test",
     item: { coordinates },
@@ -62,21 +75,25 @@ const DraggableGridItem = ({
       isDragging: monitor.isDragging(),
     }),
   });
+
   const [, drop] = useDrop({
     accept: "Test",
-    hover: () => {},
-    drop: (draggedItem) => {
+    hover: () => { },
+    drop: (draggedItem: any) => {
       if (draggedItem.coordinates !== coordinates) {
         moveItem(draggedItem.coordinates, coordinates);
       }
     },
   });
+
+  const handlesubmitOperator = () => {
+    setIsModalOpen(false);
+  };
+
   const handlesubmitJigs = () => {
     setAssignJigModelOpen(false);
   };
-  const closeAssignJigModal = () => {
-    setAssignJigModelOpen(false);
-  };
+
   const handleOperator = (rowIndex, seatIndex, event) => {
     let operator = operators.filter((val) => val._id == event);
     let key = `${rowIndex}-${seatIndex}`;
@@ -85,9 +102,9 @@ const DraggableGridItem = ({
       newAssignedOperators[key] = [];
     }
     newAssignedOperators[key].push(operator[0]);
-
     setAssignedOperators(newAssignedOperators);
   };
+
   const handleJig = (rowIndex, seatIndex, event) => {
     let jig = jigs.filter((val) => val._id == event);
     let key = `${rowIndex}-${seatIndex}`;
@@ -98,9 +115,7 @@ const DraggableGridItem = ({
     newAssignedJigs[key].push(jig[0]);
     setAssignedJigs(newAssignedJigs);
   };
-  const handlesubmitOperator = () => {
-    setIsModalOpen(false);
-  };
+
   const handleRemoveOperator = async (rowIndex, seatIndex, operatorid) => {
     try {
       let form = new FormData();
@@ -115,31 +130,16 @@ const DraggableGridItem = ({
       if (data && data.status == 200) {
       }
     } catch (error) {
-      
+
     }
   };
-  const openAssignJigModal = (stages: any) => {
-    setAssignJigModelOpen(true);
-  };
-  const isOperatorAssignedToAnySeat = (operatorName: any) => {
-    return Object.values(assignedOperators).some((operatorsForSeat) =>
-      operatorsForSeat?.some(
-        (assignedOperator) => assignedOperator.name === operatorName,
-      ),
-    );
-  };
-  const isJigAssignedToAnySeat = (jigName: any) => {
-    return Object.values(assignedJigs).some((jigForSeat) =>
-      jigForSeat?.some((assignedJig) => assignedJig?.name === jigName),
-    );
-  };
+
   const handleRemoveJig = async (rowIndex, seatIndex, index, jigId) => {
     try {
       let form = new FormData();
       form.append("status", "Free");
       let result = await updateJigStatus(jigId, form);
       if (result && result.status == 200) {
-        // toast.success("Jig Removed successfully!");
         const key = `${rowIndex}-${seatIndex}`;
         setAssignedJigs((prevAssignedJigs) => {
           const newAssignedJigs = { ...prevAssignedJigs };
@@ -151,35 +151,45 @@ const DraggableGridItem = ({
               delete newAssignedJigs[key];
             }
           }
-
           return newAssignedJigs;
         });
-
-        // handlePlaningSubmit();
       }
     } catch (error) {
-      
     }
   };
+
+  const isOperatorAssignedToAnySeat = (operatorName: any) => {
+    return Object.values(assignedOperators).some((operatorsForSeat: any) =>
+      operatorsForSeat?.some(
+        (assignedOperator: any) => assignedOperator.name === operatorName,
+      ),
+    );
+  };
+
+  const isJigAssignedToAnySeat = (jigName: any) => {
+    return Object.values(assignedJigs).some((jigForSeat: any) =>
+      jigForSeat?.some((assignedJig: any) => assignedJig?.name === jigName),
+    );
+  };
+
   const changeJigCategories = async (id: any) => {
     try {
       let result = await fetchJigsById(id);
       setJigs(result);
     } catch (error) {
-      
     }
   };
+
   return (
     <div
       ref={(node) => drag(drop(node))}
       key={seatIndex}
-      className={`flex flex-col rounded-lg border-2 p-2 transition-all duration-300 ${
-        assignedStages[coordinates] && assignedStages[coordinates].length > 0
+      className={`flex flex-col h-full rounded-xl border-2 p-2 transition-all duration-300 ${assignedStages[coordinates] && assignedStages[coordinates].length > 0
           ? !assignedStages[coordinates][0]?.reserved
-            ? "border-green-500 bg-green-200 shadow-xl"
-            : "border-danger bg-[#fbc0c0] shadow-xl"
-          : "border-gray-300 bg-white hover:shadow-lg"
-      }`}
+            ? "border-green-500/50 bg-green-50 shadow-sm transform hover:scale-[1.01] dark:bg-green-900/20"
+            : "border-red-500/50 bg-red-50 shadow-sm dark:bg-red-900/20"
+          : "border-dashed border-gray-300 bg-white hover:border-primary/50 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700"
+        }`}
       onDrop={handleDrop(rowIndex, seatIndex)}
       onDragOver={handleDragOver}
       title={
@@ -188,8 +198,8 @@ const DraggableGridItem = ({
           : "Drop Stage Here"
       }
     >
-      <span className="text-gray-800 flex items-center justify-between text-xs font-bold">
-        <p className="text-sm"> S{item.seatNumber} </p>
+      <span className="text-gray-800 flex items-center justify-between text-[10px] font-bold">
+        <p className="text-xs"> S{item.seatNumber} </p>
       </span>
       {assignedStages[coordinates] && assignedStages[coordinates].length > 0 ? (
         <div className="mt-1">
@@ -197,9 +207,9 @@ const DraggableGridItem = ({
             {assignedStages[coordinates].map((stage: any, stageIndex: any) => (
               <div key={stageIndex}>
                 <div className="flex items-center justify-between">
-                  <strong className="text-gray-900 text-xs">
+                  <strong className="text-gray-900 text-[10px] leading-tight">
                     {stage.name}
-                    <p>{stage.upha}</p>
+                    <p className="text-[9px] text-gray-500">{stage.upha}</p>
                   </strong>
                   {!stage?.reserved && (
                     <button
@@ -212,7 +222,7 @@ const DraggableGridItem = ({
                           rowSeatLength,
                         )
                       }
-                      className="ml-3 h-5 rounded-full bg-danger p-1 text-white transition-all duration-200 hover:bg-danger"
+                      className="ml-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-600 transition-all duration-200 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-400"
                     >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -235,16 +245,15 @@ const DraggableGridItem = ({
                   (operator: any, index1: number) => (
                     <p
                       key={`${rowIndex}-${seatIndex}-${operator._id || index1}`}
-                      className="flex items-center justify-end pr-1 text-xs"
+                      className="flex items-center justify-end pr-1 text-[10px] leading-tight mt-1"
                     >
-                      <span>
-                        <strong>Operator : </strong>
-                        {operator.name}{" "}
+                      <span className="truncate max-w-[80px]">
+                        <strong>{operator.name}</strong>
                       </span>
                       {!stage?.reserved && (
                         <button
                           type="button"
-                          className="h-5 rounded-full transition-all duration-200"
+                          className="ml-1 flex h-4 w-4 items-center justify-center rounded-full text-gray-400 transition-all duration-200 hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-900/30"
                           onClick={() =>
                             handleRemoveOperator(
                               rowIndex,
@@ -259,7 +268,7 @@ const DraggableGridItem = ({
                             viewBox="0 0 24 24"
                             strokeWidth="2"
                             stroke="currentColor"
-                            className="h-3 pt-0.5"
+                            className="h-2.5 w-2.5"
                           >
                             <path
                               strokeLinecap="round"
@@ -279,16 +288,15 @@ const DraggableGridItem = ({
                       jig?.name ? (
                         <p
                           key={index}
-                          className="flex items-center justify-end text-xs"
+                          className="flex items-center justify-end text-[10px] leading-tight mt-0.5"
                         >
-                          <span>
-                            <strong>Jig: </strong>
-                            {jig?.name}{" "}
+                          <span className="truncate max-w-[80px]">
+                            <strong>{jig?.name}</strong>
                           </span>
                           {!stage?.reserved && (
                             <button
                               type="button"
-                              className="h-5 rounded-full p-1 transition-all duration-200"
+                              className="ml-1 flex h-4 w-4 items-center justify-center rounded-full text-gray-400 transition-all duration-200 hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-900/30"
                               onClick={() =>
                                 handleRemoveJig(
                                   rowIndex,
@@ -304,7 +312,7 @@ const DraggableGridItem = ({
                                 viewBox="0 0 24 24"
                                 strokeWidth="2"
                                 stroke="currentColor"
-                                className="h-3 pt-0.5"
+                                className="h-2.5 w-2.5"
                               >
                                 <path
                                   strokeLinecap="round"
@@ -322,152 +330,151 @@ const DraggableGridItem = ({
           </div>
         </div>
       ) : (
-        <span className="text-gray-500 text-sm italic">No Stage Assigned</span>
+        <span className="text-gray-400 text-[10px] italic mt-2">Empty Seat</span>
       )}
-      {assignedStages[coordinates] &&
-        assignedStages[coordinates].length > 0 &&
-        !assignedStages[`${rowIndex}-${seatIndex}`][0]?.reserved &&
-        !assignedOperators[`${rowIndex}-${seatIndex}`] && (
-          <div className="mt-2 flex justify-end">
+
+      <div className="mt-auto flex justify-end gap-1 pt-2">
+        {assignedStages[coordinates] &&
+          assignedStages[coordinates].length > 0 &&
+          !assignedStages[`${rowIndex}-${seatIndex}`][0]?.reserved &&
+          !assignedOperators[`${rowIndex}-${seatIndex}`] && (
             <button
               type="button"
-              className="text-dark ml-3 h-6 rounded-full bg-gray p-1.5 transition-all duration-200"
+              className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition-all duration-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400"
               onClick={() => openModal(assignedStages[coordinates])}
             >
-              <svg
-                fill="#000000"
-                version="1.1"
-                id="Capa_1"
-                xmlns="http://www.w3.org/2000/svg"
-                width="10px"
-                height="10px"
-                viewBox="0 0 45.402 45.402"
-                stroke="#000000"
-              >
-                <g id="SVGRepo_bgCarrier" strokeWidth="0"></g>
-                <g
-                  id="SVGRepo_tracerCarrier"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                ></g>
-                <g id="SVGRepo_iconCarrier">
-                  <path d="M41.267,18.557H26.832V4.134C26.832,1.851,24.99,0,22.707,0c-2.283,0-4.124,1.851-4.124,4.135v14.432H4.141 c-2.283,0-4.139,1.851-4.138,4.135c-0.001,1.141,0.46,2.187,1.207,2.934c0.748,0.749,1.78,1.222,2.92,1.222h14.453V41.27 c0,1.142,0.453,2.176,1.201,2.922c0.748,0.748,1.777,1.211,2.919,1.211c2.282,0,4.129-1.851,4.129-4.133V26.857h14.435 c2.283,0,4.134-1.867,4.133-4.15C45.399,20.425,43.548,18.557,41.267,18.557z"></path>
-                </g>
-              </svg>
+              <UserPlus className="h-3.5 w-3.5" />
             </button>
-          </div>
-        )}
-      {assignedStages[coordinates] &&
-        // !assignedJigs[`${rowIndex}-${seatIndex}`] &&
-        assignedStages[coordinates][0].hasJigStepType && (
-          <div className="mt-1 flex justify-end">
+          )}
+
+        {assignedStages[coordinates] &&
+          assignedStages[coordinates][0].hasJigStepType && (
             <button
               type="button"
-              className="text-dark ml-3 h-6 rounded-full bg-gray p-1.5 transition-all duration-200"
+              className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600 transition-all duration-200 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-400"
               onClick={() => openAssignJigModal(assignedStages[coordinates])}
             >
-              <svg
-                fill="#000000"
-                width="10px"
-                height="10px"
-                viewBox="0 0 100 100"
-              >
-                <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                <g
-                  id="SVGRepo_tracerCarrier"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                ></g>
-                <g id="SVGRepo_iconCarrier">
-                  {" "}
-                  <g>
-                    {" "}
-                    <path d="m56.59 37.92h-3.29v-3.3a2.2 2.2 0 0 0 -2.2-2.19h-2.2a2.2 2.2 0 0 0 -2.2 2.19v3.3h-3.29a2.21 2.21 0 0 0 -2.2 2.2v2.19a2.21 2.21 0 0 0 2.2 2.2h3.29v3.3a2.21 2.21 0 0 0 2.2 2.19h2.2a2.21 2.21 0 0 0 2.2-2.2v-3.3h3.29a2.21 2.21 0 0 0 2.2-2.2v-2.18a2.21 2.21 0 0 0 -2.2-2.2z"></path>{" "}
-                    <path d="m79.6 25.33a5 5 0 0 0 -4.93-4.93h-49.34a5 5 0 0 0 -4.93 4.93v32.07a5 5 0 0 0 4.93 4.93h49.34a5 5 0 0 0 4.93-4.93zm-7.4 27.75a1.89 1.89 0 0 1 -1.85 1.85h-40.7a1.89 1.89 0 0 1 -1.85-1.85v-23.43a1.89 1.89 0 0 1 1.85-1.85h40.7a1.89 1.89 0 0 1 1.85 1.85zm-13.57 19.12h-3.7a1.16 1.16 0 0 1 -1.23-1.2v-2.5a1.16 1.16 0 0 0 -1.23-1.23h-4.94a1.16 1.16 0 0 0 -1.23 1.23v2.5a1.16 1.16 0 0 1 -1.23 1.23h-3.7a5 5 0 0 0 -4.94 4.93v.62a1.9 1.9 0 0 0 1.85 1.85h23.44a1.9 1.9 0 0 0 1.85-1.85v-.62a5 5 0 0 0 -4.94-4.96z"></path>{" "}
-                  </g>{" "}
-                </g>
-              </svg>
+              <Settings className="h-3.5 w-3.5" />
             </button>
-          </div>
-        )}
+          )}
+      </div>
+
       <Modal
         isOpen={isModalOpen}
         onSubmit={handlesubmitOperator}
         onClose={closeModal}
         title="Assign Operators"
+        maxWidth="max-w-sm"
       >
-        <div>
-          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-            Operators
-          </label>
-          <select
-            onChange={(e) =>
-              handleOperator(rowIndex, seatIndex, e.target.value)
-            }
-            className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          >
-            <option value="">Please Select</option>
-            {filteredOperators?.map((operator, index) => (
-              <option
-                key={index}
-                value={operator._id}
-                className="text-body dark:text-bodydark"
-                disabled={isOperatorAssignedToAnySeat(operator.name)}
+        <div className="space-y-5">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-gray-500 dark:text-gray-400 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.1em]">
+              <UserPlus className="h-3.5 w-3.5 text-blue-500" />
+              Available Operators
+            </label>
+            <div className="group relative">
+              <select
+                onChange={(e) =>
+                  handleOperator(rowIndex, seatIndex, e.target.value)
+                }
+                className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3.5 text-sm font-semibold text-gray-800 transition-all duration-200 hover:border-blue-400 hover:bg-white focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
               >
-                {operator.name}
-                {isOperatorAssignedToAnySeat(operator.name) && "(Assigned)"}
-              </option>
-            ))}
-          </select>
+                <option value="">Select an operator...</option>
+                {filteredOperators?.map((operator, index) => (
+                  <option
+                    key={index}
+                    value={operator._id}
+                    disabled={isOperatorAssignedToAnySeat(operator.name)}
+                  >
+                    {operator.name}
+                    {isOperatorAssignedToAnySeat(operator.name) ? " — (Assigned)" : ""}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 transition-colors group-hover:text-blue-500">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 rounded-2xl bg-blue-50/50 p-4 text-[11px] leading-relaxed text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+            <div className="mt-0.5 rounded-full bg-blue-100 p-1 dark:bg-blue-800">
+              <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <p>Only operators whose skills match requirements are listed here.</p>
+          </div>
         </div>
       </Modal>
+
       <Modal
         isOpen={isAssignJigModalOpen}
         onSubmit={handlesubmitJigs}
         onClose={closeAssignJigModal}
         title="Assign Jigs"
+        maxWidth="max-w-sm"
       >
-        <div>
-          <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-            Jig Category
-          </label>
-          <select
-            onChange={(e) => changeJigCategories(e.target.value)}
-            className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          >
-            <option value="">Please Select</option>
-            {jigCategories?.map((category, index) => (
-              <option
-                key={index}
-                value={category._id}
-                className="text-body dark:text-bodydark"
+        <div className="space-y-5">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-gray-500 dark:text-gray-400 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.1em]">
+              <Settings className="h-3.5 w-3.5 text-purple-500" />
+              Jig Category
+            </label>
+            <div className="group relative">
+              <select
+                onChange={(e) => changeJigCategories(e.target.value)}
+                className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3.5 text-sm font-semibold text-gray-800 transition-all duration-200 hover:border-purple-400 hover:bg-white focus:border-purple-500 focus:bg-white focus:ring-4 focus:ring-purple-500/10 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
               >
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="text-gray-800 mb-3 mt-2 block text-sm font-medium dark:text-bodydark">
-            Jig
-          </label>
-          <select
-            onChange={(e) => handleJig(rowIndex, seatIndex, e.target.value)}
-            className="relative z-20 w-full appearance-none rounded border border-stroke bg-transparent px-4.5 py-3 outline-none transition focus:border-primary active:border-primary dark:border-form-strokedark dark:bg-form-input"
-          >
-            <option value="">Please Select</option>
-            {jigs?.map((jig, index) => (
-              <option
-                key={index}
-                value={jig?._id}
-                className="text-body dark:text-bodydark"
-                disabled={isJigAssignedToAnySeat(jig?.name)}
+                <option value="">Select Category...</option>
+                {jigCategories?.map((category, index) => (
+                  <option
+                    key={index}
+                    value={category._id}
+                  >
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 transition-colors group-hover:text-purple-500">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-gray-500 dark:text-gray-400 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.1em]">
+              <Wrench className="h-3.5 w-3.5 text-purple-500" />
+              Machine/Tool Name
+            </label>
+            <div className="group relative">
+              <select
+                onChange={(e) => handleJig(rowIndex, seatIndex, e.target.value)}
+                className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3.5 text-sm font-semibold text-gray-800 transition-all duration-200 hover:border-purple-400 hover:bg-white focus:border-purple-500 focus:bg-white focus:ring-4 focus:ring-purple-500/10 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
               >
-                {jig?.name}
-                {isJigAssignedToAnySeat(jig?.name) && "(Assigned)"}
-              </option>
-            ))}
-          </select>
+                <option value="">Select a Jig...</option>
+                {jigs?.map((jig, index) => (
+                  <option
+                    key={index}
+                    value={jig?._id}
+                    disabled={isJigAssignedToAnySeat(jig?.name)}
+                  >
+                    {jig?.name}
+                    {isJigAssignedToAnySeat(jig?.name) ? " — (Occupied)" : ""}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400 transition-colors group-hover:text-purple-500">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+          </div>
         </div>
       </Modal>
     </div>

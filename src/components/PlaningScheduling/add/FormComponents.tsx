@@ -14,7 +14,33 @@ import {
 import { MdInventory } from "react-icons/md";
 import SeatAvailabilityDatePicker from "@/components/DateTimePicker/SeatAvailabilityDatePicker";
 
-const FormComponent = ({
+interface FormComponentProps {
+  shifts: any[];
+  process: any[];
+  roomPlan: any[];
+  calculateTimeDifference: (shift: any) => void;
+  handleCalculation: () => void;
+  setSelectedProduct: (product: any) => void;
+  selectedProcess: any;
+  setSelectedProcess: (process: any) => void;
+  repeatCount: string | number;
+  setRepeatCount: (count: any) => void;
+  selectedShift: any;
+  setSelectedShift: (shift: any) => void;
+  setSelectedRoom: (room: any) => void;
+  selectedRoom: any;
+  startDate: string;
+  setStartDate: (date: any) => void;
+  assignedStages: any;
+  getProduct: (id: any) => void;
+  productName: string;
+  processName: string;
+  setProcessName: (name: string) => void;
+  packagingData: any[];
+  inventoryData: any;
+}
+
+const FormComponent: React.FC<FormComponentProps> = ({
   shifts,
   process,
   roomPlan,
@@ -40,13 +66,12 @@ const FormComponent = ({
   inventoryData,
 }) => {
   const [floorID, setFloorID] = useState("");
-  const [seatAvailability, setSeatAvailability] = useState([]);
+  const [seatAvailability, setSeatAvailability] = useState<any[]>([]);
 
-  // const [shiftID,setShiftID] = useState("");
   const getSeatAvailabilityFromCurrentDate = async (shiftID: any) => {
     try {
       const response = await fetchSeatAvailabilityFromCurrentDate(
-        floorID,
+        floorID || selectedRoom?._id,
         shiftID,
       );
       const availabilityArray = [response.seatAvailability];
@@ -55,24 +80,13 @@ const FormComponent = ({
       console.error("Error Fetching Seat Availabilty :", error);
     }
   };
-  useEffect(() => {
-    flatpickr(".form-datepicker", {
-      mode: "single",
-      static: true,
-      dateFormat: "M j, Y",
-      prevArrow:
-        '<svg className="fill-current" width="7" height="11" viewBox="0 0 7 11"><path d="M5.4 10.8l1.4-1.4-4-4 4-4L5.4 0 0 5.4z" /></svg>',
-      nextArrow:
-        '<svg className="fill-current" width="7" height="11" viewBox="0 0 7 11"><path d="M1.4 10.8L0 9.4l4-4-4-4L1.4 0l5.4 5.4z" /></svg>',
-    });
-  }, []);
-  const handleDateChange = (dateType: any) => (selectedDate: any) => {
+
+  const handleDateChange = (dateType: string) => (selectedDate: any) => {
     if (dateType === "start") {
       setStartDate(formatDate(selectedDate));
-    } else {
-      setEndDate(formatDate(selectedDate));
     }
   };
+
   const formatDate = (date: any) => {
     if (!date) return "";
     const day = String(date.getDate()).padStart(2, "0");
@@ -83,9 +97,11 @@ const FormComponent = ({
     const seconds = String(date.getSeconds()).padStart(2, "0");
     return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
   };
+
   const handleProcessType = (e: any) => {
     const selected = process.find((value: any) => value.name === e);
     setSelectedProcess(selected);
+    setProcessName(selected?.name || "");
     getProduct(selected?.selectedProduct);
   };
 
@@ -101,12 +117,13 @@ const FormComponent = ({
     calculateTimeDifference(selected);
     getSeatAvailabilityFromCurrentDate(selected._id);
   };
+
   const handleRepeatCount = (e: any) => {
-    const totalSeats = selectedRoom.lines.reduce(
-      (total, row) => total + row.seats.length,
+    const totalSeats = selectedRoom?.lines.reduce(
+      (total: number, row: any) => total + row.seats.length,
       0,
-    );
-    if (Object.keys(assignedStages).length >= totalSeats) {
+    ) || 0;
+    if (assignedStages && Object.keys(assignedStages).length >= totalSeats) {
       alert(
         "Insufficient seats available to assign all stages. Please adjust the allocation.",
       );
@@ -114,260 +131,320 @@ const FormComponent = ({
     }
     setRepeatCount(e);
   };
-  const handleProcessName = (e: any) => {
-    try {
-    } catch (error) {}
-  };
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* Planning Form */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="flex flex-col">
-          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-black dark:text-white">
-            <FaCogs /> Planning Name
-          </label>
-          <input
-            value={processName}
-            onChange={(e) => setProcessName(e.target.value)}
-            type="text"
-            placeholder="Planning Name"
-            className="dark:bg-gray-700 w-full rounded-lg border border-stroke bg-white px-4 py-2 text-black outline-none transition focus:border-primary focus:ring focus:ring-primary/20 dark:text-white"
-          />
-        </div>
+    <div className="flex flex-col gap-4">
+      {/* 📋 Step 1: Planning Setup */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-all hover:shadow-md dark:border-gray-800 dark:bg-gray-800/20">
+          <div className="mb-4 flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+              <FaClipboardList className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="text-md font-bold text-gray-900 dark:text-white font-outfit">Planning Setup</h3>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400">Process and floor</p>
+            </div>
+          </div>
 
-        <div className="flex flex-col">
-          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-black dark:text-white">
-            <FaLayerGroup /> Process Type
-          </label>
-          <select
-            value={selectedProcess?.name || ""}
-            onChange={(e) => handleProcessType(e.target.value)}
-            className="dark:bg-gray-700 w-full rounded-lg border border-stroke bg-white px-4 py-2 text-black outline-none transition focus:border-primary focus:ring focus:ring-primary/20 dark:text-white"
-          >
-            <option value="">Please Select</option>
-            {process.map((room, index) => (
-              <option key={index} value={room?.name}>
-                {room?.name}
-              </option>
-            ))}
-          </select>
-        </div>
+          <div className="space-y-4">
+            <div className="flex flex-col">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                Planning Name
+              </label>
+              <div className="relative">
+                <FaCogs className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+                <input
+                  value={processName}
+                  onChange={(e) => setProcessName(e.target.value)}
+                  type="text"
+                  placeholder="e.g., Q1 Production"
+                  readOnly={true}
+                  className="w-full rounded-lg border border-gray-200 bg-gray-100 py-2 pl-9 pr-4 text-xs font-medium outline-none cursor-not-allowed dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                />
+              </div>
+            </div>
 
-        <div className="flex flex-col">
-          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-black dark:text-white">
-            <FaClipboardList /> Floor Name
-          </label>
-          <select
-            value={selectedRoom?.floorName || ""}
-            onChange={(e) => handleFloorName(e.target.value)}
-            className="dark:bg-gray-700 w-full rounded-lg border border-stroke bg-white px-4 py-2 text-black outline-none transition focus:border-primary focus:ring focus:ring-primary/20 dark:text-white"
-          >
-            <option value="">Please Select</option>
-            {roomPlan.map((room, index) => (
-              <option key={index} value={room?.floorName}>
-                {room?.floorName}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col">
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                  Process Type
+                </label>
+                <div className="relative">
+                  <FaLayerGroup className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+                  <select
+                    value={selectedProcess?.name || ""}
+                    onChange={(e) => handleProcessType(e.target.value)}
+                    className="w-full appearance-none rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-10 text-xs font-medium outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                    disabled={true}
+                  >
+                    <option value="">Please Select</option>
+                    {process.map((room, index) => (
+                      <option key={index} value={room?.name}>{room?.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
-      {/* Shift, Start Date, Repeat Count */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="flex flex-col">
-          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-black dark:text-white">
-            <FaClock /> Shift
-          </label>
-          <select
-            value={selectedShift?._id || ""}
-            onChange={(e) => handleShift(e.target.value)}
-            className="dark:bg-gray-700 w-full rounded-lg border border-stroke bg-white px-4 py-2 text-black outline-none transition focus:border-primary focus:ring focus:ring-primary/20 dark:text-white"
-          >
-            <option value="">Please Select</option>
-            {shifts.map((shift, index) => (
-              <option key={index} value={shift?._id}>
-                {shift?.name} ({shift?.intervals[0].startTime} -{" "}
-                {shift?.intervals[shift?.intervals.length - 1].endTime})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex flex-col">
-          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-black dark:text-white">
-            <FaCalendarAlt /> Start Date
-          </label>
-          <div className="relative">
-            <Calendar className="text-gray-400 absolute left-3 top-1/2 z-1 h-5 w-5 -translate-y-1/2" />
-            <SeatAvailabilityDatePicker
-              seatAvailability={seatAvailability}
-              floorID={floorID}
-              setStartDate={setStartDate}
-              formatDate={startDate}
-              onDateChange={handleDateChange("start")}
-            />
+              <div className="flex flex-col">
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                  Floor Name
+                </label>
+                <div className="relative">
+                  <FaClipboardList className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+                  <select
+                    value={selectedRoom?.floorName || ""}
+                    onChange={(e) => handleFloorName(e.target.value)}
+                    className="w-full appearance-none rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-10 text-xs font-medium outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                  >
+                    <option value="">Select Floor</option>
+                    {roomPlan.map((room, index) => (
+                      <option key={index} value={room?.floorName}>{room?.floorName}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-col">
-          <label className="mb-2 flex items-center gap-2 text-sm font-medium text-black dark:text-white">
-            <FaBox /> Repeat Count
-          </label>
-          <input
-            type="number"
-            value={repeatCount}
-            onChange={(e) => handleRepeatCount(e.target.value)}
-            placeholder="Enter Repeat Count"
-            className="dark:bg-gray-700 w-full rounded-lg border border-stroke bg-white px-4 py-2 text-black outline-none transition focus:border-primary focus:ring focus:ring-primary/20 dark:text-white"
-          />
-        </div>
-      </div>
-
-      {/* Selected Process Details */}
-      {selectedProcess && (
-        <div className="dark:bg-gray-800 mt-2 rounded-lg bg-white p-6 shadow-md">
-          <h3 className="mb-4 flex items-center gap-2 text-2xl font-semibold text-black dark:text-white">
-            <FaCogs /> {selectedProcess?.name}
-          </h3>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
-              <FaBox /> <strong>Product Name:</strong> {productName}
-            </div>
-            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
-              <FaClock /> <strong>Shift:</strong>{" "}
-              {selectedShift &&
-                `${selectedShift?.name} (${selectedShift?.intervals[0].startTime} - ${selectedShift?.intervals[selectedShift?.intervals.length - 1].endTime})`}
-            </div>
-            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
-              <FaClock /> <strong>Break Time:</strong>{" "}
-              {selectedShift?.totalBreakTime} Minutes
-            </div>
-            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
-              <FaClipboardList /> <strong>Order Confirmation No:</strong>{" "}
-              {selectedProcess?.orderConfirmationNo}
-            </div>
-            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
-              <FaCogs /> <strong>Process ID:</strong>{" "}
-              {selectedProcess?.processID}
-            </div>
-            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
-              <FaBox /> <strong>Quantity:</strong> {selectedProcess?.quantity}
-            </div>
-            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
-              <FaCalendarAlt /> <strong>Shift Days:</strong>{" "}
-              {selectedShift &&
-                Object.keys(selectedShift.weekDays)
-                  .filter((day) => day !== "_id" && selectedShift.weekDays[day])
-                  .join(", ")}
-            </div>
-            <div className="text-gray-700 dark:text-gray-300 flex items-center gap-2">
-              <FaClipboardList /> <strong>Description:</strong>{" "}
-              {selectedProcess?.descripition}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Inventory & Kits */}
-      {inventoryData && (
-        <div className="mt-2 grid grid-cols-1 gap-6 xl:grid-cols-2">
-          {/* Kit Section */}
-          <div className="dark:bg-gray-800 rounded-lg bg-white p-6 shadow-md">
-            <h4 className="mb-4 flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
-              <MdInventory /> Kit
-            </h4>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div>
-                <strong>Required Kits:</strong> {selectedProcess?.quantity}
+        {/* 📅 Step 2: Scheduling */}
+        <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-all hover:shadow-md dark:border-gray-800 dark:bg-gray-800/20">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">
+                <FaCalendarAlt className="h-4 w-4" />
               </div>
               <div>
-                <strong>Available Kits:</strong> {inventoryData?.quantity}
-              </div>
-              <div>
-                <strong>Shortage:</strong>{" "}
-                {Math.max(
-                  selectedProcess?.quantity - inventoryData?.quantity,
-                  0,
-                )}
-              </div>
-              <div>
-                <strong>Surplus:</strong>{" "}
-                {Math.max(
-                  inventoryData?.quantity - selectedProcess?.quantity,
-                  0,
-                )}
-              </div>
-              <div>
-                <strong>Issued Kits:</strong>{" "}
-                {Math.min(selectedProcess?.quantity, inventoryData?.quantity)}
+                <h3 className="text-md font-bold text-gray-900 dark:text-white font-outfit">Scheduling Info</h3>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400">Time settings</p>
               </div>
             </div>
           </div>
 
-          {/* Carton Section */}
-          {packagingData.length > 0 &&
-            packagingData[0].packagingData.packagingType === "Carton" && (
-              <div className="dark:bg-gray-800 rounded-lg bg-white p-6 shadow-md">
-                <h4 className="mb-4 flex items-center gap-2 text-lg font-semibold text-black dark:text-white">
-                  <FaBox /> Cartons
-                </h4>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div>
-                    <strong>Required Cartons:</strong>{" "}
-                    {Math.ceil(
-                      selectedProcess?.quantity /
-                        packagingData[0].packagingData.maxCapacity,
-                    )}
-                  </div>
-                  <div>
-                    <strong>Available Cartons:</strong>{" "}
-                    {inventoryData?.cartonQuantity}
-                  </div>
-                  <div>
-                    <strong>Shortage:</strong>{" "}
-                    {inventoryData?.cartonQuantity <
-                    selectedProcess?.quantity /
-                      packagingData[0].packagingData.maxCapacity
-                      ? Math.abs(
-                          Math.ceil(
-                            selectedProcess?.quantity /
-                              packagingData[0].packagingData.maxCapacity,
-                          ) - inventoryData?.cartonQuantity,
-                        )
-                      : 0}
-                  </div>
-                  <div>
-                    <strong>Surplus:</strong>{" "}
-                    {inventoryData?.cartonQuantity >
-                    selectedProcess?.quantity /
-                      packagingData[0].packagingData.maxCapacity
-                      ? Math.abs(
-                          inventoryData?.cartonQuantity -
-                            Math.ceil(
-                              selectedProcess?.quantity /
-                                packagingData[0].packagingData.maxCapacity,
-                            ),
-                        )
-                      : 0}
-                  </div>
-                  <div>
-                    <strong>Carton Dimensions:</strong> (
-                    {packagingData[0].packagingData.cartonWidth} x{" "}
-                    {packagingData[0].packagingData.cartonHeight})
+          <div className="space-y-4">
+            <div className="flex flex-col">
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                Work Shift
+              </label>
+              <div className="relative">
+                <FaClock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+                <select
+                  value={selectedShift?._id || ""}
+                  onChange={(e) => handleShift(e.target.value)}
+                  className="w-full appearance-none rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-10 text-xs font-medium outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                >
+                  <option value="">Select Shift</option>
+                  {shifts.map((shift, index) => (
+                    <option key={index} value={shift?._id}>
+                      {shift?.name} ({shift?.intervals[0].startTime} - {shift?.intervals[shift?.intervals.length - 1].endTime})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col">
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                  Plan Start Date
+                </label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4 z-10" />
+                  <div className="w-full">
+                    <SeatAvailabilityDatePicker
+                      seatAvailability={seatAvailability}
+                      floorID={floorID}
+                      setStartDate={setStartDate}
+                      formatDate={startDate}
+                      onDateChange={handleDateChange("start")}
+                    />
                   </div>
                 </div>
               </div>
-            )}
+
+              <div className="flex flex-col">
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                  Repeat (Lines)
+                </label>
+                <div className="relative">
+                  <FaBox className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+                  <input
+                    type="number"
+                    value={repeatCount}
+                    onChange={(e) => handleRepeatCount(e.target.value)}
+                    placeholder="1"
+                    className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-4 text-xs font-medium outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 📊 Section: Process Summary Dashboard */}
+      {selectedProcess && (
+        <div className="rounded-xl border border-gray-100 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-800/20 overflow-hidden">
+          <div className="bg-gray-50 px-4 py-3 border-b border-gray-100 dark:bg-gray-900/50 dark:border-gray-800 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-blue-600 rounded-lg text-white">
+                <FaCogs className="h-4 w-4" />
+              </div>
+              <h3 className="font-bold text-gray-900 dark:text-white text-sm tracking-tight font-outfit">Active: <span className="text-blue-600 dark:text-blue-400">{selectedProcess?.name}</span></h3>
+            </div>
+            <div className="flex gap-1.5">
+              <span className="px-3 py-1 bg-green-100 text-green-700 text-[10px] font-bold rounded-lg dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800/50">ID: {selectedProcess?.processID}</span>
+              <span className="px-3 py-1 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-lg dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50">QTY: {selectedProcess?.quantity}</span>
+            </div>
+          </div>
+
+          <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="flex flex-col p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50">
+              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Product</span>
+              <span className="text-xs font-black text-gray-900 dark:text-white truncate font-outfit">{productName}</span>
+            </div>
+
+            <div className="flex flex-col p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50">
+              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Ref No</span>
+              <span className="text-xs font-black text-gray-900 dark:text-white font-outfit">{selectedProcess?.orderConfirmationNo}</span>
+            </div>
+
+            <div className="flex flex-col p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50">
+              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Shift Schedule</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-black text-blue-600 dark:text-blue-400 font-outfit">
+                  {selectedShift ? selectedShift.name : 'Unassigned'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50">
+              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Break</span>
+              <span className="text-xs font-black text-gray-900 dark:text-white font-outfit">{selectedShift?.totalBreakTime || 0} Min</span>
+            </div>
+          </div>
+
+          <div className="px-4 pb-4 pt-1">
+            <div className="p-3 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100/50 dark:border-blue-800/30">
+              <span className="text-[9px] font-bold text-blue-400 uppercase mb-1 block tracking-wider">Description</span>
+              <p className="text-[10px] text-gray-600 dark:text-gray-400 leading-relaxed italic">
+                {selectedProcess?.descripition || 'No internal notes provided.'}
+              </p>
+            </div>
+          </div>
         </div>
       )}
-      {/* Calculate Button */}
-      <div className="mt-4 flex justify-end text-right">
+
+      {/* 📦 Section: Inventory Health Check */}
+      {inventoryData && selectedProcess && (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {/* Kit Health */}
+          <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-800/20">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
+                  <MdInventory className="h-4 w-4" />
+                </div>
+                <h3 className="text-md font-bold text-gray-900 dark:text-white font-outfit">Kit Readiness</h3>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] font-black text-gray-400 uppercase">Avail.</span>
+                <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-900 rounded-md text-xs font-black text-gray-900 dark:text-white">{inventoryData?.quantity}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50 text-center">
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter mb-1">Required</p>
+                <p className="text-lg font-black text-gray-900 dark:text-white font-outfit">{selectedProcess?.quantity}</p>
+              </div>
+
+              <div className={`p-3 rounded-xl border text-center ${selectedProcess?.quantity > inventoryData?.quantity ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800/50 text-red-600' : 'bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/50 text-green-600'}`}>
+                <p className="text-[9px] font-bold uppercase tracking-tighter mb-1 opacity-70">{selectedProcess?.quantity > inventoryData?.quantity ? 'Shortage' : 'Surplus'}</p>
+                <p className="text-lg font-black font-outfit">{Math.abs(selectedProcess?.quantity - inventoryData?.quantity)}</p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 dark:bg-blue-900/10 dark:border-blue-800/50 text-center">
+                <p className="text-[9px] font-bold text-blue-400 uppercase tracking-tighter mb-1">Cap</p>
+                <p className="text-lg font-black text-blue-600 dark:text-blue-400 font-outfit">{Math.min(selectedProcess?.quantity, inventoryData?.quantity)}</p>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-[9px] font-black text-gray-400 uppercase">Coverage</span>
+                <span className={`text-[9px] font-black uppercase ${inventoryData?.quantity >= selectedProcess?.quantity ? 'text-green-500' : 'text-red-500'}`}>
+                  {Math.min(Math.round((inventoryData?.quantity / selectedProcess?.quantity) * 100), 100)}%
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-gray-100 rounded-full dark:bg-gray-900 overflow-hidden shadow-inner">
+                <div
+                  className={`h-full transition-all duration-700 rounded-full ${inventoryData?.quantity >= selectedProcess?.quantity ? 'bg-green-500' : 'bg-red-500'}`}
+                  style={{ width: `${Math.min((inventoryData?.quantity / selectedProcess?.quantity) * 100, 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Carton Health */}
+          {packagingData?.length > 0 && packagingData[0]?.packagingType === "Carton" && (
+            <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-800/20">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-50 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400">
+                    <FaBox className="h-4 w-4" />
+                  </div>
+                  <h3 className="text-md font-bold text-gray-900 dark:text-white font-outfit">Carton Availability</h3>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50 text-center">
+                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter mb-1">Needed</p>
+                  <p className="text-lg font-black text-gray-900 dark:text-white font-outfit">
+                    {Math.ceil(selectedProcess?.quantity / packagingData[0]?.maxCapacity)}
+                  </p>
+                </div>
+
+                <div className={`p-3 rounded-xl border text-center ${inventoryData?.cartonQuantity < (selectedProcess?.quantity / packagingData[0]?.maxCapacity) ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800/50 text-red-600' : 'bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/50 text-green-600'}`}>
+                  <p className="text-[9px] font-bold uppercase tracking-tighter mb-1 opacity-70">
+                    {inventoryData?.cartonQuantity < (selectedProcess?.quantity / packagingData[0]?.maxCapacity) ? 'Short' : 'Surp'}
+                  </p>
+                  <p className="text-lg font-black font-outfit">
+                    {Math.abs(Math.ceil(selectedProcess?.quantity / packagingData[0]?.maxCapacity) - inventoryData?.cartonQuantity)}
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50 text-center">
+                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter mb-1">Avail.</p>
+                  <p className="text-lg font-black text-gray-900 dark:text-white font-outfit">{inventoryData?.cartonQuantity}</p>
+                </div>
+              </div>
+
+              <div className="mt-6 flex items-center justify-between p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900/80">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[9px] font-black uppercase ${inventoryData?.cartonQuantity < (selectedProcess?.quantity / packagingData[0]?.maxCapacity) ? 'text-red-500' : 'text-green-500'}`}>
+                    {inventoryData?.cartonQuantity < (selectedProcess?.quantity / packagingData[0]?.maxCapacity) ? 'Packaging Block' : 'Stock Coverage'}
+                  </span>
+                </div>
+                <span className="text-[8px] font-bold text-gray-400 uppercase">Max {packagingData[0]?.maxCapacity}/Ctn</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 🚀 Action: Calculation */}
+      <div className="flex justify-end pt-2">
         <button
           type="button"
           onClick={handleCalculation}
-          className="flex w-44 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white shadow-md transition hover:bg-blue-500"
+          className="group relative flex items-center justify-center gap-3 overflow-hidden rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 px-8 py-3.5 font-black text-white shadow-xl transition-all hover:scale-[1.02] hover:shadow-blue-500/25 active:scale-95"
         >
-          <FaCogs /> Calculate
+          <div className="absolute inset-0 bg-white/20 opacity-0 transition-opacity group-hover:opacity-10" />
+          <FaCogs className="h-4 w-4 animate-spin-slow group-hover:scale-110 transition-transform" />
+          <span className="relative font-bold spacing tracking-widest uppercase text-xs">Initiate Scheduling Engine</span>
         </button>
       </div>
     </div>

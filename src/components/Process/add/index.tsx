@@ -26,8 +26,8 @@ const AddProcess = () => {
   const [descripition, setDescripition] = useState("");
   const [processID, setProcessID] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [products, setProduct] = useState([]);
-  const [errors, setErrors] = useState({});
+  const [products, setProduct] = useState<any[]>([]);
+  const [errors, setErrors] = useState<any>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -40,7 +40,7 @@ const AddProcess = () => {
       let response = await getOrderConfirmationNumers();
       setOcNoArr(response.getOrderConfirmationNo);
     } catch (error) {
-      
+
     }
   };
 
@@ -49,7 +49,7 @@ const AddProcess = () => {
       let result = await viewProduct();
       setProduct(result.Products);
     } catch (error) {
-      
+
     }
   };
 
@@ -57,13 +57,9 @@ const AddProcess = () => {
     let tempErrors: any = {};
     if (!name.trim()) tempErrors.name = "Process Name is required.";
     if (!selectedProduct) tempErrors.selectedProduct = "Product is required.";
-    if (!orderConfirmationNo)
-      tempErrors.orderConfirmationNo = "Order Confirmation is required.";
     if (!processID.trim()) tempErrors.processID = "Process ID is required.";
     if (!quantity || Number(quantity) <= 0)
-      tempErrors.quantity = "Enter a valid quantity.";
-    if (!descripition.trim())
-      tempErrors.descripition = "Description is required.";
+      tempErrors.quantity = "Quantity must be greater than 0.";
     setErrors(tempErrors);
     return Object.keys(tempErrors).length === 0;
   };
@@ -256,7 +252,18 @@ const AddProcess = () => {
                   <input
                     type="number"
                     value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "" || /^\d+$/.test(val)) {
+                        setQuantity(val);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (["e", "E", "+", "-", "."].includes(e.key)) {
+                        e.preventDefault();
+                      }
+                    }}
+                    min="1"
                     placeholder="Enter Quantity"
                     className={inputClass("quantity")}
                   />
@@ -294,10 +301,9 @@ const AddProcess = () => {
                   type="submit"
                   disabled={isSubmitting}
                   className={`rounded-md px-6 py-2 font-medium text-white shadow 
-                    ${
-                      isSubmitting
-                        ? "bg-gray-400 cursor-not-allowed"
-                        : "bg-green-600 hover:bg-green-700"
+                    ${isSubmitting
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-green-600 hover:bg-green-700"
                     }`}
                 >
                   {isSubmitting ? "Submitting..." : "Submit"}
