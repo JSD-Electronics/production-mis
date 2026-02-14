@@ -28,6 +28,15 @@ interface LogEntry {
   type?: "info" | "success" | "error" | "data";
 }
 
+const USB_FILTERS = [
+  // Common USB-Serial chips
+  { usbVendorId: 0x2341 }, // Arduino
+  { usbVendorId: 0x10c4 }, // CP210x
+  { usbVendorId: 0x0403 }, // FTDI
+  { usbVendorId: 0x1a86 }, // CH340
+  { usbVendorId: 0x067b }, // Prolific
+];
+
 // --- Helper Functions ---
 
 const formatTimestamp = () => {
@@ -45,6 +54,29 @@ const parseKeyValue = (key: string, source: string): string | null => {
   const regex = new RegExp(`${escapedKey}\\s*[:=]\\s*([^\\n,]+)`, "i");
   const match = source.match(regex);
   return match ? match[1].trim() : null;
+};
+
+const getFriendlyName = (info: any) => {
+  if (!info || !info.usbVendorId) return "USB Serial Port";
+
+  const vids: Record<number, string> = {
+    0x2341: "Arduino",
+    0x10c4: "CP210x USB to UART",
+    0x0403: "FTDI USB Serial",
+    0x1a86: "CH340 USB Serial",
+    0x067b: "Prolific USB Serial",
+    0x2e8a: "Raspberry Pi Pico",
+    0x303a: "Espressif (ESP32)"
+  };
+
+  const name = vids[info.usbVendorId] || "USB Serial Port";
+
+  // Web Serial API (Chrome/Edge) restricts access to actual COM port names (like COM10) 
+  // for browser security/privacy. We use Serial Numbers and Indices to distinguish devices.
+  const snPart = info.serialNumber ? ` [SN: ${info.serialNumber}]` : "";
+  const idStr = `(VID: ${info.usbVendorId.toString(16).toUpperCase()}, PID: ${info.usbProductId?.toString(16).toUpperCase()})`;
+
+  return `${name}${snPart} ${idStr}`;
 };
 
 const parseJigOutput = (text: string) => {
@@ -86,6 +118,9 @@ const parseJigOutput = (text: string) => {
 
 const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisconnect, onConnectionChange, searchQuery, finalResult, finalReason, onStatusUpdate, generatedCommand, setGeneratedCommand, autoConnect }: JigSectionProps) => {
   const [isConnected, setIsConnected] = useState(false);
+  const [connectedPortInfo, setConnectedPortInfo] = useState<any>(null);
+  const [availablePorts, setAvailablePorts] = useState<any[]>([]);
+  const [isSelectingPort, setIsSelectingPort] = useState(false);
 
   // Notify parent of connection status changes
   useEffect(() => {
@@ -95,6 +130,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const portRef = useRef<any>(null);
   const readerRef = useRef<any>(null);
+  const [isManualStopped, setIsManualStopped] = useState(false);
   const stopRequestedRef = useRef(false);
   const readingPromiseRef = useRef<Promise<void> | null>(null);
   const accumulatedDataRef = useRef<string>("");
@@ -122,12 +158,8 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
 
   const generatedCommandRef = useRef(generatedCommand);
   useEffect(() => {
-    // Only update ref if generatedCommand is truthy (preserves local updates during race conditions)
-    // or if we explicitly want to handle resets (which usually happen with component remounts anyway)
 
     // If we just generated a command locally (isLocallyGeneratedRef is true), 
-    // we should IGNORE the prop update if it doesn't match our new local value (implying it's stale/lagging).
-    // Once the prop matches our local value (parent caught up), we can clear the flag.
     if (isLocallyGeneratedRef.current) {
       if (generatedCommand === generatedCommandRef.current) {
         isLocallyGeneratedRef.current = false;
@@ -138,6 +170,56 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       }
     }
   }, [generatedCommand]);
+
+  useEffect(() => {
+    // Reset auto-connect attempt and manual stop flag when subStep changes
+    // This allows auto-connect to trigger once per new Jig step
+    autoConnectAttemptedRef.current = false;
+    setIsManualStopped(false);
+  }, [subStep?._id, subStep?.stepName]);
+
+  useEffect(() => {
+    if (!("serial" in navigator)) return;
+
+    const updatePorts = async () => {
+      const ports = await (navigator as any).serial.getPorts();
+      // Filter for USB devices that are actually physically ATTACHED
+      const usbPorts = ports.filter((p: any) => p.getInfo().usbVendorId && (p.connected === undefined || p.connected));
+
+      // Perform a quick availability check to filter out ports locked by other apps
+      const nonBusyPorts = [];
+      for (const p of usbPorts) {
+        try {
+          // If the port is already open in THIS tab, it's considered non-busy for us
+          if (p.readable && p.writable) {
+            nonBusyPorts.push(p);
+            continue;
+          }
+          // Attempt a brief open to check for OS-level locks
+          await p.open({ baudRate: 115200 });
+          await p.close();
+          nonBusyPorts.push(p);
+        } catch (err: any) {
+          // If open fails with NetworkError, it's busy/locked by another application
+          if (err.name !== "NetworkError" && err.name !== "InvalidStateError") {
+            nonBusyPorts.push(p);
+          }
+        }
+      }
+      setAvailablePorts(nonBusyPorts);
+    };
+
+    (navigator as any).serial.addEventListener("connect", updatePorts);
+    (navigator as any).serial.addEventListener("disconnect", updatePorts);
+
+    // Initial fetch
+    updatePorts();
+
+    return () => {
+      (navigator as any).serial.removeEventListener("connect", updatePorts);
+      (navigator as any).serial.removeEventListener("disconnect", updatePorts);
+    };
+  }, []);
 
 
 
@@ -207,8 +289,11 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
 
   const clearLogs = useCallback(() => setLogs([]), []);
 
-  const disconnectJig = useCallback(async () => {
+  const disconnectJig = useCallback(async (isManual: boolean = false) => {
     stopRequestedRef.current = true;
+    if (isManual) {
+      setIsManualStopped(true);
+    }
     if (readerRef.current?.cancel) {
       try { await readerRef.current.cancel(); } catch (e) { console.warn(e); }
     }
@@ -226,15 +311,16 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       try { await portRef.current.close(); } catch (e) { console.error(e); }
       portRef.current = null;
     }
+    setConnectedPortInfo(null);
     setIsConnected(false);
-    addLog("System Disconnected", "info");
+    addLog(isManual ? "System Stopped Manually" : "System Disconnected", "info");
   }, [addLog]);
 
 
   // Supply disconnect function to parent (moved to fix TDZ)
   useEffect(() => {
     if (onDisconnect) {
-      onDisconnect(() => disconnectJig());
+      onDisconnect(() => disconnectJig(true)); // Pass true for manual disconnect
     }
   }, [onDisconnect, disconnectJig]);
 
@@ -872,19 +958,17 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
     try {
       if (!(navigator as any).serial) {
         addLog("Web Serial API is not supported in this browser.", "error");
-        return;
+        return false;
       }
 
-      if (portRef.current || isConnected) await disconnectJig();
+      if (isConnected || portRef.current) return true;
 
+      setIsManualStopped(false); // Clear stop flag on intentional connection
       let port = (existingPort && typeof existingPort.open === "function") ? existingPort : null;
       if (!port) {
         // Filter to show only USB serial ports
-        // Using empty filters array will show all available serial ports that support the Serial API
-        // The browser will automatically filter out non-USB devices
         port = await (navigator as any).serial.requestPort({
-          // No specific filters means all USB serial devices will be shown
-          // Non-USB devices (like Bluetooth) are automatically excluded
+          filters: USB_FILTERS
         });
       }
 
@@ -892,10 +976,19 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
 
       portRef.current = port;
       stopRequestedRef.current = false;
+      setConnectedPortInfo(port.getInfo());
       setIsConnected(true);
       addLog(`Port Connected ${existingPort ? '(Auto)' : ''} (115200 baud)`, "success");
 
+      // Save last used port for auto-reconnect on step changes
+      localStorage.setItem("last_jig_port", JSON.stringify({
+        vid: port.getInfo().usbVendorId,
+        pid: port.getInfo().usbProductId
+      }));
+
       readingPromiseRef.current = startReading(port);
+      setIsSelectingPort(false);
+      return true;
 
     } catch (error: any) {
       console.error("Connection failed:", error);
@@ -903,8 +996,12 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       if (error.name === "NetworkError") msg += "Port busy or locked.";
       else if (error.name === "NotFoundError") msg += "No device selected.";
       else msg += error.message;
+
       addLog(msg, "error");
-      if (!existingPort) alert(msg);
+
+      // Only show alert if it was a manual user action (no existingPort passed)
+      if (!existingPort && error.name !== "NotFoundError") alert(msg);
+      return false;
     }
   };
 
@@ -977,41 +1074,149 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
   const autoConnectAttemptedRef = useRef(false);
 
   useEffect(() => {
-    // Only try once per mount
-    if (!autoConnect || isConnected || autoConnectAttemptedRef.current) return;
+    // Only try once per step or when manual override happens
+    if (!autoConnect || isConnected || autoConnectAttemptedRef.current || isManualStopped) return;
 
     autoConnectAttemptedRef.current = true;
 
+    // const tryAutoConnect = async () => {
+    //   // Small delay to let component stabilize
+    //   await new Promise(resolve => setTimeout(resolve, 200));
+
+    //   try {
+    //     if (!(navigator as any).serial) return;
+
+    //     // Check if already connected to avoid unnecessary disconnect/reconnect
+    //     if (isConnected || portRef.current) return;
+
+    //     const ports = await (navigator as any).serial.getPorts();
+    //     if (ports.length > 0) {
+    //       const port = ports[0];
+
+    //       // Check if port is already open and ready
+    //       if (port.readable && port.writable) {
+    //         // Port is already open, just reuse it
+    //         portRef.current = port;
+    //         stopRequestedRef.current = false;
+    //         setIsConnected(true);
+    //         addLog("Port Connected (Auto-Reuse) (115200 baud)", "success");
+    //         readingPromiseRef.current = startReading(port);
+    //       } else {
+    //         // Port needs to be opened
+    //         await connectToJig(port);
+    //       }
+    //     }
+    //   } catch (error) {
+    //     console.warn("Auto-connect failed:", error);
+    //     // Silently fail - user can manually connect if needed
+    //   }
+    // };
+
+    //  this should only read the usb serial port not all ports
+    // Updated tryAutoConnect to handle multiple ports and busy port fallback
     const tryAutoConnect = async () => {
-      // Small delay to let component stabilize
       await new Promise(resolve => setTimeout(resolve, 200));
 
       try {
-        if (!(navigator as any).serial) return;
-
-        // Check if already connected to avoid unnecessary disconnect/reconnect
+        if (!("serial" in navigator)) return;
         if (isConnected || portRef.current) return;
 
+        // Get ONLY already-granted USB ports
         const ports = await (navigator as any).serial.getPorts();
-        if (ports.length > 0) {
-          const port = ports[0];
 
-          // Check if port is already open and ready
-          if (port.readable && port.writable) {
-            // Port is already open, just reuse it
-            portRef.current = port;
-            stopRequestedRef.current = false;
-            setIsConnected(true);
-            addLog("Port Connected (Auto-Reuse) (115200 baud)", "success");
-            readingPromiseRef.current = startReading(port);
-          } else {
-            // Port needs to be opened
-            await connectToJig(port);
+        // Filter only USB devices that are PHYSICALLY ATTACHED
+        const usbPorts = ports.filter(
+          (port: any) => port.getInfo().usbVendorId && (port.connected === undefined || port.connected)
+        );
+
+        // Pre-filter busy ports so we don't show them in the manual selection list
+        const readyPorts = [];
+        for (const p of usbPorts) {
+          try {
+            if (p.readable && p.writable) { readyPorts.push(p); continue; }
+            await p.open({ baudRate: 115200 });
+            await p.close();
+            readyPorts.push(p);
+          } catch (e: any) {
+            if (e.name !== "NetworkError") readyPorts.push(p);
           }
         }
+
+        setAvailablePorts(readyPorts);
+        const activePorts = readyPorts; // Use the verified list for the rest of the logic
+
+        if (usbPorts.length > 0) {
+          // Priority 1: Try to match the last used port
+          const savedPort = localStorage.getItem("last_jig_port");
+          if (savedPort) {
+            const { vid, pid, serialNumber } = JSON.parse(savedPort);
+            const match = activePorts.find((p: any) => {
+              const info = p.getInfo();
+              console.log("USB Port Info :", info);
+              const basicMatch = info.usbVendorId === vid && info.usbProductId === pid;
+              // If we have a serial number saved, use it for exact hardware matching to tell apart identical FTDI chips
+              return serialNumber ? (basicMatch && info.serialNumber === serialNumber) : basicMatch;
+            });
+
+            if (match) {
+              addLog(`Found last used port (VID: ${vid.toString(16)}, PID: ${pid.toString(16)}). Reconnecting...`, "info");
+              const success = await openOrReusePort(match);
+              if (success) return;
+            }
+          }
+
+          // Case 1: Only one USB device → auto connect
+          if (activePorts.length === 1) {
+            await openOrReusePort(activePorts[0]);
+            return;
+          }
+
+          // Case 2: Multiple USB devices → Attempt auto-connect to non-busy one
+          if (activePorts.length > 1) {
+
+            addLog(`${activePorts.length} USB devices attached.Checking for available port...`, "info");
+
+            for (const port of activePorts) {
+              const info = port.getInfo();
+              // Don't log for every single port unless we are stuck
+              const success = await openOrReusePort(port);
+              if (success) return;
+            }
+
+            addLog("Multiple ports detected but none could be auto-connected. Please select manually.", "info");
+            setIsSelectingPort(true);
+            return;
+          }
+        }
+
+        // Case 3: No USB devices → force picker (filtered)
+        if (usbPorts.length === 0) {
+          addLog("No known USB serial devices found. Ready f or manual connection.", "info");
+        }
+
       } catch (error) {
         console.warn("Auto-connect failed:", error);
-        // Silently fail - user can manually connect if needed
+      }
+    };
+
+
+    const openOrReusePort = async (port: any) => {
+      if (port.readable && port.writable) {
+        // Already open
+        portRef.current = port;
+        setConnectedPortInfo(port.getInfo());
+        stopRequestedRef.current = false;
+        setIsConnected(true);
+        addLog("Port Connected (Auto-Reuse) (115200 baud)", "success");
+        if (readingPromiseRef.current) {
+          // Promise might be running, but we should make sure
+        } else {
+          readingPromiseRef.current = startReading(port);
+        }
+        return true;
+      } else {
+        // Need to open
+        return await connectToJig(port);
       }
     };
 
@@ -1021,56 +1226,85 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
     return () => {
       autoConnectAttemptedRef.current = false;
     };
-  }, [autoConnect]); // Only depend on autoConnect prop
+  }, [autoConnect, isConnected]); // Depend on autoConnect and isConnected to re-check if needed
 
-
-  return { isConnected, connectToJig, disconnectJig, simulateJigConnection, logs, clearLogs, downloadLogs, sendCommand };
+  return { isConnected, connectedPortInfo, connectToJig, disconnectJig, simulateJigConnection, logs, clearLogs, downloadLogs, sendCommand, availablePorts, isSelectingPort, setIsSelectingPort };
 };
 
 // --- Sub-Components ---
 
-const Header = ({ isConnected, onConnect, onDisconnect, onSimulate }: any) => (
-  <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-6 py-4 dark:border-gray-800 dark:bg-gray-800/50">
-    <div className="flex items-center gap-4">
-      <div className={`flex h-10 w-10 items-center justify-center rounded-xl shadow-sm transition-all ${isConnected ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-        }`}>
-        <Cable className="h-6 w-6" />
-      </div>
-      <div>
-        <h3 className="text-base font-bold text-gray-900 dark:text-white">Jig Interface</h3>
-        <div className="flex items-center gap-2">
-          <span className={`relative flex h-2 w-2`}>
-            <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${isConnected ? 'bg-green-400' : 'hidden'}`}></span>
-            <span className={`relative inline-flex h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-          </span>
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
-            {isConnected ? 'Device Connected' : 'Ready to Connect'}
-          </p>
+const Header = ({ isConnected, connectedPortInfo, onConnect, onDisconnect, onSimulate, availablePorts, onSelectPort, isSelectingPort }: any) => (
+  <div className="flex flex-col border-b border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-800/50">
+    <div className="flex items-center justify-between px-6 py-4">
+      <div className="flex items-center gap-4">
+        <div className={`flex h-10 w-10 items-center justify-center rounded-xl shadow-sm transition-all ${isConnected ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+          <Cable className="h-6 w-6" />
         </div>
+        <div>
+          <h3 className="text-base font-bold text-gray-900 dark:text-white">Jig Interface</h3>
+          <div className="flex items-center gap-2">
+            <span className={`relative flex h-2 w-2`}>
+              <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${isConnected ? 'bg-green-400' : 'hidden'}`}></span>
+              <span className={`relative inline-flex h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+            </span>
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              {isConnected ? (
+                <span>
+                  Connected: <span className="text-blue-500 dark:text-blue-400 font-bold">
+                    {getFriendlyName(connectedPortInfo)}
+                  </span>
+                </span>
+              ) : 'Ready to Connect'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        {!isConnected ? (
+          <>
+            <button onClick={onConnect} className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg active:scale-95">
+              <Cable className="h-4 w-4" />
+              Connect Device
+            </button>
+          </>
+        ) : (
+          <button onClick={onDisconnect} className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-5 py-2 text-xs font-bold text-red-600 shadow-sm transition-all hover:bg-red-100 hover:shadow dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-400">
+            <Square className="h-4 w-4 fill-current" />
+            Stop Connection
+          </button>
+        )}
       </div>
     </div>
 
-    <div className="flex gap-3">
-      {!isConnected ? (
-        <>
-          {/* Simulation Mode Disabled
-          <button onClick={onSimulate} className="group flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-600 shadow-sm transition-all hover:border-gray-300 hover:bg-gray-50 hover:shadow dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
-            <Play className="h-3.5 w-3.5 text-gray-400 group-hover:text-blue-500" />
-            Simulation
-          </button>
-          */}
-          <button onClick={onConnect} className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow-md transition-all hover:bg-blue-700 hover:shadow-lg active:scale-95">
-            <Cable className="h-4 w-4" />
-            Connect Device
-          </button>
-        </>
-      ) : (
-        <button onClick={onDisconnect} className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-5 py-2 text-xs font-bold text-red-600 shadow-sm transition-all hover:bg-red-100 hover:shadow dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-400">
-          <Square className="h-4 w-4 fill-current" />
-          Stop Connection
-        </button>
-      )}
-    </div>
+    {/* Port Selector Section */}
+    {availablePorts && availablePorts.length > 1 && !isConnected && (
+      <div className="px-6 pb-4 border-t border-gray-100 dark:border-gray-800 pt-4 flex flex-col gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] font-bold text-gray-400 border-l-2 border-blue-500 pl-2 uppercase tracking-wider">Select Available Device:</div>
+          <div className="text-[9px] text-gray-400 italic font-medium">* System COM names (COM10, etc.) are hidden by browser security</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {availablePorts.map((p: any, idx: number) => {
+            const info = p.getInfo();
+            return (
+              <button
+                key={idx}
+                onClick={() => onSelectPort(p)}
+                className="flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold text-gray-600 shadow-sm transition-all hover:border-blue-500 hover:text-blue-600 group dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:border-blue-500 dark:hover:text-blue-400"
+                title={`Device ID: ${info.usbVendorId?.toString(16).toUpperCase()}:${info.usbProductId?.toString(16).toUpperCase()}`}
+              >
+                <span className="flex h-5 items-center rounded bg-blue-50 px-1.5 text-[9px] text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                  PORT {idx + 1}
+                </span>
+                <div className="h-1.5 w-1.5 rounded-full bg-blue-500 group-hover:animate-pulse" />
+                {getFriendlyName(info)}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    )}
   </div>
 );
 
@@ -1165,15 +1399,19 @@ const TerminalOutput = ({ logs, onClear, onDownload, onSend, connected, expanded
 // --- Main Component ---
 
 export default function JigSection(props: JigSectionProps) {
-  const { isConnected, connectToJig, disconnectJig, simulateJigConnection, logs, clearLogs, downloadLogs, sendCommand } = useSerialPort(props);
+  const { isConnected, connectedPortInfo, connectToJig, disconnectJig, simulateJigConnection, logs, clearLogs, downloadLogs, sendCommand, availablePorts, isSelectingPort } = useSerialPort(props);
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl transition-all dark:bg-gray-900 dark:border-gray-800">
       <Header
         isConnected={isConnected}
-        onConnect={connectToJig}
-        onDisconnect={disconnectJig}
+        connectedPortInfo={connectedPortInfo}
+        onConnect={() => connectToJig()}
+        onDisconnect={() => disconnectJig(true)}
         onSimulate={simulateJigConnection}
+        availablePorts={availablePorts}
+        onSelectPort={(port: any) => connectToJig(port)}
+        isSelectingPort={isSelectingPort}
       />
       <TerminalOutput logs={logs} onClear={clearLogs} onDownload={downloadLogs} onSend={sendCommand} connected={isConnected} expanded={props.expanded} />
     </div>
