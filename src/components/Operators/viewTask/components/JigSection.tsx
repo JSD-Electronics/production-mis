@@ -121,6 +121,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
   const isLocallyGeneratedRef = useRef(false);
 
   const generatedCommandRef = useRef(generatedCommand);
+  let matchCount = 0;
   useEffect(() => {
     // Only update ref if generatedCommand is truthy (preserves local updates during race conditions)
     // or if we explicitly want to handle resets (which usually happen with component remounts anyway)
@@ -268,12 +269,12 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       const newData = accumulatedDataRef.current;
 
       const parsedArray = parseJigOutput(newData);
-      const parsedData = parsedArray[0];
 
+      const parsedData = parsedArray[0];
       const currentSubStep = subStepRef.current;
       if (!currentSubStep?.jigFields) return;
 
-      let matchCount = 0;
+      // matchCount = 0;
       let allPassed = true;
       const requiredFieldsCount = currentSubStep.jigFields.length;
 
@@ -375,7 +376,6 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
         if (ccid) {
           // addLog(`Validating CCID: ${ccid}. Checking generated command...`, "info");
           const cmd = generatedCommandRef.current;
-          console.log("cmd ===>", cmd);
 
           if (cmd) {
             try {
@@ -465,8 +465,6 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
         const apnValue = findVal("APN");
         const pfValue = findVal("PF");
 
-        console.log("search for value for", normalizedActionType, "== nwValue", nwValue, "apnValue", apnValue, "pfValue", pfValue);
-
         if (nwValue || apnValue || pfValue) {
           addLog(`Validating ${actionType}: N/W=${nwValue}, APN=${apnValue}, PF=${pfValue}`, "info");
           (async () => {
@@ -521,7 +519,6 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                   const nameMatch = Array.isArray(p.name) ? p.name.includes(nwValue) : p.name === nwValue;
                   return profileIdMatch && nameMatch;
                 });
-                console.log("found pfValue ==>", found, "(checking pfValue:", pfValue, "nwValue:", nwValue, ")");
                 validationPassedPf = true;
                 if (!found) {
                   validationPassedPf = false;
@@ -562,7 +559,8 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
           accumulatedDataRef.current = "";
           return;
         }
-      } if (matchCount < requiredFieldsCount) {
+      }
+      if (matchCount < requiredFieldsCount) {
         const missing = currentSubStep.jigFields.filter((field: any) => {
           let found = false;
           if (parsedData[field.jigName]) found = true;
@@ -732,6 +730,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
         writer.releaseLock();
         writerRef.current = null;
         addLog(`TX: ${cmd}`, "info");
+
         return true;
       } catch (e: any) {
         addLog(`Send failed: ${e?.message || e}`, "error");
@@ -774,8 +773,6 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       command = effectiveGeneratedCommand;
     }
 
-    console.log("Command execution check:", { actionType, command, isConnected, currentStepId, lastSent: lastSentCommandStepRef.current });
-
     if (isConnected && (actionType === "Command" || actionType === "Custom Fields" || actionType?.toLowerCase() === "switch profile 2" || actionType?.toLowerCase() === "switch profile 1" || actionType === "Esim Settings validation") && command && lastSentCommandStepRef.current !== currentStepId) {
       // Reset switch profile tracking flags before sending new command
       if (actionType?.toLowerCase() === "switch profile 1" || actionType?.toLowerCase() === "switch profile 2") {
@@ -791,6 +788,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       addLog(`Auto-sending command: ${command}`, 'info');
       isCommandBusyRef.current = true;
       sendCommand(command).then(() => {
+        matchCount = 0;
         addLog(`Command Executed: ${command}`, 'success');
         console.log("command sent : ==>", command);
         // Wait for 1.5s after command is sent to allow jig to process/respond fully
