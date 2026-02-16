@@ -360,7 +360,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       const currentSubStep = subStepRef.current;
       if (!currentSubStep?.jigFields) return;
 
-      // matchCount = 0;
+      matchCount = 0;
       let allPassed = true;
       const requiredFieldsCount = currentSubStep.jigFields.length;
 
@@ -462,6 +462,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
         if (ccid) {
           // addLog(`Validating CCID: ${ccid}. Checking generated command...`, "info");
           const cmd = generatedCommandRef.current;
+          console.log("cmd ===>", cmd);
 
           if (cmd) {
             try {
@@ -551,6 +552,8 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
         const apnValue = findVal("APN");
         const pfValue = findVal("PF");
 
+        console.log("search for value for", normalizedActionType, "== nwValue", nwValue, "apnValue", apnValue, "pfValue", pfValue);
+
         if (nwValue || apnValue || pfValue) {
           addLog(`Validating ${actionType}: N/W=${nwValue}, APN=${apnValue}, PF=${pfValue}`, "info");
           (async () => {
@@ -605,6 +608,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                   const nameMatch = Array.isArray(p.name) ? p.name.includes(nwValue) : p.name === nwValue;
                   return profileIdMatch && nameMatch;
                 });
+                console.log("found pfValue ==>", found, "(checking pfValue:", pfValue, "nwValue:", nwValue, ")");
                 validationPassedPf = true;
                 if (!found) {
                   validationPassedPf = false;
@@ -858,6 +862,8 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
     if ((command === "@GENERATED_COMMAND" || actionType === "Esim Settings validation") && effectiveGeneratedCommand) {
       command = effectiveGeneratedCommand;
     }
+
+    console.log("Command execution check:", { actionType, command, isConnected, currentStepId, lastSent: lastSentCommandStepRef.current });
 
     if (isConnected && (actionType === "Command" || actionType === "Custom Fields" || actionType?.toLowerCase() === "switch profile 2" || actionType?.toLowerCase() === "switch profile 1" || actionType === "Esim Settings validation") && command && lastSentCommandStepRef.current !== currentStepId) {
       // Reset switch profile tracking flags before sending new command
