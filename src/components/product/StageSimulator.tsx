@@ -14,11 +14,15 @@ import {
     Smartphone,
     X,
     Clock,
-    Download
+    Download,
+    Printer
 } from "lucide-react";
 import JigSection from "../Operators/viewTask/components/JigSection";
 import Loader from "@/components/common/Loader";
 import * as XLSX from 'xlsx';
+import StickerGenerator from "../Operators/viewTask-old/StickerGenerator";
+import { toast } from "react-toastify";
+import html2canvas from "html2canvas";
 
 interface StageSimulatorProps {
     stages: any[];
@@ -34,6 +38,7 @@ interface DummyDevice {
     status: "Pending" | "Pass" | "NG";
     currentStageIndex: number;
     results: Record<string, any>; // Store results per stage/step
+    customFields?: Record<string, any>;
 }
 
 export default function StageSimulator({ stages, isOpen, onClose, initialStageIndex = 0, isPageMode = false }: StageSimulatorProps) {
@@ -52,6 +57,9 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
     const [stageStartTime, setStageStartTime] = useState<number>(0);
     const [totalStageTime, setTotalStageTime] = useState<number>(0);
     const ngTimeoutRef = useRef<any>(null); // Use any to match browser/node timeout types safely
+
+    const [isStickerPrinted, setIsStickerPrinted] = useState(false);
+    const [isVerifiedSticker, setIsVerifiedSticker] = useState(false);
 
     const activeDevice = dummyDevices.find((d) => d.id === selectedDevice);
     const activeStage = stages[selectedStageIndex];
@@ -154,6 +162,8 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
         const now = Date.now();
         setStageStartTime(now);
         setStepStartTime(now);
+        setIsStickerPrinted(false); // Reset sticker state on new test start
+        setIsVerifiedSticker(false); // Reset sticker state on new test start
         addLog(`Starting test for ${activeDevice?.serialNo} on stage: ${activeStage.stageName}`);
     };
 
@@ -202,6 +212,42 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                 addLog(`Recovered to PASS within ${timeoutSeconds}s timeout period.`);
             }
 
+            // Sync with dummy device data for stickers (IMEI/CCID etc)
+            if (activeDevice && data?.parsedData) {
+                // Look for IMEI and CCID in parsedData
+                const parsed = data.parsedData;
+                const flattened: Record<string, string> = {};
+
+                // Search through sections
+                Object.keys(parsed).forEach(section => {
+                    if (typeof parsed[section] === 'object') {
+                        Object.keys(parsed[section]).forEach(key => {
+                            flattened[key.toLowerCase()] = parsed[section][key];
+                        });
+                    } else {
+                        flattened[section.toLowerCase()] = parsed[section];
+                    }
+                });
+
+                const imei = flattened['imei'] || flattened['imei_no'];
+                const ccid = flattened['ccid'];
+
+                if (imei || ccid) {
+                    const updates: Record<string, string> = {};
+                    if (imei) updates['imei_no'] = imei;
+                    if (ccid) updates['ccid'] = ccid;
+
+                    setDummyDevices(prev => prev.map(d =>
+                        d.id === activeDevice.id
+                            ? { ...d, customFields: { ...(d.customFields || {}), ...updates } }
+                            : d
+                    ));
+
+                    if (imei) addLog(`Captured IMEI from jig: ${imei}`);
+                    if (ccid) addLog(`Captured CCID from jig: ${ccid}`);
+                }
+            }
+
             setStepResults((prev) => ({
                 ...prev,
                 [currentStepIndex]: { status, data, executionTime, reason: undefined },
@@ -210,17 +256,23 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
             setWaitingStatus(null);
             addLog(`Step '${stepKv.stepName}': ${status} - Time: ${executionTime.toFixed(2)}s`);
 
-            if (currentStepIndex < activeStage.subSteps.length - 1) {
-                setCurrentStepIndex((prev) => prev + 1);
-            } else {
-                // Calculate total stage time
-                const totalTime = (Date.now() - stageStartTime) / 1000;
-                setTotalStageTime(totalTime);
-                addLog(`All steps passed! Stage Verified. Total Time: ${totalTime.toFixed(2)}s`);
-                setIsTestRunning(false);
-                if (activeDevice) {
-                    updateDeviceStatus(activeDevice.id, "Pass");
+            // If it's NOT a printer step, we can advance.
+            // If it IS a printer step, we stay here until printed/verified.
+            if (!stepKv.isPrinterEnable) {
+                if (currentStepIndex < activeStage.subSteps.length - 1) {
+                    setCurrentStepIndex((prev) => prev + 1);
+                } else {
+                    // Calculate total stage time
+                    const totalTime = (Date.now() - stageStartTime) / 1000;
+                    setTotalStageTime(totalTime);
+                    addLog(`All steps passed! Stage Verified. Total Time: ${totalTime.toFixed(2)}s`);
+                    setIsTestRunning(false);
+                    if (activeDevice) {
+                        updateDeviceStatus(activeDevice.id, "Pass");
+                    }
                 }
+            } else {
+                addLog("Waiting for Label Print and Verification...");
             }
         } else if (status === "NG") {
 
@@ -249,6 +301,74 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
 
     const updateDeviceStatus = (id: string, status: "Pass" | "NG") => {
         setDummyDevices(prev => prev.map(d => d.id === id ? { ...d, status } : d));
+    };
+
+    const handlePrintSticker = () => {
+        const stickerRoot = document.getElementById("sticker-preview");
+        if (!stickerRoot) {
+            toast.error("Sticker preview not found");
+            return;
+        }
+
+        const stickerElement = (stickerRoot.querySelector('.actual-sticker-container') || stickerRoot) as HTMLElement;
+        const widthPx = parseInt(stickerElement.getAttribute('data-sticker-width') || '300');
+        const heightPx = parseInt(stickerElement.getAttribute('data-sticker-height') || '150');
+        const stickerWidthMM = Math.round(widthPx * 0.264583);
+        const stickerHeightMM = Math.round(heightPx * 0.264583);
+
+        html2canvas(stickerElement, {
+            scale: 3,
+            useCORS: true,
+            backgroundColor: "#ffffff",
+            logging: false,
+        }).then((canvas) => {
+            const imageData = canvas.toDataURL("image/png");
+            const printWindow = window.open("", "_blank");
+            if (!printWindow) {
+                toast.error("Please allow popups to print stickers");
+                return;
+            }
+            printWindow.document.write(`
+            <html>
+              <head>
+                <style>
+                  @page { size: ${stickerWidthMM}mm ${stickerHeightMM}mm; margin: 0; }
+                  body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; }
+                  img { width: ${stickerWidthMM}mm; height: ${stickerHeightMM}mm; display: block; }
+                </style>
+              </head>
+              <body>
+                <img src="${imageData}">
+                <script>
+                  window.onload = function() {
+                    setTimeout(() => { window.print(); window.close(); }, 300);
+                  };
+                </script>
+              </body>
+            </html>
+          `);
+            printWindow.document.close();
+            setIsStickerPrinted(true);
+            addLog("Label Printed successfully.");
+        });
+    };
+
+    const handleVerifySticker = () => {
+        setIsVerifiedSticker(true);
+        addLog("Label Verified manually.");
+
+        // Advance to next step after verification
+        if (currentStepIndex < activeStage.subSteps.length - 1) {
+            setCurrentStepIndex((prev) => prev + 1);
+        } else {
+            const totalTime = (Date.now() - stageStartTime) / 1000;
+            setTotalStageTime(totalTime);
+            addLog(`All steps passed! Stage Verified. Total Time: ${totalTime.toFixed(2)}s`);
+            setIsTestRunning(false);
+            if (activeDevice) {
+                updateDeviceStatus(activeDevice.id, "Pass");
+            }
+        }
     };
 
     const currentSubStep = activeStage?.subSteps?.[currentStepIndex];
@@ -359,20 +479,87 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                     </div>
                 )}
 
-                {/* PRINTER SECTION (Mock) */}
+                {/* PRINTER SECTION */}
                 {currentSubStep.isPrinterEnable && (
-                    <div className="mt-6 border-t pt-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Box className="h-5 w-5 text-purple-500" />
-                            <span className="font-semibold text-gray-700 dark:text-gray-300">Printer Configuration</span>
+                    <div className="mt-8 rounded-2xl border border-gray-100 bg-gray-50/50 p-6 dark:bg-gray-900/40 dark:border-gray-800">
+                        <div className="mb-6 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">
+                                    <Printer className="h-6 w-6" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Label Printing</h3>
+                                    <p className="text-xs text-gray-500">Preview and verify your device labels</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                {isStickerPrinted && (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                        <CheckCircle className="h-3.5 w-3.5" />
+                                        PRINTED
+                                    </span>
+                                )}
+                                {isVerifiedSticker && (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                        <CheckCircle className="h-3.5 w-3.5" />
+                                        VERIFIED
+                                    </span>
+                                )}
+                            </div>
                         </div>
-                        <div className="rounded border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-sm text-gray-500">
-                            [Printer Preview Mockup]<br />
-                            Configured Fields: {currentSubStep.printerFields?.length || 0}
+
+                        <div className="mb-8 flex flex-col items-center justify-center gap-6">
+                            {/* Sticker Preview */}
+                            <div id="sticker-preview" className="rounded-xl border border-gray-200 bg-white p-2 shadow-sm transition-all hover:shadow-md dark:border-gray-700">
+                                {currentSubStep.printerFields && Array.isArray(currentSubStep.printerFields) ? (
+                                    currentSubStep.printerFields.map((field: any, index: number) => (
+                                        <div key={index} className="m-2">
+                                            <StickerGenerator
+                                                stickerData={field}
+                                                deviceData={activeDevice ? [{
+                                                    serial_no: activeDevice.serialNo,
+                                                    ...activeDevice.customFields
+                                                }] : []}
+                                            />
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="m-2">
+                                        <StickerGenerator
+                                            stickerData={currentSubStep.stickerData}
+                                            deviceData={activeDevice ? [{
+                                                serial_no: activeDevice.serialNo,
+                                                ...activeDevice.customFields
+                                            }] : []}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex w-full max-w-md flex-col gap-3">
+                                <button
+                                    onClick={handlePrintSticker}
+                                    className={`flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 font-bold text-white shadow-lg transition-all active:scale-[0.98] ${isStickerPrinted
+                                        ? 'bg-primary text-gray-400 dark:bg-primary dark:text-gray-500'
+                                        : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700'
+                                        }`}
+                                >
+                                    <Printer className="h-5 w-5" />
+                                    {isStickerPrinted ? 'Re-print Label' : 'Print Label'}
+                                </button>
+
+                                {isStickerPrinted && !isVerifiedSticker && (
+                                    <button
+                                        onClick={handleVerifySticker}
+                                        className="flex w-full animate-bounce items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 px-6 py-4 font-bold text-white shadow-lg shadow-green-500/20 transition-all hover:from-green-600 hover:to-emerald-700 active:scale-[0.98]"
+                                    >
+                                        <CheckCircle className="h-5 w-5" />
+                                        Verify Label Scanned
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                        <button className="mt-2 text-xs text-blue-600 hover:underline" onClick={() => addLog("Simulated Label Print")}>
-                            Test Print
-                        </button>
                     </div>
                 )}
             </div>
