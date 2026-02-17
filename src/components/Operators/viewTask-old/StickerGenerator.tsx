@@ -17,6 +17,58 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
       .join("");
   };
 
+  const resolveValue = (field: any, device: any) => {
+    let baseValue = field.value || "";
+    if (!device) return baseValue;
+
+    // Slug replacement logic for any field type (allows dynamic barcodes/qr/text)
+    if (typeof baseValue === "string" && baseValue.includes("{")) {
+      const slugs = baseValue.match(/{[^{}]+}/g) || [];
+      slugs.forEach((slugBox: string) => {
+        const slug = slugBox.slice(1, -1);
+        const camelSlug = toCamelCase(slug);
+        const val = device[camelSlug] || device[slug] || "";
+        baseValue = baseValue.replace(slugBox, val);
+      });
+      if (field.type === "dynamic_url") return baseValue;
+    }
+
+    const formattedKey = field.slug ? toCamelCase(field.slug) : "";
+    let fieldValue = (formattedKey && device) ? device[formattedKey] : undefined;
+
+    // Custom Fields Lookup
+    const customFields = device?.customFields || device?.custom_fields || device?.customfields;
+    if (field.slug !== "serial_no" && !fieldValue && customFields) {
+      let customFieldsObj = customFields;
+      if (typeof customFieldsObj === "string") {
+        try { customFieldsObj = JSON.parse(customFieldsObj); } catch (e) { customFieldsObj = null; }
+      }
+
+      if (customFieldsObj) {
+        const slug = (field.slug || "").toLowerCase();
+        const displayName = (field.name || "").toLowerCase();
+        const keys = Object.keys(customFieldsObj);
+        const normalize = (s: any) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+        const foundKey = keys.find(k => {
+          const kLower = k.toLowerCase();
+          return kLower === slug ||
+            kLower === displayName ||
+            normalize(k) === normalize(slug) ||
+            normalize(k) === normalize(displayName);
+        });
+
+        if (foundKey) {
+          fieldValue = customFieldsObj[foundKey];
+        } else {
+          fieldValue = customFieldsObj[formattedKey] ||
+            customFieldsObj[formattedKey.charAt(0).toUpperCase() + formattedKey.slice(1)];
+        }
+      }
+    }
+    return fieldValue || baseValue || "";
+  };
+
   return (
     <div
       className="actual-sticker-container bg-white"
@@ -36,51 +88,15 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
       }}
     >
       {stickerData?.fields?.map((field: any) => {
-        const formattedKey = field.slug ? toCamelCase(field.slug) : "";
         const device = (deviceData && deviceData.length > 0) ? deviceData[0] : null;
-        let fieldValue = (formattedKey && device) ? device[formattedKey] : undefined;
-
-        // Custom Fields Lookup
-        const customFields = device?.customFields || device?.custom_fields || device?.customfields;
-        if (field.slug !== "serial_no" && !fieldValue && customFields) {
-          let customFieldsObj = customFields;
-          if (typeof customFieldsObj === "string") {
-            try {
-              customFieldsObj = JSON.parse(customFieldsObj);
-            } catch (e) {
-              customFieldsObj = null;
-            }
-          }
-
-          if (customFieldsObj) {
-            const slug = (field.slug || "").toLowerCase();
-            const displayName = (field.name || "").toLowerCase();
-            const keys = Object.keys(customFieldsObj);
-            const normalize = (s: any) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-
-            const foundKey = keys.find(k => {
-              const kLower = k.toLowerCase();
-              return kLower === slug ||
-                kLower === displayName ||
-                normalize(k) === normalize(slug) ||
-                normalize(k) === normalize(displayName);
-            });
-
-            if (foundKey) {
-              fieldValue = customFieldsObj[foundKey];
-            } else {
-              fieldValue = customFieldsObj[formattedKey] ||
-                customFieldsObj[formattedKey.charAt(0).toUpperCase() + formattedKey.slice(1)];
-            }
-          }
-        }
+        const fieldValue = resolveValue(field, device);
 
         const align = field.styles?.textAlign || "center";
         const fontSize = parseInt(String(field.styles?.fontSize || 14), 10);
 
         return (
           <div
-            key={field._id}
+            key={field._id || field.id}
             className="absolute flex items-center"
             style={{
               top: `${field.y}px`,
@@ -90,7 +106,6 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
               justifyContent: align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center",
               padding: "0 2px",
               boxSizing: "border-box",
-              // REMOVED: overflow: "hidden" - this was cutting off the text
               zIndex: 10,
             }}
           >
@@ -108,19 +123,35 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
                 />
               </div>
             ) : field.type === "qrcode" ? (
-              <QRCodeCanvas
-                value={String(fieldValue || "N/A")}
-                size={Math.min(field.width || 80, field.height || 80)}
-                bgColor="transparent"
-                fgColor={field.styles?.color || "#000000"}
-                level="H"
-              />
+              <div className="flex w-full h-full items-center justify-center">
+                <QRCodeCanvas
+                  value={String(fieldValue || "N/A")}
+                  size={Math.min(field.width || 80, field.height || 80)}
+                  bgColor="transparent"
+                  fgColor={field.styles?.color || "#000000"}
+                  level="H"
+                />
+              </div>
             ) : field.type === "image" ? (
               <img
                 src={field.value}
                 alt="Logo"
                 style={{ width: "100%", height: "100%", objectFit: "contain" }}
               />
+            ) : field.type === "table" ? (
+              <table style={{ width: "100%", height: "100%", borderCollapse: "collapse", border: "1px solid black", fontSize: `${fontSize}px` }}>
+                <tbody>
+                  {(field.tableData || [["Row 1", "Col 2"], ["Row 2", "Col 2"]]).map((row: any[], ri: number) => (
+                    <tr key={ri}>
+                      {row.map((cell: string, ci: number) => (
+                        <td key={ci} style={{ border: "1px solid black", padding: "2px", textAlign: align as any }}>
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             ) : (
               <span
                 style={{
@@ -129,13 +160,12 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
                   fontWeight: field.styles?.fontWeight || "normal",
                   color: field.styles?.color || "black",
                   textAlign: align as any,
-                  // Increased line-height and removed clipping to ensure text is visible
                   lineHeight: "1.4",
                   display: "block",
                   background: "transparent"
                 }}
               >
-                {String(fieldValue || field.value || "")}
+                {String(fieldValue || "")}
               </span>
             )}
           </div>

@@ -126,7 +126,8 @@ const AddProduct = () => {
           isSubExpand: true,
           ngTimeout: 0,
           stepType: "manual",
-          printerFields: [],
+          printerFields: [
+          ],
           packagingData: {
             packagingType: "",
             cartonWidth: 0,
@@ -851,15 +852,57 @@ const AddProduct = () => {
     pushToHistory();
     const subStep = updatedStages[index].subSteps[subIndex];
     subStep.isPrinterEnable = !subStep.isPrinterEnable;
+    // if sticker is not generated into the stages by default on check printer Enable option this will rendered
+    ///automatically 
     if (subStep.isPrinterEnable && (!subStep.printerFields || subStep.printerFields.length === 0)) {
       subStep.printerFields = [
         {
           isExpanded: true,
           dimensions: {
-            width: 100,
-            height: 100,
+            width: 189,
+            height: 94,
           },
-          fields: [],
+          fields: [
+              {
+                name: "IMEI",
+                slug: "imei",
+                x: 5,
+                y: 27,
+                width: 82,
+                height: 25,
+                styles: { fontSize: "12px" },
+                fontSize: 12,
+              },
+              {
+                name: "IMEI",
+                slug: "imei",
+                x: 114,
+                y: 29,
+                width: 73,
+                height: 64,
+                type: "qrcode",
+              },
+              {
+                name: "CCID",
+                slug: "ccid",
+                x: 5,
+                y: 52,
+                width: 84,
+                height: 19,
+                styles: { fontSize: "12px" },
+                fontSize: 12,
+              },
+              {
+                name: "serial_no",
+                slug: "serial_no",
+                x: 12,
+                y: 76,
+                width: 79,
+                height: 13,
+                styles: { fontSize: "12px" },
+                fontSize: 12,
+              },
+            ],
         },
       ];
     }
@@ -1104,7 +1147,7 @@ const AddProduct = () => {
                     </div>
                   </div>
                 </div>
-                <div className="bg-gray-100 px-1 py-6 dark:bg-boxdark">
+                <div className="px-1 py-6 dark:bg-boxdark">
                   <label className="text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2 text-sm font-semibold">
                     Product Name
                   </label>
@@ -1131,7 +1174,7 @@ const AddProduct = () => {
                               <div
                                 ref={stageProvided.innerRef}
                                 {...stageProvided.draggableProps}
-                                className="bg-gray-50 space-y-4 border border-[#eee] p-6 shadow-lg dark:border-form-strokedark dark:bg-boxdark"
+                                className="space-y-4 border border-[#eee] p-6 shadow-lg dark:border-form-strokedark dark:bg-boxdark"
                               >
                                 <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-2">
                                   <div className="flex items-center gap-3">
@@ -2306,7 +2349,7 @@ const AddProduct = () => {
                     Add Stage
                   </button>
                 </div>
-                <div className="bg-gray-50 space-y-4 border border-[#eee] p-6 shadow-lg dark:border-form-strokedark dark:bg-boxdark">
+                <div className=" space-y-4 border border-[#eee] p-6 shadow-lg dark:border-form-strokedark dark:bg-boxdark">
                   <div className="grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
                     <h3 className="text-gray-900 block text-lg font-semibold dark:text-black">
                       Common Stages
@@ -2315,7 +2358,7 @@ const AddProduct = () => {
                   {commonStages.map((cStage: CommonStage, idx: number) => (
                     <div
                       key={idx}
-                      className="bg-gray-50 dark:bg-gray-800 space-y-4 rounded-xl border border-[#eee] p-6 shadow-sm transition-all hover:shadow-md dark:border-form-strokedark"
+                      className="dark:bg-gray-800 space-y-4 rounded-xl border border-[#eee] p-6 shadow-sm transition-all hover:shadow-md dark:border-form-strokedark"
                     >
                       <div className="flex items-center justify-between border-b pb-3 dark:border-strokedark">
                         <h3 className="text-gray-900 border-l-4 border-primary pl-3 text-lg font-bold dark:text-white">
