@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Clock,
   FileText,
@@ -10,7 +10,8 @@ import {
   Coffee,
   GripVertical,
   Info,
-  AlertCircle
+  AlertCircle,
+  Timer
 } from "lucide-react";
 import {
   DragDropContext,
@@ -82,12 +83,43 @@ const EditShiftManagement = () => {
     }));
   };
 
-  // Time difference (in minutes)
+  // Time difference (in minutes), handles midnight crossing
   const calculateTimeDifference = (start: string, end: string) => {
+    if (!start || !end) return 0;
     const [sh, sm] = start.split(":").map(Number);
     const [eh, em] = end.split(":").map(Number);
-    return eh * 60 + em - (sh * 60 + sm);
+    let diff = (eh * 60 + em) - (sh * 60 + sm);
+    if (diff < 0) diff += 1440;
+    return diff;
   };
+
+  // Calculate summary statistics for the shift
+  const shiftSummary = useMemo(() => {
+    let totalWorkMinutes = 0;
+    let totalBreakMinutes = 0;
+
+    intervals.forEach((interval) => {
+      const duration = calculateTimeDifference(interval.startTime, interval.endTime);
+      if (interval.breakTime) {
+        totalBreakMinutes += duration;
+      } else {
+        totalWorkMinutes += duration;
+      }
+    });
+
+    const formatDuration = (minutes: number) => {
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      if (h === 0 && m === 0) return "0h";
+      return `${h}h${m > 0 ? ` ${m}m` : ""}`;
+    };
+
+    return {
+      work: formatDuration(totalWorkMinutes),
+      break: formatDuration(totalBreakMinutes),
+      total: formatDuration(totalWorkMinutes + totalBreakMinutes),
+    };
+  }, [intervals]);
 
   // Validation logic
   const validateForm = () => {
@@ -106,14 +138,26 @@ const EditShiftManagement = () => {
       intervals.forEach((interval, i) => {
         if (!interval.startTime || !interval.endTime) {
           newErrors[`interval-${i}`] = "Start & End time are required";
-        } else if (interval.startTime >= interval.endTime) {
-          newErrors[`interval-${i}`] = "Start time must be earlier than end time";
+        } else if (interval.startTime === interval.endTime) {
+          newErrors[`interval-${i}`] = "Start and End time cannot be the same";
         }
 
         if (i > 0) {
+          const prevStart = intervals[i - 1].startTime;
           const prevEnd = intervals[i - 1].endTime;
-          if (interval.startTime < prevEnd) {
-            newErrors[`interval-${i}`] = "Intervals must not overlap";
+          const currentStart = interval.startTime;
+
+          // Smarter overlap check to handle midnight wrapping
+          if (prevStart < prevEnd) {
+            // Previous interval was within the same day
+            if (currentStart < prevEnd && currentStart >= prevStart) {
+              newErrors[`interval-${i}`] = "Intervals must not overlap";
+            }
+          } else {
+            // Previous interval crossed midnight
+            if (currentStart < prevEnd || currentStart >= prevStart) {
+              newErrors[`interval-${i}`] = "Intervals must not overlap";
+            }
           }
         }
       });
@@ -135,34 +179,28 @@ const EditShiftManagement = () => {
     const id = pathname.split("/").pop();
 
     try {
-      // Sort intervals
-      const sortedIntervals = [...intervals].sort((a, b) => {
-        const [ah, am] = a.startTime.split(":").map(Number);
-        const [bh, bm] = b.startTime.split(":").map(Number);
-        return ah * 60 + am - (bh * 60 + bm);
-      });
+      // Use logical order instead of chronological sort to support night shifts
+      const logicalIntervals = [...intervals];
 
-      // Find shift start
-      let shiftStartTime = sortedIntervals[0].startTime;
-      for (let i = 0; i < sortedIntervals.length; i++) {
-        if (!sortedIntervals[i].breakTime) {
-          shiftStartTime = sortedIntervals[i].startTime;
-          break;
-        } else {
-          shiftStartTime = sortedIntervals[i].endTime;
-        }
-      }
-
-      // Find shift end
-      let shiftEndTime = sortedIntervals[sortedIntervals.length - 1].endTime;
-      for (let i = sortedIntervals.length - 1; i >= 0; i--) {
-        if (!sortedIntervals[i].breakTime) {
-          shiftEndTime = sortedIntervals[i].endTime;
+      // Find shift start (first work interval or first interval if no work)
+      let shiftStartTime = logicalIntervals[0].startTime;
+      for (let i = 0; i < logicalIntervals.length; i++) {
+        if (!logicalIntervals[i].breakTime) {
+          shiftStartTime = logicalIntervals[i].startTime;
           break;
         }
       }
 
-      const totalBreakTime = sortedIntervals
+      // Find shift end (last work interval or last interval if no work)
+      let shiftEndTime = logicalIntervals[logicalIntervals.length - 1].endTime;
+      for (let i = logicalIntervals.length - 1; i >= 0; i--) {
+        if (!logicalIntervals[i].breakTime) {
+          shiftEndTime = logicalIntervals[i].endTime;
+          break;
+        }
+      }
+
+      const totalBreakTime = logicalIntervals
         .filter((interval) => interval.breakTime)
         .reduce(
           (total, br) => total + calculateTimeDifference(br.startTime, br.endTime),
@@ -174,7 +212,7 @@ const EditShiftManagement = () => {
         startTime: shiftStartTime,
         endTime: shiftEndTime,
         totalBreakTime,
-        intervals: sortedIntervals,
+        intervals: logicalIntervals,
         descripition: description, // Match original API field name
         weekDays,
       };
@@ -185,9 +223,10 @@ const EditShiftManagement = () => {
       setTimeout(() => {
         window.location.href = "/shift-management/view";
       }, 1500);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error updating shift:", err);
-      toast.error("Failed to update shift. Please try again.");
+      const errorMessage = err?.message || "Failed to update shift. Please try again.";
+      toast.error(errorMessage);
     }
   };
 
@@ -282,8 +321,8 @@ const EditShiftManagement = () => {
                       type="button"
                       onClick={() => handleCheckboxChange(day)}
                       className={`flex h-10 w-10 items-center justify-center rounded-xl text-xs font-black transition-all ${(weekDays as any)[day]
-                          ? "bg-primary text-white shadow-lg shadow-primary/20 scale-105"
-                          : "bg-gray-50 text-gray-400 hover:bg-gray-100 dark:bg-white/5"
+                        ? "bg-primary text-white shadow-lg shadow-primary/20 scale-105"
+                        : "bg-gray-50 text-gray-400 hover:bg-gray-100 dark:bg-white/5"
                         }`}
                       title={day.charAt(0).toUpperCase() + day.slice(1)}
                     >
@@ -331,10 +370,61 @@ const EditShiftManagement = () => {
             </div>
 
             {errors.intervals && (
-              <div className="mb-4 rounded-xl bg-rose-50 p-3 text-[10px] font-bold text-rose-600 uppercase tracking-widest">
-                <AlertCircle size={14} className="mr-2 inline" /> {errors.intervals}
+              <div className="mb-4 rounded-xl bg-rose-50 p-3 text-[10px] font-bold text-rose-600 uppercase tracking-widest flex items-center gap-2">
+                <AlertCircle size={14} /> {errors.intervals}
               </div>
             )}
+
+            {/* Visual Summary Stats */}
+            <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="flex flex-col rounded-2xl border-2 border-primary/10 bg-primary/5 p-4 transition-all hover:bg-primary/10">
+                <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-1 opacity-70">Capacity / Work</p>
+                <div className="flex items-end justify-between">
+                  <span className="text-xl font-black text-gray-900 dark:text-white leading-none">{shiftSummary.work}</span>
+                  <Clock size={16} className="text-primary/40" />
+                </div>
+              </div>
+              <div className="flex flex-col rounded-2xl border-2 border-amber-100 bg-amber-50/50 p-4 transition-all hover:bg-amber-100/50">
+                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1 opacity-70">Total Breaks</p>
+                <div className="flex items-end justify-between">
+                  <span className="text-xl font-black text-gray-900 dark:text-white leading-none">{shiftSummary.break}</span>
+                  <Coffee size={16} className="text-amber-500/40" />
+                </div>
+              </div>
+              <div className="flex flex-col rounded-2xl border-2 border-gray-100 bg-gray-50/50 p-4 transition-all hover:bg-gray-100/50">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 opacity-70">Full Duration</p>
+                <div className="flex items-end justify-between">
+                  <span className="text-xl font-black text-gray-900 dark:text-white leading-none">{shiftSummary.total}</span>
+                  <Timer size={16} className="text-gray-400/40" />
+                </div>
+              </div>
+            </div>
+
+            {/* Timeline Preview Progression */}
+            <div className="mb-8 rounded-2xl border border-gray-100 bg-gray-50/20 p-5">
+              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Shift Timeline Progression</h3>
+              <div className="flex flex-wrap items-center gap-y-3 gap-x-2">
+                {intervals.map((interval, idx) => (
+                  <React.Fragment key={idx}>
+                    <div
+                      className={`group flex items-center gap-2 rounded-xl px-4 py-2 text-[11px] font-black transition-all shadow-sm ${interval.breakTime
+                        ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-200'
+                        : 'bg-primary/10 text-primary ring-1 ring-primary/20'
+                        }`}
+                    >
+                      {interval.breakTime ? <Coffee size={13} className="opacity-70" /> : <Clock size={13} className="opacity-70" />}
+                      <span>{interval.startTime} — {interval.endTime}</span>
+                      <span className="ml-1 text-[9px] opacity-50 uppercase tracking-tighter">
+                        ({Math.floor(calculateTimeDifference(interval.startTime, interval.endTime) / 60)}h {calculateTimeDifference(interval.startTime, interval.endTime) % 60}m)
+                      </span>
+                    </div>
+                    {idx < intervals.length - 1 && (
+                      <div className="h-0.5 w-4 rounded-full bg-gray-100 mx-1" />
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
 
             <DragDropContext onDragEnd={onDragEnd}>
               <Droppable droppableId="intervals">
@@ -355,10 +445,10 @@ const EditShiftManagement = () => {
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             className={`group relative flex flex-col gap-4 rounded-2xl border-2 p-5 transition-all md:flex-row md:items-center ${snapshot.isDragging
-                                ? "border-primary bg-white shadow-2xl scale-[1.02] z-50"
-                                : interval.breakTime
-                                  ? "border-amber-100 bg-amber-50/30 dark:border-amber-900/20 dark:bg-amber-900/5"
-                                  : "border-gray-50 bg-gray-50/30 dark:border-strokedark dark:bg-white/5"
+                              ? "border-primary bg-white shadow-2xl scale-[1.02] z-50"
+                              : interval.breakTime
+                                ? "border-amber-100 bg-amber-50/30 dark:border-amber-900/20 dark:bg-amber-900/5"
+                                : "border-gray-50 bg-gray-50/30 dark:border-strokedark dark:bg-white/5"
                               }`}
                           >
                             <div {...provided.dragHandleProps} className="hidden cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-400 md:block">
@@ -392,8 +482,8 @@ const EditShiftManagement = () => {
                                 type="button"
                                 onClick={() => handleCheckboxBreakTime(index, "breakTime", !interval.breakTime)}
                                 className={`flex items-center gap-2 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${interval.breakTime
-                                    ? "bg-amber-500 text-white shadow-lg shadow-amber-500/20"
-                                    : "bg-white text-gray-400 ring-1 ring-gray-100 dark:bg-boxdark dark:ring-strokedark"
+                                  ? "bg-amber-500 text-white shadow-lg shadow-amber-500/20"
+                                  : "bg-white text-gray-400 ring-1 ring-gray-100 dark:bg-boxdark dark:ring-strokedark"
                                   }`}
                               >
                                 <Coffee size={14} />

@@ -52,7 +52,14 @@ const StickerDesigner = ({
   stickerData: any;
   setStickerData: any;
 }) => {
-  const [availableFields, setAvailableFields] = useState(stickerFields);
+  const [availableFields, setAvailableFields] = useState(stickerFields || []);
+
+  useEffect(() => {
+    if (stickerFields && stickerFields.length > 0) {
+      setAvailableFields(stickerFields);
+    }
+  }, [stickerFields]);
+
   const [focusedFieldIndex, setFocusedFieldIndex] = useState<number | null>(
     null,
   );
@@ -1075,7 +1082,10 @@ const StickerDesigner = ({
                             value={(function () {
                               const fallback =
                                 field.slug || field.value || "N/A";
-                              const src = stickerData;
+
+                              // Handle stickerData if it's an array (take first element) or an object
+                              const src = Array.isArray(stickerData) ? stickerData[0] : stickerData;
+
                               if (src && typeof src === "object") {
                                 const keyCamel = String(field.slug || "")
                                   .toLowerCase()

@@ -31,6 +31,9 @@ interface ShiftInterval {
 interface Shifts {
   _id: string;
   name: string;
+  startTime: string;
+  endTime: string;
+  totalBreakTime: string;
   intervals: ShiftInterval[];
   createdAt: string;
   updatedAt: string;
@@ -130,11 +133,11 @@ const ViewShift = () => {
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700 dark:text-gray-300">
             <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[10px] dark:bg-white/5 uppercase">Start</span>
-            {row?.intervals?.[0]?.startTime || "-"}
+            {row?.startTime || row?.intervals?.[0]?.startTime || "-"}
           </div>
           <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700 dark:text-gray-300">
             <span className="rounded-md bg-gray-100 px-2 py-0.5 text-[10px] dark:bg-white/5 uppercase">End</span>
-            {row?.intervals?.[row.intervals.length - 1]?.endTime || "-"}
+            {row?.endTime || row?.intervals?.[row?.intervals?.length - 1]?.endTime || "-"}
           </div>
         </div>
       ),

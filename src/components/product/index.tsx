@@ -304,6 +304,8 @@ const AddProduct = () => {
         const loadedStages = result.product.stages || [];
         const stagesWithIds = loadedStages.map((stage: any, sIdx: number) => ({
           ...stage,
+          managedBy: "", // Clear operator assignment on clone
+          jigId: "", // Clear jig assignment on clone
           cycleTime: stage.cycleTime || "",
           videoLinks: Array.isArray(stage.videoLinks)
             ? stage.videoLinks
@@ -340,7 +342,11 @@ const AddProduct = () => {
 
         // Also clone Common Stages if they exist
         if (result.product.commonStages && result.product.commonStages.length > 0) {
-          setCommonStages(result.product.commonStages);
+          const cleanedCommonStages = result.product.commonStages.map((cs: any) => ({
+            ...cs,
+            managedBy: "" // Clear assignment
+          }));
+          setCommonStages(cleanedCommonStages);
         }
 
         closeModal();
@@ -854,55 +860,18 @@ const AddProduct = () => {
     subStep.isPrinterEnable = !subStep.isPrinterEnable;
     // if sticker is not generated into the stages by default on check printer Enable option this will rendered
     ///automatically 
-    if (subStep.isPrinterEnable && (!subStep.printerFields || subStep.printerFields.length === 0)) {
+    if (
+      subStep.isPrinterEnable &&
+      (!subStep.printerFields || subStep.printerFields.length === 0)
+    ) {
       subStep.printerFields = [
         {
           isExpanded: true,
           dimensions: {
-            width: 189,
-            height: 94,
+            width: 189, // Default width in mm
+            height: 94,  // Default height in mm
           },
-          fields: [
-              {
-                name: "IMEI",
-                slug: "imei",
-                x: 5,
-                y: 27,
-                width: 82,
-                height: 25,
-                styles: { fontSize: "12px" },
-                fontSize: 12,
-              },
-              {
-                name: "IMEI",
-                slug: "imei",
-                x: 114,
-                y: 29,
-                width: 73,
-                height: 64,
-                type: "qrcode",
-              },
-              {
-                name: "CCID",
-                slug: "ccid",
-                x: 5,
-                y: 52,
-                width: 84,
-                height: 19,
-                styles: { fontSize: "12px" },
-                fontSize: 12,
-              },
-              {
-                name: "serial_no",
-                slug: "serial_no",
-                x: 12,
-                y: 76,
-                width: 79,
-                height: 13,
-                styles: { fontSize: "12px" },
-                fontSize: 12,
-              },
-            ],
+          fields: [], // Let StickerDesigner populate defaults via useEffect
         },
       ];
     }
@@ -2269,67 +2238,54 @@ const AddProduct = () => {
                                         </div>
                                       )}
                                     </Droppable>
-
-                                    <div className="col-span-12 flex justify-end gap-5">
-                                      <button
-                                        type="button"
-                                        className="mt-4 flex items-center text-blue-500"
-                                        onClick={() => handleAddSubStep(index)}
-                                      >
-                                        <FontAwesomeIcon icon={faPlus} className="mr-2" />
-                                        Add Sub-Step
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        className="mt-4 flex items-center text-primary"
-                                        onClick={() => handleDuplicateStage(index)}
-                                      >
-                                        <FontAwesomeIcon
-                                          icon={faCopy}
-                                          className="mr-2"
-                                        />
-                                        Duplicate Stage
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        className="mt-4 flex items-center text-indigo-600"
-                                        onClick={() => {
-                                          localStorage.setItem("simulationConfig", JSON.stringify({
-                                            stages: stages,
-                                            initialStageIndex: index
-                                          }));
-                                          window.open("/product/simulator", "_blank");
-                                        }}
-                                      >
-                                        <Play className="mr-2 h-4 w-4" />
-                                        Test Stage
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        className="mt-4 flex items-center text-primary"
-                                        onClick={() => handleDuplicateStage(index)}
-                                      >
-                                        <FontAwesomeIcon
-                                          icon={faCopy}
-                                          className="mr-2"
-                                        />
-                                        Duplicate Stage
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        className="mt-4 flex items-center text-danger"
-                                        onClick={() => handleRemoveStage(index)}
-                                      >
-                                        <FontAwesomeIcon icon={faTrash} className="mr-2" />
-                                        Remove Stage
-                                      </button>
-                                    </div>
                                   </>
                                 )}
+                                <div className="col-span-12 flex justify-end gap-5">
+                                  <button
+                                    type="button"
+                                    className="mt-4 flex items-center text-blue-500"
+                                    onClick={() => handleAddSubStep(index)}
+                                  >
+                                    <FontAwesomeIcon icon={faPlus} className="mr-2" />
+                                    Add Sub-Step
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="mt-4 flex items-center text-primary"
+                                    onClick={() => handleDuplicateStage(index)}
+                                  >
+                                    <FontAwesomeIcon
+                                      icon={faCopy}
+                                      className="mr-2"
+                                    />
+                                    Duplicate Stage
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="mt-4 flex items-center text-indigo-600"
+                                    onClick={() => {
+                                      localStorage.setItem("simulationConfig", JSON.stringify({
+                                        stages: stages,
+                                        initialStageIndex: index
+                                      }));
+                                      window.open("/product/simulator", "_blank");
+                                    }}
+                                  >
+                                    <Play className="mr-2 h-4 w-4" />
+                                    Test Stage
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className="mt-4 flex items-center text-danger"
+                                    onClick={() => handleRemoveStage(index)}
+                                  >
+                                    <FontAwesomeIcon icon={faTrash} className="mr-2" />
+                                    Remove Stage
+                                  </button>
+                                </div>
                               </div>
                             )}
                           </Draggable>

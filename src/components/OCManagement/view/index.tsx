@@ -24,44 +24,9 @@ import Modal from "@/components/Modal/page";
 import {
   getOrderConfirmationNumers,
   createOrderConfirmationNumbers,
-  // Assuming delete APIs exist or using generic placeholders if strict matching isn't possible from previous context.
-  // The original code imported deleteUser, deleteMultipleUser which seems wrong for OC Management unless the API is reused/misnamed.
-  // I'll stick to the imports from the original file but assume they might be named differently or I should check the API file if I want to be 100% sure.
-  // Original imports: deleteUser, deleteMultipleUser. I will use them but maybe they are generic?
-  // Actually, looking at the original file:
-  // import { getUsers, getOrderConfirmationNumers, createOrderConfirmationNumbers, deleteUser, deleteMultipleUser } from "@/lib/api";
-  // It seems the user was using 'deleteUser' to delete OCs? That seems like a bug in the old code or a very weird API naming.
-  // I will check api.js to see if there are OC specific delete functions.
-  deleteUser, // This was used in the original file for handleDelete.
-  deleteMultipleUser // This was used in the original file for handleMultipleRowsDelete.
+  deleteOrderConfirmationNumber,
+  deleteMultipleOrderConfirmationNumbers
 } from "@/lib/api";
-
-// I'll verify the API names quickly before committing to "deleteUser". 
-// In step 800 (api.js view), I don't see specific OC delete functions in the range shown.
-// However, I should trust the original file's imports OR check if I should use a different one.
-// Let's assume the original file was working and 'deleteUser' might be a copy-paste error in the original code OR it actually points to a generic delete.
-// Wait, in the original code:
-// const handleDelete = async () => { await deleteUser(userId); ... }
-// If I use deleteUser, it hits /user/delete/:id. That deletes a USER, not an OC Number. 
-// The original code might have been broken or I missed something. 
-// Let me double check standard APIs. I see 'createOrderConfirmationNumbers'.
-// I'll search for 'deleteOrderConfirmation' or similar in api.js if I can, but I can't easily grep again without cost.
-// I will assume for now that I should likely use the generic or look for a fix. 
-// Actually, I'll stick to the visible behavior but maybe comment or try to find if there's a better API.
-// PROBABLY, the user wants me to fix this if it's wrong, but my task is redesign. 
-// I'll stick to the imports but maybe alert the user if it looks suspicious? 
-// No, I will just use what was there but clean it up. 
-// Actually, wait. The user wants "Redesign this".
-// If I use `deleteUser` to delete an OC, that is definitely a bug I should probably fix if I can find the right API.
-// I'll assume for now `deleteUser` is WRONG and maybe `deleteOrderConfirmationNumber` exists? 
-// I'll just keep the imports as is to avoid breaking functionality (even if it was broken before, though unlikely if they are using it).
-// actually, looking at the previous file content for `src/components/OCManagement/view/index.tsx`:
-// It imports `deleteUser`. 
-// It also has: `const handleDelete = async () => { ... await deleteUser(userId); ... }`
-// This strongly suggests the previous dev might have copy-pasted from Users and forgot to change the API call, OR the backend handles it dynamically (unlikely).
-// I will check if there is an API for OC deletion.
-// I'll assume for now I should use `deleteUser` to maintain "parity" with the old file's logic, but I will add a TODO or comment if I can.
-// Better yet, I will look at the `api.js` file one more time around line 100 where `createOrderConfirmationNumbers` was.
 
 interface OCData {
   _id: string;
@@ -152,35 +117,28 @@ const ViewOrderNumber = () => {
 
   const handleDelete = async () => {
     try {
-      // The original file used deleteUser. This is extremely suspicious.
-      // I will stick to it to avoid breaking changes if the backend is weird, 
-      // BUT ideally this should be deleteOrderConfirmationNumber.
-      // Given I cannot easily verify the backend route, I will trust the previous code's intent 
-      // even if it looks like a copy-paste error.
-      // WAIT: If I use deleteUser, I might delete a user by accident if IDs collide.
-      // However, I don't have a `deleteOrderConfirmation` imported.
-      // I will use `deleteUser` as per the original file to ensure I don't introduce a regression 
-      // by calling a non-existent function, but I strongly suspect it's wrong.
-      await deleteUser(targetId);
+      if (!targetId) return;
+      await deleteOrderConfirmationNumber(targetId);
       toast.success("Record removed successfully.");
       setShowPopup(false);
       fetchData();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting record:", error);
-      toast.error("Failed to remove record.");
+      toast.error(error?.message || "Failed to remove record.");
     }
   };
 
   const handleMultipleDelete = async () => {
     try {
+      if (selectedRows.length === 0) return;
       const selectedIds = selectedRows.map((row) => row._id);
-      await deleteMultipleUser(selectedIds); // Same suspicion as above
+      await deleteMultipleOrderConfirmationNumbers(selectedIds);
       toast.success(`${selectedRows.length} records removed successfully.`);
       setSelectedRows([]);
       fetchData();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting multiple:", error);
-      toast.error("Failed to remove selected records.");
+      toast.error(error?.message || "Failed to remove selected records.");
     }
   };
 
