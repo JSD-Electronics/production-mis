@@ -1155,6 +1155,24 @@ export const getOperatorSkills = async () => {
 
   }
 };
+export const deleteOperatorSkill = async (id) => {
+  try {
+    const response = await api.delete(`/skill-management/delete/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error deleting skill" };
+  }
+};
+export const deleteOperatorSkillMultiple = async (ids) => {
+  try {
+    const response = await api.post(`/skill-management/delete/multiple`, {
+      deleteIds: ids,
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error deleting skills" };
+  }
+};
 export const updateQuantity = async (formData, id) => {
   try {
     let response = await api.put(`/process/updateQuantity/${id}`, formData);
@@ -1602,6 +1620,26 @@ export const getAPNByMakeAndProfile = async (esimMake, esimProfile) => {
     return response.data;
   } catch (error) {
     throw error.response?.data || { message: "Error fetching ESIM APNs" };
+  }
+};
+
+export const deleteOrderConfirmationNumber = async (id) => {
+  try {
+    const response = await api.delete(`/process/orderConfirmation/delete/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error deleting Order Confirmation" };
+  }
+};
+
+export const deleteMultipleOrderConfirmationNumbers = async (ids) => {
+  try {
+    const response = await api.post("/process/orderConfirmation/delete-multiple", {
+      deleteIds: ids,
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error deleting multiple Order Confirmations" };
   }
 };
 
