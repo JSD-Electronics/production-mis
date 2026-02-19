@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useDropzone } from "react-dropzone";
-import { bulkCreateEsimMaster, viewEsimMakes, viewEsimProfiles, viewEsimApns } from "@/lib/api";
+import { bulkCreateEsimMaster, viewEsimMakes, viewEsimProfiles, viewEsimApns, getAPNByMakeAndProfile } from "@/lib/api";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import DefaultLayout from "@/components/Layouts/DefaultLayout";
 import Link from "next/link";
@@ -150,6 +150,35 @@ const BulkUploadEsimMaster = () => {
     fetchMasters();
   }, []);
 
+  const getAPNBYMakeAndProfileFunc = async (profileValue: string, pfId: string, currentSelection: any) => {
+    if (!currentSelection.esimMake || !profileValue) return;
+    try {
+      const response = await getAPNByMakeAndProfile(currentSelection.esimMake, profileValue);
+      if (pfId === "1") {
+        setSelection((prev) => ({
+          ...prev,
+          profile1: profileValue,
+          apnProfile1: response.data.apnName || "",
+        }));
+      } else {
+        setSelection((prev) => ({
+          ...prev,
+          profile2: profileValue,
+          apnProfile2: response.data.apnName || "",
+        }));
+      }
+    } catch (e: any) {
+      // If no APN found, just set the profile and clear the APN
+      if (pfId === "1") {
+        setSelection((prev) => ({ ...prev, profile1: profileValue, apnProfile1: "" }));
+      } else {
+        setSelection((prev) => ({ ...prev, profile2: profileValue, apnProfile2: "" }));
+      }
+      toast.error(e?.message || "Failed to fetch APN profiles");
+    }
+  };
+
+
   const profile1Options = useMemo(() => {
     if (!selection.profile2) return profiles;
     return profiles.filter((p) => {
@@ -295,18 +324,32 @@ const BulkUploadEsimMaster = () => {
                   <label className="mb-1 block text-xs font-medium dark:text-white">ESIM Make</label>
                   <select
                     value={selection.esimMake}
-                    onChange={(e) => setSelection({ ...selection, esimMake: e.target.value })}
+                    onChange={(e) => {
+                      const newMake = e.target.value;
+                      setSelection((prev) => {
+                        const next = { ...prev, esimMake: newMake };
+                        if (newMake) {
+                          if (next.profile1) getAPNBYMakeAndProfileFunc(next.profile1, "1", next);
+                          if (next.profile2) getAPNBYMakeAndProfileFunc(next.profile2, "2", next);
+                        }
+                        return next;
+                      });
+                    }}
                     className="w-full rounded border border-stroke bg-white py-2 px-3 text-sm outline-none dark:border-strokedark dark:bg-boxdark dark:text-white"
                   >
                     <option value="">Select Make</option>
-                    {makes.map(m => <option key={m._id} value={m.name}>{m.name}</option>)}
+                    {makes.map(m => <option key={m._id} value={m.simId || m.name}>{m.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium dark:text-white">Profile 1</label>
                   <select
                     value={selection.profile1}
-                    onChange={(e) => setSelection({ ...selection, profile1: e.target.value })}
+                    onChange={(e) => {
+                      const newProfile = e.target.value;
+                      setSelection((prev) => ({ ...prev, profile1: newProfile }));
+                      getAPNBYMakeAndProfileFunc(newProfile, "1", { ...selection, profile1: newProfile });
+                    }}
                     className="w-full rounded border border-stroke bg-white py-2 px-3 text-sm outline-none dark:border-strokedark dark:bg-boxdark dark:text-white"
                   >
                     <option value="">Select Profile 1</option>
@@ -327,7 +370,11 @@ const BulkUploadEsimMaster = () => {
                   <label className="mb-1 block text-xs font-medium dark:text-white">Profile 2</label>
                   <select
                     value={selection.profile2}
-                    onChange={(e) => setSelection({ ...selection, profile2: e.target.value })}
+                    onChange={(e) => {
+                      const newProfile = e.target.value;
+                      setSelection((prev) => ({ ...prev, profile2: newProfile }));
+                      getAPNBYMakeAndProfileFunc(newProfile, "2", { ...selection, profile2: newProfile });
+                    }}
                     className="w-full rounded border border-stroke bg-white py-2 px-3 text-sm outline-none dark:border-strokedark dark:bg-boxdark dark:text-white"
                   >
                     <option value="">Select Profile 2</option>
@@ -346,45 +393,23 @@ const BulkUploadEsimMaster = () => {
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium dark:text-white">APN Profile 1</label>
-                  <select
+                  <input
+                    type="text"
                     value={selection.apnProfile1}
-                    onChange={(e) => setSelection({ ...selection, apnProfile1: e.target.value })}
-                    className="w-full rounded border border-stroke bg-white py-2 px-3 text-sm outline-none dark:border-strokedark dark:bg-boxdark dark:text-white"
-                  >
-                    <option value="">Select APN</option>
-                    {apns.map((a) => {
-                      const names = Array.isArray(a.apnName) ? a.apnName : [a.apnName];
-                      const mainName = names[0] || "APN";
-                      return (
-                        <optgroup key={a._id} label={`${mainName} (${a.esimMake})`}>
-                          {names.map((n: string, idx: number) => (
-                            <option key={`${a._id}-${idx}`} value={n}>{n}</option>
-                          ))}
-                        </optgroup>
-                      );
-                    })}
-                  </select>
+                    readOnly
+                    placeholder="Auto-fetched"
+                    className="w-full rounded border border-stroke bg-gray-100 py-2 px-3 text-sm outline-none dark:border-strokedark dark:bg-meta-4 dark:text-white opacity-70 cursor-not-allowed"
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium dark:text-white">APN Profile 2</label>
-                  <select
+                  <input
+                    type="text"
                     value={selection.apnProfile2}
-                    onChange={(e) => setSelection({ ...selection, apnProfile2: e.target.value })}
-                    className="w-full rounded border border-stroke bg-white py-2 px-3 text-sm outline-none dark:border-strokedark dark:bg-boxdark dark:text-white"
-                  >
-                    <option value="">Select APN</option>
-                    {apns.map((a) => {
-                      const names = Array.isArray(a.apnName) ? a.apnName : [a.apnName];
-                      const mainName = names[0] || "APN";
-                      return (
-                        <optgroup key={a._id} label={`${mainName} (${a.esimMake})`}>
-                          {names.map((n: string, idx: number) => (
-                            <option key={`${a._id}-${idx}`} value={n}>{n}</option>
-                          ))}
-                        </optgroup>
-                      );
-                    })}
-                  </select>
+                    readOnly
+                    placeholder="Auto-fetched"
+                    className="w-full rounded border border-stroke bg-gray-100 py-2 px-3 text-sm outline-none dark:border-strokedark dark:bg-meta-4 dark:text-white opacity-70 cursor-not-allowed"
+                  />
                 </div>
               </div>
             )}
