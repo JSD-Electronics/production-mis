@@ -6,6 +6,26 @@
   background-color: #ccffcc !important;
   color: #008000 !important;
 }
+
+/* Shift off-days: grayed out with strikethrough */
+.offday-date {
+  background-color: #f3f4f6 !important;
+  color: #9ca3af !important;
+  text-decoration: line-through !important;
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
+}
+
+/* Public holidays: orange highlight */
+.holiday-date {
+  background-color: #fff3cd !important;
+  color: #b45309 !important;
+  font-weight: bold !important;
+  cursor: not-allowed !important;
+  border: 1px solid #fbbf24 !important;
+  border-radius: 4px !important;
+}
+
 .react-datepicker__day {
   position: relative;
 }
@@ -17,3 +37,4 @@
 .react-datepicker-wrapper{
   display: block !important;
 }
+

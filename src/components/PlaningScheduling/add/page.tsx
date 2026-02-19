@@ -79,7 +79,68 @@ const ADDPlanSchedule = () => {
     getOperators();
     getAllPlaning();
     fetchJigCategories();
+    loadHolidays();
   }, []);
+
+  const isWorkingDay = (date: Date) => {
+    // 1. Check Shift Day-off
+    if (selectedShift && selectedShift.weekDays) {
+      const dayNames = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+      const dayName = dayNames[date.getDay()];
+      if (!selectedShift.weekDays[dayName]) return false;
+    }
+
+    // 2. Check Holidays
+    if (holidayList && holidayList.length > 0) {
+      const isHoliday = holidayList.some((h) => {
+        const hDate = new Date(h.holidayDate);
+        return (
+          hDate.getFullYear() === date.getFullYear() &&
+          hDate.getMonth() === date.getMonth() &&
+          hDate.getDate() === date.getDate()
+        );
+      });
+      if (isHoliday) return false;
+    }
+
+    return true;
+  };
+
+  const getNextWorkingDay = (date: Date) => {
+    let current = new Date(date);
+    let count = 0;
+    while (!isWorkingDay(current) && count < 365) {
+      current.setDate(current.getDate() + 1);
+      count++;
+    }
+    return current;
+  };
+
+  useEffect(() => {
+    if (startDate && (selectedShift || holidayList.length > 0)) {
+      const parts = startDate.split(" ");
+      const dateParts = parts[0].split("/");
+      if (dateParts.length === 3) {
+        const [day, month, year] = dateParts.map(Number);
+        const fullYear = year < 100 ? 2000 + year : year;
+        const current = new Date(fullYear, month - 1, day);
+        const nextWorking = getNextWorkingDay(current);
+
+        if (current.toDateString() !== nextWorking.toDateString()) {
+          const hoursPart = parts[1] || "00:00:00";
+          const adjustedDate = formatDate(nextWorking).split(" ")[0] + " " + hoursPart;
+          setStartDate(adjustedDate);
+        }
+      }
+    }
+  }, [selectedShift, holidayList]);
+
+  useEffect(() => {
+    if (isPlaningAndSchedulingShow && assignedStages && Object.keys(assignedStages).length > 0) {
+      calculateSingleStage(assignedStages, 0, 0);
+    }
+  }, [startDate, selectedShift, holidayList, repeatCount, (assignedStages ? Object.keys(assignedStages).length : 0)]);
+
   const fetchJigCategories = async () => {
     try {
       let result = await viewJigCategory();
@@ -103,6 +164,10 @@ const ADDPlanSchedule = () => {
     } catch (error) {
 
     }
+  };
+  const loadHolidays = async () => {
+    const holidays = await getHolidayList();
+    if (holidays) setHolidayList(holidays);
   };
   const formatDate = (dateString: any) => {
     const date = new Date(dateString);
@@ -436,14 +501,14 @@ const ADDPlanSchedule = () => {
     }
 
     const totalUPHA = Array.from(uniqueAssignedStages).reduce(
-      (sum, stageName) => {
+      (sum: number, stageName: any) => {
         const stage = stages.find(
-          (s) => s.stageName == updatedStages[`${rowIndex}-${seatIndex}`],
+          (s: any) => s.stageName == stageName,
         );
-        let seatCount = seatCountPerStage[stageName] || 1;
+        let seatCount = (seatCountPerStage as any)[stageName] || 1;
 
         if (stage && parseInt(stage.upha, 10) > 0) {
-          const adjustedUPHA = parseInt(stage.upha, 10 * seatCount);
+          const adjustedUPHA = parseInt(stage.upha, 10) * seatCount;
           return sum + adjustedUPHA;
         }
 
@@ -451,6 +516,7 @@ const ADDPlanSchedule = () => {
       },
       0,
     );
+
     const leastUpha = Math.min(
       ...stages.map(
         (stage) =>
@@ -707,18 +773,14 @@ const ADDPlanSchedule = () => {
 
     let start = new Date(fullYear, month - 1, day);
 
-
     let remainingDays = totalDays;
     while (remainingDays > 0) {
       start.setDate(start.getDate() + 1);
-
-      const currentDate = start.toDateString();
-      const isWeekend = start.getDay() === 0 || start.getDay() === 6;
-
-      if (!isWeekend) {
+      if (isWorkingDay(start)) {
         remainingDays -= 1;
       }
     }
+
 
     const formattedEndDate = `${String(start.getDate()).padStart(2, "0")}/${String(
       start.getMonth() + 1,
@@ -728,9 +790,9 @@ const ADDPlanSchedule = () => {
       start.getSeconds(),
     ).padStart(2, "0")}`;
 
-
     return formattedEndDate;
   };
+
 
 
   const handleDragStart = (stage: any, substep = null) => (event: any) => {
@@ -1188,6 +1250,7 @@ const ADDPlanSchedule = () => {
                   setProcessName={setProcessName}
                   packagingData={packagingData}
                   inventoryData={inventoryData}
+                  holidays={holidayList}
                 />
 
                 {totalTimeEstimation && (
