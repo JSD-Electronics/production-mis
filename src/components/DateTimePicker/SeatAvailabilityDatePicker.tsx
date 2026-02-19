@@ -10,6 +10,8 @@ const SeatAvailabilityDatePicker = ({
   setStartDate,
   formatDate,
   onDateChange,
+  selectedShift,
+  holidays,
 }) => {
   const [seatData, setSeatData] = useState([]);
   const [selectedDate, setSelectedDate] = useState(null);
@@ -51,6 +53,31 @@ const SeatAvailabilityDatePicker = ({
     const dateString = date.toISOString().split("T")[0];
     const seatInfo = seatData.find((seat) => seat.date === dateString);
 
+    // Check if it's a day-off
+    if (selectedShift && selectedShift.weekDays) {
+      const dayNames = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+      const dayName = dayNames[date.getDay()];
+      if (!selectedShift.weekDays[dayName]) {
+        return "offday-date";
+      }
+    }
+
+
+    // Check if it's a holiday
+    if (holidays && holidays.length > 0) {
+      const isHoliday = holidays.some((h) => {
+        const hDate = new Date(h.holidayDate);
+        return (
+          hDate.getFullYear() === date.getFullYear() &&
+          hDate.getMonth() === date.getMonth() &&
+          hDate.getDate() === date.getDate()
+        );
+      });
+      if (isHoliday) {
+        return "holiday-date";
+      }
+    }
+
     if (seatInfo) {
       return seatInfo?.availableSeats === 0
         ? "reserved-date"
@@ -71,25 +98,71 @@ const SeatAvailabilityDatePicker = ({
     const dateString = date.toISOString().split("T")[0];
     const seatInfo = seatData.find((seat) => seat.date === dateString);
 
+    let tooltip = "No data available";
+    if (selectedShift && selectedShift.weekDays) {
+      const dayNames = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+      const dayName = dayNames[date.getDay()];
+      if (!selectedShift.weekDays[dayName]) {
+        tooltip = "Day Off";
+      }
+    }
+
+    if (holidays && holidays.length > 0) {
+      const holiday = holidays.find((h) => {
+        const hDate = new Date(h.holidayDate);
+        return (
+          hDate.getFullYear() === date.getFullYear() &&
+          hDate.getMonth() === date.getMonth() &&
+          hDate.getDate() === date.getDate()
+        );
+      });
+      if (holiday) {
+        tooltip = `Holiday: ${holiday.holidayName}`;
+      }
+    }
+
+    if (seatInfo && tooltip === "No data available") {
+      tooltip =
+        seatInfo?.availableSeats === 0
+          ? "Fully Reserved"
+          : `${seatInfo.availableSeats} seats available`;
+    }
+
     return (
-      <div
-        title={
-          seatInfo
-            ? seatInfo?.availableSeats === 0
-              ? "Fully Reserved"
-              : `${seatInfo.availableSeats} seats available`
-            : "No data available"
-        }
-      >
+      <div title={tooltip}>
         <span>{day}</span>
       </div>
     );
   };
+
   const filterDate = (date) => {
     const dateString = date.toISOString().split("T")[0];
     const seatInfo = seatData.find((seat) => seat.date === dateString);
 
-    return !seatInfo || seatInfo?.availableSeats > 0;
+    // 1. Seat availability check
+    if (seatInfo && seatInfo.availableSeats === 0) return false;
+
+    // 2. Shift Day-off check
+    if (selectedShift && selectedShift.weekDays) {
+      const dayNames = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+      const dayName = dayNames[date.getDay()];
+      if (!selectedShift.weekDays[dayName]) return false;
+    }
+
+    // 3. Holiday check
+    if (holidays && holidays.length > 0) {
+      const isHoliday = holidays.some((h) => {
+        const hDate = new Date(h.holidayDate);
+        return (
+          hDate.getFullYear() === date.getFullYear() &&
+          hDate.getMonth() === date.getMonth() &&
+          hDate.getDate() === date.getDate()
+        );
+      });
+      if (isHoliday) return false;
+    }
+
+    return true;
   };
 
   return (
@@ -109,5 +182,6 @@ const SeatAvailabilityDatePicker = ({
     </div>
   );
 };
+
 
 export default SeatAvailabilityDatePicker;

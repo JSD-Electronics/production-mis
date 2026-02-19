@@ -38,6 +38,7 @@ interface FormComponentProps {
   setProcessName: (name: string) => void;
   packagingData: any[];
   inventoryData: any;
+  holidays: any[];
 }
 
 const FormComponent: React.FC<FormComponentProps> = ({
@@ -64,6 +65,7 @@ const FormComponent: React.FC<FormComponentProps> = ({
   setProcessName,
   packagingData,
   inventoryData,
+  holidays,
 }) => {
   const [floorID, setFloorID] = useState("");
   const [seatAvailability, setSeatAvailability] = useState<any[]>([]);
@@ -124,9 +126,9 @@ const FormComponent: React.FC<FormComponentProps> = ({
       0,
     ) || 0;
     if (assignedStages && Object.keys(assignedStages).length >= totalSeats) {
-      alert(
-        "Insufficient seats available to assign all stages. Please adjust the allocation.",
-      );
+      // alert(
+      //   "Insufficient seats available to assign all stages. Please adjust the allocation.",
+      // );
       return;
     }
     setRepeatCount(e);
@@ -258,6 +260,8 @@ const FormComponent: React.FC<FormComponentProps> = ({
                       setStartDate={setStartDate}
                       formatDate={startDate}
                       onDateChange={handleDateChange("start")}
+                      selectedShift={selectedShift}
+                      holidays={holidays}
                     />
                   </div>
                 </div>
