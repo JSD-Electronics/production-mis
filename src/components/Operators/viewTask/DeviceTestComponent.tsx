@@ -1732,17 +1732,17 @@ export default function DeviceTestComponent({
                                         onSubmit={handleSubmitManualValues}
                                         title="Add Custom Values"
                                       >
-                                        <div className="space-y-6">
+                                        <div className="space-y-4">
                                           {/* Modal Header inside content for full control if standard modal header is hidden or simple */}
                                           <div className="text-center">
-                                            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 mb-4">
-                                              <ClipboardList className="h-6 w-6 text-blue-600" />
+                                            <div className="mx-auto flex items-center justify-center h-10 w-10 rounded-full bg-blue-100 mb-2">
+                                              <ClipboardList className="h-5 w-5 text-blue-600" />
                                             </div>
                                             <h3 className="text-lg font-bold text-gray-900">Enter Manual Values</h3>
                                             <p className="text-sm text-gray-500 mt-1">Please provide the required measurements/values below.</p>
                                           </div>
 
-                                          <div className="bg-gray-50 p-6 rounded-xl border border-gray-100 space-y-5">
+                                          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
                                             {(() => {
                                               const fields = currentSubStep?.jigFields && currentSubStep.jigFields.length > 0 ? currentSubStep.jigFields : currentSubStep?.customFields;
                                               return Array.isArray(fields) && fields.length > 0 ? (
@@ -1754,12 +1754,12 @@ export default function DeviceTestComponent({
                                                   const res = validateCustomField(cf, val);
                                                   const hasError = (!res.valid && val.length > 0) || (manualErrors[fname]);
 
-                                                  const baseCls = "w-full rounded-lg border px-4 py-3 text-sm outline-none transition duration-200";
+                                                  const baseCls = "w-full rounded-lg border px-4 py-2 text-sm outline-none transition duration-200";
                                                   const normalCls = "border-gray-200 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
                                                   const errorCls = "border-red-300 bg-white text-red-900 focus:border-red-500 focus:ring-2 focus:ring-red-100";
 
                                                   return (
-                                                    <div key={idx} className="space-y-1.5 animate-in fade-in slide-in-from-bottom-2 duration-300" style={{ animationDelay: `${idx * 100}ms` }}>
+                                                    <div key={idx} className="space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-300" style={{ animationDelay: `${idx * 100}ms` }}>
                                                       <label className="text-sm font-semibold text-gray-700 flex justify-between">
                                                         <span>{fname} <span className="text-red-500">*</span></span>
                                                         <span className="text-xs font-normal text-gray-400">

@@ -11,6 +11,16 @@ const Modal = ({
   closeOption = true,
   maxWidth = "max-w-180",
   children,
+}: {
+  isOpen: boolean;
+  onSubmit?: () => void;
+  onClose: () => void;
+  title: string;
+  submitOption?: boolean;
+  submitDisabled?: boolean;
+  closeOption?: boolean;
+  maxWidth?: string;
+  children: React.ReactNode;
 }) => {
   const [mounted, setMounted] = useState(false);
 
@@ -29,7 +39,7 @@ const Modal = ({
   const modalContent = (
     <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300">
       <div
-        className={`w-full ${maxWidth} scale-100 transform overflow-hidden rounded-2xl bg-white p-0 shadow-2xl transition-all duration-300 animate-in fade-in zoom-in-95 duration-200`}
+        className={`w-full ${maxWidth} max-h-[90vh] flex flex-col scale-100 transform overflow-hidden rounded-2xl bg-white p-0 shadow-2xl transition-all duration-300 animate-in fade-in zoom-in-95 duration-200`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -40,7 +50,7 @@ const Modal = ({
         </div>
 
         {/* Modal Body */}
-        <div className="px-6 py-5">
+        <div className="px-6 py-5 overflow-y-auto flex-1">
           {children}
         </div>
 
@@ -61,8 +71,8 @@ const Modal = ({
               onClick={onSubmit}
               disabled={submitDisabled}
               className={`rounded-xl px-5 py-2 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-all duration-200 focus:outline-none active:scale-95 ${submitDisabled
-                  ? "bg-gray-300 cursor-not-allowed shadow-none"
-                  : "bg-blue-600 hover:bg-blue-700 hover:shadow-blue-500/40"
+                ? "bg-gray-300 cursor-not-allowed shadow-none"
+                : "bg-blue-600 hover:bg-blue-700 hover:shadow-blue-500/40"
                 }`}
             >
               Confirm
