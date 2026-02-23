@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import Modal from "@/components/Modal/page";
 import { useQRCode } from "next-qrcode";
 import SearchableInput from "@/components/SearchableInput/SearchableInput";
@@ -48,6 +48,7 @@ import {
   ChevronDown,
   ChevronUp,
   List,
+  RotateCcw,
 } from "lucide-react";
 import Image from "next/image";
 import React, { useEffect, useState } from "react";
@@ -128,6 +129,8 @@ interface DeviceTestComponentProps {
   handlePrintCartonSticker: () => void;
   historyFilterDate: string;
   setHistoryFilterDate: (date: string) => void;
+  handlePauseResume: () => void;
+  handleStop: () => void;
 }
 
 export default function DeviceTestComponent({
@@ -195,6 +198,8 @@ export default function DeviceTestComponent({
   handlePrintCartonSticker,
   historyFilterDate,
   setHistoryFilterDate,
+  handlePauseResume,
+  handleStop,
 }: DeviceTestComponentProps) {
   useEffect(() => {
     if (processData?._id) {
@@ -207,7 +212,7 @@ export default function DeviceTestComponent({
   const [qrCartons, setQrCartons] = useState<{ [key: string]: boolean }>({});
   const [todaySummary, setTodaySummary] = useState<any>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isSopOpen, setIsSopOpen] = useState(false);
+  const [isSopOpen, setIsSopOpen] = useState(true);
 
   // Ref to hold the disconnect function from the jig interface
   const jigDisconnectRef = React.useRef<(() => void) | null>(null);
@@ -234,6 +239,8 @@ export default function DeviceTestComponent({
   const [isPreviousStagesModalOpen, setIsPreviousStagesModalOpen] = useState(false);
   const [isCartonDevicesModalOpen, setIsCartonDevicesModalOpen] = useState(false);
   const [isVerifyCartonModal, setIsVerifyCartonModal] = useState(false);
+  const [selectedLogs, setSelectedLogs] = useState<any[]>([]);
+  const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
   const [manualFieldValues, setManualFieldValues] = useState<Record<string, string>>({});
   const [manualErrors, setManualErrors] = useState<Record<string, string | null>>({});
   const [isManualValuesModalOpen, setIsManualValuesModalOpen] = useState(false);
@@ -626,14 +633,7 @@ export default function DeviceTestComponent({
       console.error("Error fetching cartons:", error);
     }
   };
-  const handlePauseResume = () => {
-    setIsPaused((prev: boolean) => !prev);
-    setDevicePause((prev: boolean) => !prev);
-  };
-  const handleStop = () => {
-    setIsPaused(true);
-    setStartTest(false);
-  };
+
   const handleAddToCart = async (packagingData: any) => {
     if (!searchResult) {
       alert("No device selected to add.");
@@ -819,6 +819,35 @@ export default function DeviceTestComponent({
 
   };
 
+  const handleRefreshSession = () => {
+    // Reset the scanned device
+    setSearchQuery("");
+    setSearchResult(null);
+    setIsPassNGButtonShow(false);
+    if (setIsStickerPrinted) setIsStickerPrinted(false);
+    if (setIsVerifiedSticker) setIsVerifiedSticker(false);
+    if (setIsAddedToCart) setIsAddedToCart(false);
+    if (setIsVerifiedPackaging) setIsVerifiedPackaging(false);
+    if (setIsDevicePassed) setIsDevicePassed(false);
+    // Reset all jig / test state
+    setCurrentJigStepIndex(0);
+    setJigResults({});
+    setJigDecision(null);
+    setNgReason(null);
+    setIsJigConnected(false);
+    setStepTimeLeft(null);
+    setShowNGModal(false);
+    pendingJigErrorRef.current = null;
+    setPendingJigErrorState(null);
+    setGeneratedCommand("");
+    setManualFieldValues({});
+    setManualErrors({});
+    setHasManualValues(false);
+    setIsManualValuesModalOpen(false);
+    stepStartTimeRef.current = Date.now();
+    totalProcessStartTimeRef.current = Date.now();
+  };
+
   const handleShiftToNextStage = async (cartonSerial: any) => {
     if (!cartonSerial) {
       alert("No carton selected.");
@@ -1001,13 +1030,23 @@ export default function DeviceTestComponent({
             </div>
           </div>
 
-          <button
-            onClick={() => setIsHistoryOpen(true)}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-indigo-700 transition-all active:scale-95"
-          >
-            <History className="h-4 w-4" />
-            History
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefreshSession}
+              title="Refresh – clear current device and restart all operations"
+              className="flex items-center gap-2 rounded-lg bg-orange-50 border border-orange-200 px-4 py-2 text-xs font-bold text-orange-600 hover:bg-orange-100 hover:border-orange-300 transition-all active:scale-95"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Refresh
+            </button>
+            <button
+              onClick={() => setIsHistoryOpen(true)}
+              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-indigo-700 transition-all active:scale-95"
+            >
+              <History className="h-4 w-4" />
+              History
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -1018,7 +1057,7 @@ export default function DeviceTestComponent({
             className={`${isPaused && "blur-sm"
               } border-gray-200 rounded-xl border bg-white p-4 shadow-sm`}
           >
-            {assignedTaskDetails.stageType == "common" ? (
+            {assignedTaskDetails?.stageType == "common" ? (
               <>
                 <label className="text-gray-600 mb-2 flex items-center gap-2 text-sm font-semibold">
                   <Search className="text-gray-500 h-4 w-4" />
@@ -1250,7 +1289,32 @@ export default function DeviceTestComponent({
                                             </div>
                                             <div className="text-xs space-y-1 text-gray-600">
                                               <div className="flex justify-between"><span>Seat:</span> <span className="font-medium text-gray-900">{record.seatNumber}</span></div>
-                                              <div className="flex justify-between"><span>User:</span> <span className="font-medium text-gray-900">{record.operatorId}</span></div>
+                                              <div className="flex justify-between">
+                                                <span>User:</span>
+                                                <span className="font-medium text-gray-900">
+                                                  {typeof record.operatorId === 'object' ? record.operatorId.name : record.operatorId}
+                                                </span>
+                                              </div>
+                                              {record.planId && (
+                                                <div className="flex justify-between">
+                                                  <span>Plan:</span>
+                                                  <span className="font-medium text-gray-900 truncate ml-2">
+                                                    {typeof record.planId === 'object' ? record.planId.processName : record.planId}
+                                                  </span>
+                                                </div>
+                                              )}
+                                              {record.logs && record.logs.length > 0 && (
+                                                <button
+                                                  onClick={() => {
+                                                    setSelectedLogs(record.logs);
+                                                    setIsLogsModalOpen(true);
+                                                  }}
+                                                  className="mt-2 text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 uppercase tracking-tighter"
+                                                >
+                                                  <Terminal className="w-3 h-3" />
+                                                  View Detailed Logs
+                                                </button>
+                                              )}
                                             </div>
                                           </div>
                                         ))}
@@ -1630,6 +1694,7 @@ export default function DeviceTestComponent({
                                             }}
                                             generatedCommand={generatedCommand}
                                             setGeneratedCommand={setGeneratedCommand}
+                                            autoConnect={!!searchResult}
                                           />
                                         </div>
                                       )}
@@ -2270,6 +2335,11 @@ export default function DeviceTestComponent({
                             <button
                               className="flex items-center gap-2 rounded-xl bg-blue-600 px-8 py-4 text-white font-bold shadow-xl hover:bg-blue-700 transition-all active:scale-95"
                               onClick={() => {
+                                if (jigDecision === "NG") {
+                                  // Open the assignment modal (same behavior as Report Issue NG)
+                                  setShowNGModal(true);
+                                  return;
+                                }
                                 if (jigDisconnectRef.current) jigDisconnectRef.current();
                                 if (searchResult && setDeviceList) {
                                   setDeviceList((prev: any[]) => prev.filter((d: any) => d.serialNo !== searchResult));
@@ -2387,7 +2457,7 @@ export default function DeviceTestComponent({
           onClick={handlePauseResume}
         >
           <Coffee className="h-4 w-4" />
-          {isPaused ? "Break Off" : "Break"}
+          {isPaused ? "Resume Work" : "Take Break"}
         </button>
         <button
           className="flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white shadow hover:bg-danger transition-colors"
@@ -2524,6 +2594,59 @@ export default function DeviceTestComponent({
               )}
             </tbody>
           </table>
+        </div >
+      </Modal >
+
+      <Modal
+        isOpen={isLogsModalOpen}
+        onClose={() => setIsLogsModalOpen(false)}
+        title="Detailed Step Logs"
+        submitOption={false}
+        onSubmit={() => { }}
+      >
+        <div className="p-4 max-h-[70vh] overflow-y-auto bg-gray-900 rounded-b-xl font-mono text-xs">
+          {selectedLogs.map((logGroup: any, gIndex: number) => (
+            <div key={gIndex} className="mb-6 last:mb-0">
+              <div className="flex items-center gap-2 mb-2 border-b border-gray-700 pb-1">
+                <span className="text-blue-400 font-bold uppercase tracking-widest">{logGroup.stepName}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] ${logGroup.status === 'Pass' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
+                  {logGroup.status}
+                </span>
+                <span className="text-gray-500 text-[10px] ml-auto">
+                  {new Date(logGroup.createdAt).toLocaleTimeString()}
+                </span>
+              </div>
+
+              {logGroup.logData?.terminalLogs?.length > 0 ? (
+                <div className="space-y-1">
+                  {logGroup.logData.terminalLogs.map((log: any, lIndex: number) => (
+                    <div key={lIndex} className="flex gap-2">
+                      <span className="text-gray-600 shrink-0">[{new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}]</span>
+                      <span className={`
+                        ${log.type === 'error' ? 'text-red-400' :
+                          log.type === 'success' ? 'text-green-400' :
+                            log.type === 'info' ? 'text-blue-300' :
+                              'text-gray-300'}
+                      `}>
+                        {log.message}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-gray-500 italic">No terminal logs available for this step.</div>
+              )}
+
+              {logGroup.logData?.reason && (
+                <div className="mt-2 p-2 bg-red-900/20 border border-red-900/30 rounded text-red-300">
+                  <span className="font-bold">Failure Reason:</span> {logGroup.logData.reason}
+                </div>
+              )}
+            </div>
+          ))}
+          {selectedLogs.length === 0 && (
+            <div className="text-center py-10 text-gray-500 italic">No logs found for this record.</div>
+          )}
         </div>
       </Modal>
     </>

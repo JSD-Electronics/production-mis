@@ -2,7 +2,7 @@
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import BasicInformation from "./BasicInformation";
 import DeviceTestComponent from "./DeviceTestComponent";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useQRCode } from "next-qrcode";
 import Barcode from "react-barcode";
 import html2canvas from "html2canvas";
@@ -17,16 +17,18 @@ import {
   createDeviceTestEntry,
   getOverallDeviceTestEntry,
   getDeviceTestEntryByOperatorId,
+  getDeviceTestRecordsByProcessId,
   getDeviceTestByDeviceId,
   updateStageByDeviceId,
   createReport,
   getOverallProgressByOperatorId,
   getOperatorTaskByUserID,
   createCarton,
+  updatePlaningAndScheduling,
 } from "@/lib/api";
 import { calculateTimeDifference } from "@/lib/common";
 import SearchableInput from "@/components/SearchableInput/SearchableInput";
-import { Video, ExternalLink } from "lucide-react";
+import { RefreshCw, Video, ExternalLink } from "lucide-react";
 
 // Utility: safely read current user from localStorage
 const getCurrentUser = () => {
@@ -40,6 +42,22 @@ const getCurrentUser = () => {
 
 type Device = any;
 type Carton = any;
+
+interface Product {
+  _id: string;
+  name: string;
+  orderConfirmationNo?: string;
+  processID?: string | number;
+  sopFile?: string;
+  stages?: any[];
+  commonStages?: any[];
+}
+
+interface User {
+  _id: string;
+  name: string;
+  role?: string;
+}
 
 interface Props {
   isFullScreenMode: boolean;
@@ -68,6 +86,9 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const [totalCompleted, setTotalCompleted] = useState(0);
   const [totalNg, setTotalNg] = useState(0);
   const [overallTotalAttempts, setOverallTotalAttempts] = useState(0);
+  const [overallTotalCompleted, setOverallTotalCompleted] = useState(0);
+  const [overallTotalNg, setOverallTotalNg] = useState(0);
+  const [wipKits, setWipKits] = useState(0);
   const [deviceList, setDeviceList] = useState<any[]>([]);
   const [choosenDevice, setChoosenDevice] = useState("");
   const [checkedDevice, setCheckedDevice] = useState<any[]>([]);
@@ -91,7 +112,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const [processData, setProcessData] = useState<any>({});
   const [processAssignUserStage, setProcessAssignUserStage] = useState<any>({});
   const [selectedProcess, setSelectedProcess] = useState("");
-  const [assignedTaskDetails, setAssignedTaskDetails] = useState("");
+  const [assignedTaskDetails, setAssignedTaskDetails] = useState<any>(null);
   const [isScanModalOpen, setScanModalOpen] = useState(false);
   const [scanslug, setScanSlug] = useState("");
   const [isScanValuePass, setIsScanValuePass] = useState<boolean[]>([]);
@@ -99,7 +120,30 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const [scanValue, setScanValue] = useState<string[]>([]);
   const [moveToPackaging, setMoveToPackaging] = useState(false);
   const [serialNumber, setSerialNumber] = useState("");
-  const [startTest, setStartTest] = useState(false);
+  const [startTest, setStartTest] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("operator_startTest") === "true";
+    }
+    return false;
+  });
+  const [operatorStartTime, setOperatorStartTime] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("operator_startTime") || "";
+    }
+    return "";
+  });
+  const [totalBreakTime, setTotalBreakTime] = useState(() => {
+    if (typeof window !== "undefined") {
+      return Number(localStorage.getItem("operator_totalBreakTime") || 0);
+    }
+    return 0;
+  });
+  const [breakStartTime, setBreakStartTime] = useState(() => {
+    if (typeof window !== "undefined") {
+      return Number(localStorage.getItem("operator_breakStartTime") || 0);
+    }
+    return 0;
+  });
   const [cartons, setCartons] = useState<any[]>([]);
   const [isCartonBarcodePrinted, setIsCartonBarCodePrinted] = useState(false);
   const [isVerifiedSticker, setIsVerifiedSticker] = useState(false);
@@ -112,7 +156,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const [selectAssignDeviceDepartment, setAsssignDeviceDepartment] =
     useState<string>("");
   const [resetDeviceIds, setResetDeviceIds] = useState<string[]>([]);
-  const isSubmitting = React.useRef(false);
+  const isSubmitting = React.useRef<boolean>(false);
   const { SVG } = useQRCode();
   const [historyFilterDate, setHistoryFilterDate] = useState(() => {
     const now = new Date();
@@ -121,6 +165,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     const day = String(now.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   });
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     const pathname = window.location.pathname;
@@ -129,9 +175,87 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     const user = getCurrentUser();
     getDeviceTestEntry();
     getPlaningAndSchedulingByID(id);
-    getOverallProgress(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyFilterDate]);
+
+  useEffect(() => {
+    const pathname = window.location.pathname;
+    const id = pathname.split("/").pop();
+    if (getPlaningAndScheduling && assignUserStage && processData) {
+      getOverallProgress(id);
+    }
+  }, [getPlaningAndScheduling, assignUserStage, processData]);
+
+  // ── Shared sync function (used by interval + manual button) ─────────────────
+  const runSync = async () => {
+    setIsSyncing(true);
+    try {
+      const pathname = window.location.pathname;
+      const id = pathname.split("/").pop();
+
+      // 1. Today's per-operator counts
+      await getDeviceTestEntry();
+
+      // 2. Seat-wise overall counts from fresh planning data
+      if (id) {
+        try {
+          const freshPlan = await getPlaningAndSchedulingById(id);
+          if (freshPlan) {
+            setPlaningAndScheduling(freshPlan);
+            const isCommon = assignedTaskDetails?.stageType === "common";
+            const stageField = isCommon ? "assignedCustomStages" : "assignedStages";
+            const assignedStages = JSON.parse(freshPlan[stageField] || "{}");
+            const seatKey = operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber;
+            const seatStages = Array.isArray(assignedStages[seatKey])
+              ? assignedStages[seatKey]
+              : assignedStages[seatKey] ? [assignedStages[seatKey]] : [];
+
+            let seatPass = 0, seatNg = 0, seatWip = 0;
+            seatStages.forEach((s: any) => {
+              seatPass += s.passedDevice || 0;
+              seatNg += s.ngDevice || 0;
+              seatWip += s.totalUPHA || 0;
+            });
+            if (seatStages.length > 0) {
+              setOverallTotalCompleted(seatPass);
+              setOverallTotalNg(seatNg);
+              setOverallTotalAttempts(seatPass + seatNg);
+              setWipKits(seatWip);
+            }
+          }
+        } catch (e) { /* ignore */ }
+      }
+
+      // 3. Refresh the searchable device list
+      if (selectedProduct?._id && assignUserStage && selectedProcess) {
+        try {
+          await getDevices(
+            selectedProduct._id || selectedProduct?.product?._id,
+            assignUserStage,
+            selectedProcess,
+          );
+        } catch (e) { /* ignore */ }
+      }
+
+      setLastSyncTime(new Date());
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // ── Auto-refresh counts every 30 s ─────────────────────────────────────────
+  const autoRefreshIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    const startPolling = () => {
+      if (autoRefreshIdRef.current) clearInterval(autoRefreshIdRef.current);
+      autoRefreshIdRef.current = setInterval(runSync, 30_000);
+    };
+    startPolling();
+    return () => {
+      if (autoRefreshIdRef.current) clearInterval(autoRefreshIdRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignedTaskDetails, operatorSeatInfo, selectedProduct, selectedProcess]);
 
   const closeScanModal = () => {
     setScanModalOpen(false);
@@ -157,12 +281,119 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const getOverallProgress = async (id: any) => {
     try {
       const user = getCurrentUser();
-      const data = { id, user_id: user?._id };
+      if (!user || !user._id) return;
+
+      const data = { id, user_id: user._id };
       let response = await getOverallProgressByOperatorId(data);
       let devices = response.data || [];
-      setOverallTotalAttempts(devices.length);
-    } catch (error: any) {
 
+      // Identify all stages assigned to the current seat
+      const isCommon = assignedTaskDetails?.stageType === "common";
+      const stageField = isCommon ? "assignedCustomStages" : "assignedStages";
+      const assignedStages = JSON.parse(getPlaningAndScheduling?.[stageField] || "{}");
+      const seatKey = operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber;
+      const seatStages = Array.isArray(assignedStages[seatKey]) ? assignedStages[seatKey] : (assignedStages[seatKey] ? [assignedStages[seatKey]] : []);
+      const seatStageNames = seatStages.map((s: any) => (s.name || s.stageName)?.trim().toLowerCase());
+
+      let pass = 0;
+      let ng = 0;
+      let attempts = 0;
+
+      devices.forEach((d: any) => {
+        const dStage = d.stageName?.trim().toLowerCase();
+        // Count everything if we don't have seat boundaries, otherwise count what belongs to this seat/operator assignment
+        if (seatStageNames.length === 0 || seatStageNames.includes(dStage)) {
+          attempts++;
+          if (d.status === "Pass" || d.status === "Completed") pass++;
+          else if (d.status === "NG") ng++;
+        }
+      });
+
+      // Local counts from history records
+      setOverallTotalAttempts(attempts);
+      setOverallTotalCompleted(pass);
+      setOverallTotalNg(ng);
+
+      // Single source of truth: Sync with Planning data seat-wise totals
+      if (getPlaningAndScheduling && seatKey && assignedStages[seatKey]) {
+        let seatPass = 0;
+        let seatNg = 0;
+        let seatWip = 0;
+
+        seatStages.forEach((s: any) => {
+          seatPass += (s.passedDevice || 0);
+          seatNg += (s.ngDevice || 0);
+          seatWip += (s.totalUPHA || 0);
+        });
+
+        // Mirror aggregated seat-wise counts
+        setOverallTotalCompleted(seatPass);
+        setOverallTotalNg(seatNg);
+        setOverallTotalAttempts(seatPass + seatNg);
+        setWipKits(seatWip);
+      }
+
+      if (getPlaningAndScheduling?.selectedProcess) {
+        refreshWIP(getPlaningAndScheduling, Array.isArray(assignUserStage) ? assignUserStage[0] : assignUserStage);
+      }
+    } catch (error: any) {
+      console.error("Error fetching overall progress:", error);
+    }
+  };
+
+  const refreshWIP = async (plan: any, currentStage: any) => {
+    if (!plan || !currentStage) return;
+    try {
+      const result = await getDeviceTestRecordsByProcessId(plan.selectedProcess);
+      const allRecords = result.deviceTestRecords || [];
+
+      const testResultsBySeatAndStage: any = {};
+      allRecords.forEach((record: any) => {
+        const key = `${record.seatNumber}:${record.stageName?.trim()}`;
+        if (!testResultsBySeatAndStage[key]) {
+          testResultsBySeatAndStage[key] = { passed: 0, ng: 0 };
+        }
+        if (record.status === "Pass" || record.status === "Completed") testResultsBySeatAndStage[key].passed++;
+        else if (record.status === "NG" || record.status === "Fail") testResultsBySeatAndStage[key].ng++;
+      });
+
+      const assignedStages = JSON.parse(plan.assignedStages || "{}");
+      const currentSeatKey = operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber;
+      const stageName = (currentStage.name || currentStage.stageName)?.trim();
+
+      // Find where we are in global sequence to find "previous" stage/seat
+      // This logic is complex and plan structure varies, but we can try to find the previous stage in the process
+      const stages = processData?.stages || [];
+      const currentStageIdx = stages.findIndex((s: any) => s.stageName === stageName);
+
+      let incoming = 0;
+      if (currentStageIdx === 0) {
+        incoming = (plan.assignedIssuedKits || 0) / (plan.repeatCount || 1);
+      } else if (currentStageIdx > 0) {
+        const prevStageName = stages[currentStageIdx - 1]?.stageName;
+        // Sum up all passed units from the previous stage across all operators/seats
+        allRecords.forEach((r: any) => {
+          if (r.stageName === prevStageName && (r.status === "Pass" || r.status === "Completed")) {
+            incoming++;
+          }
+        });
+      }
+
+      // Processed at current stage by ALL operators at this stage? 
+      // Or just this seat? 
+      // The user wants "process wise", but WIP is usually per seat.
+      // However, if we want to show how many are available for this specific stage globally:
+      let processedGlobal = 0;
+      allRecords.forEach((r: any) => {
+        if (r.stageName === stageName && (r.status === "Pass" || r.status === "NG" || r.status === "Completed" || r.status === "Fail")) {
+          processedGlobal++;
+        }
+      });
+
+      // setWipKits(Math.max(0, incoming - processedGlobal));
+      // Replaced by Planning-based WIP count in getOverallProgress and init logic
+    } catch (e) {
+      console.error("WIP calculation failed:", e);
     }
   };
   const getDeviceById = async (id: any) => {
@@ -228,12 +459,12 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       setCheckedDevice(updatedDeviceHistory);
       return updatedDeviceHistory;
     } catch (error: any) {
-
-      // If error occurs (e.g. no records found), clear the displayed list so we don't show old data
-      setCheckedDevice([]);
-      setTotalNg(0);
-      setTotalCompleted(0);
-      setTotalAttempts(0);
+      if (error?.status === 404) {
+        setCheckedDevice([]);
+        setTotalNg(0);
+        setTotalCompleted(0);
+        setTotalAttempts(0);
+      }
     }
   };
   const getDeviceTestEntryOverall = async () => {
@@ -275,6 +506,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   useEffect(() => {
     const savedTime = localStorage.getItem("elapsedTime");
     const savedDisplayItem = localStorage.getItem("deviceDisplayTime");
+    const savedIsPaused = localStorage.getItem("operator_isPaused");
+    const savedIsDevicePause = localStorage.getItem("operator_isDevicePause");
+
+    if (savedIsPaused !== null) {
+      setIsPaused(savedIsPaused === "true");
+    }
+    if (savedIsDevicePause !== null) {
+      setDevicePause(savedIsDevicePause === "true");
+    }
     if (savedDisplayItem) {
       const n = Number(savedDisplayItem);
       setElapsedDevicetime(n);
@@ -347,18 +587,60 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
   const handleStart = () => {
+    const now = new Date().toISOString();
+    if (!operatorStartTime) {
+      setOperatorStartTime(now);
+      localStorage.setItem("operator_startTime", now);
+    }
     setIsPaused(false);
+    localStorage.setItem("operator_isPaused", "false");
     setTaskStaus(true);
     setIsDeviceSectionShow(true);
     setDevicePause(false);
+    localStorage.setItem("operator_isDevicePause", "false");
   };
   const handlePauseResume = () => {
-    setIsPaused((prev) => !prev);
-    setDevicePause((prev) => !prev);
+    setIsPaused((prev) => {
+      const next = !prev;
+      localStorage.setItem("operator_isPaused", String(next));
+      const now = Date.now();
+      if (next) {
+        // Just went on break
+        setBreakStartTime(now);
+        localStorage.setItem("operator_breakStartTime", String(now));
+      } else {
+        // Just resumed work
+        if (breakStartTime) {
+          const duration = Math.floor((now - breakStartTime) / 1000); // duration in seconds
+          setTotalBreakTime((prevTotal) => {
+            const nextTotal = prevTotal + duration;
+            localStorage.setItem("operator_totalBreakTime", String(nextTotal));
+            return nextTotal;
+          });
+          setBreakStartTime(0);
+          localStorage.removeItem("operator_breakStartTime");
+        }
+      }
+      return next;
+    });
+    setDevicePause((prev) => {
+      const next = !prev;
+      localStorage.setItem("operator_isDevicePause", String(next));
+      return next;
+    });
   };
   const handleStop = () => {
     setIsPaused(true);
+    localStorage.setItem("operator_isPaused", "true");
     setTaskStaus(false);
+    setStartTest(false);
+    localStorage.setItem("operator_startTest", "false");
+    localStorage.removeItem("operator_startTime");
+    localStorage.removeItem("operator_totalBreakTime");
+    localStorage.removeItem("operator_breakStartTime");
+    setOperatorStartTime("");
+    setTotalBreakTime(0);
+    setBreakStartTime(0);
   };
   const getProduct = async (id: any, assignStageToUser: any) => {
     try {
@@ -412,6 +694,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       const user = getCurrentUser();
       const assignedTaskDetails = await getAssignedTask(user?._id);
       setAssignedTaskDetails(assignedTaskDetails);
+
       let assignOperator: any = {};
       let assignStage: any = {};
       if (assignedTaskDetails?.stageType === "common") {
@@ -421,41 +704,62 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         assignOperator = JSON.parse(result?.assignedOperators || "{}");
         assignStage = JSON.parse(result?.assignedStages || "{}");
       }
-      // 
-      const currentUserName = user;
+
+      const currentUserId = user?._id;
       const keys = Object.keys(assignOperator || {});
-      const keysAssignStages = Object.keys(assignStage || {});
       let seatDetails: string | undefined;
-      keys.forEach((value: string, index: number) => {
-        if (assignOperator[value]?.[0]?._id === currentUserName?._id) {
-          seatDetails = keys[index];
+
+      // Robust seat identification: search through all operators at each seat
+      for (const seatKey of keys) {
+        const operators = assignOperator[seatKey];
+        if (Array.isArray(operators) && operators.some((op: any) => op._id === currentUserId)) {
+          seatDetails = seatKey;
+          break;
         }
-      });
-      const seatInfo = seatDetails?.split("-");
-      if (seatInfo) {
+      }
+
+      if (seatDetails) {
+        const seatInfo = seatDetails.split("-");
         setOperatorSeatInfo({
           rowNumber: seatInfo[0],
           seatNumber: seatInfo[1],
         });
-      }
-      let assignStageToUser: any = null;
-      keysAssignStages.forEach((value: string) => {
-        if (value === seatDetails) {
-          assignStageToUser = assignStage[value];
-          setAssignUserStage(assignStage[value]);
+
+        // Aggregated counts from the identified seat (covering all stages for that seat)
+        if (assignStage[seatDetails]) {
+          const seatStages = assignStage[seatDetails];
+          setAssignUserStage(seatStages);
+
+          let seatPass = 0;
+          let seatNg = 0;
+          let seatWip = 0;
+
+          const stagesArray = Array.isArray(seatStages) ? seatStages : [seatStages];
+          stagesArray.forEach((s: any) => {
+            seatPass += (s.passedDevice || 0);
+            seatNg += (s.ngDevice || 0);
+            seatWip += (s.totalUPHA || 0);
+          });
+
+          setWipKits(seatWip);
+          setOverallTotalCompleted(seatPass);
+          setOverallTotalNg(seatNg);
+          setOverallTotalAttempts(seatPass + seatNg);
+
+          setSelectedProcess(result?.selectedProcess);
+          fetchProcessByID(result?.selectedProcess, seatStages);
         }
-      });
+      }
+
       if (result?.status === "down_time_hold") {
         setIsDownTimeAvailable(true);
         setDownTimeVal(JSON.parse(result?.downTime || "{}"));
       }
 
-      setSelectedProcess(result?.selectedProcess);
-      fetchProcessByID(result?.selectedProcess, assignStageToUser);
       getShiftByID(result?.selectedShift);
       setPlaningAndScheduling(result);
     } catch (error: any) {
-
+      console.error("Error fetching planning data:", error);
     }
   };
   const toggleFullScreenMode = () => {
@@ -528,6 +832,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         const processStageData = Array.isArray(processAssignUserStage)
           ? processAssignUserStage[0]
           : processAssignUserStage;
+
         const testSteps = processStageData?.subSteps?.filter(
           (s: any) => s.stepType === "jig" || s.stepType === "manual"
         ) || [];
@@ -597,6 +902,70 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
 
       }
 
+      // Sync WIP counts in Planning and Scheduling record
+      try {
+        const planData = { ...getPlaningAndScheduling };
+        if (planData) {
+          const isCommon = assignedTaskDetails?.stageType === "common";
+          const stageField = isCommon ? "assignedCustomStages" : "assignedStages";
+          let assignedStages = JSON.parse(planData[stageField] || "{}");
+          const currentSeatKey = operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber;
+
+          // 1. Decrement current stage count and increment Pass/NG metrics
+          if (assignedStages[currentSeatKey]) {
+            const currentStageName = Array.isArray(assignUserStage) ? assignUserStage[0]?.name || assignUserStage[0]?.stageName : assignUserStage?.name || assignUserStage?.stageName;
+            const stageIdx = assignedStages[currentSeatKey].findIndex((s: any) => (s.name || s.stageName) === currentStageName);
+            if (stageIdx !== -1) {
+              assignedStages[currentSeatKey][stageIdx].totalUPHA = Math.max(0, (assignedStages[currentSeatKey][stageIdx].totalUPHA || 0) - 1);
+
+              if (status === "Pass") {
+                assignedStages[currentSeatKey][stageIdx].passedDevice = (assignedStages[currentSeatKey][stageIdx].passedDevice || 0) + 1;
+              } else {
+                assignedStages[currentSeatKey][stageIdx].ngDevice = (assignedStages[currentSeatKey][stageIdx].ngDevice || 0) + 1;
+              }
+
+              // Update local state to reflect planning totals
+              const updatedStage = assignedStages[currentSeatKey][stageIdx];
+              setWipKits(updatedStage.totalUPHA || 0);
+              setOverallTotalCompleted(updatedStage.passedDevice || 0);
+              setOverallTotalNg(updatedStage.ngDevice || 0);
+              setOverallTotalAttempts((updatedStage.passedDevice || 0) + (updatedStage.ngDevice || 0));
+            }
+          }
+
+          // 2. If Passed, increment next stage count
+          if (status === "Pass") {
+            const currentIndex = processData?.stages?.findIndex((stage: any) => stage.stageName === stageData?.name);
+            if (currentIndex !== -1 && currentIndex < processData?.stages?.length - 1) {
+              const nextStageName = processData.stages[currentIndex + 1].stageName;
+              // Find which seat handles the next stage
+              for (const seatKey in assignedStages) {
+                const nextStageIdx = assignedStages[seatKey].findIndex((s: any) => (s.name || s.stageName) === nextStageName);
+                if (nextStageIdx !== -1) {
+                  assignedStages[seatKey][nextStageIdx].totalUPHA = (assignedStages[seatKey][nextStageIdx].totalUPHA || 0) + 1;
+                  break;
+                }
+              }
+            }
+          }
+
+          const updatedPlanData = {
+            ...planData,
+            [stageField]: JSON.stringify(assignedStages)
+          };
+
+          await updatePlaningAndScheduling(updatedPlanData, id);
+          setPlaningAndScheduling(updatedPlanData);
+
+          // Also update the local assignUserStage state so the UI reflects it immediately
+          if (assignedStages[currentSeatKey]) {
+            setAssignUserStage(assignedStages[currentSeatKey]);
+          }
+        }
+      } catch (e) {
+        console.error("WIP count sync failed:", e);
+      }
+
       // Build JSON payload
       const payload: any = {
         deviceId: deviceInfo?.[0]?._id || "",
@@ -609,6 +978,9 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         stageName: stageData?.name ?? "",
         status: status,
         timeConsumed: deviceDisplay,
+        totalBreakTime: String(totalBreakTime),
+        startTime: operatorStartTime,
+        endTime: new Date().toISOString(),
         logs: logs,
       };
 
@@ -619,22 +991,28 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
 
       let result = await createDeviceTestEntry(payload);
 
-      if (result && result.status === 200) {
+      if (result && (result.status === 200 || result.status === 201)) {
+        // Prepend to show at top of "Recent Activity"
         setCheckedDevice((prev) => [
-          ...prev,
           {
-            deviceInfo: deviceInfo?.[0] || { serialNo: searchResult }, // Fallback if deviceInfo is missing
+            deviceInfo: deviceInfo?.[0] || { serialNo: searchResult },
             stageName: stageData?.name,
             status,
             timeTaken: deviceDisplay,
+            createdAt: new Date().toISOString()
           },
+          ...prev,
         ]);
+
         setTotalAttempts((prev) => prev + 1);
         if (status === "NG") {
           setTotalNg((prev) => prev + 1);
         } else {
           setTotalCompleted((prev) => prev + 1);
         }
+
+        // Refresh seat-wise stats from Planning and overall counts
+        getOverallProgress(id);
 
         // Robustly remove the device from the searchable list
         // This ensures that for Pass AND NG (assigned to QC, TRC, etc.), the device is removed.
@@ -954,34 +1332,47 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         pauseOnHover
       />
 
-      {/* Seat Info */}
-      <div className="mt-4 flex items-center gap-2 px-6 text-sm">
-        <h5 className="text-gray-700 font-semibold">Seat Details:</h5>
-        <p className="text-gray-800">
-          Line Number: {operatorSeatInfo?.rowNumber}, Seat Number:{" "}
-          {operatorSeatInfo?.seatNumber}
-        </p>
+      {/* Seat Info + Last Sync bar */}
+      <div className="mt-4 flex items-center justify-between px-6">
+        <div className="flex items-center gap-2 text-sm">
+          <h5 className="text-gray-700 font-semibold">Seat Details:</h5>
+          <p className="text-gray-800">
+            Line Number: {operatorSeatInfo?.rowNumber}, Seat Number:{" "}
+            {operatorSeatInfo?.seatNumber}
+          </p>
+        </div>
+
+        {/* Last Sync button */}
+        <button
+          onClick={runSync}
+          disabled={isSyncing}
+          className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all active:scale-95
+            ${isSyncing
+              ? "border-indigo-200 bg-indigo-50 text-indigo-400 cursor-not-allowed"
+              : "border-gray-200 bg-white text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 shadow-sm"
+            }`}
+        >
+          <RefreshCw
+            className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""
+              }`}
+          />
+          {isSyncing
+            ? "Syncing…"
+            : lastSyncTime
+              ? `Last sync: ${lastSyncTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
+              : "Sync Now"}
+        </button>
       </div>
       {/* Stats */}
       <div className="mt-4 grid grid-cols-1 gap-4 px-6 md:grid-cols-3">
         <div className="rounded-xl border-l-4 border-blue-500 bg-blue-50 p-5 shadow">
-          <h3 className="text-lg font-bold text-blue-700">Issued Kits</h3>
+          <h3 className="text-lg font-bold text-blue-700">UPH Target</h3>
           <div className="mt-2 space-y-1 text-sm text-blue-900">
             <p>
-              <b>WIP Kits:</b>{" "}
-              {Math.max(
-                0,
-                parseInt(
-                  String(
-                    (Array.isArray(assignUserStage)
-                      ? assignUserStage[0]?.totalUPHA
-                      : assignUserStage?.totalUPHA) || 0,
-                  ),
-                ) - totalAttempts,
-              )}
+              <b>WIP Kits:</b> {wipKits}
             </p>
             <p>
-              <b>Line Issued Kits:</b>{" "}
+              <b>Line issue kit:</b>{" "}
               {getPlaningAndScheduling?.assignedIssuedKits}
             </p>
             <p>
@@ -997,9 +1388,9 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         <div className="rounded-xl border-l-4 border-green-500 bg-green-50 p-5 shadow">
           <h3 className="text-lg font-bold text-green-700">Devices</h3>
           <div className="mt-2 flex flex-col gap-1 text-sm">
-            <span>Attempts: {totalAttempts}</span>
-            <span className="text-green-700">Pass: {totalCompleted}</span>
-            <span className="text-red-600">NG: {totalNg}</span>
+            <span>Tested: {overallTotalAttempts}</span>
+            <span className="text-green-700">Pass: {overallTotalCompleted}</span>
+            <span className="text-red-600">NG: {overallTotalNg}</span>
           </div>
         </div>
         <div className="rounded-xl border-l-4 border-yellow-500 bg-yellow-50 p-5 shadow">
@@ -1108,7 +1499,10 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             product={product}
             isPaused={isPaused}
             setIsPaused={setIsPaused}
-            setStartTest={setStartTest}
+            setStartTest={(val: boolean) => {
+              setStartTest(val);
+              localStorage.setItem("operator_startTest", String(val));
+            }}
             timerDisplay={timerDisplay}
             setDevicePause={setDevicePause}
             deviceDisplay={deviceDisplay}
@@ -1169,6 +1563,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             handlePrintCartonSticker={handlePrintCartonSticker}
             historyFilterDate={historyFilterDate}
             setHistoryFilterDate={setHistoryFilterDate}
+            handlePauseResume={handlePauseResume}
+            handleStop={handleStop}
           />
         ) : (
           <BasicInformation
@@ -1176,7 +1572,11 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             assignUserStage={assignUserStage}
             getPlaningAndScheduling={getPlaningAndScheduling}
             shift={shift}
-            setStartTest={setStartTest}
+            setStartTest={(val: boolean) => {
+              setStartTest(val);
+              localStorage.setItem("operator_startTest", String(val));
+              if (val) handleStart();
+            }}
             processAssignUserStage={processAssignUserStage}
           />
         )}
