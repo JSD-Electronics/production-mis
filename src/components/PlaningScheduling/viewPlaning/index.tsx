@@ -29,7 +29,7 @@ import {
   FiTrendingUp,
   FiDownload,
 } from "react-icons/fi";
-import { FiUsers, FiActivity, FiCheckCircle, FiXCircle, FiSearch, FiFilter } from "react-icons/fi";
+import { FiUsers, FiActivity, FiCheckCircle, FiXCircle, FiSearch, FiFilter, FiRefreshCcw } from "react-icons/fi";
 import { formatDate } from "@/lib/common";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -262,6 +262,8 @@ const ViewPlanSchedule = () => {
   const [seatStatusFilter, setSeatStatusFilter] = useState("all");
   const [showOccupiedOnly, setShowOccupiedOnly] = useState(true);
   const [seatSearch, setSeatSearch] = useState("");
+  const [lastRefreshed, setLastRefreshed] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const occupancyStats = React.useMemo(() => {
     let active = 0;
     let downtime = 0;
@@ -357,11 +359,11 @@ const ViewPlanSchedule = () => {
         return;
       }
       const result = await getDeviceByProductId(selectedProcess.selectedProduct);
-      
+
 
       const allDevices = result?.data || [];
       const processDevices = allDevices.filter((d: any) => d.processID === selectedProcess._id);
-      
+
       if (processDevices.length === 0) {
         toast.info("No serials found for this process");
         return;
@@ -398,7 +400,26 @@ const ViewPlanSchedule = () => {
     const id = pathname.split("/").pop();
     setID(id);
     getPlaningById(id);
+    setLastRefreshed(new Date().toLocaleTimeString());
+
+    // Polling for live updates every 30 seconds
+    const interval = setInterval(() => {
+      getPlaningById(id);
+      setLastRefreshed(new Date().toLocaleTimeString());
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, [loading]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    const pathname = window.location.pathname;
+    const id = pathname.split("/").pop();
+    await getPlaningById(id);
+    setLastRefreshed(new Date().toLocaleTimeString());
+    toast.success("Data Refreshed Successfully");
+    setIsRefreshing(false);
+  };
   const assignedStageKeys = Object.keys(assignedStages || {}).filter(
     (key) => assignedStages[key][0].name !== "Reserved",
   );
@@ -416,7 +437,7 @@ const ViewPlanSchedule = () => {
       let result = await viewJigCategory();
       setJigCategories(result?.JigCategories);
     } catch (error) {
-      
+
     }
   };
   const getHolidayList = async () => {
@@ -424,7 +445,7 @@ const ViewPlanSchedule = () => {
       let result = await fetchHolidays();
       return result?.holidays;
     } catch (error) {
-      
+
     }
   };
   const getProduct = async (id: any) => {
@@ -441,7 +462,7 @@ const ViewPlanSchedule = () => {
       setProductName(result.product.name);
       setSelectedProduct(result);
     } catch (error) {
-      
+
     }
   };
   const getHourlyIntervals = (start, end) => {
@@ -709,7 +730,7 @@ const ViewPlanSchedule = () => {
 
       setLoading(false);
     } catch (error) {
-      
+
       setLoading(false);
       return {};
     }
@@ -773,7 +794,7 @@ const ViewPlanSchedule = () => {
 
       return assignedStagesObject;
     } catch (error) {
-      
+
       return {};
     }
   };
@@ -786,7 +807,7 @@ const ViewPlanSchedule = () => {
       setOperators(operators);
       return false;
     } catch (error) {
-      
+
     }
   };
   const getAllShifts = async () => {
@@ -795,7 +816,7 @@ const ViewPlanSchedule = () => {
       return result?.Shifts;
       setShifts(result?.Shifts);
     } catch (error) {
-      
+
     }
   };
   const getAllProcess = async () => {
@@ -804,7 +825,7 @@ const ViewPlanSchedule = () => {
       setProcess(result.Processes);
       return result.Processes;
     } catch (error) {
-      
+
     }
   };
   const handleRemoveStage = (
@@ -1010,7 +1031,7 @@ const ViewPlanSchedule = () => {
     assignedIssuedKits = 0,
     deviceTests = [],
   ) => {
-    
+
 
     const stagePassCount = deviceTests.reduce((acc, record) => {
       const stage = record.stageName?.trim();
@@ -1032,7 +1053,7 @@ const ViewPlanSchedule = () => {
     }, {});
     const testResultsBySeatAndStage = {};
     deviceTests.forEach((record) => {
-      
+
       const key = `${record.seatNumber}:${record.stageName?.trim()}`;
       if (!testResultsBySeatAndStage[key]) {
         testResultsBySeatAndStage[key] = { passed: 0, ng: 0 };
@@ -1057,7 +1078,7 @@ const ViewPlanSchedule = () => {
       return false;
     }
     let seatIndex = 0;
-    
+
     selectedRoom.lines?.forEach((row: any, rowIndex: number) => {
       row.seats.forEach((_: any, seatPosition: number) => {
         const seatKey = `${rowIndex}-${seatPosition}`;
@@ -1474,9 +1495,26 @@ const ViewPlanSchedule = () => {
           <div className="rounded-lg border border-stroke bg-white p-6 shadow-lg dark:border-strokedark dark:bg-boxdark">
             <div className="flex flex-wrap items-center justify-between border-b border-stroke px-2 py-4 dark:border-strokedark">
               {/* Title */}
-              <h3 className="text-xl font-semibold text-black dark:text-white">
-                View Planning
-              </h3>
+              <div className="flex items-center gap-4">
+                <h3 className="text-xl font-semibold text-black dark:text-white">
+                  View Planning
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleRefresh}
+                    title="Manual Refresh"
+                    className={`flex items-center justify-center rounded-full p-2 transition-all hover:bg-gray-100 dark:hover:bg-gray-700 ${isRefreshing ? "animate-spin cursor-not-allowed opacity-50" : ""
+                      }`}
+                  >
+                    <FiRefreshCcw className="h-5 w-5 text-primary" />
+                  </button>
+                  {lastRefreshed && (
+                    <span className="text-xs text-black/50 dark:text-white/50">
+                      Last Sync: {lastRefreshed}
+                    </span>
+                  )}
+                </div>
+              </div>
 
               {/* Status Message */}
               {downTimeval &&
