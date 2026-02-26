@@ -224,7 +224,14 @@ const TaskComponent = () => {
     {
       name: "Actions",
       cell: (row: any) => {
-        const canView = row.status !== "Completed" &&
+        if (row.status === "completed") {
+          return (
+            <span className="text-xs text-emerald-600 font-bold italic">Completed</span>
+          );
+        }
+
+        const canView =
+          row.status !== "completed" &&
           row.kitRecievedConfirmationStatus !== "ASSIGN_TO_OPERATOR" &&
           row.kitRecievedConfirmationStatus !== "REJECT";
 
@@ -249,7 +256,9 @@ const TaskComponent = () => {
                 <UserCheck size={18} />
               </button>
             ) : (
-              <span className="text-xs text-gray-400 font-medium italic">No Actions</span>
+              <span className="text-xs text-gray-400 font-medium italic">
+                No Actions
+              </span>
             )}
           </div>
         );

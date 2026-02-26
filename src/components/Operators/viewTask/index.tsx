@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import BasicInformation from "./BasicInformation";
 import DeviceTestComponent from "./DeviceTestComponent";
@@ -25,6 +25,13 @@ import {
   getOperatorTaskByUserID,
   createCarton,
   updatePlaningAndScheduling,
+  // Operator work tracking
+  startOperatorWorkSession,
+  getActiveOperatorWorkSession,
+  stopOperatorWorkSession,
+  startOperatorWorkBreak,
+  endOperatorWorkBreak,
+  logOperatorWorkEvent,
 } from "@/lib/api";
 import { calculateTimeDifference } from "@/lib/common";
 import SearchableInput from "@/components/SearchableInput/SearchableInput";
@@ -167,6 +174,79 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   });
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [operatorSessionId, setOperatorSessionId] = useState<string | null>(null);
+
+  const ensureOperatorSession = React.useCallback(
+    async (): Promise<string | null> => {
+      try {
+        if (operatorSessionId) return operatorSessionId;
+
+        if (typeof window === "undefined") return null;
+
+        const pathname = window.location.pathname;
+        const planIdFromUrl = pathname.split("/").pop() || "";
+        const processId = selectedProcess || processData?._id || "";
+
+        if (!processId) return null;
+
+        // Try to reuse any active session first
+        try {
+          const active = await getActiveOperatorWorkSession(processId);
+          const existing = active?.session;
+          if (existing?._id) {
+            setOperatorSessionId(existing._id);
+            return existing._id;
+          }
+        } catch (error) {
+          // Non-fatal – we'll try to create a new one
+          console.error("Failed to fetch active operator session:", error);
+        }
+
+        // Create a new session
+        const payload: any = { processId };
+        if (planIdFromUrl) payload.planId = planIdFromUrl;
+        payload.taskUrl = window.location.href;
+
+        const started = await startOperatorWorkSession(payload);
+        const session = started?.session;
+        if (session?._id) {
+          setOperatorSessionId(session._id);
+          return session._id;
+        }
+        return null;
+      } catch (error) {
+        console.error("Failed to ensure operator work session:", error);
+        return null;
+      }
+    },
+    [operatorSessionId, selectedProcess, processData],
+  );
+
+  const safeLogOperatorEvent = React.useCallback(
+    async (
+      actionName: string,
+      payload: any = {},
+      actionType: string = "UI",
+      existingSessionId?: string | null,
+    ) => {
+      try {
+        if (typeof window === "undefined") return;
+        const sessionId = existingSessionId || (await ensureOperatorSession());
+        if (!sessionId) return;
+
+        await logOperatorWorkEvent(sessionId, {
+          actionType,
+          actionName,
+          payload,
+          pageUrl: window.location.pathname,
+          clientOccurredAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error(`Failed to log operator work event: ${actionName}`, error);
+      }
+    },
+    [ensureOperatorSession],
+  );
 
   useEffect(() => {
     const pathname = window.location.pathname;
@@ -210,21 +290,12 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
               ? assignedStages[seatKey]
               : assignedStages[seatKey] ? [assignedStages[seatKey]] : [];
 
-            let seatPass = 0, seatNg = 0, seatWip = 0;
-            seatStages.forEach((s: any) => {
-              seatPass += s.passedDevice || 0;
-              seatNg += s.ngDevice || 0;
-              seatWip += s.totalUPHA || 0;
-            });
-            if (seatStages.length > 0) {
-              setOverallTotalCompleted(seatPass);
-              setOverallTotalNg(seatNg);
-              setOverallTotalAttempts(seatPass + seatNg);
-              setWipKits(seatWip);
-            }
+            // Counts are now handled globally in getOverallProgress which is triggered by setPlaningAndScheduling
           }
         } catch (e) { /* ignore */ }
       }
+
+      await getOverallProgress(id);
 
       // 3. Refresh the searchable device list
       if (selectedProduct?._id && assignUserStage && selectedProcess) {
@@ -280,122 +351,80 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   };
   const getOverallProgress = async (id: any) => {
     try {
-      const user = getCurrentUser();
-      if (!user || !user._id) return;
+      if (!getPlaningAndScheduling) return;
+      const processId = getPlaningAndScheduling.selectedProcess;
+      if (!processId) return;
 
-      const data = { id, user_id: user._id };
-      let response = await getOverallProgressByOperatorId(data);
-      let devices = response.data || [];
+      // 1. Fetch all records for this process instance globally
+      const recordResult = await getDeviceTestRecordsByProcessId(processId);
+      const allRecords = recordResult.deviceTestRecords || [];
 
-      // Identify all stages assigned to the current seat
+      // 2. Identify current stages assigned to this seat
       const isCommon = assignedTaskDetails?.stageType === "common";
       const stageField = isCommon ? "assignedCustomStages" : "assignedStages";
       const assignedStages = JSON.parse(getPlaningAndScheduling?.[stageField] || "{}");
       const seatKey = operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber;
-      const seatStages = Array.isArray(assignedStages[seatKey]) ? assignedStages[seatKey] : (assignedStages[seatKey] ? [assignedStages[seatKey]] : []);
-      const seatStageNames = seatStages.map((s: any) => (s.name || s.stageName)?.trim().toLowerCase());
 
-      let pass = 0;
-      let ng = 0;
-      let attempts = 0;
+      const seatStages = Array.isArray(assignedStages?.[seatKey])
+        ? assignedStages[seatKey]
+        : (assignedStages?.[seatKey] ? [assignedStages[seatKey]] : []);
 
-      devices.forEach((d: any) => {
-        const dStage = d.stageName?.trim().toLowerCase();
-        // Count everything if we don't have seat boundaries, otherwise count what belongs to this seat/operator assignment
-        if (seatStageNames.length === 0 || seatStageNames.includes(dStage)) {
-          attempts++;
-          if (d.status === "Pass" || d.status === "Completed") pass++;
-          else if (d.status === "NG") ng++;
+      const targetStageNames = new Set(seatStages.map((s: any) => (s.name || s.stageName)?.trim()).filter(Boolean));
+      if (targetStageNames.size === 0) return;
+
+      // 3. Filter records for CURRENT stage (GLOBAL across all operators/plans in this process instance)
+      let globalPass = 0;
+      let globalNg = 0;
+      let globalTested = 0;
+
+      allRecords.forEach((r: any) => {
+        const rStage = (r.name || r.stageName)?.trim();
+        if (targetStageNames.has(rStage)) {
+          globalTested++;
+          if (r.status === "Pass" || r.status === "Completed") globalPass++;
+          else if (r.status === "NG" || r.status === "Fail") globalNg++;
         }
       });
 
-      // Local counts from history records
-      setOverallTotalAttempts(attempts);
-      setOverallTotalCompleted(pass);
-      setOverallTotalNg(ng);
+      setOverallTotalCompleted(globalPass);
+      setOverallTotalNg(globalNg);
+      setOverallTotalAttempts(globalTested);
 
-      // Single source of truth: Sync with Planning data seat-wise totals
-      if (getPlaningAndScheduling && seatKey && assignedStages[seatKey]) {
-        let seatPass = 0;
-        let seatNg = 0;
-        let seatWip = 0;
+      // 4. Calculate WIP globally for these stages
+      const stages = (processData?.stages || []).map((s: any) => s.stageName);
+      const currentStageName = Array.from(targetStageNames)[0] as string;
+      const currentStageIdx = stages.indexOf(currentStageName);
 
-        seatStages.forEach((s: any) => {
-          seatPass += (s.passedDevice || 0);
-          seatNg += (s.ngDevice || 0);
-          seatWip += (s.totalUPHA || 0);
-        });
-
-        // Mirror aggregated seat-wise counts
-        setOverallTotalCompleted(seatPass);
-        setOverallTotalNg(seatNg);
-        setOverallTotalAttempts(seatPass + seatNg);
-        setWipKits(seatWip);
-      }
-
-      if (getPlaningAndScheduling?.selectedProcess) {
-        refreshWIP(getPlaningAndScheduling, Array.isArray(assignUserStage) ? assignUserStage[0] : assignUserStage);
-      }
-    } catch (error: any) {
-      console.error("Error fetching overall progress:", error);
-    }
-  };
-
-  const refreshWIP = async (plan: any, currentStage: any) => {
-    if (!plan || !currentStage) return;
-    try {
-      const result = await getDeviceTestRecordsByProcessId(plan.selectedProcess);
-      const allRecords = result.deviceTestRecords || [];
-
-      const testResultsBySeatAndStage: any = {};
-      allRecords.forEach((record: any) => {
-        const key = `${record.seatNumber}:${record.stageName?.trim()}`;
-        if (!testResultsBySeatAndStage[key]) {
-          testResultsBySeatAndStage[key] = { passed: 0, ng: 0 };
-        }
-        if (record.status === "Pass" || record.status === "Completed") testResultsBySeatAndStage[key].passed++;
-        else if (record.status === "NG" || record.status === "Fail") testResultsBySeatAndStage[key].ng++;
-      });
-
-      const assignedStages = JSON.parse(plan.assignedStages || "{}");
-      const currentSeatKey = operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber;
-      const stageName = (currentStage.name || currentStage.stageName)?.trim();
-
-      // Find where we are in global sequence to find "previous" stage/seat
-      // This logic is complex and plan structure varies, but we can try to find the previous stage in the process
-      const stages = processData?.stages || [];
-      const currentStageIdx = stages.findIndex((s: any) => s.stageName === stageName);
-
-      let incoming = 0;
+      let incomingCount = 0;
       if (currentStageIdx === 0) {
-        incoming = (plan.assignedIssuedKits || 0) / (plan.repeatCount || 1);
+        // First stage: incoming is total kits targeted for this stage globally in the plan
+        let totalTargetForStage = 0;
+        Object.values(assignedStages).forEach((seatS: any) => {
+          const arr = Array.isArray(seatS) ? seatS : [seatS];
+          arr.forEach((s: any) => {
+            if (targetStageNames.has((s.name || s.stageName)?.trim())) {
+              totalTargetForStage += (s.totalUPHA || 0);
+            }
+          });
+        });
+        incomingCount = totalTargetForStage;
       } else if (currentStageIdx > 0) {
-        const prevStageName = stages[currentStageIdx - 1]?.stageName;
-        // Sum up all passed units from the previous stage across all operators/seats
+        // Subsequent stage: incoming is what passed in the PREVIOUS stage globally
+        const prevStageName = stages[currentStageIdx - 1];
         allRecords.forEach((r: any) => {
-          if (r.stageName === prevStageName && (r.status === "Pass" || r.status === "Completed")) {
-            incoming++;
+          if ((r.name || r.stageName)?.trim() === prevStageName && (r.status === "Pass" || r.status === "Completed")) {
+            incomingCount++;
           }
         });
       }
 
-      // Processed at current stage by ALL operators at this stage? 
-      // Or just this seat? 
-      // The user wants "process wise", but WIP is usually per seat.
-      // However, if we want to show how many are available for this specific stage globally:
-      let processedGlobal = 0;
-      allRecords.forEach((r: any) => {
-        if (r.stageName === stageName && (r.status === "Pass" || r.status === "NG" || r.status === "Completed" || r.status === "Fail")) {
-          processedGlobal++;
-        }
-      });
-
-      // setWipKits(Math.max(0, incoming - processedGlobal));
-      // Replaced by Planning-based WIP count in getOverallProgress and init logic
-    } catch (e) {
-      console.error("WIP calculation failed:", e);
+      const wip = incomingCount - globalTested;
+      setWipKits(wip > 0 ? wip : 0);
+    } catch (error: any) {
+      console.error("Error fetching process-wide progress:", error);
     }
   };
+
   const getDeviceById = async (id: any) => {
     try {
       let result = await getDeviceTestByDeviceId(id);
@@ -490,9 +519,9 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       // 
       const filteredDeviceList = result?.data.filter(
         (device: any) =>
-          !existingDevices.includes(device.serialNo) &&
+          !existingSerials.has(device.serialNo) &&
           device.currentStage === (assignStageToUser?.[0]?.name || assignStageToUser?.name) &&
-          // device.status !== "Pass" &&
+          (device.processID === pId || device.processId === pId) &&
           device.assignDeviceTo !== "TRC" &&
           device.assignDeviceTo !== "QC"
       );
@@ -574,6 +603,18 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         setIsPassNGButtonShow(false);
         setIsVerifiedSticker(false);
         setIsStickerPrinted(false);
+        // Log report submission as an operator event
+        safeLogOperatorEvent(
+          "REPORT_ISSUE_SUBMIT",
+          {
+            serialNo: searchedSerialNo,
+            issueType,
+            issueDescription,
+            processId: id,
+            stageName: assignUserStage?.name || "",
+          },
+          "OPERATION",
+        );
         return false;
       }
     } catch (error: any) {
@@ -598,8 +639,20 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     setIsDeviceSectionShow(true);
     setDevicePause(false);
     localStorage.setItem("operator_isDevicePause", "false");
+    // Ensure backend session exists and log start event (fire-and-forget)
+    safeLogOperatorEvent(
+      "TASK_START",
+      {
+        operatorStartTime: now,
+        selectedProcess,
+        planId: getPlaningAndScheduling?._id,
+      },
+      "SESSION",
+    );
   };
   const handlePauseResume = () => {
+    const goingOnBreak = !isPaused;
+
     setIsPaused((prev) => {
       const next = !prev;
       localStorage.setItem("operator_isPaused", String(next));
@@ -628,8 +681,42 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       localStorage.setItem("operator_isDevicePause", String(next));
       return next;
     });
+    // Call backend break APIs + log events (fire-and-forget)
+    (async () => {
+      try {
+        const sessionId = await ensureOperatorSession();
+        if (!sessionId) return;
+        if (goingOnBreak) {
+          await startOperatorWorkBreak(sessionId, { reason: "UI_BREAK" });
+          await safeLogOperatorEvent(
+            "BREAK_START",
+            { reason: "UI_BREAK" },
+            "SESSION",
+            sessionId,
+          );
+        } else {
+          await endOperatorWorkBreak(sessionId);
+          await safeLogOperatorEvent(
+            "BREAK_END",
+            {},
+            "SESSION",
+            sessionId,
+          );
+        }
+      } catch (error) {
+        console.error("Failed to sync break with backend:", error);
+      }
+    })();
   };
   const handleStop = () => {
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(
+        "Are you sure you want to stop your work?",
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
     setIsPaused(true);
     localStorage.setItem("operator_isPaused", "true");
     setTaskStaus(false);
@@ -641,6 +728,29 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     setOperatorStartTime("");
     setTotalBreakTime(0);
     setBreakStartTime(0);
+    // Stop backend session and log stop event (fire-and-forget)
+    (async () => {
+      try {
+        const sessionId = await ensureOperatorSession();
+        if (!sessionId) return;
+        await stopOperatorWorkSession(sessionId, {
+          status: "completed",
+          stopReason: "USER_STOP_BUTTON",
+        });
+        await safeLogOperatorEvent(
+          "SESSION_STOP",
+          {
+            status: "completed",
+            totalBreakTime,
+          },
+          "SESSION",
+          sessionId,
+        );
+        setOperatorSessionId(null);
+      } catch (error) {
+        console.error("Failed to stop operator work session:", error);
+      }
+    })();
   };
   const getProduct = async (id: any, assignStageToUser: any) => {
     try {
@@ -725,26 +835,9 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           seatNumber: seatInfo[1],
         });
 
-        // Aggregated counts from the identified seat (covering all stages for that seat)
         if (assignStage[seatDetails]) {
           const seatStages = assignStage[seatDetails];
           setAssignUserStage(seatStages);
-
-          let seatPass = 0;
-          let seatNg = 0;
-          let seatWip = 0;
-
-          const stagesArray = Array.isArray(seatStages) ? seatStages : [seatStages];
-          stagesArray.forEach((s: any) => {
-            seatPass += (s.passedDevice || 0);
-            seatNg += (s.ngDevice || 0);
-            seatWip += (s.totalUPHA || 0);
-          });
-
-          setWipKits(seatWip);
-          setOverallTotalCompleted(seatPass);
-          setOverallTotalNg(seatNg);
-          setOverallTotalAttempts(seatPass + seatNg);
 
           setSelectedProcess(result?.selectedProcess);
           fetchProcessByID(result?.selectedProcess, seatStages);
@@ -1035,6 +1128,18 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         setIsVerifiedPackaging(false);
 
         toast.success(result.message || `Device ${status} Successfully!!`);
+        // Log device test submission as an operator event
+        safeLogOperatorEvent(
+          "DEVICE_TEST_SUBMIT",
+          {
+            status,
+            serialNo: deviceInfo?.[0]?.serialNo || searchResult,
+            stageName: stageData?.name ?? "",
+            processId: selectedProcess || "",
+            planId: id || "",
+          },
+          "OPERATION",
+        );
       } else {
         toast.error(result?.message || "Error creating device test entry");
       }
@@ -1276,6 +1381,16 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         };
 
         setCartons((prev: any[]) => [...prev, newCarton]);
+        // Log cart creation + first device add as an operator event
+        safeLogOperatorEvent(
+          "PACKAGING_ADD_TO_CART",
+          {
+            cartonId: newCartonData.id,
+            deviceSerial: device?.serialNo,
+            maxCapacity: packageData.maxCapacity,
+          },
+          "OPERATION",
+        );
       } else {
         setCartons((prev: any[]) => {
           const copy = [...prev];
@@ -1289,6 +1404,16 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           copy[copy.length - 1] = last;
           return copy;
         });
+        // Log subsequent device add to existing carton
+        const existingCarton = lastCarton;
+        safeLogOperatorEvent(
+          "PACKAGING_ADD_TO_CART",
+          {
+            cartonId: existingCarton?.cartonSerial || existingCarton?.id,
+            deviceSerial: device?.serialNo,
+          },
+          "OPERATION",
+        );
       }
     } catch (error: any) {
       console.error("Error Creating/Updating Carton", error?.message ?? error);

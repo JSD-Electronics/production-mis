@@ -13,7 +13,7 @@ const ChartThree = dynamic(() => import("@/components/Charts/ChartThree"), {
 });
 
 const ProductionManagerDashboard: React.FC = () => {
-  const [taskList, setTaskList] = useState([]);
+  const [taskList, setTaskList] = useState<any[]>([]);
   useEffect(() => {
     let userDetails = JSON.parse(localStorage.getItem("userDetails") || "{}");
     getTask(userDetails._id);
@@ -21,9 +21,9 @@ const ProductionManagerDashboard: React.FC = () => {
   const getTask = async (id: any) => {
     try {
       let result = await getTaskByUserId(id);
-      setTaskList(result.task);
+      setTaskList(result.task || []);
     } catch (error) {
-      
+
     }
   };
   return (

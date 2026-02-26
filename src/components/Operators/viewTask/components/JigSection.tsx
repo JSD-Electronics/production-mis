@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Cable, Square, Terminal, Trash2, Download, Play, Activity } from "lucide-react";
 import { updateStageBySerialNo, getEsimMasterByCcid, viewEsimProfiles, viewEsimApns } from "@/lib/api";
 import { toast } from "react-toastify";
@@ -738,9 +738,13 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
             addLog(`NG Reason: ${reasonStr}`, "error");
           }
 
-          // Handle Store to DB
+          // Handle Store to DB (including custom flow "Through Jig Stages")
           const collectedData: any = {};
-          if (currentSubStep.stepFields?.actionType === "Store to DB" && currentSubStep.jigFields) {
+          const actionType = currentSubStep.stepFields?.actionType;
+          const isStoreToDb =
+            actionType === "Store to DB" ||
+            actionType === "Through Jig Stages";
+          if (isStoreToDb && currentSubStep.jigFields) {
             currentSubStep.jigFields.forEach((field: any) => {
               const fieldName = field.jigName;
               let val = parsedData[fieldName];
@@ -865,7 +869,20 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
 
     console.log("Command execution check:", { actionType, command, isConnected, currentStepId, lastSent: lastSentCommandStepRef.current });
 
-    if (isConnected && (actionType === "Command" || actionType === "Custom Fields" || actionType?.toLowerCase() === "switch profile 2" || actionType?.toLowerCase() === "switch profile 1" || actionType === "Esim Settings validation") && command && lastSentCommandStepRef.current !== currentStepId) {
+    const normalizedAction = actionType?.toLowerCase();
+    const isSerialCommandStep =
+      normalizedAction === "command" ||
+      normalizedAction === "through serial" ||
+      normalizedAction === "custom fields";
+    if (
+      isConnected &&
+      (isSerialCommandStep ||
+        normalizedAction === "switch profile 2" ||
+        normalizedAction === "switch profile 1" ||
+        actionType === "Esim Settings validation") &&
+      command &&
+      lastSentCommandStepRef.current !== currentStepId
+    ) {
       // Reset switch profile tracking flags before sending new command
       if (actionType?.toLowerCase() === "switch profile 1" || actionType?.toLowerCase() === "switch profile 2") {
         switchProfileCompletedRef.current = false;

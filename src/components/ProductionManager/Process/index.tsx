@@ -1,5 +1,5 @@
 ﻿"use client";
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import {
@@ -9,69 +9,95 @@ import {
   updateIssuedKitsToLine,
 } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { FiEye, FiCheck, FiTrash, FiX } from "react-icons/fi";
+import {
+  Eye,
+  Check,
+  X,
+  Search,
+  Layers,
+  Cpu,
+  Package,
+  CheckCircle2,
+  AlertCircle
+} from "lucide-react";
 import { BallTriangle } from "react-loader-spinner";
-import ConfirmationPopup from "@/components/Confirmation/page";
 import Modal from "@/components/Modal/page";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+
 const ViewProcessInventory = () => {
-  const [showPopup, setShowPopup] = React.useState(false);
-  const [productId, setProductId] = React.useState("");
-  const [productionManagerData, setProductionManagerData] = React.useState([]);
-  const [isInventoryModel, setIsInventoryModel] = React.useState(false);
-  const [inventoryDetails, setInventoryDetails] = React.useState({});
-  const [inventoryID, setInventoryID] = useState("");
-  const [updatedQuantity, setUpdatedQuantity] = React.useState(0);
-  const [updatedCartonQuantity, setUpdatedCartonQuantity] = React.useState(0);
-  const [loading, setLoading] = React.useState(true);
-  const [selectedRows, setSelectedRows] = React.useState([]);
-  const [packagingData, setPackagingData] = useState([]);
-  const [processName, setProcessName] = React.useState("");
-  const [issuedKitsToLineModel, setIssuedKitsToLineModel] =
-    React.useState(false);
-  const [processData, setProcessData] = useState({});
-  const [assignedStage, setAssignedStage] = React.useState([]);
-  const [startLineStage, setStartLineStage] = React.useState([
-    {
-      key: "",
-      data: [],
-      assignedKitsToStage: [],
-      issuedKits: 0,
-    },
-  ]);
-  const handleRowSelected = (state: any) => {
-    setSelectedRows(state.selectedRows);
-  };
   const router = useRouter();
-  const closeInventoryModal = () => {
-    setIsInventoryModel(false);
-  };
-  const closeIssuedKitsToLineModel = () => {
-    setIssuedKitsToLineModel(false);
-  };
+
+  // State Management
+  const [productionManagerData, setProductionManagerData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedRows, setSelectedRows] = useState([]);
+
+  // Modal States
+  const [isInventoryModel, setIsInventoryModel] = useState(false);
+  const [inventoryDetails, setInventoryDetails] = useState<any>({});
+  const [inventoryID, setInventoryID] = useState("");
+  const [updatedQuantity, setUpdatedQuantity] = useState(0);
+  const [updatedCartonQuantity, setUpdatedCartonQuantity] = useState(0);
+  const [packagingData, setPackagingData] = useState<any[]>([]);
+  const [processName, setProcessName] = useState("");
+
+  const [issuedKitsToLineModel, setIssuedKitsToLineModel] = useState(false);
+  const [processData, setProcessData] = useState<any>({});
+  const [startLineStage, setStartLineStage] = useState<any[]>([
+    { key: "", data: [], assignedKitsToStage: [], issuedKits: 0 },
+  ]);
+
   React.useEffect(() => {
     getProductionManagerProcess();
   }, []);
+
+  const getProductionManagerProcess = async () => {
+    try {
+      setLoading(true);
+      let result = await fetchList("/production-manger/process/get");
+      setProductionManagerData(result.Processes || []);
+    } catch (error) {
+      console.error("Error Fetching Process:", error);
+      toast.error("Failed to fetch processes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRowSelected = (state: any) => {
+    setSelectedRows(state.selectedRows);
+  };
+
+  const closeInventoryModal = () => {
+    setIsInventoryModel(false);
+  };
+
+  const closeIssuedKitsToLineModel = () => {
+    setIssuedKitsToLineModel(false);
+  };
+
   const handleKitsToLine = async () => {
     try {
-      const assignedStage = JSON.parse(processData.assignStages);
-      const updatedStageData = { ...assignedStage };
-      let seatDetails = [];
+      const assignedStageParams = JSON.parse(processData.assignStages);
+      const updatedStageData = { ...assignedStageParams };
+      let seatDetails: any[] = [];
       let issuedKits = 0;
       let totalAssignedKit = 0;
       let issuedKitsStatus = "";
+
       startLineStage.forEach((stage) => {
         const key = stage.key;
-        const original = assignedStage[key]?.[0];
+        const original = assignedStageParams[key]?.[0];
         const updates = stage.data?.[0] || {};
-        issuedKits += parseInt(updates?.totalUPHA);
+        issuedKits += parseInt(updates?.totalUPHA || 0);
         totalAssignedKit = stage.issuedKits;
         let seatsInfo = key.split("-");
         seatDetails.push({
           rowNumber: seatsInfo[0],
           seatNumber: seatsInfo[1],
-          issuedKits: parseInt(updates?.totalUPHA),
+          issuedKits: parseInt(updates?.totalUPHA || 0),
         });
         if (!original) return;
         updatedStageData[key] = [
@@ -81,6 +107,7 @@ const ViewProcessInventory = () => {
           },
         ];
       });
+
       if (totalAssignedKit != issuedKits && issuedKits > 0) {
         issuedKitsStatus = "PARTIALLY_ISSUED";
       } else if (totalAssignedKit == issuedKits) {
@@ -88,228 +115,259 @@ const ViewProcessInventory = () => {
       } else {
         issuedKitsStatus = "NOT_ISSUED";
       }
+
       let formData = new FormData();
       formData.append("planId", processData.planId);
       formData.append("processId", processData._id);
-      formData.append("issuedKits", parseInt(issuedKits));
+      formData.append("issuedKits", issuedKits.toString());
       formData.append("seatDetails", JSON.stringify(seatDetails));
       formData.append("issuedKitsStatus", issuedKitsStatus);
       formData.append("assignedStage", JSON.stringify(updatedStageData));
       formData.append("processStatus", "waiting_for_kits_confirmation");
+
       let result = await updateIssuedKitsToLine(formData);
       if (result) {
         setIssuedKitsToLineModel(false);
         getProductionManagerProcess();
-        toast.success(result?.message || "Device Created Successfully !!");
+        toast.success(result?.message || "Kits assigned to line successfully!");
       }
     } catch (error) {
-      console.error("Error Update Stage Data:", error);
+      console.error("Error updating stage data:", error);
+      toast.error("An error occurred while assigning kits.");
     }
   };
 
-  const getProductionManagerProcess = async () => {
-    try {
-      let result = await fetchList("/production-manger/process/get");
-      setProductionManagerData(result.Processes);
-    } catch (error) {
-      console.error("Error Fetching Inventory:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
   const handleEdit = (process: any) => {
     setInventoryID(process._id);
     setProcessName(process.name);
-    setIsInventoryModel(true);
     setUpdatedQuantity(0);
     setUpdatedCartonQuantity(0);
-    inventoryData.map((value, index) => {
-      if (value._id === process._id) {
-        value?.productDetails?.stages.map((stage, index) => {
-          stage?.subSteps
-            .filter((value1) => value1.isPackagingStatus)
-            .forEach((value1) => {
-              setPackagingData((prev) => [...prev, value1]);
-            });
-        });
-        setInventoryDetails(value);
-      }
-    });
+
+    // Find matching process internally instead of mapping blindly
+    const targetProcess = productionManagerData.find((p) => p._id === process._id);
+    if (targetProcess) {
+      let packData: any[] = [];
+      targetProcess?.productDetails?.stages?.forEach((stage: any) => {
+        stage?.subSteps
+          ?.filter((val: any) => val.isPackagingStatus)
+          .forEach((val: any) => {
+            packData.push(val);
+          });
+      });
+      setPackagingData(packData);
+      setInventoryDetails(targetProcess);
+    }
+    setIsInventoryModel(true);
   };
+
   const handleSubmitInventory = async () => {
     try {
-      setIsInventoryModel(true);
-
       if (!inventoryID) {
-        console.error("Inventory ID is missing");
+        toast.error("Inventory ID is missing");
         return;
       }
+      const existingItem = productionManagerData.find((value) => value._id === inventoryID);
+      const currentQuantity = existingItem ? parseInt(existingItem.quantity) || 0 : 0;
+      const currentCartonQuantity = existingItem ? parseInt(existingItem.cartonQuantity) || 0 : 0;
+      const additionalQuantity = parseInt(updatedQuantity.toString()) || 0;
+      const additionalCartonQuantity = parseInt(updatedCartonQuantity.toString()) || 0;
 
-      const existingItem = inventoryData.find(
-        (value) => value._id === inventoryID,
-      );
-      const currentQuantity = existingItem
-        ? parseInt(existingItem.quantity) || 0
-        : 0;
-      const currentCartonQuantity = existingItem
-        ? parseInt(existingItem.cartonQuantity) || 0
-        : 0;
-      const additionalQuantity = parseInt(updatedQuantity) || 0;
-      const additionalCartonQuantity = parseInt(updatedCartonQuantity) || 0;
-
-      const finalCartonQuantity =
-        currentCartonQuantity + additionalCartonQuantity;
+      const finalCartonQuantity = currentCartonQuantity + additionalCartonQuantity;
       const finalQuantity = currentQuantity + additionalQuantity;
 
       let formData = new FormData();
-      formData.append("quantity", finalQuantity);
-      formData.append("cartonQuantity", finalCartonQuantity);
+      formData.append("quantity", finalQuantity.toString());
+      formData.append("cartonQuantity", finalCartonQuantity.toString());
 
       if (finalQuantity > 0) {
         formData.append("status", "In Stock");
       }
 
       const result = await updateInventoryById(inventoryID, formData);
-
       if (result && result.status === 200) {
-        
         setIsInventoryModel(false);
+        toast.success("Inventory updated successfully.");
         getProductionManagerProcess();
       } else {
-        console.error("Failed to update inventory", result);
+        toast.error("Failed to update inventory.");
       }
     } catch (error) {
       console.error("Error updating inventory", error);
     }
   };
-  const handleStatusUpdate = async (data, status) => {
+
+  const handleStatusUpdate = async (data: any, status: string) => {
     try {
       let form = new FormData();
       form.append("id", data?._id);
       form.append("status", status);
       if (status === "Waiting_Kits_allocation") {
-        let returnedKits = data?.quantity - data?.issuedKits;
-        form.append("issuedKits", returnedKits);
+        let returnedKits = (data?.quantity || 0) - (data?.issuedKits || 0);
+        form.append("issuedKits", returnedKits.toString());
       }
       let result = await updateProductionStatus(form);
       if (result && result.status === 200) {
-        toast.success("Production Update Successfully!");
+        toast.success("Production status updated successfully!");
+        getProductionManagerProcess();
       }
     } catch (error) {
       console.error("Error updating status", error);
+      toast.error("Failed to update status.");
     }
   };
+
   const handleIssuedKits = (row: any) => {
     setProcessData({});
-    let assignedStages = JSON.parse(row.assignStages);
-    let productStages = row.stages.length;
-    let repeatCount = row.repeatCount;
-    const keys = Object.keys(assignedStages);
+    let assignedStages;
+    try {
+      assignedStages = JSON.parse(row.assignStages);
+    } catch (e) {
+      assignedStages = {};
+    }
+    let productStages = row.stages?.length || 0;
+    let repeatCount = row.repeatCount || 0;
+    const Objectkeys = Object.keys(assignedStages);
     const selectedStageEntries: any[] = [];
+
     for (let i = 0; i < repeatCount; i++) {
       const index = i * productStages;
-      const key = keys[index];
-      if (assignedStages[key]) {
+      const key = Objectkeys[index];
+      if (key && assignedStages[key]) {
         selectedStageEntries.push({
           key,
-          data: assignedStages[key],
+          data: assignedStages[key] || [],
           issuedKits: row.issuedKits,
           issuedCartons: row.issuedCartons,
         });
       }
     }
-    // return false;
     setProcessData(row);
     setStartLineStage(selectedStageEntries);
     setIssuedKitsToLineModel(true);
   };
+
+  // Memoized filtered data
+  const filteredData = useMemo(() => {
+    return productionManagerData.filter((item: any) => {
+      const searchStr = `${item.name} ${item.processID} ${item.status}`.toLowerCase();
+      return searchStr.includes(searchTerm.toLowerCase());
+    });
+  }, [productionManagerData, searchTerm]);
+
+  // Statistics
+  const stats = useMemo(() => {
+    const total = productionManagerData.length;
+    const active = productionManagerData.filter((p: any) => p.status === "active").length;
+    const completed = productionManagerData.filter((p: any) => p.status === "completed").length;
+    const awaitingApproval = productionManagerData.filter((p: any) => p.status === "Waiting_Kits_approval").length;
+
+    return { total, active, completed, awaitingApproval };
+  }, [productionManagerData]);
+
   const columns = [
     {
-      name: "ID",
-      selector: (row: Inventory, index: number) => index + 1,
+      name: "Process Info",
+      selector: (row: any) => row?.name,
       sortable: true,
+      grow: 2,
+      cell: (row: any) => (
+        <div className="flex flex-col py-3">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-gray-900 dark:text-white">{row.name}</span>
+            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+              {row.processID}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-gray-500">
+            <Layers size={12} />
+            <span className="truncate">{row.productName || "N/A"}</span>
+          </div>
+        </div>
+      ),
     },
     {
-      name: "Product Name",
-      selector: (row: Inventory) => row?.name,
+      name: "Quantities",
       sortable: true,
+      cell: (row: any) => (
+        <div className="flex flex-col py-2 gap-1 text-xs">
+          <div className="flex justify-between w-full min-w-[100px]">
+            <span className="text-gray-500">Target:</span>
+            <span className="font-semibold dark:text-white">{parseInt(row?.quantity || 0)}</span>
+          </div>
+          <div className="flex justify-between w-full">
+            <span className="text-gray-500">Kits:</span>
+            <span className="font-semibold text-blue-600">{parseInt(row?.issuedKits || 0)}</span>
+          </div>
+          <div className="flex justify-between w-full">
+            <span className="text-gray-500">Cartons:</span>
+            <span className="font-semibold text-purple-600">{parseInt(row?.issuedCartons || 0)}</span>
+          </div>
+        </div>
+      ),
     },
     {
-      name: "Quantity",
-      selector: (row: Inventory) => parseInt(row?.quantity),
+      name: "Kit Distribution",
+      selector: (row: any) => parseInt(row.assignedKitsToOperator || 0),
       sortable: true,
-    },
-    {
-      name: "Issued kits",
-      selector: (row: Inventory) => parseInt(row?.issuedKits),
-      sortable: true,
-    },
-    {
-      name: "Issued Carton",
-      selector: (row: Inventory) => parseInt(row.issuedCartons),
-      sortable: true,
-    },
-    {
-      name: "Issued kit to Operator",
-      selector: (row: Inventory) => parseInt(row.assignedKitsToOperator),
-      sortable: true,
-    },
-    {
-      name: "Issued Kit Status",
-      selector: (row: Inventory) => {
+      cell: (row: any) => {
         const statusClassMap: Record<string, string> = {
-          ISSUED: "bg-green-600",
-          PARTIALLY_ISSUED: "bg-amber-500",
-          NOT_ISSUED: "bg-red-600",
+          ISSUED: "bg-emerald-100 text-emerald-800 border-emerald-200",
+          PARTIALLY_ISSUED: "bg-amber-100 text-amber-800 border-amber-200",
+          NOT_ISSUED: "bg-rose-100 text-rose-800 border-rose-200",
         };
         const labelMap: Record<string, string> = {
-          ISSUED: "Issued",
+          ISSUED: "Fully Issued",
           PARTIALLY_ISSUED: "Partially Issued",
           NOT_ISSUED: "Not Issued",
         };
-        const statusClass =
-          statusClassMap[row.issuedKitsStatus] || "bg-gray-600";
-        const displayLabel = labelMap[row.issuedKitsStatus] || "Unknown";
+        const statusClass = statusClassMap[row.issuedKitsStatus] || "bg-gray-100 text-gray-800 border-gray-200";
+        const displayLabel = labelMap[row.issuedKitsStatus] || "Pending Info";
+
         return (
-          <span className={`inline-block rounded px-2.5 py-1 text-[11px] font-semibold text-white ${statusClass}`}>
-            {displayLabel}
-          </span>
+          <div className="flex flex-col gap-1 items-start">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-bold uppercase tracking-wider ${statusClass}`}>
+              {displayLabel}
+            </span>
+            <span className="text-[10px] text-gray-500 font-medium">
+              To Operator: {parseInt(row.assignedKitsToOperator || 0)}
+            </span>
+          </div>
         );
       },
-      sortable: true,
     },
     {
-      name: "Status",
-      selector: (row: Inventory) => row?.status,
+      name: "Process Status",
+      selector: (row: any) => row?.status,
       sortable: true,
-      cell: (row: Inventory) => {
-        const statusClasses = {
-          waiting_schedule: "bg-orange-500",
-          Waiting_Kits_allocation: "bg-violet-600",
-          Waiting_Kits_approval: "bg-teal-600",
-          waiting_for_line_feeding: "bg-blue-600",
-          waiting_for_kits_confirmation: "bg-orange-600",
-          active: "bg-amber-500",
-          down_time_hold: "bg-red-600",
-          completed: "bg-green-600",
-          default: "bg-gray-500",
-        } as Record<string, string>;
-        const status = row?.status;
-        const labelMap = {
+      grow: 1.5,
+      cell: (row: any) => {
+        const statusClasses: Record<string, string> = {
+          waiting_schedule: "bg-orange-100 text-orange-800 border-orange-200",
+          Waiting_Kits_allocation: "bg-violet-100 text-violet-800 border-violet-200",
+          Waiting_Kits_approval: "bg-teal-100 text-teal-800 border-teal-200",
+          waiting_for_line_feeding: "bg-blue-100 text-blue-800 border-blue-200",
+          waiting_for_kits_confirmation: "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200",
+          active: "bg-emerald-100 text-emerald-800 border-emerald-200",
+          down_time_hold: "bg-rose-100 text-rose-800 border-rose-200",
+          completed: "bg-gray-100 text-gray-800 border-gray-200",
+          default: "bg-gray-100 text-gray-800 border-gray-200",
+        };
+        const labelMap: Record<string, string> = {
           waiting_schedule: "Waiting Schedule",
           Waiting_Kits_allocation: "Waiting Kits Allocation",
-          Waiting_Kits_approval: "Waiting Kits Approval",
+          Waiting_Kits_approval: "Awaiting Kits Approval",
           waiting_for_line_feeding: "Waiting For Line Feeding",
-          waiting_for_kits_confirmation: "Waiting For Kits Confirmation",
-          active: "Active",
+          waiting_for_kits_confirmation: "Awaiting Kits Confirmation",
+          active: "Active IN-PROG",
           down_time_hold: "Down Time Hold",
           completed: "Completed",
           default: "Process Created",
-        } as Record<string, string>;
-        const cls = statusClasses[status] || statusClasses.default;
-        const label = labelMap[status] || labelMap.default;
+        };
+        const cls = statusClasses[row?.status] || statusClasses.default;
+        const label = labelMap[row?.status] || row?.status;
+
         return (
-          <span className={`inline-block rounded px-2.5 py-1 text-[11px] font-semibold text-white ${cls}`}>
+          <span className={`inline-flex items-center px-2 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider ${cls}`}>
             {label}
           </span>
         );
@@ -317,317 +375,280 @@ const ViewProcessInventory = () => {
     },
     {
       name: "Actions",
-      cell: (row: Inventory) => (
-        <div className="flex items-center space-x-1">
+      cell: (row: any) => (
+        <div className="flex items-center gap-2">
+          {/* Details Button */}
+          <button
+            onClick={() => handleEdit(row)}
+            className="group relative flex h-8 w-8 items-center justify-center rounded-lg bg-gray-50 text-gray-600 transition hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400"
+            title="View Details"
+          >
+            <Eye size={16} />
+            <span className="absolute -top-8 left-1/2 -translate-x-1/2 scale-0 rounded bg-gray-900 px-2 py-1 text-[10px] text-white transition-all group-hover:scale-100 whitespace-nowrap z-50">View Details</span>
+          </button>
+
+          {/* Action logic */}
           {row.status == "Waiting_Kits_approval" && (
             <>
               <button
-                onClick={() =>
-                  handleStatusUpdate(row, "waiting_for_line_feeding")
-                }
-                className="transform rounded-full bg-blue-500 p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-blue-600"
+                onClick={() => handleStatusUpdate(row, "waiting_for_line_feeding")}
+                className="group relative flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition hover:bg-emerald-600 hover:text-white dark:bg-emerald-900/20"
+                title="Approve Kits"
               >
-                <FiCheck size={16} />
+                <Check size={16} />
+                <span className="absolute -top-8 left-1/2 -translate-x-1/2 scale-0 rounded bg-gray-900 px-2 py-1 text-[10px] text-white transition-all group-hover:scale-100 whitespace-nowrap z-50">Approve</span>
               </button>
               <button
                 onClick={() => handleStatusUpdate(row, "Waiting_Kits_allocation")}
-                className="transform rounded-full bg-danger p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-danger"
+                className="group relative flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600 transition hover:bg-rose-600 hover:text-white dark:bg-rose-900/20"
+                title="Reject Kits"
               >
-                <FiX size={16} />
+                <X size={16} />
+                <span className="absolute -top-8 left-1/2 -translate-x-1/2 scale-0 rounded bg-gray-900 px-2 py-1 text-[10px] text-white transition-all group-hover:scale-100 whitespace-nowrap z-50">Reject</span>
               </button>
             </>
           )}
-          {(row.status === "waiting_for_line_feeding" ||
-            row.issuedKitsStatus === "PARTIALLY_ISSUED") && (
-              <button
-                onClick={() => handleIssuedKits(row)}
-                className="transform rounded-full bg-[#34D399] p-1 text-white shadow-lg transition-transform hover:scale-105 hover:bg-[#34D399]"
-              >
-                <svg
-                  width="15px"
-                  height="15px"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  stroke="#ffffff"
-                >
-                  <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-                  <g
-                    id="SVGRepo_tracerCarrier"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  ></g>
-                  <g id="SVGRepo_iconCarrier">
-                    {" "}
-                    <path
-                      d="M18 18.86H17.24C16.44 18.86 15.68 19.17 15.12 19.73L13.41 21.42C12.63 22.19 11.36 22.19 10.58 21.42L8.87 19.73C8.31 19.17 7.54 18.86 6.75 18.86H6C4.34 18.86 3 17.53 3 15.89V4.97998C3 3.33998 4.34 2.01001 6 2.01001H18C19.66 2.01001 21 3.33998 21 4.97998V15.89C21 17.52 19.66 18.86 18 18.86Z"
-                      stroke="#ffffff"
-                      stroke-width="1.5"
-                      stroke-miterlimit="10"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    ></path>{" "}
-                    <path
-                      d="M11.9999 10.0001C13.2868 10.0001 14.33 8.95687 14.33 7.67004C14.33 6.38322 13.2868 5.34009 11.9999 5.34009C10.7131 5.34009 9.66992 6.38322 9.66992 7.67004C9.66992 8.95687 10.7131 10.0001 11.9999 10.0001Z"
-                      stroke="#ffffff"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    ></path>{" "}
-                    <path
-                      d="M16 15.6601C16 13.8601 14.21 12.4001 12 12.4001C9.79 12.4001 8 13.8601 8 15.6601"
-                      stroke="#ffffff"
-                      stroke-width="1.5"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    ></path>{" "}
-                  </g>
-                </svg>
-              </button>
-            )}
+
+          {(row.status === "waiting_for_line_feeding" || row.issuedKitsStatus === "PARTIALLY_ISSUED") && (
+            <button
+              onClick={() => handleIssuedKits(row)}
+              className="group relative flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition hover:bg-blue-600 hover:text-white dark:bg-blue-900/20"
+              title="Assign Kits to Line"
+            >
+              <Package size={16} />
+              <span className="absolute -top-8 left-1/2 -translate-x-1/2 scale-0 rounded bg-gray-900 px-2 py-1 text-[10px] text-white transition-all group-hover:scale-100 whitespace-nowrap z-50">Assign Kits to Line</span>
+            </button>
+          )}
         </div>
       ),
     },
   ];
 
+  const customStyles = {
+    headRow: {
+      style: {
+        backgroundColor: "#f9fafb",
+        borderTopWidth: "1px",
+        borderTopColor: "rgba(0,0,0,0.05)",
+      },
+    },
+    headCells: {
+      style: {
+        fontWeight: "700",
+        fontSize: "0.75rem",
+        color: "#6b7280",
+        textTransform: "uppercase" as const,
+        letterSpacing: "0.05em",
+      },
+    },
+    rows: {
+      style: {
+        minHeight: "80px",
+        "&:hover": {
+          backgroundColor: "#f9fafb !important",
+        }
+      },
+    },
+  };
+
   return (
-    <div className="bg-gradient-to-b from-gray-50 to-white min-h-screen p-6">
-      <Breadcrumb pageName="View Process" parentName="Production Manager" />
-      <div className="mt-6 rounded-xl bg-white/90 backdrop-blur-md p-6 shadow-2xl ring-1 ring-black/5 dark:bg-boxdark/90 dark:ring-white/10">
-        <ToastContainer
-          position="top-center"
-          closeOnClick
-          pauseOnFocusLoss
-          draggable
-          pauseOnHover
-        />
-        {loading ? (
-          <div className="flex justify-center">
-            <BallTriangle
-              height={100}
-              width={100}
-              color="#4fa94d"
-              ariaLabel="loading"
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* Header */}
+      <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Line Production Management</h1>
+          <p className="mt-1 text-sm text-gray-500">Manage process lifecycle, kit approvals, and line assignments.</p>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: "Total Planned", value: stats.total, icon: Cpu, color: "text-blue-600", bg: "bg-blue-50" },
+          { label: "Active Execution", value: stats.active, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50" },
+          { label: "Pending Approvals", value: stats.awaitingApproval, icon: AlertCircle, color: "text-amber-600", bg: "bg-amber-50" },
+          { label: "Completed", value: stats.completed, icon: Layers, color: "text-gray-600", bg: "bg-gray-100" },
+        ].map((stat, i) => (
+          <div key={i} className="flex items-center rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-200 dark:bg-boxdark dark:ring-strokedark">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${stat.bg} ${stat.color} mr-4`}>
+              <stat.icon size={24} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">{stat.label}</p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">{stat.value}</h3>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Main Table Container */}
+      <div className="overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-black/5 dark:bg-boxdark">
+        {/* Search Bar */}
+        <div className="flex border-b border-gray-100 p-6 dark:border-strokedark">
+          <div className="relative w-full max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              type="text"
+              placeholder="Search running processes..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 text-sm focus:border-primary focus:bg-white focus:outline-none focus:ring-4 focus:ring-primary/10 transition-all dark:border-strokedark dark:bg-form-input dark:text-white"
             />
           </div>
-        ) : (
-          <>
+        </div>
+
+        {/* Data Table */}
+        <div className="relative">
+          {loading ? (
+            <div className="flex h-64 items-center justify-center">
+              <BallTriangle height={80} width={80} color="#3c50e0" />
+            </div>
+          ) : (
             <DataTable
-              className="min-w-full text-sm"
               columns={columns}
-              data={productionManagerData}
+              data={filteredData}
               pagination
-              selectableRows
-              onSelectedRowsChange={handleRowSelected}
               highlightOnHover
-              pointerOnHover
-              customStyles={{
-                headCells: {
-                  style: {
-                    fontWeight: "600",
-                    backgroundColor: "#f8f9fa",
-                    padding: "12px",
-                  },
-                },
-                rows: {
-                  style: {
-                    minHeight: "60px",
-                    "&:hover": {
-                      backgroundColor: "#f1f5f9",
-                    },
-                  },
-                },
-                pagination: {
-                  style: {
-                    padding: "12px",
-                    border: "none",
-                  },
-                },
-                cells: {
-                  style: {
-                    padding: "12px",
-                    "& > div:first-child": {
-                      whiteSpace: "break-spaces",
-                      overflow: "hidden",
-                      textOverflow: "inherit",
-                    },
-                  },
-                },
-              }}
+              customStyles={customStyles}
             />
-            <Modal
-              isOpen={issuedKitsToLineModel}
-              onSubmit={handleKitsToLine}
-              onClose={closeIssuedKitsToLineModel}
-              title={"Assign Kits to Line"}
-              submitOption={true}
-            >
-              <div>
-                {startLineStage?.map((value, index) => (
-                  <div key={index} className="mb-2">
-                    <div className="grid grid-cols-2 pb-6">
-                      <div>
-                        <strong>Row & Seat Number:</strong> {value.key}
-                      </div>
-                      <div className="text-gray-700 block text-sm font-medium">
-                        <strong>Stage Name:</strong> {value.data[0]?.name}
-                      </div>
-                      <div>
-                        <strong>Kit Issued:</strong> {value.issuedKits}
-                      </div>
-                      <div>
-                        <strong>Carton Issued :</strong> {value.issuedCartons}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="mb-3 block text-sm text-black dark:text-white">
-                        Line Number {index + 1}
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max={value.issuedKits / startLineStage.length}
-                        required={true}
-                        value={value.data?.[0]?.totalUPHA || ""}
-                        onChange={(e) => {
-                          let kitsValue = parseInt(e.target.value) || 0;
-                          if (kitsValue > value.issuedKits) {
-                            kitsValue = value.issuedKits;
-                          }
-
-                          const updatedStages = [...startLineStage];
-                          const updatedStage = { ...updatedStages[index] };
-
-                          if (!Array.isArray(updatedStage.data)) {
-                            updatedStage.data = [];
-                          }
-
-                          updatedStage.data[0] = {
-                            ...updatedStage.data[0],
-                            totalUPHA: kitsValue,
-                          };
-
-                          updatedStages[index] = updatedStage;
-                          setStartLineStage(updatedStages);
-                        }}
-                        placeholder="No of kits Issued to stage"
-                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Modal>
-            <Modal
-              isOpen={isInventoryModel}
-              onSubmit={handleSubmitInventory}
-              onClose={closeInventoryModal}
-              title={"Inventory Details (" + processName + ")"}
-              submitOption={false}
-            >
-              <div>
-                <div>
-                  <strong>Process Details </strong>
-                </div>
-                <div className="grid py-2 sm:grid-cols-2">
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Process Name :</strong>{" "}
-                    {inventoryDetails?.name}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Process Id :</strong>{" "}
-                    {inventoryDetails?.processID}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Required kits :</strong>{" "}
-                    {inventoryDetails?.processQuantity}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Issued Kits :</strong>{" "}
-                    {inventoryDetails?.issuedKits}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Kits Shortage :</strong>{" "}
-                    {Math.abs(
-                      inventoryDetails?.processQuantity -
-                      inventoryDetails?.issuedKits,
-                    )}
-                  </div>
-                  <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                    <strong className="font-medium">Surplus Kits :</strong>{" "}
-                    {inventoryDetails?.issuedKits >
-                      inventoryDetails?.processQuantity
-                      ? Math.abs(
-                        inventoryDetails?.inventoryQuantity -
-                        inventoryDetails?.processQuantity,
-                      )
-                      : 0}
-                  </div>
-                </div>
-                {packagingData.length > 0 && (
-                  <>
-                    <div>
-                      <strong>Carton Details</strong>
-                    </div>
-                    <div className="grid py-2 sm:grid-cols-2">
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">
-                          Required Cartons :
-                        </strong>{" "}
-                        {parseInt(inventoryDetails?.processQuantity) /
-                          packagingData[0]?.packagingData?.maxCapacity}
-                      </div>
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">
-                          Cartons Shortage :
-                        </strong>{" "}
-                        {Math.abs(
-                          parseInt(inventoryDetails?.processQuantity) /
-                          packagingData[0]?.packagingData?.maxCapacity -
-                          inventoryDetails?.cartonQuantity,
-                        )}
-                      </div>
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">
-                          Surplus Cartons :
-                        </strong>{" "}
-                        {inventoryDetails?.cartonQuantity >
-                          inventoryDetails?.processQuantity /
-                          packagingData[0]?.packagingData?.maxCapacity
-                          ? Math.abs(
-                            parseInt(inventoryDetails?.processQuantity) /
-                            packagingData[0]?.packagingData?.maxCapacity -
-                            inventoryDetails?.cartonQuantity,
-                          )
-                          : 0}
-                      </div>
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">Updated At :</strong>{" "}
-                        {new Date(
-                          inventoryDetails?.updatedAt,
-                        ).toLocaleDateString()}
-                      </div>
-                      <div className="text-gray-700 dark:text-gray-300 mb-2 px-3">
-                        <strong className="font-medium">Created At :</strong>{" "}
-                        {new Date(
-                          inventoryDetails?.createdAt,
-                        ).toLocaleDateString()}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </Modal>
-          </>
-        )}
-        {showPopup && (
-          <ConfirmationPopup
-            message="Are you sure you want to delete this item?"
-            onConfirm={() => handleDelete()}
-            onCancel={() => setShowPopup(false)}
-          />
-        )}
+          )}
+        </div>
       </div>
+
+      {/* View Details Modal */}
+      <Modal
+        isOpen={isInventoryModel}
+        onSubmit={() => setIsInventoryModel(false)}
+        onClose={closeInventoryModal}
+        title="Process Details"
+        submitOption={false}
+      >
+        <div className="space-y-6 pt-2">
+          {/* Header Info */}
+          <div className="grid grid-cols-2 gap-4 rounded-xl bg-gray-50 p-4 dark:bg-meta-4">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Process Name</p>
+              <p className="mt-1 font-semibold text-gray-900 dark:text-white">{inventoryDetails?.name}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Process ID</p>
+              <p className="mt-1 font-semibold text-gray-900 dark:text-white">{inventoryDetails?.processID}</p>
+            </div>
+          </div>
+
+          {/* Kit Information */}
+          <div className="space-y-3">
+            <h4 className="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
+              <Package size={16} className="text-primary" />
+              Resource Allocation Summary
+            </h4>
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4 rounded-xl border border-gray-100 p-4 text-sm dark:border-strokedark">
+              <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                <span className="text-gray-500">Target Kits:</span>
+                <span className="font-bold">{inventoryDetails?.processQuantity || 0}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                <span className="text-gray-500">Issued Kits:</span>
+                <span className="font-bold text-emerald-600">{inventoryDetails?.issuedKits || 0}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                <span className="text-gray-500">Kits Shortage:</span>
+                <span className="font-bold text-rose-500">
+                  {Math.abs((inventoryDetails?.processQuantity || 0) - (inventoryDetails?.issuedKits || 0))}
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                <span className="text-gray-500">Surplus Kits:</span>
+                <span className="font-bold text-blue-500">
+                  {((inventoryDetails?.issuedKits || 0) > (inventoryDetails?.processQuantity || 0)) ? Math.abs((inventoryDetails?.inventoryQuantity || 0) - (inventoryDetails?.processQuantity || 0)) : 0}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Carton Information */}
+          {packagingData && packagingData.length > 0 && (
+            <div className="space-y-3">
+              <h4 className="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
+                <Layers size={16} className="text-purple-500" />
+                Carton Distribution
+              </h4>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-4 rounded-xl border border-gray-100 p-4 text-sm dark:border-strokedark">
+                <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                  <span className="text-gray-500">Req. Cartons:</span>
+                  <span className="font-bold">
+                    {Math.ceil((inventoryDetails?.processQuantity || 0) / (packagingData[0]?.packagingData?.maxCapacity || 1))}
+                  </span>
+                </div>
+                <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                  <span className="text-gray-500">Issued Cartons:</span>
+                  <span className="font-bold">{inventoryDetails?.cartonQuantity || 0}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Assign Kits to Line Modal */}
+      <Modal
+        isOpen={issuedKitsToLineModel}
+        onSubmit={handleKitsToLine}
+        onClose={closeIssuedKitsToLineModel}
+        title="Assign Kits to Line (Stage Mapping)"
+        submitOption={true}
+      >
+        <div className="space-y-4 pt-2">
+          {startLineStage?.map((value, index) => (
+            <div key={index} className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-strokedark dark:bg-meta-4">
+              <div className="grid grid-cols-2 gap-y-3 text-sm border-b border-gray-200 pb-3 mb-3 dark:border-strokedark">
+                <div className="flex flex-col">
+                  <span className="text-xs text-gray-500 uppercase tracking-wider font-bold">Location</span>
+                  <span className="font-medium text-gray-900 dark:text-white mt-0.5">Row {value.key.split('-')[0]}, Seat {value.key.split('-')[1]}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-gray-500 uppercase tracking-wider font-bold">Stage</span>
+                  <span className="font-medium text-gray-900 dark:text-white mt-0.5">{value.data[0]?.name || "N/A"}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-gray-500 uppercase tracking-wider font-bold">Kits Allocated</span>
+                  <span className="font-medium text-blue-600 mt-0.5">{value.issuedKits} Total</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase text-gray-500">
+                  Kits to assign this line
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max={value.issuedKits}
+                  required
+                  value={value.data?.[0]?.totalUPHA || ""}
+                  onChange={(e) => {
+                    let kitsValue = parseInt(e.target.value) || 0;
+                    if (kitsValue > value.issuedKits) kitsValue = value.issuedKits;
+
+                    const updatedStages = [...startLineStage];
+                    const updatedStage = { ...updatedStages[index] };
+
+                    if (!Array.isArray(updatedStage.data)) updatedStage.data = [];
+                    updatedStage.data[0] = { ...updatedStage.data[0], totalUPHA: kitsValue };
+
+                    updatedStages[index] = updatedStage;
+                    setStartLineStage(updatedStages);
+                  }}
+                  placeholder="Quantity"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Modal>
+
+      <ToastContainer position="top-right" autoClose={3000} />
     </div>
   );
 };

@@ -116,6 +116,10 @@ const AllocationManagement = () => {
 
   const handleSubmitCarton = async () => {
     try {
+      if (selectedProcessDetails.status === "completed") {
+        toast.error("Process is already fully allocated");
+        return;
+      }
       const data = new FormData();
       data.append("process", selectedProcess);
       data.append("issueCartonProcess", issueCartonProcess);
@@ -135,6 +139,10 @@ const AllocationManagement = () => {
       data.append("process", selectedProcess);
       data.append("issuedKits", issueKitProcess);
 
+      if (selectedProcessDetails.status === "completed") {
+        toast.error("Process is already fully allocated");
+        return;
+      }
       const needed = (selectedProcessDetails.processQuantity || 0) - (selectedProcessDetails.issuedKits || 0);
       const input = parseInt(issueKitProcess) || 0;
 
@@ -268,7 +276,7 @@ const AllocationManagement = () => {
     {
       name: "Actions",
       cell: (row: Inventory) => {
-        const kitComplete = row.issuedKits >= row.processQuantity;
+        const kitComplete = row.issuedKits >= row.processQuantity || row.status === "completed";
 
         // Calculate estimated cartons needed if packaging info exists
         let cartonsNeeded = 0;
@@ -280,7 +288,7 @@ const AllocationManagement = () => {
           cartonsNeeded = Math.ceil(row.processQuantity / packStep.packagingData.maxCapacity);
         }
 
-        const cartonComplete = cartonsNeeded > 0 && row.cartonQuantity >= cartonsNeeded;
+        const cartonComplete = (cartonsNeeded > 0 && row.cartonQuantity >= cartonsNeeded) || row.status === "completed";
 
         return (
           <div className="flex items-center gap-2">
@@ -512,7 +520,7 @@ const AllocationManagement = () => {
           (() => {
             const needed = (selectedInventory?.processQuantity || 0) - (selectedInventory?.issuedKits || 0);
             const input = parseInt(issueKitProcess) || 0;
-            return needed <= 0 || input <= 0 || input > needed;
+            return selectedInventory?.status === "completed" || needed <= 0 || input <= 0 || input > needed;
           })()
         }
       >
