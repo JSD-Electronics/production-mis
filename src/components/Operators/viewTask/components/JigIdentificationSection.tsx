@@ -139,26 +139,64 @@ export default function JigIdentificationSection({
                     const fieldName = field.jigName;
                     let foundValue = undefined;
 
-                    // Check top level or nested
-                    if (parsedData[fieldName]) {
+                    // Check top level or nested - strictly ensuring it's a string
+                    if (parsedData[fieldName] && typeof parsedData[fieldName] === 'string') {
                         foundValue = parsedData[fieldName];
                     } else {
                         for (const section in parsedData) {
-                            if (typeof parsedData[section] === 'object' && parsedData[section][fieldName]) {
+                            if (typeof parsedData[section] === 'object' && parsedData[section][fieldName] && typeof parsedData[section][fieldName] === 'string') {
                                 foundValue = parsedData[section][fieldName];
                                 break;
                             }
                         }
                     }
 
-                    if (foundValue !== undefined && String(foundValue).trim() !== "") {
-                        capturedFields[fieldName] = String(foundValue).trim();
+                    if (foundValue !== undefined && String(foundValue).trim() !== "" && typeof foundValue === 'string') {
+                        const trimmedVal = foundValue.trim();
+
+                        // Validation Check: Ensure data is complete according to field rules
+                        let isFieldValid = true;
+                        const vtype = field.validationType;
+
+                        if (vtype === "length") {
+                            const len = trimmedVal.length;
+                            const from = Number(field.lengthFrom);
+                            const to = Number(field.lengthTo);
+                            if (!isNaN(from) && !isNaN(to)) {
+                                if (len < from || len > to) isFieldValid = false;
+                            }
+                        } else if (vtype === "value") {
+                            const expected = (field.value || "").trim();
+                            if (expected && trimmedVal !== expected) {
+                                // For value matching, it might be partial if it's arriving in chunks
+                                // but if we expect a specific value, it must match.
+                                if (!expected.startsWith(trimmedVal)) {
+                                    isFieldValid = false;
+                                } else if (trimmedVal !== expected) {
+                                    isFieldValid = false; // Still waiting for full value
+                                }
+                            }
+                        } else if (vtype === "range") {
+                            // Range matching is hard to do partially, so we just check if it's within range
+                            const num = Number(trimmedVal);
+                            const from = Number(field.rangeFrom);
+                            const to = Number(field.rangeTo);
+                            if (!isNaN(num) && !isNaN(from) && !isNaN(to)) {
+                                if (num < from || num > to) isFieldValid = false;
+                            }
+                        }
+
+                        if (isFieldValid) {
+                            capturedFields[fieldName] = trimmedVal;
+                        } else {
+                            allFound = false;
+                        }
                     } else {
                         allFound = false;
                     }
                 }
 
-                if (allFound && Object.keys(capturedFields).length > 0) {
+                if (allFound && Object.keys(capturedFields).length === jigStageFields.length) {
                     clearTimeout(timeoutId);
                     addLog('info', `Identification successful: ${JSON.stringify(capturedFields)}`);
                     await onIdentify(capturedFields);

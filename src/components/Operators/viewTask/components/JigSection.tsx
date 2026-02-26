@@ -282,11 +282,11 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
 
       currentSubStep.jigFields.forEach((field: any) => {
         let receivedValueString: string | null = null;
-        if (parsedData[field.jigName]) {
+        if (parsedData[field.jigName] && typeof parsedData[field.jigName] === "string") {
           receivedValueString = parsedData[field.jigName];
         } else {
           for (const sectionKey in parsedData) {
-            if (typeof parsedData[sectionKey] === 'object' && parsedData[sectionKey][field.jigName]) {
+            if (typeof parsedData[sectionKey] === 'object' && parsedData[sectionKey][field.jigName] && typeof parsedData[sectionKey][field.jigName] === "string") {
               receivedValueString = parsedData[sectionKey][field.jigName];
               break;
             }
@@ -294,41 +294,66 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
         }
 
         if (receivedValueString !== null && receivedValueString !== undefined) {
-          matchCount++;
+          const trimmedVal = receivedValueString.trim();
+          let isFieldMatch = true;
 
           if (field.validationType === 'range') {
-            const val = parseFloat(receivedValueString);
+            const val = parseFloat(trimmedVal);
             if (!isNaN(val)) {
               const min = field.rangeFrom !== null ? parseFloat(field.rangeFrom) : -Infinity;
               const max = field.rangeTo !== null ? parseFloat(field.rangeTo) : Infinity;
 
               if (val < min || val > max) {
                 allPassed = false;
-                failedFields.push(`${field.jigName} (${receivedValueString} out of range ${min}-${max})`);
+                failedFields.push(`${field.jigName} (${trimmedVal} out of range ${min}-${max})`);
+                isFieldMatch = true; // It's a match, but failed validation
               }
             } else {
               allPassed = false;
-              failedFields.push(`${field.jigName} (Invalid numeric value: ${receivedValueString})`);
+              failedFields.push(`${field.jigName} (Invalid numeric value: ${trimmedVal})`);
+              isFieldMatch = true;
             }
           } else if (field.validationType === 'value') {
             if (field.value && field.value.trim() !== "") {
               const expected = field.value.trim();
-              const received = receivedValueString.toString().trim();
-
-              if (expected !== received) {
-                const numExp = parseFloat(expected);
-                const numRec = parseFloat(received);
-                if (!isNaN(numExp) && !isNaN(numRec)) {
-                  if (Math.abs(numExp - numRec) > 0.1) {
-                    allPassed = false;
-                    failedFields.push(`${field.jigName} (Expected: ${expected}, Got: ${received})`);
-                  }
+              if (expected !== trimmedVal) {
+                // Check if it's a partial match we should wait for
+                if (expected.startsWith(trimmedVal)) {
+                  isFieldMatch = false; // Still waiting for full value match
                 } else {
-                  allPassed = false;
-                  failedFields.push(`${field.jigName} (Expected: ${expected}, Got: ${received})`);
+                  // Actual mismatch
+                  const numExp = parseFloat(expected);
+                  const numRec = parseFloat(trimmedVal);
+                  if (!isNaN(numExp) && !isNaN(numRec)) {
+                    if (Math.abs(numExp - numRec) > 0.1) {
+                      allPassed = false;
+                      failedFields.push(`${field.jigName} (Expected: ${expected}, Got: ${trimmedVal})`);
+                    }
+                  } else {
+                    allPassed = false;
+                    failedFields.push(`${field.jigName} (Expected: ${expected}, Got: ${trimmedVal})`);
+                  }
+                  isFieldMatch = true;
                 }
               }
             }
+          } else if (field.validationType === 'length') {
+            const len = trimmedVal.length;
+            const from = Number(field.lengthFrom);
+            const to = Number(field.lengthTo);
+            if (!isNaN(from) && !isNaN(to)) {
+              if (len < from) {
+                isFieldMatch = false; // Still waiting for more characters
+              } else if (len > to) {
+                allPassed = false;
+                failedFields.push(`${field.jigName} (Length ${len} exceeds max ${to})`);
+                isFieldMatch = true;
+              }
+            }
+          }
+
+          if (isFieldMatch) {
+            matchCount++;
           }
         }
       });
@@ -661,10 +686,10 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
           if (isStoreToDb && currentSubStep.jigFields) {
             currentSubStep.jigFields.forEach((field: any) => {
               const fieldName = field.jigName;
-              let val = parsedData[fieldName];
+              let val = (parsedData[fieldName] && typeof parsedData[fieldName] === "string") ? parsedData[fieldName] : undefined;
               if (val === undefined) {
                 for (const sectionKey in parsedData) {
-                  if (typeof parsedData[sectionKey] === 'object' && parsedData[sectionKey][fieldName]) {
+                  if (typeof parsedData[sectionKey] === 'object' && parsedData[sectionKey][fieldName] && typeof parsedData[sectionKey][fieldName] === "string") {
                     val = parsedData[sectionKey][fieldName];
                     break;
                   }
