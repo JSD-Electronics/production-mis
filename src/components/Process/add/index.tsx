@@ -16,7 +16,7 @@ import {
   Hash,
   Layers,
   AlignLeft,
-} from "lucide-react"; // âœ… Import icons
+} from "lucide-react"; //  Import icons
 
 const AddProcess = () => {
   const [name, setName] = useState("");
@@ -143,7 +143,7 @@ const AddProcess = () => {
           <div className="rounded-xl border border-stroke bg-white shadow-lg dark:border-strokedark dark:bg-boxdark">
             <div className="border-b border-stroke px-6.5 py-4 dark:border-strokedark flex justify-between items-center">
               <h3 className="text-lg font-semibold text-black dark:text-white">
-                âž• Add New Process
+                Add New Process
               </h3>
             </div>
 

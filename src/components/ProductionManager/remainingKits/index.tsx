@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
-import { fetchList, updateInventoryById, createProcessKits } from "@/lib/api";
+import { fetchList, updateInventoryById, createProcessKits, getUseTypeByType } from "@/lib/api";
 import { Inventory } from "@/types/inventory";
 import { useRouter } from "next/navigation";
 import {
@@ -38,10 +38,46 @@ const ViewProcessInventory = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isInventoryModel, setIsInventoryModel] = useState(false);
   const [inventoryDetails, setInventoryDetails] = useState<any>({});
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
 
   useEffect(() => {
+    checkPermission();
     getRemainingKitsToProcess();
   }, []);
+
+  const checkPermission = async () => {
+    try {
+      const userDetails = JSON.parse(localStorage.getItem("userDetails") || "{}");
+      const userType = userDetails.userType;
+
+      if (!userType) {
+        router.push("/");
+        return;
+      }
+
+      if (userType.toLowerCase() === "admin") {
+        setHasPermission(true);
+        return;
+      }
+
+      const result = await getUseTypeByType();
+      const permissions = result.userType[0].roles;
+      const normalizedUserType = userType.toLowerCase().replace(/\s+/g, "_");
+
+      // The key for "Remaining Kits" in roles is "remaining_kits"
+      const permitted = permissions["remaining_kits"]?.[normalizedUserType];
+
+      if (!permitted) {
+        toast.error("You do not have permission to access this page.");
+        router.push("/dashboard");
+      } else {
+        setHasPermission(true);
+      }
+    } catch (error) {
+      console.error("Permission check failed:", error);
+      router.push("/dashboard");
+    }
+  };
 
   const getRemainingKitsToProcess = async () => {
     try {
@@ -236,6 +272,9 @@ const ViewProcessInventory = () => {
       },
     },
   };
+
+  if (hasPermission === null) return null;
+  if (hasPermission === false) return null;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">

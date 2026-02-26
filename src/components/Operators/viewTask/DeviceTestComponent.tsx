@@ -6,6 +6,7 @@ import CartonSearchableInput from "@/components/SearchableInput/CartonSearchable
 import NGModel from "@/components/Operators/viewTask/components/NGModal";
 import {
   createCarton,
+  verifyCartonSticker,
   fetchCartonByProcessID,
   fetchCartons,
   shiftToPDI,
@@ -14,6 +15,7 @@ import {
   getCartonsIntoStore,
   keepCartonInStore,
   updateStageBySerialNo,
+  searchByJigFields,
 } from "@/lib/api";
 import {
   FileText,
@@ -49,11 +51,15 @@ import {
   ChevronUp,
   List,
   RotateCcw,
+  Terminal,
+  Cable,
 } from "lucide-react";
 import Image from "next/image";
 import React, { useEffect, useState } from "react";
 import StickerGenerator from "../viewTask-old/StickerGenerator";
+import { toast } from "react-toastify";
 import JigSection from "./components/JigSection";
+import JigIdentificationSection from "./components/JigIdentificationSection";
 
 interface Cart {
   cartonSerial: string;
@@ -227,32 +233,110 @@ export default function DeviceTestComponent({
   const [ngReason, setNgReason] = useState<string | null>(null);
   const [jigDecision, setJigDecision] = useState<"Pass" | "NG" | null>(null);
   const [currentJigStepIndex, setCurrentJigStepIndex] = useState(0);
-  const [jigResults, setJigResults] = useState<Record<number, { status: "Pass" | "NG"; reason?: string; data?: any; timeTaken?: number }>>(
-    {}
-  );
+  const [jigResults, setJigResults] = useState<
+    Record<
+      number,
+      { status: "Pass" | "NG"; reason?: string; data?: any; timeTaken?: number }
+    >
+  >({});
   const stepStartTimeRef = React.useRef<number>(Date.now());
   const [stepTimeLeft, setStepTimeLeft] = useState<number | null>(null);
   const [isJigConnected, setIsJigConnected] = useState(false);
   const pendingJigErrorRef = React.useRef<string | null>(null);
-  const [pendingJigErrorState, setPendingJigErrorState] = useState<string | null>(null); // For UI feedback if needed
+  const [pendingJigErrorState, setPendingJigErrorState] = useState<
+    string | null
+  >(null); // For UI feedback if needed
   const totalProcessStartTimeRef = React.useRef<number>(Date.now());
-  const [isPreviousStagesModalOpen, setIsPreviousStagesModalOpen] = useState(false);
-  const [isCartonDevicesModalOpen, setIsCartonDevicesModalOpen] = useState(false);
+  const [isPreviousStagesModalOpen, setIsPreviousStagesModalOpen] =
+    useState(false);
+  const [isCartonDevicesModalOpen, setIsCartonDevicesModalOpen] =
+    useState(false);
   const [isVerifyCartonModal, setIsVerifyCartonModal] = useState(false);
+  const [isAllCartonsPopupOpen, setIsAllCartonsPopupOpen] = useState(false);
+  const [verifyingCartonSerial, setVerifyingCartonSerial] = useState<string | null>(
+    null,
+  );
+  const [scannedCartonSerial, setScannedCartonSerial] = useState("");
+  const [isPreviewPrintModalOpen, setIsPreviewPrintModalOpen] = useState(false);
+  const [previewCartonData, setPreviewCartonData] = useState<any>(null);
   const [selectedLogs, setSelectedLogs] = useState<any[]>([]);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
-  const [manualFieldValues, setManualFieldValues] = useState<Record<string, string>>({});
-  const [manualErrors, setManualErrors] = useState<Record<string, string | null>>({});
+  const [manualFieldValues, setManualFieldValues] = useState<
+    Record<string, string>
+  >({});
+  const [manualErrors, setManualErrors] = useState<
+    Record<string, string | null>
+  >({});
   const [isManualValuesModalOpen, setIsManualValuesModalOpen] = useState(false);
   const [hasManualValues, setHasManualValues] = useState(false);
   const [generatedCommand, setGeneratedCommand] = useState<string>("");
+  const [isJigSearching, setIsJigSearching] = useState(false);
+  const [jigSearchError, setJigSearchError] = useState<string | null>(null);
 
-  const handleVerifyCarton = (scannedValue: string) => {
-    if (scannedValue === selectedCarton) {
-      alert("Carton Verified Successfully!");
-      setIsVerifyCartonModal(false);
+  const handleJigIdentification = async (capturedFields: any) => {
+    setIsJigSearching(true);
+    setJigSearchError(null);
+    try {
+      const response = await searchByJigFields({
+        jigFields: capturedFields,
+        processId: processData?._id,
+      });
+      if (response && response.data) {
+        const device = response.data;
+        const serial = device.serialNo || device.serial_no;
+
+        await getDeviceById(device._id);
+        setSearchResult(serial);
+        setSearchQuery(serial);
+
+        // Match manual search reset behavior
+        if (setIsStickerPrinted) setIsStickerPrinted(false);
+        if (setIsVerifiedSticker) setIsVerifiedSticker(false);
+        if (setIsDevicePassed) setIsDevicePassed(false);
+
+        const stageData = Array.isArray(processAssignUserStage)
+          ? processAssignUserStage[0]
+          : processAssignUserStage;
+        const hasPrinter = stageData?.subSteps?.some(
+          (s: any) => s.isPrinterEnable,
+        );
+        if (setIsPassNGButtonShow) {
+          setIsPassNGButtonShow(!hasPrinter);
+        }
+
+        toast.success(`Device Identified: ${serial}`);
+      }
+    } catch (err: any) {
+      const msg =
+        err.response?.data?.message || err.message || "Device not found";
+      setJigSearchError(msg);
+      if (err.response?.status === 409) {
+        toast.error(msg);
+      }
+    } finally {
+      setIsJigSearching(false);
+    }
+  };
+
+  const handleVerifyCarton = async () => {
+    if (!verifyingCartonSerial) return;
+    if (scannedCartonSerial === verifyingCartonSerial) {
+      try {
+        await verifyCartonSticker(verifyingCartonSerial);
+        toast.success("Carton Verified Successfully!");
+        setIsVerifyCartonModal(false);
+        setScannedCartonSerial("");
+        setVerifyingCartonSerial(null);
+        // Refresh cartons
+        if (processData?._id) {
+          fetchProcessCartons();
+          fetchExistingCartonsByProcessID();
+        }
+      } catch (error) {
+        toast.error("Failed to verify carton");
+      }
     } else {
-      alert("Incorrect Carton Serial! Please scan the correct carton.");
+      toast.error("Incorrect Carton Serial! Please scan the correct carton.");
     }
   };
 
@@ -285,16 +369,20 @@ export default function DeviceTestComponent({
       const from = Number(cf?.rangeFrom);
       const to = Number(cf?.rangeTo);
       if (Number.isNaN(num)) return { valid: false, message: "Enter a number" };
-      if (Number.isNaN(from) || Number.isNaN(to)) return { valid: true, message: null };
-      if (num < from || num > to) return { valid: false, message: `Enter between ${from}-${to}` };
+      if (Number.isNaN(from) || Number.isNaN(to))
+        return { valid: true, message: null };
+      if (num < from || num > to)
+        return { valid: false, message: `Enter between ${from}-${to}` };
       return { valid: true, message: null };
     }
     if (vtype === "length") {
       const len = val.length;
       const from = Number(cf?.lengthFrom);
       const to = Number(cf?.lengthTo);
-      if (Number.isNaN(from) || Number.isNaN(to)) return { valid: true, message: null };
-      if (len < from || len > to) return { valid: false, message: `Length ${from}-${to} chars` };
+      if (Number.isNaN(from) || Number.isNaN(to))
+        return { valid: true, message: null };
+      if (len < from || len > to)
+        return { valid: false, message: `Length ${from}-${to} chars` };
       return { valid: true, message: null };
     }
     return { valid: true, message: null };
@@ -307,7 +395,9 @@ export default function DeviceTestComponent({
     setIsManualValuesModalOpen(false);
   }, [currentJigStepIndex]);
 
-  const updateCustomFieldsDataIntoDB = async (values: Record<string, string>) => {
+  const updateCustomFieldsDataIntoDB = async (
+    values: Record<string, string>,
+  ) => {
     try {
       const targetSerial = searchResult || searchQuery;
       if (!targetSerial) return;
@@ -335,9 +425,16 @@ export default function DeviceTestComponent({
 
   const handleManualPass = async () => {
     const currentSubStep = testSteps[currentJigStepIndex];
-    const fields = currentSubStep?.jigFields && currentSubStep.jigFields.length > 0 ? currentSubStep.jigFields : currentSubStep?.customFields;
+    const fields =
+      currentSubStep?.jigFields && currentSubStep.jigFields.length > 0
+        ? currentSubStep.jigFields
+        : currentSubStep?.customFields;
 
-    if (currentSubStep?.stepType === "manual" && Array.isArray(fields) && fields.length > 0) {
+    if (
+      currentSubStep?.stepType === "manual" &&
+      Array.isArray(fields) &&
+      fields.length > 0
+    ) {
       const hasError = fields.some((cf: any) => {
         const name = cf?.fieldName || cf?.jigName;
         const v = manualFieldValues[name ?? ""] ?? "";
@@ -346,7 +443,11 @@ export default function DeviceTestComponent({
       });
       if (hasError) return;
     }
-    if (currentSubStep?.stepType === "manual" && Array.isArray(fields) && fields.length > 0) {
+    if (
+      currentSubStep?.stepType === "manual" &&
+      Array.isArray(fields) &&
+      fields.length > 0
+    ) {
       const collected: Record<string, string> = {};
       fields.forEach((cf: any) => {
         const name = cf?.fieldName || cf?.jigName;
@@ -361,9 +462,16 @@ export default function DeviceTestComponent({
 
   const handleManualNG = async () => {
     const currentSubStep = testSteps[currentJigStepIndex];
-    const fields = currentSubStep?.jigFields && currentSubStep.jigFields.length > 0 ? currentSubStep.jigFields : currentSubStep?.customFields;
+    const fields =
+      currentSubStep?.jigFields && currentSubStep.jigFields.length > 0
+        ? currentSubStep.jigFields
+        : currentSubStep?.customFields;
 
-    if (currentSubStep?.stepType === "manual" && Array.isArray(fields) && fields.length > 0) {
+    if (
+      currentSubStep?.stepType === "manual" &&
+      Array.isArray(fields) &&
+      fields.length > 0
+    ) {
       const collected: Record<string, string> = {};
       fields.forEach((cf: any) => {
         const name = cf?.fieldName || cf?.jigName;
@@ -377,7 +485,10 @@ export default function DeviceTestComponent({
   };
   const handleSubmitManualValues = () => {
     const currentSubStep = testSteps[currentJigStepIndex];
-    const fields = currentSubStep?.jigFields && currentSubStep.jigFields.length > 0 ? currentSubStep.jigFields : currentSubStep?.customFields;
+    const fields =
+      currentSubStep?.jigFields && currentSubStep.jigFields.length > 0
+        ? currentSubStep.jigFields
+        : currentSubStep?.customFields;
 
     if (!Array.isArray(fields) || fields.length === 0) {
       setHasManualValues(true);
@@ -400,22 +511,26 @@ export default function DeviceTestComponent({
     }
   };
 
-  const handleStepDecision = (status: "Pass" | "NG", reason?: string, data?: any, isImmediate = true) => {
+  const handleStepDecision = (
+    status: "Pass" | "NG",
+    reason?: string,
+    data?: any,
+    isImmediate = true,
+  ) => {
     if (jigDecision) {
-
       return;
     }
 
-
     // For the new requirement: If it's a non-immediate NG from the jig, store the reason and wait.
     if (status === "NG" && !isImmediate) {
-
       pendingJigErrorRef.current = reason || "Validation failed";
       setPendingJigErrorState(reason || "Validation failed");
       return;
     }
 
-    const timeTaken = Math.round((Date.now() - stepStartTimeRef.current) / 1000);
+    const timeTaken = Math.round(
+      (Date.now() - stepStartTimeRef.current) / 1000,
+    );
 
     const newResults = {
       ...jigResults,
@@ -449,7 +564,9 @@ export default function DeviceTestComponent({
       const finalStatus = allPassed ? "Pass" : "NG";
       setJigDecision(finalStatus);
 
-      const totalProcessTime = Math.round((Date.now() - totalProcessStartTimeRef.current) / 1000);
+      const totalProcessTime = Math.round(
+        (Date.now() - totalProcessStartTimeRef.current) / 1000,
+      );
 
       if (finalStatus === "Pass") {
         handleUpdateStatus("Pass", "", { ...newResults, totalProcessTime });
@@ -461,8 +578,7 @@ export default function DeviceTestComponent({
     pendingJigErrorRef.current = null;
     setPendingJigErrorState(null);
   };
-  // ... rest of the file ... 
-
+  // ... rest of the file ...
 
   useEffect(() => {
     if (testSteps.length === 0) return;
@@ -472,14 +588,24 @@ export default function DeviceTestComponent({
     const isJigStep = currentSubStep?.stepType === "jig";
     const canStartTimer = !!searchResult;
 
-    if (isJigStep && currentSubStep?.ngTimeout > 0 && !jigDecision && !isdevicePassed && searchResult && canStartTimer) {
+    if (
+      isJigStep &&
+      currentSubStep?.ngTimeout > 0 &&
+      !jigDecision &&
+      !isdevicePassed &&
+      searchResult &&
+      canStartTimer
+    ) {
       setStepTimeLeft(currentSubStep.ngTimeout);
       const timer = setInterval(() => {
         setStepTimeLeft((prev) => {
           if (prev === null) return null;
           if (prev <= 1) {
             clearInterval(timer);
-            handleStepDecision("NG", pendingJigErrorRef.current || "Step timeout reached");
+            handleStepDecision(
+              "NG",
+              pendingJigErrorRef.current || "Step timeout reached",
+            );
             return 0;
           }
           return prev - 1;
@@ -489,7 +615,13 @@ export default function DeviceTestComponent({
     } else {
       setStepTimeLeft(null);
     }
-  }, [currentJigStepIndex, testSteps, jigDecision, isdevicePassed, searchResult]);
+  }, [
+    currentJigStepIndex,
+    testSteps,
+    jigDecision,
+    isdevicePassed,
+    searchResult,
+  ]);
 
   // Reset test state when scanning a new device
   useEffect(() => {
@@ -558,6 +690,85 @@ export default function DeviceTestComponent({
       console.error("Error generating QR Code:", error);
     }
   };
+
+  const handlePrintPreview = () => {
+    const printContent = document.getElementById("carton-sticker-preview");
+    if (!printContent) return;
+
+    const printWindow = window.open("", "_blank", "width=800,height=600");
+    if (printWindow) {
+      // Find the canvas element and get its data URL if it exists
+      const canvas = printContent.querySelector("canvas");
+      const qrImage = canvas ? canvas.toDataURL("image/png") : "";
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Print Carton Sticker</title>
+            <style>
+              @page { size: auto; margin: 0mm; }
+              body { 
+                font-family: 'Courier New', Courier, monospace; 
+                display: flex; 
+                justify-content: center; 
+                align-items: center; 
+                min-height: 100vh; 
+                margin: 0; 
+                color: #000;
+              }
+              .sticker { 
+                border: 1px solid #000; 
+                padding: 10px; 
+                width: 240px; 
+                background: #fff;
+              }
+              .row { 
+                display: flex; 
+                justify-content: space-between; 
+                align-items: flex-start;
+                border-bottom: 1px dashed #eee; 
+                padding: 2px 0;
+                font-size: 9px;
+                gap: 5px;
+              }
+              .row span:first-child { font-weight: bold; color: #777; white-space: nowrap; font-size: 8px; }
+              .row span:last-child { font-weight: 800; text-align: right; word-break: break-all; }
+              .qr-box { 
+                text-align: center; 
+                margin-top: 8px; 
+              }
+              .qr-image { width: 90px; height: 90px; margin-bottom: 2px; }
+              .serial-text { font-size: 9px; font-weight: bold; letter-spacing: 0.5px; }
+              @media print {
+                body { min-height: auto; }
+                .sticker { border: none; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="sticker">
+              <div class="row"><span>PROCESS:</span> <span>${assignedTaskDetails?.processName || "N/A"}</span></div>
+              <div class="row"><span>PRODUCT:</span> <span>${product?.name || "N/A"}</span></div>
+              <div class="row"><span>CARTON SN:</span> <span>${previewCartonData?.cartonSerial}</span></div>
+              <div class="row"><span>QTY:</span> <span>${previewCartonData?.devices?.length || 0} PCS</span></div>
+              <div class="qr-box">
+                ${qrImage ? `<img src="${qrImage}" class="qr-image" />` : ""}
+                <div class="serial-text">${previewCartonData?.cartonSerial}</div>
+              </div>
+            </div>
+            <script>
+              window.onload = function() {
+                window.print();
+                setTimeout(() => { window.close(); }, 500);
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      setIsPreviewPrintModalOpen(false);
+    }
+  };
   const handleGenerateQRCode = async (carton: any) => {
     try {
       if (!carton.cartonSerial) {
@@ -595,13 +806,17 @@ export default function DeviceTestComponent({
       }
 
       if (result) {
-
-        const details = result.cartonDetails || (Array.isArray(result) ? result : [result]);
+        const details =
+          result.cartonDetails || (Array.isArray(result) ? result : [result]);
 
         // Filter out cartons that are shifted to FG/Store
         const activeDetails = details.filter((c: any) => {
-          const status = String(c.status || '').toLowerCase();
-          return !status.includes('store') && !status.includes('fg') && !status.includes('shipped');
+          const status = String(c.status || "").toLowerCase();
+          return (
+            !status.includes("store") &&
+            !status.includes("fg") &&
+            !status.includes("shipped")
+          );
         });
 
         const serials = activeDetails.map((c: any) => c.cartonSerial);
@@ -721,7 +936,9 @@ export default function DeviceTestComponent({
   };
   const handleShiftToPDI = async () => {
     try {
-      const cartonList = Array.isArray(processCartons) ? processCartons : processCartons?.cartonDetails || [];
+      const cartonList = Array.isArray(processCartons)
+        ? processCartons
+        : processCartons?.cartonDetails || [];
       if (cartonList.length === 0) {
         alert("No cartons available to shift.");
         return;
@@ -731,7 +948,7 @@ export default function DeviceTestComponent({
       cartonSerials.forEach((serial: string, index: number) => {
         formData.append(`cartons[${index}]`, serial);
       });
-      const response = await shiftToPDI(formData);
+      const response = await shiftToPDI(cartonSerials);
       if (response) {
         const data = response;
         alert("Cartons shifted to PDI successfully!");
@@ -754,7 +971,6 @@ export default function DeviceTestComponent({
     setSelectedCarton(data[0].cartonSerial);
     setLoadingCartonDevices(false);
     setCartonDevices(data[0].devices);
-
   };
   const getNGAssignOptions = () => {
     const options: any[] = [];
@@ -794,15 +1010,11 @@ export default function DeviceTestComponent({
   };
 
   const handleNG = () => {
-
     handleUpdateStatus("NG", selectAssignDeviceDepartment, jigResults);
     setShowNGModal(false);
-
   };
 
   const handleRetry = () => {
-
-
     // Reset all test state
     setCurrentJigStepIndex(0);
     setJigResults({});
@@ -816,7 +1028,6 @@ export default function DeviceTestComponent({
     stepStartTimeRef.current = Date.now();
 
     // Close modal
-
   };
 
   const handleRefreshSession = () => {
@@ -912,7 +1123,7 @@ export default function DeviceTestComponent({
   };
   const canShowPassNGButtons = (
     deviceTestHistory: any[],
-    currentStageName: string
+    currentStageName: string,
   ) => {
     if (!Array.isArray(deviceTestHistory) || deviceTestHistory.length === 0) {
       return true;
@@ -921,8 +1132,7 @@ export default function DeviceTestComponent({
     const lastEntry = deviceTestHistory[deviceTestHistory.length - 1];
 
     return !(
-      lastEntry.stageName === currentStageName &&
-      lastEntry.status === 'NG'
+      lastEntry.stageName === currentStageName && lastEntry.status === "NG"
     );
   };
 
@@ -937,34 +1147,45 @@ export default function DeviceTestComponent({
       const s = (h?.status || "").toString().toLowerCase();
       return s.includes("resolved");
     });
-  const isAssignedToQCorTRC = lastHistoryEntry?.assignedDeviceTo === "QC" || lastHistoryEntry?.assignedDeviceTo === "TRC";
-  const shouldHideJigInterface = !hasQCResolved && lastHistoryEntry?.status === "NG" && isAssignedToQCorTRC;
+  const isAssignedToQCorTRC =
+    lastHistoryEntry?.assignedDeviceTo === "QC" ||
+    lastHistoryEntry?.assignedDeviceTo === "TRC";
+  const shouldHideJigInterface =
+    !hasQCResolved && lastHistoryEntry?.status === "NG" && isAssignedToQCorTRC;
 
   return (
     <>
       {/* SOP Section */}
-      <div className="mt-4 rounded-xl bg-white shadow-sm border border-gray-100 overflow-hidden transition-all duration-300">
+      <div className="mt-4 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all duration-300">
         <button
           onClick={() => setIsSopOpen(!isSopOpen)}
-          className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors"
+          className="flex w-full items-center justify-between px-5 py-3 transition-colors hover:bg-gray-50"
         >
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-blue-50 rounded-lg text-blue-600">
+            <div className="rounded-lg bg-blue-50 p-1.5 text-blue-600">
               <FileText className="h-4 w-4" />
             </div>
-            <h3 className="text-gray-800 text-sm font-bold">Standard Operating Procedure (SOP)</h3>
-            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-600 uppercase">
+            <h3 className="text-sm font-bold text-gray-800">
+              Standard Operating Procedure (SOP)
+            </h3>
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-600">
               Active
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-gray-400 font-medium">{isSopOpen ? 'Collapse' : 'Expand'}</span>
-            {isSopOpen ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+            <span className="text-[10px] font-medium text-gray-400">
+              {isSopOpen ? "Collapse" : "Expand"}
+            </span>
+            {isSopOpen ? (
+              <ChevronUp className="h-4 w-4 text-gray-400" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-gray-400" />
+            )}
           </div>
         </button>
 
         {isSopOpen && (
-          <div className="px-5 pb-5 pt-2 border-t border-gray-50 animate-in slide-in-from-top-2 duration-300">
+          <div className="animate-in slide-in-from-top-2 border-t border-gray-50 px-5 pb-5 pt-2 duration-300">
             {product?.sopFile ? (
               <div className="space-y-3">
                 {product?.sopFile.endsWith(".pdf") ? (
@@ -974,22 +1195,22 @@ export default function DeviceTestComponent({
                     title="SOP PDF Preview"
                   />
                 ) : product?.sopFile.match(/\.(jpg|jpeg|png|gif)$/i) ? (
-                  <div className="relative group">
+                  <div className="group relative">
                     <Image
                       src={product?.sopFile}
                       alt="SOP Preview"
                       width={800}
                       height={600}
-                      className="max-h-[500px] w-full rounded-lg object-contain bg-gray-50 p-2"
+                      className="max-h-[500px] w-full rounded-lg bg-gray-50 object-contain p-2"
                     />
                   </div>
                 ) : (
-                  <div className="flex justify-center p-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                  <div className="flex justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 p-8">
                     <a
                       href={product?.sopFile}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 rounded-lg bg-blue-700 px-6 py-2.5 text-sm font-bold text-white shadow hover:bg-blue-800 transition-all"
+                      className="flex items-center gap-2 rounded-lg bg-blue-700 px-6 py-2.5 text-sm font-bold text-white shadow transition-all hover:bg-blue-800"
                     >
                       <BookOpenCheck className="h-5 w-5" />
                       Open SOP Reference
@@ -998,7 +1219,7 @@ export default function DeviceTestComponent({
                 )}
               </div>
             ) : (
-              <div className="text-gray-400 py-8 text-center text-xs italic flex flex-col items-center gap-2">
+              <div className="flex flex-col items-center gap-2 py-8 text-center text-xs italic text-gray-400">
                 <FileText className="h-8 w-8 opacity-20" />
                 No SOP content found for this product.
               </div>
@@ -1008,23 +1229,26 @@ export default function DeviceTestComponent({
       </div>
 
       {/* Devices Section */}
-      <div className="mt-4 rounded-xl bg-white p-5 shadow-sm border border-gray-100">
+      <div className="mt-4 rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 pb-4">
           <div className="flex items-center gap-4">
-            <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600">
+            <div className="rounded-xl bg-indigo-50 p-2 text-indigo-600">
               <Cpu className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-gray-800 text-base font-bold leading-tight">Device Testing</h3>
-              <div className="flex items-center gap-3 mt-1">
-                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-50 rounded text-[10px] font-bold text-gray-500 border border-gray-100">
+              <h3 className="text-base font-bold leading-tight text-gray-800">
+                Device Testing
+              </h3>
+              <div className="mt-1 flex items-center gap-3">
+                <div className="flex items-center gap-1.5 rounded border border-gray-100 bg-gray-50 px-2 py-0.5 text-[10px] font-bold text-gray-500">
                   <Timer className="h-3 w-3" />
                   ELAPSED: <span className="text-gray-900">{timerDisplay}</span>
                 </div>
-                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-yellow-50 rounded text-[10px] font-bold text-yellow-600 border border-yellow-100">
+                <div className="flex items-center gap-1.5 rounded border border-yellow-100 bg-yellow-50 px-2 py-0.5 text-[10px] font-bold text-yellow-600">
                   <Zap className="h-3 w-3" />
-                  ACTIVE: <span className="text-yellow-700">{deviceDisplay}</span>
+                  ACTIVE:{" "}
+                  <span className="text-yellow-700">{deviceDisplay}</span>
                 </div>
               </div>
             </div>
@@ -1034,14 +1258,21 @@ export default function DeviceTestComponent({
             <button
               onClick={handleRefreshSession}
               title="Refresh – clear current device and restart all operations"
-              className="flex items-center gap-2 rounded-lg bg-orange-50 border border-orange-200 px-4 py-2 text-xs font-bold text-orange-600 hover:bg-orange-100 hover:border-orange-300 transition-all active:scale-95"
+              className="flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-4 py-2 text-xs font-bold text-orange-600 transition-all hover:border-orange-300 hover:bg-orange-100 active:scale-95"
             >
               <RotateCcw className="h-4 w-4" />
               Refresh
             </button>
             <button
+              onClick={() => setIsAllCartonsPopupOpen(true)}
+              className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs font-bold text-indigo-600 transition-all hover:bg-indigo-100 active:scale-95"
+            >
+              <Box className="h-4 w-4" />
+              Carton Details
+            </button>
+            <button
               onClick={() => setIsHistoryOpen(true)}
-              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-indigo-700 transition-all active:scale-95"
+              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow transition-all hover:bg-indigo-700 active:scale-95"
             >
               <History className="h-4 w-4" />
               History
@@ -1049,18 +1280,267 @@ export default function DeviceTestComponent({
           </div>
         </div>
 
+        {/* Carton Details Popup */}
+        <Modal
+          isOpen={isAllCartonsPopupOpen}
+          onClose={() => setIsAllCartonsPopupOpen(false)}
+          title="Carton Tracking & Verification"
+          submitOption={false}
+          width="max-w-4xl"
+        >
+          <div className="space-y-6">
+            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gray-50 text-xs font-bold uppercase tracking-wider text-gray-500">
+                  <tr>
+                    <th className="px-6 py-4">Carton Serial</th>
+                    <th className="px-6 py-4">Devices</th>
+                    <th className="px-6 py-4">Verification</th>
+                    <th className="px-6 py-4 text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(() => {
+                    const cartonList = Array.isArray(processCartons)
+                      ? processCartons
+                      : processCartons?.cartonDetails || [];
+                    return cartonList.length > 0 ? (
+                      cartonList.map((row: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-gray-50/50">
+                          <td className="px-6 py-4 font-bold text-gray-900">
+                            {row?.cartonSerial}
+                          </td>
+                          <td className="px-6 py-4 text-gray-600">
+                            {row?.devices?.length || 0} / {row?.maxCapacity || 5}
+                          </td>
+                          <td className="px-6 py-4">
+                            {row?.isStickerVerified ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
+                                <CheckCircle className="h-3.5 w-3.5" />
+                                Verified
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-700">
+                                <AlertTriangle className="h-3.5 w-3.5" />
+                                Pending
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex justify-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setPreviewCartonData(row);
+                                  setIsPreviewPrintModalOpen(true);
+                                }}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100"
+                                title="Preview & Print"
+                              >
+                                <Printer className="h-4 w-4" />
+                              </button>
+                              {!row?.isStickerVerified && (
+                                <button
+                                  onClick={() => {
+                                    setVerifyingCartonSerial(row.cartonSerial);
+                                    setIsVerifyCartonModal(true);
+                                  }}
+                                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                                  title="Verify"
+                                >
+                                  <ClipboardCheck className="h-4 w-4" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          className="px-6 py-10 text-center italic text-gray-400"
+                        >
+                          No cartons created yet for this process.
+                        </td>
+                      </tr>
+                    );
+                  })()}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Shift to PDI Footer */}
+            {(() => {
+              const cartonList = Array.isArray(processCartons)
+                ? processCartons
+                : processCartons?.cartonDetails || [];
+              const allVerified =
+                cartonList.length > 0 &&
+                cartonList.every((c: any) => c.isStickerVerified);
+              return (
+                <div className="flex items-center justify-between rounded-xl bg-gray-50 p-4">
+                  <div className="text-sm text-gray-600">
+                    {allVerified ? (
+                      <span className="flex items-center gap-2 font-bold text-green-600">
+                        <CheckCircle className="h-4 w-4" /> All cartons
+                        verified. Ready for PDI.
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2 font-medium text-gray-500">
+                        <AlertTriangle className="h-4 w-4" /> All cartons must
+                        be verified to enable PDI shift.
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    disabled={!allVerified}
+                    onClick={handleShiftToPDI}
+                    className={`flex items-center gap-2 rounded-lg px-6 py-2 text-xs font-bold text-white shadow transition-all ${allVerified ? "bg-indigo-600 hover:bg-indigo-700" : "cursor-not-allowed bg-gray-400"}`}
+                  >
+                    <ArrowRightCircle className="h-4 w-4" />
+                    Shift to PDI
+                  </button>
+                </div>
+              );
+            })()}
+
+            {/* Hidden Barcode Area for Printing */}
+            <div className="hidden">
+              <div id="barcode-area">
+                {Object.keys(qrCartons).map(
+                  (serial) =>
+                    qrCartons[serial] && (
+                      <div key={serial} className="m-4 text-center">
+                        <Canvas
+                          text={serial}
+                          options={{
+                            margin: 2,
+                            scale: 4,
+                            width: 200,
+                            color: { dark: "#000000", light: "#ffffff" },
+                          }}
+                        />
+                        <p className="mt-2 font-bold">{serial}</p>
+                      </div>
+                    ),
+                )}
+              </div>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Verify Carton Serial Modal */}
+        <Modal
+          isOpen={isVerifyCartonModal}
+          onClose={() => {
+            setIsVerifyCartonModal(false);
+            setScannedCartonSerial("");
+          }}
+          title="Verify Carton"
+          onSubmit={handleVerifyCarton}
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Verifying:{" "}
+              <span className="font-bold text-indigo-600">
+                {verifyingCartonSerial}
+              </span>
+            </p>
+            <div>
+              <label className="mb-2 block text-sm font-bold text-gray-700">
+                Scan Carton Serial
+              </label>
+              <input
+                type="text"
+                value={scannedCartonSerial}
+                onChange={(e) => setScannedCartonSerial(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleVerifyCarton();
+                }}
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Scan / Enter carton serial..."
+                autoFocus
+              />
+            </div>
+          </div>
+        </Modal>
+
+        {/* Carton Sticker Preview Modal */}
+        <Modal
+          isOpen={isPreviewPrintModalOpen}
+          onClose={() => setIsPreviewPrintModalOpen(false)}
+          title="Sticker Preview"
+          onSubmit={handlePrintPreview}
+          submitText="Print Sticker"
+        >
+          <div className="flex flex-col items-center gap-6 p-4">
+            <div
+              id="carton-sticker-preview"
+              className="w-[200px] rounded-lg border-2 border-gray-100 bg-white p-3 shadow-sm"
+              style={{
+                fontFamily: "monospace",
+              }}
+            >
+              <div className="space-y-1.5 text-[10px] text-gray-800">
+                <div className="flex justify-between border-b border-gray-50 pb-0.5">
+                  <span className="font-bold uppercase text-gray-400 text-[8px]">Process:</span>
+                  <span className="max-w-[100px] text-right font-black leading-tight text-[9px]">
+                    {assignedTaskDetails?.processName || "N/A"}
+                  </span>
+                </div>
+                <div className="flex justify-between border-b border-gray-50 pb-0.5">
+                  <span className="font-bold uppercase text-gray-400 text-[8px]">Product:</span>
+                  <span className="max-w-[100px] text-right font-black leading-tight text-[9px]">
+                    {product?.name || "N/A"}
+                  </span>
+                </div>
+                <div className="flex justify-between border-b border-gray-50 pb-0.5">
+                  <span className="font-bold uppercase text-gray-400 text-[8px]">Carton SN:</span>
+                  <span className="max-w-[100px] break-all text-right font-black text-indigo-600 text-[9px]">
+                    {previewCartonData?.cartonSerial}
+                  </span>
+                </div>
+                <div className="flex justify-between border-b border-gray-50 pb-0.5">
+                  <span className="font-bold uppercase text-gray-400 text-[8px]">Qty:</span>
+                  <span className="font-black text-[9px]">
+                    {previewCartonData?.devices?.length || 0} PCS
+                  </span>
+                </div>
+
+                <div className="flex flex-col items-center gap-1 pt-2">
+                  <Canvas
+                    text={previewCartonData?.cartonSerial || "N/A"}
+                    options={{
+                      margin: 2,
+                      scale: 4,
+                      width: 90,
+                      color: { dark: "#000000", light: "#ffffff" },
+                    }}
+                  />
+                  <span className="text-[8px] font-bold tracking-wider">
+                    {previewCartonData?.cartonSerial}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-center text-[10px] italic text-gray-500">
+              Verify the details above before printing. Verification is enabled after printing.
+            </p>
+          </div>
+        </Modal>
+
         {/* Content */}
         <div className="mt-5 space-y-5">
-
           {/* Device Search Box */}
           <div
             className={`${isPaused && "blur-sm"
-              } border-gray-200 rounded-xl border bg-white p-4 shadow-sm`}
+              } rounded-xl border border-gray-200 bg-white p-4 shadow-sm`}
           >
             {assignedTaskDetails?.stageType == "common" ? (
               <>
-                <label className="text-gray-600 mb-2 flex items-center gap-2 text-sm font-semibold">
-                  <Search className="text-gray-500 h-4 w-4" />
+                <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-600">
+                  <Search className="h-4 w-4 text-gray-500" />
                   Search Carton
                 </label>
                 <CartonSearchableInput
@@ -1075,44 +1555,77 @@ export default function DeviceTestComponent({
               </>
             ) : (
               <>
-                <label className="text-gray-600 mb-2 flex items-center gap-2 text-sm font-semibold">
-                  <Search className="text-gray-500 h-4 w-4" />
-                  Search Device
-                </label>
-                <SearchableInput
-                  options={deviceList}
-                  checkedDevice={checkedDevice}
-                  searchQuery={searchQuery}
-                  setSearchQuery={setSearchQuery}
-                  onNoResults={handleNoResults}
-                  setSearchResult={setSearchResult}
-                  getDeviceById={getDeviceById}
-                  setIsPassNGButtonShow={setIsPassNGButtonShow}
-                  setIsStickerPrinted={setIsStickerPrinted}
-                  setIsVerifiedSticker={setIsVerifiedSticker}
-                  checkIsPrintEnable={processAssignUserStage?.subSteps?.some(
-                    (s: any) => s.isPrinterEnable,
-                  )}
-                  setIsDevicePassed={setIsDevicePassed}
-                />
+                {(() => {
+                  const stageData = Array.isArray(processAssignUserStage)
+                    ? processAssignUserStage[0]
+                    : processAssignUserStage;
+                  const currentStageName =
+                    stageData?.stageName || stageData?.name || "";
+                  const productStageData = product?.stages?.find(
+                    (s: any) => s.stageName === currentStageName,
+                  );
+
+                  const searchType =
+                    stageData?.searchType || productStageData?.searchType;
+                  const jigStageFields =
+                    stageData?.jigStageFields?.length > 0
+                      ? stageData.jigStageFields
+                      : productStageData?.jigStageFields || [];
+
+                  if (searchType === "Through Jig Stages") {
+                    return !searchResult ? (
+                      <JigIdentificationSection
+                        jigStageFields={jigStageFields}
+                        onIdentify={handleJigIdentification}
+                        isSearching={isJigSearching}
+                        error={jigSearchError}
+                      />
+                    ) : null;
+                  }
+
+                  return (
+                    <>
+                      <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-600">
+                        <Search className="h-4 w-4 text-gray-500" />
+                        Search Device
+                      </label>
+                      <SearchableInput
+                        options={deviceList}
+                        checkedDevice={checkedDevice}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        onNoResults={handleNoResults}
+                        setSearchResult={setSearchResult}
+                        getDeviceById={getDeviceById}
+                        setIsPassNGButtonShow={setIsPassNGButtonShow}
+                        setIsStickerPrinted={setIsStickerPrinted}
+                        setIsVerifiedSticker={setIsVerifiedSticker}
+                        checkIsPrintEnable={processAssignUserStage?.subSteps?.some(
+                          (s: any) => s.isPrinterEnable,
+                        )}
+                        setIsDevicePassed={setIsDevicePassed}
+                      />
+                    </>
+                  );
+                })()}
               </>
             )}
 
             {selectedCarton && (
-              <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="animate-in fade-in slide-in-from-bottom-4 mt-8 grid grid-cols-1 gap-6 duration-500 lg:grid-cols-4">
                 {/* Left Sidebar: Carton Info & QR */}
-                <div className="lg:col-span-5 space-y-6">
-                  <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 h-full flex flex-col justify-between relative overflow-hidden transition-all hover:shadow-md">
-                    <div className="absolute top-0 right-0 p-4 opacity-[0.03] pointer-events-none">
-                      <Package className="w-40 h-40 text-blue-600" />
+                <div className="space-y-6 lg:col-span-5">
+                  <div className="relative flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition-all hover:shadow-md">
+                    <div className="pointer-events-none absolute right-0 top-0 p-4 opacity-[0.03]">
+                      <Package className="h-40 w-40 text-blue-600" />
                     </div>
 
                     <div>
-                      <h3 className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-1">
+                      <h3 className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">
                         Carton Serial
                       </h3>
-                      <div className="flex items-center gap-2 relative z-10">
-                        <h2 className="text-xl font-black text-gray-800 break-all leading-tight">
+                      <div className="relative z-10 flex items-center gap-2">
+                        <h2 className="break-all text-xl font-black leading-tight text-gray-800">
                           {selectedCarton}
                         </h2>
                       </div>
@@ -1125,41 +1638,47 @@ export default function DeviceTestComponent({
                         const count = cartonDevices.length;
 
                         return (
-                          <div className="mt-5 relative z-10">
+                          <div className="relative z-10 mt-5">
                             <span
-                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold border ${isFull
-                                ? "bg-red-50 text-red-700 border-red-100"
-                                : "bg-blue-50 text-blue-700 border-blue-100"
+                              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-bold ${isFull
+                                ? "border-red-100 bg-red-50 text-red-700"
+                                : "border-blue-100 bg-blue-50 text-blue-700"
                                 }`}
                             >
                               {isFull ? (
-                                <AlertTriangle className="w-3.5 h-3.5" />
+                                <AlertTriangle className="h-3.5 w-3.5" />
                               ) : (
-                                <Box className="w-3.5 h-3.5" />
+                                <Box className="h-3.5 w-3.5" />
                               )}
                               {currentCarton?.status?.toUpperCase() || "OPEN"}
                             </span>
                             <div className="mt-4 flex items-center justify-between text-sm">
-                              <span className="text-gray-500 font-medium">Contents</span>
-                              <span className="text-gray-900 font-bold bg-gray-50 px-2 py-0.5 rounded border border-gray-100">{count} Devices</span>
+                              <span className="font-medium text-gray-500">
+                                Contents
+                              </span>
+                              <span className="rounded border border-gray-100 bg-gray-50 px-2 py-0.5 font-bold text-gray-900">
+                                {count} Devices
+                              </span>
                             </div>
                           </div>
                         );
                       })()}
                     </div>
 
-                    <div className="mt-8 space-y-3 relative z-10">
+                    <div className="relative z-10 mt-8 space-y-3">
                       {!qrCartons[selectedCarton] ? (
                         <button
-                          onClick={() => handleCommonGenerateQRCode(selectedCarton)}
-                          className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-200 hover:bg-blue-700 hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-[0.98]"
+                          onClick={() =>
+                            handleCommonGenerateQRCode(selectedCarton)
+                          }
+                          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-200 transition-all hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-xl active:scale-[0.98]"
                         >
                           <QrCode className="h-4 w-4" />
                           Generate QR Code
                         </button>
                       ) : (
-                        <div className="flex flex-col items-center animate-in zoom-in duration-300">
-                          <div className="p-4 bg-white rounded-xl shadow-sm border-2 border-dashed border-gray-200 mb-4 w-full flex justify-center">
+                        <div className="animate-in zoom-in flex flex-col items-center duration-300">
+                          <div className="mb-4 flex w-full justify-center rounded-xl border-2 border-dashed border-gray-200 bg-white p-4 shadow-sm">
                             <Canvas
                               text={selectedCarton}
                               options={{
@@ -1171,17 +1690,17 @@ export default function DeviceTestComponent({
                               }}
                             />
                           </div>
-                          <div className="grid grid-cols-2 gap-2 w-full">
+                          <div className="grid w-full grid-cols-2 gap-2">
                             <button
                               onClick={handlePrint}
-                              className="flex items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-xs font-bold text-white shadow hover:bg-black hover:-translate-y-0.5 transition-all"
+                              className="flex items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3 text-xs font-bold text-white shadow transition-all hover:-translate-y-0.5 hover:bg-black"
                             >
                               <Printer className="h-4 w-4" />
                               Print
                             </button>
                             <button
                               onClick={() => setIsVerifyCartonModal(true)}
-                              className="flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-3 py-3 text-xs font-bold text-white shadow hover:bg-purple-700 hover:-translate-y-0.5 transition-all"
+                              className="flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-3 py-3 text-xs font-bold text-white shadow transition-all hover:-translate-y-0.5 hover:bg-purple-700"
                             >
                               <ClipboardCheck className="h-4 w-4" />
                               Verify
@@ -1195,28 +1714,30 @@ export default function DeviceTestComponent({
 
                 {/* Right Side: Device List Table */}
                 <div className="lg:col-span-5">
-                  <div className="rounded-2xl bg-white shadow-sm border border-gray-100 overflow-hidden flex flex-col h-full">
-                    <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-                      <h4 className="font-bold text-gray-800 flex items-center gap-2">
-                        <List className="w-5 h-5 text-gray-400" />
+                  <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+                    <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-6 py-4">
+                      <h4 className="flex items-center gap-2 font-bold text-gray-800">
+                        <List className="h-5 w-5 text-gray-400" />
                         Device List
                       </h4>
                     </div>
 
                     {loadingCartonDevices ? (
-                      <div className="p-12 text-center text-gray-400 flex flex-col items-center justify-center h-full">
-                        <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-200 border-t-blue-600 mb-4"></div>
-                        <span className="text-sm font-medium">Loading devices...</span>
+                      <div className="flex h-full flex-col items-center justify-center p-12 text-center text-gray-400">
+                        <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-blue-600"></div>
+                        <span className="text-sm font-medium">
+                          Loading devices...
+                        </span>
                       </div>
                     ) : cartonDevices.length === 0 ? (
-                      <div className="p-12 text-center text-gray-400 italic flex flex-col items-center justify-center h-full">
-                        <Box className="w-12 h-12 text-gray-200 mb-2" />
+                      <div className="flex h-full flex-col items-center justify-center p-12 text-center italic text-gray-400">
+                        <Box className="mb-2 h-12 w-12 text-gray-200" />
                         No devices found in this carton.
                       </div>
                     ) : (
-                      <div className="overflow-x-auto flex-1">
+                      <div className="flex-1 overflow-x-auto">
                         <table className="min-w-full text-sm">
-                          <thead className="bg-gray-50 text-gray-500 text-left text-[10px] font-bold uppercase tracking-wider border-b border-gray-100">
+                          <thead className="border-b border-gray-100 bg-gray-50 text-left text-[10px] font-bold uppercase tracking-wider text-gray-500">
                             <tr>
                               <th className="px-6 py-4">Serial No</th>
                               <th className="px-6 py-4">Model & IMEI</th>
@@ -1229,18 +1750,22 @@ export default function DeviceTestComponent({
                           <tbody className="divide-y divide-gray-50">
                             {cartonDevices.map((device, index) => (
                               <React.Fragment key={device._id || index}>
-                                <tr className="group hover:bg-blue-50/30 transition-colors">
-                                  <td className="px-6 py-4 font-bold text-gray-800 text-sm">
+                                <tr className="group transition-colors hover:bg-blue-50/30">
+                                  <td className="px-6 py-4 text-sm font-bold text-gray-800">
                                     {device.serialNo}
                                   </td>
                                   <td className="px-6 py-4">
                                     <div className="flex flex-col">
-                                      <span className="text-gray-900 font-medium">{device.modelName || "N/A"}</span>
-                                      <span className="text-[10px] text-gray-400 font-mono mt-0.5">{device.imeiNo || "N/A"}</span>
+                                      <span className="font-medium text-gray-900">
+                                        {device.modelName || "N/A"}
+                                      </span>
+                                      <span className="font-mono mt-0.5 text-[10px] text-gray-400">
+                                        {device.imeiNo || "N/A"}
+                                      </span>
                                     </div>
                                   </td>
                                   <td className="px-6 py-4">
-                                    <span className="inline-flex rounded px-2 py-1 text-xs font-semibold bg-gray-100 text-gray-600">
+                                    <span className="inline-flex rounded bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">
                                       {device.currentStage}
                                     </span>
                                   </td>
@@ -1248,76 +1773,122 @@ export default function DeviceTestComponent({
                                     <span
                                       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${device.status === "Pass"
                                         ? "bg-green-100 text-green-700"
-                                        : device.status === "Fail" || device.status === "NG"
+                                        : device.status === "Fail" ||
+                                          device.status === "NG"
                                           ? "bg-red-100 text-red-700"
                                           : "bg-gray-100 text-gray-600"
                                         }`}
                                     >
-                                      {device.status === "Pass" && <Check className="w-3 h-3" />}
-                                      {(device.status === "Fail" || device.status === "NG") && <X className="w-3 h-3" />}
+                                      {device.status === "Pass" && (
+                                        <Check className="h-3 w-3" />
+                                      )}
+                                      {(device.status === "Fail" ||
+                                        device.status === "NG") && (
+                                          <X className="h-3 w-3" />
+                                        )}
                                       {device.status || "N/A"}
                                     </span>
                                   </td>
                                   <td className="px-6 py-4 text-xs text-gray-500">
-                                    {new Date(device.createdAt).toLocaleDateString()}
+                                    {new Date(
+                                      device.createdAt,
+                                    ).toLocaleDateString()}
                                     <span className="block text-[10px] text-gray-400">
-                                      {new Date(device.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                      {new Date(
+                                        device.createdAt,
+                                      ).toLocaleTimeString([], {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
                                     </span>
                                   </td>
                                   <td className="px-6 py-4 text-center">
                                     {device.testRecords?.length > 0 ? (
-                                      <div className="relative group/tooltip">
-                                        <span className="cursor-help text-xs font-medium text-blue-600 border-b border-dotted border-blue-600">
+                                      <div className="group/tooltip relative">
+                                        <span className="cursor-help border-b border-dotted border-blue-600 text-xs font-medium text-blue-600">
                                           {device.testRecords.length} Records
                                         </span>
                                       </div>
                                     ) : (
-                                      <span className="text-gray-300 text-xs">-</span>
+                                      <span className="text-xs text-gray-300">
+                                        -
+                                      </span>
                                     )}
                                   </td>
                                 </tr>
                                 {/* Expanded Details for Records */}
                                 {device.testRecords?.length > 0 && (
                                   <tr className="bg-gray-50/50">
-                                    <td colSpan={6} className="px-6 py-3 border-b border-gray-100 shadow-inner">
+                                    <td
+                                      colSpan={6}
+                                      className="border-b border-gray-100 px-6 py-3 shadow-inner"
+                                    >
                                       <div className="flex gap-2 overflow-x-auto pb-1">
-                                        {device.testRecords.map((record: any, rIndex: number) => (
-                                          <div key={rIndex} className="flex-shrink-0 bg-white rounded-lg border border-gray-200 p-3 min-w-[200px] shadow-sm">
-                                            <div className="flex justify-between items-start mb-2">
-                                              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{record.stageName}</span>
-                                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${record.status === 'Pass' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{record.status}</span>
-                                            </div>
-                                            <div className="text-xs space-y-1 text-gray-600">
-                                              <div className="flex justify-between"><span>Seat:</span> <span className="font-medium text-gray-900">{record.seatNumber}</span></div>
-                                              <div className="flex justify-between">
-                                                <span>User:</span>
-                                                <span className="font-medium text-gray-900">
-                                                  {typeof record.operatorId === 'object' ? record.operatorId.name : record.operatorId}
+                                        {device.testRecords.map(
+                                          (record: any, rIndex: number) => (
+                                            <div
+                                              key={rIndex}
+                                              className="min-w-[200px] flex-shrink-0 rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
+                                            >
+                                              <div className="mb-2 flex items-start justify-between">
+                                                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                                                  {record.stageName}
+                                                </span>
+                                                <span
+                                                  className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${record.status === "Pass" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}
+                                                >
+                                                  {record.status}
                                                 </span>
                                               </div>
-                                              {record.planId && (
+                                              <div className="space-y-1 text-xs text-gray-600">
                                                 <div className="flex justify-between">
-                                                  <span>Plan:</span>
-                                                  <span className="font-medium text-gray-900 truncate ml-2">
-                                                    {typeof record.planId === 'object' ? record.planId.processName : record.planId}
+                                                  <span>Seat:</span>{" "}
+                                                  <span className="font-medium text-gray-900">
+                                                    {record.seatNumber}
                                                   </span>
                                                 </div>
-                                              )}
-                                              {record.logs && record.logs.length > 0 && (
-                                                <button
-                                                  onClick={() => {
-                                                    setSelectedLogs(record.logs);
-                                                    setIsLogsModalOpen(true);
-                                                  }}
-                                                  className="mt-2 text-[10px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 uppercase tracking-tighter"
-                                                >
-                                                  <Terminal className="w-3 h-3" />
-                                                  View Detailed Logs
-                                                </button>
-                                              )}
+                                                <div className="flex justify-between">
+                                                  <span>User:</span>
+                                                  <span className="font-medium text-gray-900">
+                                                    {typeof record.operatorId ===
+                                                      "object"
+                                                      ? record.operatorId.name
+                                                      : record.operatorId}
+                                                  </span>
+                                                </div>
+                                                {record.planId && (
+                                                  <div className="flex justify-between">
+                                                    <span>Plan:</span>
+                                                    <span className="ml-2 truncate font-medium text-gray-900">
+                                                      {typeof record.planId ===
+                                                        "object"
+                                                        ? record.planId
+                                                          .processName
+                                                        : record.planId}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                                {record.logs &&
+                                                  record.logs.length > 0 && (
+                                                    <button
+                                                      onClick={() => {
+                                                        setSelectedLogs(
+                                                          record.logs,
+                                                        );
+                                                        setIsLogsModalOpen(
+                                                          true,
+                                                        );
+                                                      }}
+                                                      className="mt-2 flex items-center gap-1 text-[10px] font-bold uppercase tracking-tighter text-blue-600 hover:text-blue-800"
+                                                    >
+                                                      <Terminal className="h-3 w-3" />
+                                                      View Detailed Logs
+                                                    </button>
+                                                  )}
+                                              </div>
                                             </div>
-                                          </div>
-                                        ))}
+                                          ),
+                                        )}
                                       </div>
                                     </td>
                                   </tr>
@@ -1329,21 +1900,19 @@ export default function DeviceTestComponent({
                       </div>
                     )}
 
-                    <div className="p-4 border-t border-gray-100 bg-gray-50/30 flex justify-end gap-3">
+                    <div className="flex justify-end gap-3 border-t border-gray-100 bg-gray-50/30 p-4">
                       {assignUserStage?.stage === "FG to Store" && (
                         <button
                           onClick={() => handleKeepInStore(selectedCarton)}
-                          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-green-200 hover:shadow-xl hover:shadow-green-300 hover:-translate-y-0.5 transition-all active:scale-95"
+                          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-green-200 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-green-300 active:scale-95"
                         >
                           <Box className="h-5 w-5" />
                           Keep in Store
                         </button>
                       )}
                       <button
-                        onClick={() =>
-                          handleShiftToNextStage(selectedCarton)
-                        }
-                        className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-200 hover:shadow-xl hover:shadow-blue-300 hover:-translate-y-0.5 transition-all active:scale-95"
+                        onClick={() => handleShiftToNextStage(selectedCarton)}
+                        className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-200 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-blue-300 active:scale-95"
                       >
                         Shift to Next Stage
                         <ArrowRightCircle className="h-5 w-5" />
@@ -1360,50 +1929,53 @@ export default function DeviceTestComponent({
                   submitOption={false}
                   onSubmit={() => { }}
                 >
-                  <div className="p-6 space-y-6">
-                    <div className="flex flex-col items-center justify-center text-center space-y-4">
-                      <div className="p-4 bg-blue-50 rounded-full text-blue-600">
-                        <ScanLine className="w-8 h-8" />
+                  <div className="space-y-6 p-6">
+                    <div className="flex flex-col items-center justify-center space-y-4 text-center">
+                      <div className="rounded-full bg-blue-50 p-4 text-blue-600">
+                        <ScanLine className="h-8 w-8" />
                       </div>
                       <div>
-                        <h4 className="text-lg font-bold text-gray-900">Scan QR Code</h4>
-                        <p className="text-sm text-gray-500">Please scan the printed carton sticker QR code to verify details.</p>
+                        <h4 className="text-lg font-bold text-gray-900">
+                          Scan QR Code
+                        </h4>
+                        <p className="text-sm text-gray-500">
+                          Please scan the printed carton sticker QR code to
+                          verify details.
+                        </p>
                       </div>
                     </div>
 
                     <input
                       autoFocus
                       placeholder="Scan Carton QR Code..."
-                      className="w-full rounded-xl border-2 border-gray-200 px-4 py-4 text-center text-lg font-mono placeholder:font-sans focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                      className="font-mono placeholder:font-sans w-full rounded-xl border-2 border-gray-200 px-4 py-4 text-center text-lg outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
+                        if (e.key === "Enter") {
                           handleVerifyCarton(e.currentTarget.value);
-                          e.currentTarget.value = '';
+                          e.currentTarget.value = "";
                         }
                       }}
                     />
                     <div className="text-center">
-                      <span className="text-xs text-gray-400 font-medium">Verified cartons can be processed for shipping or PDI.</span>
+                      <span className="text-xs font-medium text-gray-400">
+                        Verified cartons can be processed for shipping or PDI.
+                      </span>
                     </div>
                   </div>
                 </Modal>
 
-
-
-
-
                 {/* Device List Hidden */}
-                <div style={{ display: 'none' }}>
+                <div style={{ display: "none" }}>
                   {loadingCartonDevices ? (
-                    <p className="text-gray-500 p-4">Loading devices...</p>
+                    <p className="p-4 text-gray-500">Loading devices...</p>
                   ) : cartonDevices.length === 0 ? (
-                    <p className="text-red-500 p-4">
+                    <p className="p-4 text-red-500">
                       No devices found for this carton.
                     </p>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="min-w-full text-sm">
-                        <thead className="bg-gray-100 text-gray-600 text-left text-xs font-semibold uppercase tracking-wider">
+                        <thead className="bg-gray-100 text-left text-xs font-semibold uppercase tracking-wider text-gray-600">
                           <tr>
                             <th className="px-4 py-3">Serial No</th>
                             <th className="px-4 py-3">Model</th>
@@ -1414,13 +1986,13 @@ export default function DeviceTestComponent({
                             <th className="px-4 py-3">Test Records</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-gray-200 divide-y">
+                        <tbody className="divide-y divide-gray-200">
                           {cartonDevices.map((device, index) => (
                             <tr
                               key={device._id || index}
-                              className="hover:bg-gray-50 transition"
+                              className="transition hover:bg-gray-50"
                             >
-                              <td className="text-gray-800 px-4 py-3 font-medium">
+                              <td className="px-4 py-3 font-medium text-gray-800">
                                 {device.serialNo}
                               </td>
                               <td className="px-4 py-3">
@@ -1453,9 +2025,7 @@ export default function DeviceTestComponent({
                                       <thead className="bg-gray-50 text-gray-600">
                                         <tr>
                                           <th className="px-2 py-1">Stage</th>
-                                          <th className="px-2 py-1">
-                                            Status
-                                          </th>
+                                          <th className="px-2 py-1">Status</th>
                                           <th className="px-2 py-1">Seat</th>
                                           <th className="px-2 py-1">Time</th>
                                           <th className="px-2 py-1">
@@ -1494,7 +2064,7 @@ export default function DeviceTestComponent({
                                     </table>
                                   </div>
                                 ) : (
-                                  <span className="text-gray-400 italic">
+                                  <span className="italic text-gray-400">
                                     No Records
                                   </span>
                                 )}
@@ -1503,7 +2073,7 @@ export default function DeviceTestComponent({
                           ))}
                         </tbody>
                       </table>
-                      <div className="flex justify-end p-4 gap-3">
+                      <div className="flex justify-end gap-3 p-4">
                         {assignUserStage?.stage === "FG to Store" && (
                           <button
                             type="button"
@@ -1516,9 +2086,7 @@ export default function DeviceTestComponent({
                         )}
                         <button
                           type="button"
-                          onClick={() =>
-                            handleShiftToNextStage(selectedCarton)
-                          }
+                          onClick={() => handleShiftToNextStage(selectedCarton)}
                           className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-indigo-700"
                         >
                           <ArrowRightCircle className="h-4 w-4" />
@@ -1531,17 +2099,17 @@ export default function DeviceTestComponent({
               </div>
             )}
             {/* Device Result */}
-            {searchResult ? (
+            {searchResult && (
               <div className="mt-4">
                 <div className="flex flex-col gap-3">
-                  <div className="flex items-center border-b pb-4 justify-between">
-                    <h3 className="text-gray-800 text-sm font-bold">
+                  <div className="flex items-center justify-between border-b pb-4">
+                    <h3 className="text-sm font-bold text-gray-800">
                       {searchResult}
                     </h3>
                     {deviceHistory.length > 0 && (
                       <button
                         onClick={() => setIsPreviousStagesModalOpen(true)}
-                        className="flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600 hover:bg-indigo-100 transition-colors"
+                        className="flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600 transition-colors hover:bg-indigo-100"
                       >
                         <ListChecks className="h-3 w-3" />
                         View Previous Stages
@@ -1550,38 +2118,49 @@ export default function DeviceTestComponent({
                   </div>
 
                   {/* Enhanced Stage Progress Badges */}
-                  <div className="flex flex-nowrap gap-2.5 overflow-x-auto pb-2 no-scrollbar">
-                    {(processData?.stages || []).map((stage: any, idx: number) => {
-                      const stageHistories = deviceHistory.filter((h: any) => h.stageName === stage.stageName);
-                      const isPass = stageHistories.some((h: any) => h.status === "Pass" || h.status === "Completed");
-                      const isNG = !isPass && stageHistories.some((h: any) => h.status === "NG");
+                  <div className="no-scrollbar flex flex-nowrap gap-2.5 overflow-x-auto pb-2">
+                    {(processData?.stages || []).map(
+                      (stage: any, idx: number) => {
+                        const stageHistories = deviceHistory.filter(
+                          (h: any) => h.stageName === stage.stageName,
+                        );
+                        const isPass = stageHistories.some(
+                          (h: any) =>
+                            h.status === "Pass" || h.status === "Completed",
+                        );
+                        const isNG =
+                          !isPass &&
+                          stageHistories.some((h: any) => h.status === "NG");
 
-                      return (
-                        <div
-                          key={idx}
-                          className={`group relative flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all duration-300 shrink-0 ${isPass
-                            ? "bg-green-50/50 text-green-700 border-green-200 shadow-sm hover:shadow-green-100/50"
-                            : isNG
-                              ? "bg-red-50/50 text-red-700 border-red-200 shadow-sm hover:shadow-red-100/50"
-                              : "bg-gray-50 text-gray-400 border-gray-100 opacity-60"
-                            }`}
-                        >
-                          <div className={`p-1 rounded-md ${isPass ? 'bg-green-500/10' : isNG ? 'bg-red-500/10' : 'bg-gray-500/10'}`}>
-                            {isPass ? (
-                              <Check className="w-3 h-3 text-green-600" />
-                            ) : isNG ? (
-                              <XCircle className="w-3 h-3 text-red-600" />
-                            ) : (
-                              <Circle className="w-3 h-3 text-gray-300" />
+                        return (
+                          <div
+                            key={idx}
+                            className={`group relative flex shrink-0 items-center gap-2 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${isPass
+                              ? "border-green-200 bg-green-50/50 text-green-700 shadow-sm hover:shadow-green-100/50"
+                              : isNG
+                                ? "border-red-200 bg-red-50/50 text-red-700 shadow-sm hover:shadow-red-100/50"
+                                : "border-gray-100 bg-gray-50 text-gray-400 opacity-60"
+                              }`}
+                          >
+                            <div
+                              className={`rounded-md p-1 ${isPass ? "bg-green-500/10" : isNG ? "bg-red-500/10" : "bg-gray-500/10"}`}
+                            >
+                              {isPass ? (
+                                <Check className="h-3 w-3 text-green-600" />
+                              ) : isNG ? (
+                                <XCircle className="h-3 w-3 text-red-600" />
+                              ) : (
+                                <Circle className="h-3 w-3 text-gray-300" />
+                              )}
+                            </div>
+                            <span>{stage.stageName}</span>
+                            {isPass && (
+                              <div className="absolute -right-1 -top-1 h-2 w-2 animate-pulse rounded-full border-2 border-white bg-green-500" />
                             )}
                           </div>
-                          <span>{stage.stageName}</span>
-                          {isPass && (
-                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full border-2 border-white animate-pulse" />
-                          )}
-                        </div>
-                      );
-                    })}
+                        );
+                      },
+                    )}
                   </div>
                 </div>
 
@@ -1591,26 +2170,38 @@ export default function DeviceTestComponent({
                     onClose={() => setIsPreviousStagesModalOpen(false)}
                     title="Previous Stages"
                     onSubmit={() => setIsPreviousStagesModalOpen(false)}
-
                   >
                     <div className="mt-2">
-                      <div className="flex items-center gap-2 mb-4">
-                        <ListChecks className="text-gray-400 h-4 w-4" />
-                        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Device History for {searchResult}</span>
+                      <div className="mb-4 flex items-center gap-2">
+                        <ListChecks className="h-4 w-4 text-gray-400" />
+                        <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                          Device History for {searchResult}
+                        </span>
                       </div>
-                      <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                      <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
                         {deviceHistory.map((value, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-100">
+                          <div
+                            key={index}
+                            className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-3"
+                          >
                             <div className="overflow-hidden">
-                              <span className="block text-xs font-bold text-gray-900">{value?.stageName}</span>
-                              <span className="block text-[10px] text-gray-500 mt-0.5">{value?.serialNo}</span>
+                              <span className="block text-xs font-bold text-gray-900">
+                                {value?.stageName}
+                              </span>
+                              <span className="mt-0.5 block text-[10px] text-gray-500">
+                                {value?.serialNo}
+                              </span>
                             </div>
-                            <div className="flex flex-col items-end shrink-0 gap-1">
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${value?.status === "Pass" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                            <div className="flex shrink-0 flex-col items-end gap-1">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${value?.status === "Pass" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}
+                              >
                                 {value?.status}
                               </span>
                               {value?.assignedDeviceTo && (
-                                <span className="text-[10px] text-gray-400">To: {value?.assignedDeviceTo}</span>
+                                <span className="text-[10px] text-gray-400">
+                                  To: {value?.assignedDeviceTo}
+                                </span>
                               )}
                             </div>
                           </div>
@@ -1620,7 +2211,6 @@ export default function DeviceTestComponent({
                   </Modal>
                 )}
                 <div className="my-3 w-full">
-
                   {/* CASE 3: Unified Sequential Flow (Jig, Manual, Printing, Packaging) */}
                   {testSteps.length > 0 &&
                     !deviceHistory.some(
@@ -1633,10 +2223,11 @@ export default function DeviceTestComponent({
                     // (!isdevicePassed || jigDecision) &&
                     !shouldHideJigInterface && (
                       <div className="py-6">
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+                        <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-2">
                           <div className="flex flex-col gap-6">
                             {(() => {
-                              const currentSubStep = testSteps[currentJigStepIndex];
+                              const currentSubStep =
+                                testSteps[currentJigStepIndex];
 
                               return (
                                 <>
@@ -1644,227 +2235,375 @@ export default function DeviceTestComponent({
                                     <>
                                       {/* PROGRESS BAR */}
                                       <div className="mb-2">
-                                        <div className="flex justify-between text-sm font-medium text-gray-500 mb-2">
+                                        <div className="mb-2 flex justify-between text-sm font-medium text-gray-500">
                                           <span className="flex items-center gap-2">
-                                            <ListChecks className="w-4 h-4 text-primary" />
+                                            <ListChecks className="h-4 w-4 text-primary" />
                                             Process Progress
                                           </span>
-                                          <span className="text-gray-700 font-bold">{Math.round(((currentJigStepIndex) / testSteps.length) * 100)}%</span>
+                                          <span className="font-bold text-gray-700">
+                                            {Math.round(
+                                              (currentJigStepIndex /
+                                                testSteps.length) *
+                                              100,
+                                            )}
+                                            %
+                                          </span>
                                         </div>
-                                        <div className="h-2.5 w-full bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                                        <div className="h-2.5 w-full overflow-hidden rounded-full border border-gray-200 bg-gray-100">
                                           <div
-                                            className="h-full bg-primary transition-all duration-500 ease-out rounded-full"
-                                            style={{ width: `${((currentJigStepIndex) / testSteps.length) * 100}%` }}
+                                            className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+                                            style={{
+                                              width: `${(currentJigStepIndex / testSteps.length) * 100}%`,
+                                            }}
                                           />
                                         </div>
                                       </div>
 
                                       {/* JIG STEP UI */}
-                                      {testSteps.some((s: any) => s.stepType === "jig") && (
-                                        <div className={currentSubStep.stepType === "jig" ? "space-y-4" : "hidden"}>
-                                          <div className="flex items-center justify-between">
-                                            <div>
-                                              <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                                                <Cpu className="w-5 h-5 text-blue-600" />
-                                                {currentSubStep.stepName || currentSubStep.name || `Automated Test`}
-                                              </h4>
-                                              <p className="text-sm text-gray-500 ml-7">
-                                                Step {currentJigStepIndex + 1} of {testSteps.length}
-                                              </p>
+                                      {testSteps.some(
+                                        (s: any) => s.stepType === "jig",
+                                      ) && (
+                                          <div
+                                            className={
+                                              currentSubStep.stepType === "jig"
+                                                ? "space-y-4"
+                                                : "hidden"
+                                            }
+                                          >
+                                            <div className="flex items-center justify-between">
+                                              <div>
+                                                <h4 className="flex items-center gap-2 text-lg font-bold text-gray-800">
+                                                  <Cpu className="h-5 w-5 text-blue-600" />
+                                                  {currentSubStep.stepName ||
+                                                    currentSubStep.name ||
+                                                    `Automated Test`}
+                                                </h4>
+                                                <p className="ml-7 text-sm text-gray-500">
+                                                  Step {currentJigStepIndex + 1}{" "}
+                                                  of {testSteps.length}
+                                                </p>
+                                              </div>
+                                              <span className="rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-blue-700">
+                                                Automated Jig
+                                              </span>
                                             </div>
-                                            <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 uppercase tracking-wide border border-blue-200">
-                                              Automated Jig
-                                            </span>
+                                            <JigSection
+                                              key={`jig-${searchResult?.serialNo || searchResult}`}
+                                              subStep={currentSubStep}
+                                              isLastStep={
+                                                currentJigStepIndex ===
+                                                testSteps.length - 1
+                                              }
+                                              onDataReceived={(data: any) => { }}
+                                              onDecision={handleStepDecision}
+                                              onDisconnect={(fn: () => void) => {
+                                                jigDisconnectRef.current = fn;
+                                              }}
+                                              searchQuery={searchQuery}
+                                              onConnectionChange={
+                                                setIsJigConnected
+                                              }
+                                              finalResult={
+                                                jigResults[currentJigStepIndex]
+                                                  ?.status
+                                              }
+                                              finalReason={
+                                                jigResults[currentJigStepIndex]
+                                                  ?.reason
+                                              }
+                                              onStatusUpdate={(
+                                                status: string,
+                                              ) => {
+                                                pendingJigErrorRef.current =
+                                                  status;
+                                              }}
+                                              generatedCommand={generatedCommand}
+                                              setGeneratedCommand={
+                                                setGeneratedCommand
+                                              }
+                                              autoConnect={!!searchResult}
+                                            />
                                           </div>
-                                          <JigSection
-                                            key={`jig-${searchResult?.serialNo || searchResult}`}
-                                            subStep={currentSubStep}
-                                            isLastStep={currentJigStepIndex === testSteps.length - 1}
-                                            onDataReceived={(data: any) => { }}
-                                            onDecision={handleStepDecision}
-                                            onDisconnect={(fn: () => void) => {
-                                              jigDisconnectRef.current = fn;
-                                            }}
-                                            searchQuery={searchQuery}
-                                            onConnectionChange={setIsJigConnected}
-                                            finalResult={jigResults[currentJigStepIndex]?.status}
-                                            finalReason={jigResults[currentJigStepIndex]?.reason}
-                                            onStatusUpdate={(status: string) => {
-                                              pendingJigErrorRef.current = status;
-                                            }}
-                                            generatedCommand={generatedCommand}
-                                            setGeneratedCommand={setGeneratedCommand}
-                                            autoConnect={!!searchResult}
-                                          />
-                                        </div>
-                                      )}
+                                        )}
 
                                       {/* MANUAL STEP UI */}
-                                      {currentSubStep.stepType === "manual" && !currentSubStep.isPrinterEnable && !currentSubStep.isPackagingStatus && (
-                                        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-950/5">
-                                          <div className="bg-orange-50/50 px-6 py-5 border-b border-orange-100 flex items-start gap-4">
-                                            <div className="p-2 bg-orange-100 rounded-lg text-orange-600 shadow-sm shrink-0">
-                                              <ClipboardCheck className="h-6 w-6" />
-                                            </div>
-                                            <div>
-                                              <div className="flex items-center gap-3">
-                                                <h5 className="text-lg font-bold text-gray-900">
-                                                  Manual Verification
-                                                </h5>
-                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 uppercase border border-orange-200">
-                                                  Required
-                                                </span>
+                                      {currentSubStep.stepType === "manual" &&
+                                        !currentSubStep.isPrinterEnable &&
+                                        !currentSubStep.isPackagingStatus && (
+                                          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-950/5">
+                                            <div className="flex items-start gap-4 border-b border-orange-100 bg-orange-50/50 px-6 py-5">
+                                              <div className="shrink-0 rounded-lg bg-orange-100 p-2 text-orange-600 shadow-sm">
+                                                <ClipboardCheck className="h-6 w-6" />
                                               </div>
-                                              <p className="text-sm text-gray-600 mt-1 leading-relaxed">
-                                                Please physically inspect the device and verify correctly.
-                                              </p>
-                                            </div>
-                                            {stepTimeLeft !== null && (
-                                              <div className="ml-auto flex items-center gap-2 rounded-full bg-red-100 px-4 py-1.5 text-red-600 shadow-sm animate-pulse">
-                                                <Timer className="h-4 w-4" />
-                                                <span className="text-xs font-black">
-                                                  NG IN: {stepTimeLeft}s
-                                                </span>
+                                              <div>
+                                                <div className="flex items-center gap-3">
+                                                  <h5 className="text-lg font-bold text-gray-900">
+                                                    Manual Verification
+                                                  </h5>
+                                                  <span className="rounded border border-orange-200 bg-orange-100 px-2 py-0.5 text-[10px] font-bold uppercase text-orange-700">
+                                                    Required
+                                                  </span>
+                                                </div>
+                                                <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                                                  Please physically inspect the
+                                                  device and verify correctly.
+                                                </p>
                                               </div>
-                                            )}
-                                          </div>
+                                              {stepTimeLeft !== null && (
+                                                <div className="ml-auto flex animate-pulse items-center gap-2 rounded-full bg-red-100 px-4 py-1.5 text-red-600 shadow-sm">
+                                                  <Timer className="h-4 w-4" />
+                                                  <span className="text-xs font-black">
+                                                    NG IN: {stepTimeLeft}s
+                                                  </span>
+                                                </div>
+                                              )}
+                                            </div>
 
-                                          <div className="p-6">
-                                            {(() => {
-                                              const fields = currentSubStep?.jigFields && currentSubStep.jigFields.length > 0 ? currentSubStep.jigFields : currentSubStep?.customFields;
-                                              const hasFields = Array.isArray(fields) && fields.length > 0;
+                                            <div className="p-6">
+                                              {(() => {
+                                                const fields =
+                                                  currentSubStep?.jigFields &&
+                                                    currentSubStep.jigFields
+                                                      .length > 0
+                                                    ? currentSubStep.jigFields
+                                                    : currentSubStep?.customFields;
+                                                const hasFields =
+                                                  Array.isArray(fields) &&
+                                                  fields.length > 0;
 
-                                              return (
-                                                <>
-                                                  {!hasManualValues && hasFields && (
-                                                    <div className="flex justify-end w-100">
-                                                      <button
-                                                        onClick={() => setIsManualValuesModalOpen(true)}
-                                                        disabled={!!jigDecision}
-                                                        className="flex items-center w-100 justify-center gap-2 rounded-lg bg-primary px-6 py-3.5 text-sm font-bold text-white shadow-sm hover:bg-primary/90 transition-all active:scale-[0.98]"
-                                                      >
-                                                        <ClipboardList className="h-5 w-5" />
-                                                        Add Value
-                                                      </button>
-                                                    </div>
-                                                  )}
-                                                  {(
-                                                    !hasFields ||
-                                                    hasManualValues
-                                                  ) && (
-                                                      <div className="flex flex-col sm:flex-row gap-4 pt-4">
-                                                        <button
-                                                          onClick={handleManualPass}
-                                                          disabled={
-                                                            !!jigDecision ||
-                                                            (hasFields &&
-                                                              fields.some((cf: any) => {
-                                                                const name = cf?.fieldName || cf?.jigName;
-                                                                const v = manualFieldValues[name ?? ""] ?? "";
-                                                                return !validateCustomField(cf, v).valid;
-                                                              }))
-                                                          }
-                                                          className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
-                                                            ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none"
-                                                            : "bg-success hover:bg-green-600"
-                                                            }`}
-                                                        >
-                                                          <CheckCircle className="h-5 w-5" />
-                                                          Confirm & Mark Pass
-                                                        </button>
-                                                        <button
-                                                          onClick={handleManualNG}
-                                                          disabled={!!jigDecision}
-                                                          className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
-                                                            ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none"
-                                                            : "bg-danger hover:bg-red-600"
-                                                            }`}
-                                                        >
-                                                          <XCircle className="h-5 w-5" />
-                                                          Report Issue (NG)
-                                                        </button>
-                                                      </div>
-                                                    )}
-                                                </>
-                                              );
-                                            })()}
+                                                return (
+                                                  <>
+                                                    {!hasManualValues &&
+                                                      hasFields && (
+                                                        <div className="flex w-100 justify-end">
+                                                          <button
+                                                            onClick={() =>
+                                                              setIsManualValuesModalOpen(
+                                                                true,
+                                                              )
+                                                            }
+                                                            disabled={
+                                                              !!jigDecision
+                                                            }
+                                                            className="flex w-100 items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-primary/90 active:scale-[0.98]"
+                                                          >
+                                                            <ClipboardList className="h-5 w-5" />
+                                                            Add Value
+                                                          </button>
+                                                        </div>
+                                                      )}
+                                                    {(!hasFields ||
+                                                      hasManualValues) && (
+                                                        <div className="flex flex-col gap-4 pt-4 sm:flex-row">
+                                                          <button
+                                                            onClick={
+                                                              handleManualPass
+                                                            }
+                                                            disabled={
+                                                              !!jigDecision ||
+                                                              (hasFields &&
+                                                                fields.some(
+                                                                  (cf: any) => {
+                                                                    const name =
+                                                                      cf?.fieldName ||
+                                                                      cf?.jigName;
+                                                                    const v =
+                                                                      manualFieldValues[
+                                                                      name ?? ""
+                                                                      ] ?? "";
+                                                                    return !validateCustomField(
+                                                                      cf,
+                                                                      v,
+                                                                    ).valid;
+                                                                  },
+                                                                ))
+                                                            }
+                                                            className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
+                                                              ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none"
+                                                              : "bg-success hover:bg-green-600"
+                                                              }`}
+                                                          >
+                                                            <CheckCircle className="h-5 w-5" />
+                                                            Confirm & Mark Pass
+                                                          </button>
+                                                          <button
+                                                            onClick={
+                                                              handleManualNG
+                                                            }
+                                                            disabled={
+                                                              !!jigDecision
+                                                            }
+                                                            className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
+                                                              ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none"
+                                                              : "bg-danger hover:bg-red-600"
+                                                              }`}
+                                                          >
+                                                            <XCircle className="h-5 w-5" />
+                                                            Report Issue (NG)
+                                                          </button>
+                                                        </div>
+                                                      )}
+                                                  </>
+                                                );
+                                              })()}
+                                            </div>
                                           </div>
-                                        </div>
-                                      )}
+                                        )}
                                       <Modal
                                         isOpen={isManualValuesModalOpen}
-                                        onClose={() => setIsManualValuesModalOpen(false)}
+                                        onClose={() =>
+                                          setIsManualValuesModalOpen(false)
+                                        }
                                         onSubmit={handleSubmitManualValues}
                                         title="Add Custom Values"
                                       >
                                         <div className="space-y-4">
                                           {/* Modal Header inside content for full control if standard modal header is hidden or simple */}
                                           <div className="text-center">
-                                            <div className="mx-auto flex items-center justify-center h-10 w-10 rounded-full bg-blue-100 mb-2">
+                                            <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
                                               <ClipboardList className="h-5 w-5 text-blue-600" />
                                             </div>
-                                            <h3 className="text-lg font-bold text-gray-900">Enter Manual Values</h3>
-                                            <p className="text-sm text-gray-500 mt-1">Please provide the required measurements/values below.</p>
+                                            <h3 className="text-lg font-bold text-gray-900">
+                                              Enter Manual Values
+                                            </h3>
+                                            <p className="mt-1 text-sm text-gray-500">
+                                              Please provide the required
+                                              measurements/values below.
+                                            </p>
                                           </div>
 
-                                          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
+                                          <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
                                             {(() => {
-                                              const fields = currentSubStep?.jigFields && currentSubStep.jigFields.length > 0 ? currentSubStep.jigFields : currentSubStep?.customFields;
-                                              return Array.isArray(fields) && fields.length > 0 ? (
-                                                fields.map((cf: any, idx: number) => {
-                                                  const fname = cf?.fieldName || cf?.jigName || `Field ${idx + 1}`;
-                                                  const vtype = cf?.validationType || "value";
-                                                  const inputType = vtype === "range" || vtype === "length" ? "number" : "text"; // Keep text for simplicity, validate logically
-                                                  const val = manualFieldValues[fname] ?? "";
-                                                  const res = validateCustomField(cf, val);
-                                                  const hasError = (!res.valid && val.length > 0) || (manualErrors[fname]);
+                                              const fields =
+                                                currentSubStep?.jigFields &&
+                                                  currentSubStep.jigFields
+                                                    .length > 0
+                                                  ? currentSubStep.jigFields
+                                                  : currentSubStep?.customFields;
+                                              return Array.isArray(fields) &&
+                                                fields.length > 0 ? (
+                                                fields.map(
+                                                  (cf: any, idx: number) => {
+                                                    const fname =
+                                                      cf?.fieldName ||
+                                                      cf?.jigName ||
+                                                      `Field ${idx + 1}`;
+                                                    const vtype =
+                                                      cf?.validationType ||
+                                                      "value";
+                                                    const inputType =
+                                                      vtype === "range" ||
+                                                        vtype === "length"
+                                                        ? "number"
+                                                        : "text"; // Keep text for simplicity, validate logically
+                                                    const val =
+                                                      manualFieldValues[
+                                                      fname
+                                                      ] ?? "";
+                                                    const res =
+                                                      validateCustomField(
+                                                        cf,
+                                                        val,
+                                                      );
+                                                    const hasError =
+                                                      (!res.valid &&
+                                                        val.length > 0) ||
+                                                      manualErrors[fname];
 
-                                                  const baseCls = "w-full rounded-lg border px-4 py-2 text-sm outline-none transition duration-200";
-                                                  const normalCls = "border-gray-200 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
-                                                  const errorCls = "border-red-300 bg-white text-red-900 focus:border-red-500 focus:ring-2 focus:ring-red-100";
+                                                    const baseCls =
+                                                      "w-full rounded-lg border px-4 py-2 text-sm outline-none transition duration-200";
+                                                    const normalCls =
+                                                      "border-gray-200 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+                                                    const errorCls =
+                                                      "border-red-300 bg-white text-red-900 focus:border-red-500 focus:ring-2 focus:ring-red-100";
 
-                                                  return (
-                                                    <div key={idx} className="space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-300" style={{ animationDelay: `${idx * 100}ms` }}>
-                                                      <label className="text-sm font-semibold text-gray-700 flex justify-between">
-                                                        <span>{fname} <span className="text-red-500">*</span></span>
-                                                        <span className="text-xs font-normal text-gray-400">
-                                                          {vtype === "range" ? `Range: ${cf?.rangeFrom} - ${cf?.rangeTo}` :
-                                                            vtype === "value" ? `Exact: ${cf?.value}` : "Required"}
-                                                        </span>
-                                                      </label>
+                                                    return (
+                                                      <div
+                                                        key={idx}
+                                                        className="animate-in fade-in slide-in-from-bottom-2 space-y-1 duration-300"
+                                                        style={{
+                                                          animationDelay: `${idx * 100}ms`,
+                                                        }}
+                                                      >
+                                                        <label className="flex justify-between text-sm font-semibold text-gray-700">
+                                                          <span>
+                                                            {fname}{" "}
+                                                            <span className="text-red-500">
+                                                              *
+                                                            </span>
+                                                          </span>
+                                                          <span className="text-xs font-normal text-gray-400">
+                                                            {vtype === "range"
+                                                              ? `Range: ${cf?.rangeFrom} - ${cf?.rangeTo}`
+                                                              : vtype ===
+                                                                "value"
+                                                                ? `Exact: ${cf?.value}`
+                                                                : "Required"}
+                                                          </span>
+                                                        </label>
 
-                                                      <div className="relative">
-                                                        <input
-                                                          type={inputType === "number" ? "number" : "text"}
-                                                          value={val}
-                                                          autoFocus={idx === 0}
-                                                          onChange={(e) => {
-                                                            const v = e.target.value;
-                                                            setManualFieldValues((prev) => ({ ...prev, [fname]: v }));
-                                                            const r = validateCustomField(cf, v);
-                                                            setManualErrors((prev) => ({ ...prev, [fname]: r.valid ? null : r.message || "Invalid value" }));
-                                                          }}
-                                                          placeholder={`Enter ${fname}`}
-                                                          className={`${baseCls} ${hasError ? errorCls : normalCls}`}
-                                                        />
-                                                        {val && !hasError && (
-                                                          <div className="absolute right-3 top-1/2 -translate-y-1/2 bg-green-100 text-green-700 p-1 rounded-full">
-                                                            <Check className="w-3 h-3" />
-                                                          </div>
+                                                        <div className="relative">
+                                                          <input
+                                                            type={
+                                                              inputType ===
+                                                                "number"
+                                                                ? "number"
+                                                                : "text"
+                                                            }
+                                                            value={val}
+                                                            autoFocus={
+                                                              idx === 0
+                                                            }
+                                                            onChange={(e) => {
+                                                              const v =
+                                                                e.target.value;
+                                                              setManualFieldValues(
+                                                                (prev) => ({
+                                                                  ...prev,
+                                                                  [fname]: v,
+                                                                }),
+                                                              );
+                                                              const r =
+                                                                validateCustomField(
+                                                                  cf,
+                                                                  v,
+                                                                );
+                                                              setManualErrors(
+                                                                (prev) => ({
+                                                                  ...prev,
+                                                                  [fname]:
+                                                                    r.valid
+                                                                      ? null
+                                                                      : r.message ||
+                                                                      "Invalid value",
+                                                                }),
+                                                              );
+                                                            }}
+                                                            placeholder={`Enter ${fname}`}
+                                                            className={`${baseCls} ${hasError ? errorCls : normalCls}`}
+                                                          />
+                                                          {val && !hasError && (
+                                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-green-100 p-1 text-green-700">
+                                                              <Check className="h-3 w-3" />
+                                                            </div>
+                                                          )}
+                                                        </div>
+                                                        {hasError && (
+                                                          <p className="flex items-center gap-1 text-xs font-medium text-red-600">
+                                                            <AlertTriangle className="h-3 w-3" />
+                                                            {manualErrors[
+                                                              fname
+                                                            ] || res.message}
+                                                          </p>
                                                         )}
                                                       </div>
-                                                      {hasError && (
-                                                        <p className="text-xs font-medium text-red-600 flex items-center gap-1">
-                                                          <AlertTriangle className="w-3 h-3" />
-                                                          {manualErrors[fname] || res.message}
-                                                        </p>
-                                                      )}
-                                                    </div>
-                                                  );
-                                                })
+                                                    );
+                                                  },
+                                                )
                                               ) : (
-                                                <div className="p-4 text-center text-sm text-gray-500 bg-white rounded-lg border border-dashed border-gray-300">
-                                                  No custom fields configured for this manual step.
+                                                <div className="rounded-lg border border-dashed border-gray-300 bg-white p-4 text-center text-sm text-gray-500">
+                                                  No custom fields configured
+                                                  for this manual step.
                                                 </div>
                                               );
                                             })()}
@@ -1876,26 +2615,45 @@ export default function DeviceTestComponent({
                                       {currentSubStep.isPrinterEnable && (
                                         <div className="space-y-6">
                                           {!isStickerPrinted ? (
-                                            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-                                              <div className="flex items-center gap-3 mb-6">
+                                            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                                              <div className="mb-6 flex items-center gap-3">
                                                 <Printer className="h-6 w-6 text-primary" />
-                                                <h3 className="text-xl font-bold text-gray-900">Printing Stack</h3>
+                                                <h3 className="text-xl font-bold text-gray-900">
+                                                  Printing Stack
+                                                </h3>
                                               </div>
-                                              <div id="sticker-preview" className="space-y-4">
-                                                {currentSubStep.printerFields?.map((field: any, idx: number) => (
-                                                  <div key={idx} className="flex justify-center mb-4">
-                                                    <StickerGenerator
-                                                      stickerData={field}
-                                                      deviceData={deviceList.filter((d: any) =>
-                                                        String(d.serialNo || d.serial_no || "").trim() === String(searchResult || "").trim()
-                                                      )}
-                                                    />
-                                                  </div>
-                                                ))}
+                                              <div
+                                                id="sticker-preview"
+                                                className="space-y-4"
+                                              >
+                                                {currentSubStep.printerFields?.map(
+                                                  (field: any, idx: number) => (
+                                                    <div
+                                                      key={idx}
+                                                      className="mb-4 flex justify-center"
+                                                    >
+                                                      <StickerGenerator
+                                                        stickerData={field}
+                                                        deviceData={deviceList.filter(
+                                                          (d: any) =>
+                                                            String(
+                                                              d.serialNo ||
+                                                              d.serial_no ||
+                                                              "",
+                                                            ).trim() ===
+                                                            String(
+                                                              searchResult ||
+                                                              "",
+                                                            ).trim(),
+                                                        )}
+                                                      />
+                                                    </div>
+                                                  ),
+                                                )}
                                               </div>
-                                              <div className="flex justify-center mt-6">
+                                              <div className="mt-6 flex justify-center">
                                                 <button
-                                                  className="flex items-center gap-2 rounded-xl bg-primary px-8 py-3.5 text-white font-bold shadow-lg hover:bg-primary/90 transition-all active:scale-95"
+                                                  className="flex items-center gap-2 rounded-xl bg-primary px-8 py-3.5 font-bold text-white shadow-lg transition-all hover:bg-primary/90 active:scale-95"
                                                   onClick={handlePrintSticker}
                                                 >
                                                   <Printer className="h-5 w-5" />
@@ -1904,29 +2662,49 @@ export default function DeviceTestComponent({
                                               </div>
                                             </div>
                                           ) : !isVerifiedSticker ? (
-                                            <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm text-center">
-                                              <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                                            <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+                                              <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-green-50">
                                                 <ScanLine className="h-10 w-10 text-green-600" />
                                               </div>
-                                              <h3 className="text-2xl font-bold text-gray-900 mb-2">Verify Sticker</h3>
-                                              <p className="text-gray-500 mb-8 max-w-xs mx-auto">Please scan or enter the serial number to proceed.</p>
+                                              <h3 className="mb-2 text-2xl font-bold text-gray-900">
+                                                Verify Sticker
+                                              </h3>
+                                              <p className="mx-auto mb-8 max-w-xs text-gray-500">
+                                                Please scan or enter the serial
+                                                number to proceed.
+                                              </p>
                                               <button
-                                                className="flex items-center gap-2 rounded-xl bg-green-600 px-8 py-3.5 text-white font-bold shadow-lg hover:bg-green-700 transition-all active:scale-95 mx-auto"
+                                                className="mx-auto flex items-center gap-2 rounded-xl bg-green-600 px-8 py-3.5 font-bold text-white shadow-lg transition-all hover:bg-green-700 active:scale-95"
                                                 onClick={handleVerifySticker}
                                               >
                                                 <ScanLine className="h-5 w-5" />
                                                 Start Verification
                                               </button>
-                                              <Modal isOpen={isVerifyStickerModal} onSubmit={handleVerifyStickerModal} onClose={closeVerifyStickerModal} title="Verify Sticker">
+                                              <Modal
+                                                isOpen={isVerifyStickerModal}
+                                                onSubmit={
+                                                  handleVerifyStickerModal
+                                                }
+                                                onClose={
+                                                  closeVerifyStickerModal
+                                                }
+                                                title="Verify Sticker"
+                                              >
                                                 <div className="space-y-4">
-                                                  <label className="block text-sm font-bold text-gray-700 mb-2">Enter / Scan Serial Number</label>
+                                                  <label className="mb-2 block text-sm font-bold text-gray-700">
+                                                    Enter / Scan Serial Number
+                                                  </label>
                                                   <input
                                                     type="text"
                                                     value={serialNumber || ""}
                                                     autoComplete="off"
-                                                    onChange={(e) => setSerialNumber(e.target.value)}
+                                                    onChange={(e) =>
+                                                      setSerialNumber(
+                                                        e.target.value,
+                                                      )
+                                                    }
                                                     placeholder="Scan QR code..."
-                                                    className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3.5 text-base font-medium focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 transition-all outline-none"
+                                                    className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3.5 text-base font-medium outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
                                                     autoFocus
                                                   />
                                                 </div>
@@ -1934,33 +2712,47 @@ export default function DeviceTestComponent({
                                             </div>
                                           ) : (
                                             <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-950/5">
-                                              <div className="bg-orange-50/50 px-6 py-5 border-b border-orange-100 flex items-start gap-4 text-left">
-                                                <div className="p-2 bg-orange-100 rounded-lg text-orange-600 shadow-sm shrink-0">
+                                              <div className="flex items-start gap-4 border-b border-orange-100 bg-orange-50/50 px-6 py-5 text-left">
+                                                <div className="shrink-0 rounded-lg bg-orange-100 p-2 text-orange-600 shadow-sm">
                                                   <ClipboardCheck className="h-6 w-6" />
                                                 </div>
                                                 <div>
                                                   <div className="flex items-center gap-3">
-                                                    <h5 className="text-lg font-bold text-gray-900">Manual Verification</h5>
-                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 uppercase border border-orange-200">Sticker Verified</span>
+                                                    <h5 className="text-lg font-bold text-gray-900">
+                                                      Manual Verification
+                                                    </h5>
+                                                    <span className="rounded border border-orange-200 bg-orange-100 px-2 py-0.5 text-[10px] font-bold uppercase text-orange-700">
+                                                      Sticker Verified
+                                                    </span>
                                                   </div>
-                                                  <p className="text-sm text-gray-600 mt-1 leading-relaxed">Please physically inspect the printed sticker on the device.</p>
+                                                  <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                                                    Please physically inspect
+                                                    the printed sticker on the
+                                                    device.
+                                                  </p>
                                                 </div>
                                               </div>
                                               <div className="p-6">
-                                                <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                                                <div className="flex flex-col gap-4 pt-4 sm:flex-row">
                                                   <button
-                                                    onClick={() => handleStepDecision("Pass")}
+                                                    onClick={() =>
+                                                      handleStepDecision("Pass")
+                                                    }
                                                     disabled={!!jigDecision}
-                                                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none" : "bg-success hover:bg-green-600"}`}
+                                                    className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none" : "bg-success hover:bg-green-600"}`}
                                                   >
-                                                    <CheckCircle className="h-5 w-5" /> Confirm Pass
+                                                    <CheckCircle className="h-5 w-5" />{" "}
+                                                    Confirm Pass
                                                   </button>
                                                   <button
-                                                    onClick={() => handleStepDecision("NG")}
+                                                    onClick={() =>
+                                                      handleStepDecision("NG")
+                                                    }
                                                     disabled={!!jigDecision}
-                                                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none" : "bg-danger hover:bg-red-600"}`}
+                                                    className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none" : "bg-danger hover:bg-red-600"}`}
                                                   >
-                                                    <XCircle className="h-5 w-5" /> Mark NG
+                                                    <XCircle className="h-5 w-5" />{" "}
+                                                    Mark NG
                                                   </button>
                                                 </div>
                                               </div>
@@ -1973,78 +2765,190 @@ export default function DeviceTestComponent({
                                       {currentSubStep.isPackagingStatus && (
                                         <div className="space-y-6">
                                           {(() => {
-                                            const isCarton = currentSubStep.packagingData?.packagingType === "Carton";
+                                            const isCarton =
+                                              currentSubStep.packagingData
+                                                ?.packagingType === "Carton";
                                             return (
-                                              <div className="border-gray-200 dark:border-gray-700 dark:bg-gray-900 rounded-2xl border bg-white p-6 shadow-lg">
+                                              <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg dark:border-gray-700 dark:bg-gray-900">
                                                 <div className="mb-4 flex items-center justify-between gap-2">
                                                   <div className="flex items-center gap-2">
                                                     <Box className="h-6 w-6 text-primary" />
-                                                    <h3 className="text-gray-900 text-xl font-semibold dark:text-white">
-                                                      {isCarton ? "ðŸ“¦ Carton Details" : "ðŸ“„ Single Device Sticker"}
+                                                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                                                      {isCarton
+                                                        ? " Carton Details"
+                                                        : "ðŸ“„ Single Device Sticker"}
                                                     </h3>
                                                   </div>
                                                   {isCarton && (
                                                     <button
-                                                      onClick={() => setIsCartonDevicesModalOpen(true)}
-                                                      className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary/20 transition-all"
+                                                      onClick={() =>
+                                                        setIsCartonDevicesModalOpen(
+                                                          true,
+                                                        )
+                                                      }
+                                                      className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-bold text-primary transition-all hover:bg-primary/20"
                                                     >
                                                       <List className="h-4 w-4" />
-                                                      View Devices ({cartons[cartons.length - 1]?.devices?.length || 0})
+                                                      View Devices (
+                                                      {cartons[
+                                                        cartons.length - 1
+                                                      ]?.devices?.length || 0}
+                                                      )
                                                     </button>
                                                   )}
                                                 </div>
-                                                <hr className="border-gray-300 dark:border-gray-700 mb-4" />
+                                                <hr className="mb-4 border-gray-300 dark:border-gray-700" />
                                                 {isCarton ? (
                                                   <>
-                                                    <div className="text-gray-700 dark:text-gray-300 grid gap-4 sm:grid-cols-2">
-                                                      <p className="flex items-center gap-2"><Package className="h-5 w-5 text-blue-500" /> <span className="font-medium">Dimensions:</span> {currentSubStep?.packagingData?.cartonWidth} Ã— {currentSubStep?.packagingData?.cartonHeight}</p>
-                                                      <p className="flex items-center gap-2"><Weight className="h-5 w-5 text-green-500" /> <span className="font-medium">Weight:</span> {currentSubStep?.packagingData?.cartonWeight} kg</p>
-                                                      <p className="flex items-center gap-2"><Layers className="h-5 w-5 text-purple-500" /> <span className="font-medium">Capacity:</span> {currentSubStep?.packagingData?.maxCapacity}</p>
-                                                      <p className="flex items-center gap-2"><ClipboardCheck className="h-5 w-5 text-orange-500" /> <span className="font-medium">Issued:</span> {processData?.issuedCartons}</p>
+                                                    <div className="grid gap-4 text-gray-700 dark:text-gray-300 sm:grid-cols-2">
+                                                      <p className="flex items-center gap-2">
+                                                        <Package className="h-5 w-5 text-blue-500" />{" "}
+                                                        <span className="font-medium">
+                                                          Dimensions:
+                                                        </span>{" "}
+                                                        {
+                                                          currentSubStep
+                                                            ?.packagingData
+                                                            ?.cartonWidth
+                                                        }{" "}
+                                                        x{" "}
+                                                        {
+                                                          currentSubStep
+                                                            ?.packagingData
+                                                            ?.cartonHeight
+                                                        }
+                                                      </p>
+                                                      <p className="flex items-center gap-2">
+                                                        <Weight className="h-5 w-5 text-green-500" />{" "}
+                                                        <span className="font-medium">
+                                                          Weight:
+                                                        </span>{" "}
+                                                        {
+                                                          currentSubStep
+                                                            ?.packagingData
+                                                            ?.cartonWeight
+                                                        }{" "}
+                                                        kg
+                                                      </p>
+                                                      <p className="flex items-center gap-2">
+                                                        <Layers className="h-5 w-5 text-purple-500" />{" "}
+                                                        <span className="font-medium">
+                                                          Capacity:
+                                                        </span>{" "}
+                                                        {
+                                                          currentSubStep
+                                                            ?.packagingData
+                                                            ?.maxCapacity
+                                                        }
+                                                      </p>
+                                                      <p className="flex items-center gap-2">
+                                                        <ClipboardCheck className="h-5 w-5 text-orange-500" />{" "}
+                                                        <span className="font-medium">
+                                                          Issued:
+                                                        </span>{" "}
+                                                        {
+                                                          processData?.issuedCartons
+                                                        }
+                                                      </p>
                                                     </div>
 
                                                     {(() => {
-                                                      const activeCarton = cartons[cartons.length - 1];
-                                                      const capacity = currentSubStep?.packagingData?.maxCapacity || activeCarton?.maxCapacity || 0;
-                                                      const isFull = activeCarton && activeCarton.devices?.length >= capacity;
+                                                      const activeCarton =
+                                                        cartons[
+                                                        cartons.length - 1
+                                                        ];
+                                                      const capacity =
+                                                        currentSubStep
+                                                          ?.packagingData
+                                                          ?.maxCapacity ||
+                                                        activeCarton?.maxCapacity ||
+                                                        0;
+                                                      const isFull =
+                                                        activeCarton &&
+                                                        activeCarton.devices
+                                                          ?.length >= capacity;
 
                                                       if (isFull) {
-                                                        const cartonDeviceData = [{
-                                                          serialNo: activeCarton.cartonSerial,
-                                                          cartonSerial: activeCarton.cartonSerial,
-                                                          deviceCount: activeCarton.devices?.length || 0,
-                                                          maxCapacity: capacity,
-                                                          productName: product?.name,
-                                                          weight: activeCarton.weightCarton || currentSubStep?.packagingData?.cartonWeight,
-                                                          createdAt: activeCarton.createdAt || new Date().toISOString(),
-                                                        }];
+                                                        const cartonDeviceData =
+                                                          [
+                                                            {
+                                                              serialNo:
+                                                                activeCarton.cartonSerial,
+                                                              cartonSerial:
+                                                                activeCarton.cartonSerial,
+                                                              deviceCount:
+                                                                activeCarton
+                                                                  .devices
+                                                                  ?.length || 0,
+                                                              maxCapacity:
+                                                                capacity,
+                                                              productName:
+                                                                product?.name,
+                                                              weight:
+                                                                activeCarton.weightCarton ||
+                                                                currentSubStep
+                                                                  ?.packagingData
+                                                                  ?.cartonWeight,
+                                                              createdAt:
+                                                                activeCarton.createdAt ||
+                                                                new Date().toISOString(),
+                                                            },
+                                                          ];
 
                                                         return (
-                                                          <div className={`mt-6 p-6 rounded-2xl border-2 border-dashed transition-all ${isCartonBarcodePrinted ? 'bg-green-50/50 border-green-200' : 'bg-primary/5 border-primary/20'}`}>
-                                                            <div className="flex items-center justify-between mb-4">
+                                                          <div
+                                                            className={`mt-6 rounded-2xl border-2 border-dashed p-6 transition-all ${isCartonBarcodePrinted ? "border-green-200 bg-green-50/50" : "border-primary/20 bg-primary/5"}`}
+                                                          >
+                                                            <div className="mb-4 flex items-center justify-between">
                                                               <div className="flex items-center gap-2">
-                                                                <Printer className={`h-6 w-6 ${isCartonBarcodePrinted ? 'text-green-600' : 'text-primary'}`} />
+                                                                <Printer
+                                                                  className={`h-6 w-6 ${isCartonBarcodePrinted ? "text-green-600" : "text-primary"}`}
+                                                                />
                                                                 <div>
-                                                                  <h4 className="text-lg font-bold text-gray-900">Carton Sticker</h4>
-                                                                  {isCartonBarcodePrinted && <span className="text-[10px] font-black uppercase text-green-600 tracking-wider">Already Printed</span>}
+                                                                  <h4 className="text-lg font-bold text-gray-900">
+                                                                    Carton
+                                                                    Sticker
+                                                                  </h4>
+                                                                  {isCartonBarcodePrinted && (
+                                                                    <span className="text-[10px] font-black uppercase tracking-wider text-green-600">
+                                                                      Already
+                                                                      Printed
+                                                                    </span>
+                                                                  )}
                                                                 </div>
                                                               </div>
                                                               <button
-                                                                onClick={handlePrintCartonSticker}
-                                                                className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-white font-bold shadow-lg transition-all active:scale-95 ${isCartonBarcodePrinted ? 'bg-green-600 hover:bg-green-700' : 'bg-primary hover:bg-primary/90'}`}
+                                                                onClick={
+                                                                  handlePrintCartonSticker
+                                                                }
+                                                                className={`flex items-center gap-2 rounded-xl px-5 py-2.5 font-bold text-white shadow-lg transition-all active:scale-95 ${isCartonBarcodePrinted ? "bg-green-600 hover:bg-green-700" : "bg-primary hover:bg-primary/90"}`}
                                                               >
                                                                 <Printer className="h-5 w-5" />
-                                                                {isCartonBarcodePrinted ? 'Reprint Sticker' : 'Print Sticker'}
+                                                                {isCartonBarcodePrinted
+                                                                  ? "Reprint Sticker"
+                                                                  : "Print Sticker"}
                                                               </button>
                                                             </div>
-                                                            <div id="carton-sticker-preview" className="bg-white p-4 rounded-xl border shadow-inner flex justify-center overflow-hidden">
+                                                            <div
+                                                              id="carton-sticker-preview"
+                                                              className="flex justify-center overflow-hidden rounded-xl border bg-white p-4 shadow-inner"
+                                                            >
                                                               <StickerGenerator
-                                                                stickerData={currentSubStep?.packagingData}
-                                                                deviceData={cartonDeviceData}
+                                                                stickerData={
+                                                                  currentSubStep?.packagingData
+                                                                }
+                                                                deviceData={
+                                                                  cartonDeviceData
+                                                                }
                                                               />
                                                             </div>
-                                                            <p className={`text-center text-xs mt-3 font-medium ${isCartonBarcodePrinted ? 'text-green-600/60' : 'text-primary/60'}`}>
-                                                              Carton Full Capacity ({capacity}/{capacity})
+                                                            <p
+                                                              className={`mt-3 text-center text-xs font-medium ${isCartonBarcodePrinted ? "text-green-600/60" : "text-primary/60"}`}
+                                                            >
+                                                              Carton Full
+                                                              Capacity (
+                                                              {capacity}/
+                                                              {capacity})
                                                             </p>
                                                           </div>
                                                         );
@@ -2055,37 +2959,74 @@ export default function DeviceTestComponent({
                                                       <div className="mt-6 flex justify-center gap-4">
                                                         <button
                                                           className="flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-white shadow hover:bg-green-700"
-                                                          onClick={() => handleAddToCart(currentSubStep)}
+                                                          onClick={() =>
+                                                            handleAddToCart(
+                                                              currentSubStep,
+                                                            )
+                                                          }
                                                         >
-                                                          <PlusCircle className="h-5 w-5" /> Add To Cart
+                                                          <PlusCircle className="h-5 w-5" />{" "}
+                                                          Add To Cart
                                                         </button>
                                                         <button
                                                           className="flex items-center gap-2 rounded-lg bg-danger px-5 py-2.5 text-white shadow hover:bg-danger"
-                                                          onClick={() => handleStepDecision("NG")}
+                                                          onClick={() =>
+                                                            handleStepDecision(
+                                                              "NG",
+                                                            )
+                                                          }
                                                         >
-                                                          <XCircle className="h-5 w-5" /> NG
+                                                          <XCircle className="h-5 w-5" />{" "}
+                                                          NG
                                                         </button>
                                                       </div>
                                                     ) : !isVerifiedPackaging ? (
-                                                      <div className="mt-6 flex flex-col items-center gap-4 p-6 bg-blue-50 rounded-xl border border-blue-100">
+                                                      <div className="mt-6 flex flex-col items-center gap-4 rounded-xl border border-blue-100 bg-blue-50 p-6">
                                                         <ScanLine className="h-8 w-8 text-blue-600" />
-                                                        <p className="text-sm font-bold text-blue-800">Please Verify Device in Carton</p>
+                                                        <p className="text-sm font-bold text-blue-800">
+                                                          Please Verify Device
+                                                          in Carton
+                                                        </p>
                                                         <button
-                                                          className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-2 text-white font-bold"
-                                                          onClick={handleVerifyPackaging}
+                                                          className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-2 font-bold text-white"
+                                                          onClick={
+                                                            handleVerifyPackaging
+                                                          }
                                                         >
                                                           Start Verification
                                                         </button>
-                                                        <Modal isOpen={isVerifyPackagingModal} onSubmit={handleVerifyPackagingModal} onClose={closeVerifyPackagingModal} title="Verify Packaging">
+                                                        <Modal
+                                                          isOpen={
+                                                            isVerifyPackagingModal
+                                                          }
+                                                          onSubmit={
+                                                            handleVerifyPackagingModal
+                                                          }
+                                                          onClose={
+                                                            closeVerifyPackagingModal
+                                                          }
+                                                          title="Verify Packaging"
+                                                        >
                                                           <div className="space-y-4">
-                                                            <label className="block text-sm font-bold text-gray-700 mb-2">Enter / Scan Serial Number</label>
+                                                            <label className="mb-2 block text-sm font-bold text-gray-700">
+                                                              Enter / Scan
+                                                              Serial Number
+                                                            </label>
                                                             <input
                                                               type="text"
-                                                              value={serialNumber || ""}
+                                                              value={
+                                                                serialNumber ||
+                                                                ""
+                                                              }
                                                               autoComplete="off"
-                                                              onChange={(e) => setSerialNumber(e.target.value)}
+                                                              onChange={(e) =>
+                                                                setSerialNumber(
+                                                                  e.target
+                                                                    .value,
+                                                                )
+                                                              }
                                                               placeholder="Scan device serial..."
-                                                              className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3.5 text-base font-medium focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 transition-all outline-none"
+                                                              className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3.5 text-base font-medium outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
                                                               autoFocus
                                                             />
                                                           </div>
@@ -2093,33 +3034,58 @@ export default function DeviceTestComponent({
                                                       </div>
                                                     ) : (
                                                       <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-950/5">
-                                                        <div className="bg-orange-50/50 px-6 py-5 border-b border-orange-100 flex items-start gap-4 text-left">
-                                                          <div className="p-2 bg-orange-100 rounded-lg text-orange-600 shadow-sm shrink-0">
+                                                        <div className="flex items-start gap-4 border-b border-orange-100 bg-orange-50/50 px-6 py-5 text-left">
+                                                          <div className="shrink-0 rounded-lg bg-orange-100 p-2 text-orange-600 shadow-sm">
                                                             <ClipboardCheck className="h-6 w-6" />
                                                           </div>
                                                           <div>
                                                             <div className="flex items-center gap-3">
-                                                              <h5 className="text-lg font-bold text-gray-900">Manual Verification</h5>
-                                                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 uppercase border border-orange-200">Packaging Verified</span>
+                                                              <h5 className="text-lg font-bold text-gray-900">
+                                                                Manual
+                                                                Verification
+                                                              </h5>
+                                                              <span className="rounded border border-orange-200 bg-orange-100 px-2 py-0.5 text-[10px] font-bold uppercase text-orange-700">
+                                                                Packaging
+                                                                Verified
+                                                              </span>
                                                             </div>
-                                                            <p className="text-sm text-gray-600 mt-1 leading-relaxed">Please ensure the device is correctly placed in the carton.</p>
+                                                            <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                                                              Please ensure the
+                                                              device is
+                                                              correctly placed
+                                                              in the carton.
+                                                            </p>
                                                           </div>
                                                         </div>
                                                         <div className="p-6">
-                                                          <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                                                          <div className="flex flex-col gap-4 pt-4 sm:flex-row">
                                                             <button
-                                                              onClick={() => handleStepDecision("Pass")}
-                                                              disabled={!!jigDecision}
-                                                              className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none" : "bg-success hover:bg-green-600"}`}
+                                                              onClick={() =>
+                                                                handleStepDecision(
+                                                                  "Pass",
+                                                                )
+                                                              }
+                                                              disabled={
+                                                                !!jigDecision
+                                                              }
+                                                              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none" : "bg-success hover:bg-green-600"}`}
                                                             >
-                                                              <CheckCircle className="h-5 w-5" /> Confirm Pass
+                                                              <CheckCircle className="h-5 w-5" />{" "}
+                                                              Confirm Pass
                                                             </button>
                                                             <button
-                                                              onClick={() => handleStepDecision("NG")}
-                                                              disabled={!!jigDecision}
-                                                              className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none" : "bg-danger hover:bg-red-600"}`}
+                                                              onClick={() =>
+                                                                handleStepDecision(
+                                                                  "NG",
+                                                                )
+                                                              }
+                                                              disabled={
+                                                                !!jigDecision
+                                                              }
+                                                              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none" : "bg-danger hover:bg-red-600"}`}
                                                             >
-                                                              <XCircle className="h-5 w-5" /> Mark NG
+                                                              <XCircle className="h-5 w-5" />{" "}
+                                                              Mark NG
                                                             </button>
                                                           </div>
                                                         </div>
@@ -2129,51 +3095,95 @@ export default function DeviceTestComponent({
                                                 ) : (
                                                   <>
                                                     {!isStickerPrinted ? (
-                                                      <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-                                                        <div className="flex items-center gap-3 mb-6">
+                                                      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                                                        <div className="mb-6 flex items-center gap-3">
                                                           <Printer className="h-6 w-6 text-primary" />
-                                                          <h3 className="text-xl font-bold text-gray-900 font-outfit">Packaging Sticker</h3>
+                                                          <h3 className="font-outfit text-xl font-bold text-gray-900">
+                                                            Packaging Sticker
+                                                          </h3>
                                                         </div>
-                                                        <div id="sticker-preview" className="bg-gray-50 rounded-xl border border-dashed border-gray-300 p-6 flex justify-center mb-4">
+                                                        <div
+                                                          id="sticker-preview"
+                                                          className="mb-4 flex justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6"
+                                                        >
                                                           <StickerGenerator
-                                                            stickerData={currentSubStep.packagingData}
-                                                            deviceData={deviceList.filter((d: any) => d.serialNo === searchResult)}
+                                                            stickerData={
+                                                              currentSubStep.packagingData
+                                                            }
+                                                            deviceData={deviceList.filter(
+                                                              (d: any) =>
+                                                                d.serialNo ===
+                                                                searchResult,
+                                                            )}
                                                           />
                                                         </div>
-                                                        <div className="flex justify-center mt-6">
+                                                        <div className="mt-6 flex justify-center">
                                                           <button
-                                                            className="flex items-center gap-2 rounded-xl bg-primary px-8 py-3.5 text-white font-bold shadow-lg hover:bg-primary/90 transition-all active:scale-95"
-                                                            onClick={handlePrintSticker}
+                                                            className="flex items-center gap-2 rounded-xl bg-primary px-8 py-3.5 font-bold text-white shadow-lg transition-all hover:bg-primary/90 active:scale-95"
+                                                            onClick={
+                                                              handlePrintSticker
+                                                            }
                                                           >
                                                             <Printer className="h-5 w-5" />
-                                                            Print Packaging Sticker
+                                                            Print Packaging
+                                                            Sticker
                                                           </button>
                                                         </div>
                                                       </div>
                                                     ) : !isVerifiedSticker ? (
-                                                      <div className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm text-center">
-                                                        <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                                                      <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+                                                        <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-green-50">
                                                           <ScanLine className="h-10 w-10 text-green-600" />
                                                         </div>
-                                                        <h3 className="text-2xl font-bold text-gray-900 mb-2 font-outfit">Verify Sticker</h3>
-                                                        <p className="text-gray-500 mb-8 max-w-xs mx-auto">Please scan or enter the serial number for verification.</p>
+                                                        <h3 className="font-outfit mb-2 text-2xl font-bold text-gray-900">
+                                                          Verify Sticker
+                                                        </h3>
+                                                        <p className="mx-auto mb-8 max-w-xs text-gray-500">
+                                                          Please scan or enter
+                                                          the serial number for
+                                                          verification.
+                                                        </p>
                                                         <button
-                                                          className="flex items-center gap-2 rounded-xl bg-green-600 px-8 py-3.5 text-white font-bold shadow-lg hover:bg-green-700 transition-all active:scale-95 mx-auto"
-                                                          onClick={handleVerifySticker}
+                                                          className="mx-auto flex items-center gap-2 rounded-xl bg-green-600 px-8 py-3.5 font-bold text-white shadow-lg transition-all hover:bg-green-700 active:scale-95"
+                                                          onClick={
+                                                            handleVerifySticker
+                                                          }
                                                         >
                                                           <ScanLine className="h-5 w-5" />
                                                           Start Verification
                                                         </button>
-                                                        <Modal isOpen={isVerifyStickerModal} onSubmit={handleVerifyStickerModal} onClose={closeVerifyStickerModal} title="Verify Sticker">
+                                                        <Modal
+                                                          isOpen={
+                                                            isVerifyStickerModal
+                                                          }
+                                                          onSubmit={
+                                                            handleVerifyStickerModal
+                                                          }
+                                                          onClose={
+                                                            closeVerifyStickerModal
+                                                          }
+                                                          title="Verify Sticker"
+                                                        >
                                                           <div className="space-y-4">
-                                                            <label className="block text-sm font-bold text-gray-700 mb-2">Enter / Scan Serial Number</label>
+                                                            <label className="mb-2 block text-sm font-bold text-gray-700">
+                                                              Enter / Scan
+                                                              Serial Number
+                                                            </label>
                                                             <input
                                                               type="text"
-                                                              value={serialNumber || ""}
+                                                              value={
+                                                                serialNumber ||
+                                                                ""
+                                                              }
                                                               autoComplete="off"
-                                                              onChange={(e) => setSerialNumber(e.target.value)}
+                                                              onChange={(e) =>
+                                                                setSerialNumber(
+                                                                  e.target
+                                                                    .value,
+                                                                )
+                                                              }
                                                               placeholder="Scan QR code..."
-                                                              className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3.5 text-base font-medium focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 transition-all outline-none"
+                                                              className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3.5 text-base font-medium outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
                                                               autoFocus
                                                             />
                                                           </div>
@@ -2181,33 +3191,57 @@ export default function DeviceTestComponent({
                                                       </div>
                                                     ) : (
                                                       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-950/5">
-                                                        <div className="bg-orange-50/50 px-6 py-5 border-b border-orange-100 flex items-start gap-4 text-left">
-                                                          <div className="p-2 bg-orange-100 rounded-lg text-orange-600 shadow-sm shrink-0">
+                                                        <div className="flex items-start gap-4 border-b border-orange-100 bg-orange-50/50 px-6 py-5 text-left">
+                                                          <div className="shrink-0 rounded-lg bg-orange-100 p-2 text-orange-600 shadow-sm">
                                                             <ClipboardCheck className="h-6 w-6" />
                                                           </div>
                                                           <div>
                                                             <div className="flex items-center gap-3">
-                                                              <h5 className="text-lg font-bold text-gray-900">Manual Verification</h5>
-                                                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 uppercase border border-orange-200">Sticker Verified</span>
+                                                              <h5 className="text-lg font-bold text-gray-900">
+                                                                Manual
+                                                                Verification
+                                                              </h5>
+                                                              <span className="rounded border border-orange-200 bg-orange-100 px-2 py-0.5 text-[10px] font-bold uppercase text-orange-700">
+                                                                Sticker Verified
+                                                              </span>
                                                             </div>
-                                                            <p className="text-sm text-gray-600 mt-1 leading-relaxed">Please physically inspect the packaging sticker on the device.</p>
+                                                            <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                                                              Please physically
+                                                              inspect the
+                                                              packaging sticker
+                                                              on the device.
+                                                            </p>
                                                           </div>
                                                         </div>
                                                         <div className="p-6">
-                                                          <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                                                          <div className="flex flex-col gap-4 pt-4 sm:flex-row">
                                                             <button
-                                                              onClick={() => handleStepDecision("Pass")}
-                                                              disabled={!!jigDecision}
-                                                              className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none" : "bg-success hover:bg-green-600"}`}
+                                                              onClick={() =>
+                                                                handleStepDecision(
+                                                                  "Pass",
+                                                                )
+                                                              }
+                                                              disabled={
+                                                                !!jigDecision
+                                                              }
+                                                              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none" : "bg-success hover:bg-green-600"}`}
                                                             >
-                                                              <CheckCircle className="h-5 w-5" /> Confirm Pass
+                                                              <CheckCircle className="h-5 w-5" />{" "}
+                                                              Confirm Pass
                                                             </button>
                                                             <button
-                                                              onClick={() => handleStepDecision("NG")}
-                                                              disabled={!!jigDecision}
-                                                              className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "bg-gray-400 cursor-not-allowed opacity-50 shadow-none" : "bg-danger hover:bg-red-600"}`}
+                                                              onClick={() =>
+                                                                handleStepDecision(
+                                                                  "NG",
+                                                                )
+                                                              }
+                                                              disabled={
+                                                                !!jigDecision
+                                                              }
+                                                              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none" : "bg-danger hover:bg-red-600"}`}
                                                             >
-                                                              <XCircle className="h-5 w-5" /> Mark NG
+                                                              <XCircle className="h-5 w-5" />{" "}
+                                                              Mark NG
                                                             </button>
                                                           </div>
                                                         </div>
@@ -2227,41 +3261,87 @@ export default function DeviceTestComponent({
                             })()}
                           </div>
 
-                          <div className="space-y-6" >
-                            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm" >
-                              <div className="border-b border-gray-100 bg-gray-50/50 px-4 py-3 flex items-center justify-between">
-                                <h4 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                                  <ClipboardList className="w-4 h-4 text-gray-500" />
+                          <div className="space-y-6">
+                            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                              <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-4 py-3">
+                                <h4 className="flex items-center gap-2 text-sm font-bold text-gray-800">
+                                  <ClipboardList className="h-4 w-4 text-gray-500" />
                                   Stage Summary
                                 </h4>
                               </div>
-                              <div className="divide-y divide-gray-100" style={{ maxHeight: '601px', overflowY: 'auto' }}>
+                              <div
+                                className="divide-y divide-gray-100"
+                                style={{
+                                  maxHeight: "601px",
+                                  overflowY: "auto",
+                                }}
+                              >
                                 {testSteps.map((step: any, index: number) => {
                                   const status = jigResults[index]?.status;
                                   return (
-                                    <div key={index} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50/50 transition-colors">
+                                    <div
+                                      key={index}
+                                      className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-gray-50/50"
+                                    >
                                       <div className="flex items-center gap-3">
-                                        <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${status === 'Pass' ? 'bg-green-100 text-green-700' :
-                                          status === 'NG' ? 'bg-red-100 text-red-700' :
-                                            index === currentJigStepIndex ? 'bg-blue-100 text-blue-700 animate-pulse' :
-                                              'bg-gray-100 text-gray-500'
-                                          }`}>
+                                        <div
+                                          className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${status === "Pass"
+                                            ? "bg-green-100 text-green-700"
+                                            : status === "NG"
+                                              ? "bg-red-100 text-red-700"
+                                              : index === currentJigStepIndex
+                                                ? "animate-pulse bg-blue-100 text-blue-700"
+                                                : "bg-gray-100 text-gray-500"
+                                            }`}
+                                        >
                                           {index + 1}
                                         </div>
                                         <div>
-                                          <span className={`block text-sm font-medium ${index === currentJigStepIndex ? 'text-gray-900' : 'text-gray-600'}`}>
-                                            {step.stepName || step.name || (step.isPrinterEnable ? "Printing" : step.isPackagingStatus ? "Packaging" : `Step ${index + 1}`)}
+                                          <span
+                                            className={`block text-sm font-medium ${index === currentJigStepIndex ? "text-gray-900" : "text-gray-600"}`}
+                                          >
+                                            {step.stepName ||
+                                              step.name ||
+                                              (step.isPrinterEnable
+                                                ? "Printing"
+                                                : step.isPackagingStatus
+                                                  ? "Packaging"
+                                                  : `Step ${index + 1}`)}
                                           </span>
-                                          <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
-                                            {step.stepType || (step.isPrinterEnable ? "printer" : step.isPackagingStatus ? "packaging" : "manual")}
+                                          <span className="text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                                            {step.stepType ||
+                                              (step.isPrinterEnable
+                                                ? "printer"
+                                                : step.isPackagingStatus
+                                                  ? "packaging"
+                                                  : "manual")}
                                           </span>
                                         </div>
                                       </div>
-                                      <div className="flex justify-end min-w-[80px]">
-                                        {status === 'Pass' && <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700 border border-green-100"><Check className="w-3 h-3" /> Pass</span>}
-                                        {status === 'NG' && <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700 border border-red-100"><XCircle className="w-3 h-3" /> Failed</span>}
-                                        {!status && index === currentJigStepIndex && <span className="text-xs text-blue-600 font-bold animate-pulse">In Progress...</span>}
-                                        {!status && index !== currentJigStepIndex && <span className="text-xs text-gray-400 font-medium">Pending</span>}
+                                      <div className="flex min-w-[80px] justify-end">
+                                        {status === "Pass" && (
+                                          <span className="inline-flex items-center gap-1.5 rounded-full border border-green-100 bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                                            <Check className="h-3 w-3" /> Pass
+                                          </span>
+                                        )}
+                                        {status === "NG" && (
+                                          <span className="inline-flex items-center gap-1.5 rounded-full border border-red-100 bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">
+                                            <XCircle className="h-3 w-3" />{" "}
+                                            Failed
+                                          </span>
+                                        )}
+                                        {!status &&
+                                          index === currentJigStepIndex && (
+                                            <span className="animate-pulse text-xs font-bold text-blue-600">
+                                              In Progress...
+                                            </span>
+                                          )}
+                                        {!status &&
+                                          index !== currentJigStepIndex && (
+                                            <span className="text-xs font-medium text-gray-400">
+                                              Pending
+                                            </span>
+                                          )}
                                       </div>
                                     </div>
                                   );
@@ -2269,80 +3349,117 @@ export default function DeviceTestComponent({
                               </div>
                             </div>
 
-                            {/* Carton Details (Moved from Recent Activity) */}
-                            {processAssignUserStage?.subSteps?.some((s: any) => s.isPackagingStatus) && (
-                              <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm mt-6">
-                                <div className="bg-gray-50/50 px-4 py-3 border-b border-gray-100">
-                                  <h4 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                                    <Box className="h-4 w-4 text-orange-500" />
-                                    Carton Details
-                                  </h4>
-                                </div>
-                                <div className="p-0">
-                                  <table className="w-full text-xs text-left">
-                                    <thead className="bg-gray-50 text-gray-500 font-medium uppercase tracking-wider">
-                                      <tr>
-                                        <th className="px-4 py-3">Serial</th>
-                                        <th className="px-4 py-3">Status</th>
-                                        <th className="px-4 py-3 text-right">Timestamp</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                      {(() => {
-                                        const cartonList = Array.isArray(processCartons) ? processCartons : processCartons?.cartonDetails || [];
-                                        return cartonList.length > 0 ? (
-                                          cartonList.map((row: any, rowIndex: number) => (
-                                            <tr key={rowIndex} className="hover:bg-gray-50/50 transition-colors">
-                                              <td className="px-4 py-3 font-semibold text-gray-900">{row?.cartonSerial}</td>
-                                              <td className="px-4 py-3">
-                                                <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 text-[10px]">{row?.status}</span>
-                                              </td>
-                                              <td className="px-4 py-3 text-right text-gray-400">
-                                                {new Date(row?.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {/* {/* Carton Details (Moved from Recent Activity) */}
+                            {/* {processAssignUserStage?.subSteps?.some(
+                              (s: any) => s.isPackagingStatus,
+                            ) && (
+                                <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                                  <div className="border-b border-gray-100 bg-gray-50/50 px-4 py-3">
+                                    <h4 className="flex items-center gap-2 text-sm font-bold text-gray-800">
+                                      <Box className="h-4 w-4 text-orange-500" />
+                                      Carton Details
+                                    </h4>
+                                  </div>
+                                  <div className="p-0">
+                                    <table className="w-full text-left text-xs">
+                                      <thead className="bg-gray-50 font-medium uppercase tracking-wider text-gray-500">
+                                        <tr>
+                                          <th className="px-4 py-3">Serial</th>
+                                          <th className="px-4 py-3">Status</th>
+                                          <th className="px-4 py-3 text-right">
+                                            Timestamp
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-100">
+                                        {(() => {
+                                          const cartonList = Array.isArray(
+                                            processCartons,
+                                          )
+                                            ? processCartons
+                                            : processCartons?.cartonDetails || [];
+                                          return cartonList.length > 0 ? (
+                                            cartonList.map(
+                                              (row: any, rowIndex: number) => (
+                                                <tr
+                                                  key={rowIndex}
+                                                  className="transition-colors hover:bg-gray-50/50"
+                                                >
+                                                  <td className="px-4 py-3 font-semibold text-gray-900">
+                                                    {row?.cartonSerial}
+                                                  </td>
+                                                  <td className="px-4 py-3">
+                                                    <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
+                                                      {row?.status}
+                                                    </span>
+                                                  </td>
+                                                  <td className="px-4 py-3 text-right text-gray-400">
+                                                    {new Date(
+                                                      row?.createdAt,
+                                                    ).toLocaleTimeString([], {
+                                                      hour: "2-digit",
+                                                      minute: "2-digit",
+                                                    })}
+                                                  </td>
+                                                </tr>
+                                              ),
+                                            )
+                                          ) : (
+                                            <tr>
+                                              <td
+                                                colSpan={3}
+                                                className="p-6 text-center italic text-gray-400"
+                                              >
+                                                No cartons found
                                               </td>
                                             </tr>
-                                          ))
-                                        ) : (
-                                          <tr>
-                                            <td colSpan={3} className="p-6 text-center text-gray-400 italic">No cartons found</td>
-                                          </tr>
-                                        );
-                                      })()}
-                                    </tbody>
-                                  </table>
-                                  {(Array.isArray(processCartons) ? processCartons.length > 0 : processCartons?.cartonDetails?.length > 0) && (
-                                    <div className="p-4 bg-gray-50/50 border-t border-gray-100 flex justify-end">
-                                      <button
-                                        className="rounded-lg bg-cyan-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-cyan-700 transition-all"
-                                        onClick={handleShiftToPDI}
-                                      >
-                                        Shift to PDI
-                                      </button>
-                                    </div>
-                                  )}
+                                          );
+                                        })()}
+                                      </tbody>
+                                    </table>
+                                    {(Array.isArray(processCartons)
+                                      ? processCartons.length > 0
+                                      : processCartons?.cartonDetails?.length >
+                                      0) && (
+                                        <div className="flex justify-end border-t border-gray-100 bg-gray-50/50 p-4">
+                                          <button
+                                            className="rounded-lg bg-cyan-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-cyan-700"
+                                            onClick={handleShiftToPDI}
+                                          >
+                                            Shift to PDI
+                                          </button>
+                                        </div>
+                                      )}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              )} */}
                           </div>
                         </div>
 
                         {/* Next Device Selection */}
                         {jigDecision && (
-                          <div className="flex flex-col items-center gap-4 mt-6 p-6 bg-blue-50/50 rounded-xl border border-blue-100">
-                            <h4 className={`text-xl font-black ${jigDecision === 'Pass' ? 'text-green-600' : 'text-red-600'}`}>
+                          <div className="mt-6 flex flex-col items-center gap-4 rounded-xl border border-blue-100 bg-blue-50/50 p-6">
+                            <h4
+                              className={`text-xl font-black ${jigDecision === "Pass" ? "text-green-600" : "text-red-600"}`}
+                            >
                               STAGE COMPLETE: {jigDecision}
                             </h4>
                             <button
-                              className="flex items-center gap-2 rounded-xl bg-blue-600 px-8 py-4 text-white font-bold shadow-xl hover:bg-blue-700 transition-all active:scale-95"
+                              className="flex items-center gap-2 rounded-xl bg-blue-600 px-8 py-4 font-bold text-white shadow-xl transition-all hover:bg-blue-700 active:scale-95"
                               onClick={() => {
                                 if (jigDecision === "NG") {
                                   // Open the assignment modal (same behavior as Report Issue NG)
                                   setShowNGModal(true);
                                   return;
                                 }
-                                if (jigDisconnectRef.current) jigDisconnectRef.current();
+                                if (jigDisconnectRef.current)
+                                  jigDisconnectRef.current();
                                 if (searchResult && setDeviceList) {
-                                  setDeviceList((prev: any[]) => prev.filter((d: any) => d.serialNo !== searchResult));
+                                  setDeviceList((prev: any[]) =>
+                                    prev.filter(
+                                      (d: any) => d.serialNo !== searchResult,
+                                    ),
+                                  );
                                 }
                                 setSearchResult("");
                                 setSearchQuery("");
@@ -2360,133 +3477,62 @@ export default function DeviceTestComponent({
                         )}
                       </div>
                     )}
-                </div>
-                <NGModel
-                  showNGModal={showNGModal}
-                  setShowNGModal={setShowNGModal}
-                  selectAssignDeviceDepartment={selectAssignDeviceDepartment}
-                  setAsssignDeviceDepartment={setAsssignDeviceDepartment}
-                  getNGAssignOptions={getNGAssignOptions}
-                  handleNG={handleNG}
-                  reason={ngReason}
-                  isJigStep={testSteps.some((s: any) => s.stepType === "jig")}
-                  onRetry={handleRetry}
-                />
-              </div>
-            ) : (
-              <div className="mt-3 text-center">
-                <div className="flex justify-center">
-                  <p className="text-red-500 text-sm">{notFoundError}</p>
-                </div>
-                <div className="flex justify-center">
-                  {notFoundError && (
-                    <>
-                      <button
-                        type="button"
-                        className="mt-3 flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-danger to-danger px-4 py-2 text-xs font-semibold text-white shadow hover:from-danger hover:to-danger"
-                        onClick={openReportIssueModel}
-                      >
-                        <AlertTriangle className="h-4 w-4" />
-                        Report Issue
-                      </button>
-                      <Modal
-                        isOpen={isReportIssueModal}
-                        onSubmit={handleSubmitReport}
-                        onClose={closeReportIssueModal}
-                        title="Report Issue"
-                      >
-                        <div className="space-y-6">
-                          {/* Issue Type */}
-                          <div>
-                            <label className="text-gray-700 dark:text-gray-200 mb-2 block text-sm font-medium">
-                              Choose Issue Type{" "}
-                              <span className="text-red-500">*</span>
-                            </label>
-                            <div className="relative">
-                              <select
-                                className="border-gray-300 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 w-full rounded-lg border bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:border-blue-500"
-                                onChange={(e) => setIssueType(e.target.value)}
-                              >
-                                <option value="">
-                                  -- Select an Issue --
-                                </option>
-                                <option value="not_found">
-                                  ðŸ“¦ Device Not Found
-                                </option>
-                                <option value="technical_fault">
-                                  âš¡ Technical Fault
-                                </option>
-                              </select>
-                            </div>
-                          </div>
-
-                          {/* Description */}
-                          <div>
-                            <label className="text-gray-700 dark:text-gray-200 mb-2 block text-sm font-medium">
-                              Description{" "}
-                              <span className="text-red-500">*</span>
-                            </label>
-                            <textarea
-                              rows={5}
-                              onChange={(e) =>
-                                setIssueDescription(e.target.value)
-                              }
-                              placeholder="Please describe the issue in detail..."
-                              className="border-gray-300 text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 w-full resize-y rounded-lg border bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:border-blue-500"
-                            ></textarea>
-                            <p className="text-gray-500 dark:text-gray-400 mt-1 text-xs">
-                              Be as specific as possible (e.g., device serial
-                              no, error steps).
-                            </p>
-                          </div>
-                        </div>
-                      </Modal>
-                    </>
-                  )}
+                  <NGModel
+                    showNGModal={showNGModal}
+                    setShowNGModal={setShowNGModal}
+                    selectAssignDeviceDepartment={selectAssignDeviceDepartment}
+                    setAsssignDeviceDepartment={setAsssignDeviceDepartment}
+                    getNGAssignOptions={getNGAssignOptions}
+                    handleNG={handleNG}
+                    reason={ngReason}
+                    isJigStep={testSteps.some((s: any) => s.stepType === "jig")}
+                    onRetry={handleRetry}
+                  />
                 </div>
               </div>
             )}
           </div>
-        </div >
-      </div >
+        </div>
+      </div>
+      {/* </div> */}
 
       {/* Footer */}
-      < div className="mt-4 flex justify-end gap-3" >
+      <div className="mt-4 flex justify-end gap-3">
         <button
-          className="flex items-center gap-2 rounded-lg bg-primary/20 px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-primary/20 transition-colors"
+          className="flex items-center gap-2 rounded-lg bg-primary/20 px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-primary/20"
           onClick={handlePauseResume}
         >
           <Coffee className="h-4 w-4" />
           {isPaused ? "Resume Work" : "Take Break"}
         </button>
         <button
-          className="flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white shadow hover:bg-danger transition-colors"
+          className="flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white shadow transition-colors hover:bg-danger"
           onClick={handleStop}
         >
           <SquareStop className="h-4 w-4" />
           Stop
         </button>
-      </div >
+      </div>
 
       {/* History Drawer */}
-      < div
+      <div
         className={`fixed inset-0 z-50 flex justify-end transition-opacity duration-300 ${isHistoryOpen ? "visible opacity-100" : "invisible opacity-0"
           }`}
       >
         {/* Backdrop */}
-        < div
+        <div
           className="absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity"
           onClick={() => setIsHistoryOpen(false)}
         />
 
         {/* Drawer Panel */}
         <div
-          className={`relative h-full w-full max-w-md bg-white shadow-2xl transition-transform duration-300 transform ${isHistoryOpen ? "translate-x-0" : "translate-x-full"
+          className={`relative h-full w-full max-w-md transform bg-white shadow-2xl transition-transform duration-300 ${isHistoryOpen ? "translate-x-0" : "translate-x-full"
             }`}
         >
           {/* Drawer Header */}
-          <div className="flex items-center justify-between border-b px-6 py-4 bg-gray-50/50">
-            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+          <div className="flex items-center justify-between border-b bg-gray-50/50 px-6 py-4">
+            <h3 className="flex items-center gap-2 text-lg font-bold text-gray-800">
               <History className="h-5 w-5 text-indigo-600" />
               Recent Activity
             </h3>
@@ -2495,11 +3541,11 @@ export default function DeviceTestComponent({
                 type="date"
                 value={historyFilterDate}
                 onChange={(e) => setHistoryFilterDate(e.target.value)}
-                className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm outline-none transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
               />
               <button
                 onClick={() => setIsHistoryOpen(false)}
-                className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                className="rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
                 title="Close"
               >
                 <X className="h-5 w-5" />
@@ -2508,21 +3554,21 @@ export default function DeviceTestComponent({
           </div>
 
           {/* Drawer Content */}
-          <div className="h-[calc(100vh-64px)] overflow-y-auto space-y-6">
+          <div className="h-[calc(100vh-64px)] space-y-6 overflow-y-auto">
             {/* Tested History List */}
             <div className="overflow-hidden rounded-xl bg-white shadow-sm">
-              <div className="bg-gray-50/50 px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                <h4 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+              <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-4 py-3">
+                <h4 className="flex items-center gap-2 text-sm font-bold text-gray-700">
                   <ListChecks className="h-4 w-4 text-indigo-500" />
                   Devices
                 </h4>
-                <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
                   {checkedDevice.length} Today
                 </span>
               </div>
               <div className="max-h-[60vh] overflow-y-auto">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-gray-50 text-gray-500 font-medium uppercase tracking-wider sticky top-0">
+                <table className="w-full text-left text-xs">
+                  <thead className="sticky top-0 bg-gray-50 font-medium uppercase tracking-wider text-gray-500">
                     <tr className="bg-white">
                       <th className="px-4 py-3">Device</th>
                       <th className="px-4 py-3">Status</th>
@@ -2532,24 +3578,39 @@ export default function DeviceTestComponent({
                   <tbody className="divide-y divide-gray-100">
                     {checkedDevice.length > 0 ? (
                       checkedDevice.map((row, rowIndex) => (
-                        <tr key={rowIndex} className="hover:bg-gray-50/50 transition-colors">
+                        <tr
+                          key={rowIndex}
+                          className="transition-colors hover:bg-gray-50/50"
+                        >
                           <td className="px-4 py-3">
-                            <span className="font-bold text-gray-900 block">{row?.deviceInfo?.serialNo}</span>
-                            <span className="text-[10px] text-gray-500">{row?.stageName}</span>
+                            <span className="block font-bold text-gray-900">
+                              {row?.deviceInfo?.serialNo}
+                            </span>
+                            <span className="text-[10px] text-gray-500">
+                              {row?.stageName}
+                            </span>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${row?.status === "Pass" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${row?.status === "Pass"
+                                ? "bg-green-100 text-green-700"
+                                : "bg-red-100 text-red-700"
+                                }`}
+                            >
                               {row?.status}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right text-gray-500 font-mono italic">
+                          <td className="font-mono px-4 py-3 text-right italic text-gray-500">
                             {row?.timeTaken}
                           </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={3} className="p-10 text-center text-gray-400 text-xs">
+                        <td
+                          colSpan={3}
+                          className="p-10 text-center text-xs text-gray-400"
+                        >
                           No devices tested today
                         </td>
                       </tr>
@@ -2558,10 +3619,9 @@ export default function DeviceTestComponent({
                 </table>
               </div>
             </div>
-
           </div>
         </div>
-      </div >
+      </div>
       <Modal
         isOpen={isCartonDevicesModalOpen}
         onClose={() => setIsCartonDevicesModalOpen(false)}
@@ -2570,32 +3630,45 @@ export default function DeviceTestComponent({
         submitOption={false}
       >
         <div className="max-h-[60vh] overflow-y-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-gray-50 text-gray-700 font-bold border-b border-gray-200 sticky top-0">
+          <table className="w-full text-left text-sm">
+            <thead className="sticky top-0 border-b border-gray-200 bg-gray-50 font-bold text-gray-700">
               <tr>
                 <th className="px-4 py-3">Serial No</th>
                 <th className="px-4 py-3 text-right">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {cartons && cartons.length > 0 && Array.isArray(cartons[cartons.length - 1]?.devices) ? (
-                cartons[cartons.length - 1].devices.map((device: any, idx: number) => (
-                  <tr key={idx} className="hover:bg-gray-50/50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{device?.serialNo || device || "N/A"}</td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold whitespace-nowrap">In Carton</span>
-                    </td>
-                  </tr>
-                ))
+              {cartons &&
+                cartons.length > 0 &&
+                Array.isArray(cartons[cartons.length - 1]?.devices) ? (
+                cartons[cartons.length - 1].devices.map(
+                  (device: any, idx: number) => (
+                    <tr key={idx} className="hover:bg-gray-50/50">
+                      <td className="px-4 py-3 font-medium text-gray-900">
+                        {device?.serialNo || device || "N/A"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="whitespace-nowrap rounded bg-green-100 px-2 py-1 text-xs font-bold text-green-700">
+                          In Carton
+                        </span>
+                      </td>
+                    </tr>
+                  ),
+                )
               ) : (
                 <tr>
-                  <td colSpan={2} className="p-8 text-center text-gray-400 italic">No devices added yet</td>
+                  <td
+                    colSpan={2}
+                    className="p-8 text-center italic text-gray-400"
+                  >
+                    No devices added yet
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
-        </div >
-      </Modal >
+        </div>
+      </Modal>
 
       <Modal
         isOpen={isLogsModalOpen}
@@ -2604,48 +3677,74 @@ export default function DeviceTestComponent({
         submitOption={false}
         onSubmit={() => { }}
       >
-        <div className="p-4 max-h-[70vh] overflow-y-auto bg-gray-900 rounded-b-xl font-mono text-xs">
+        <div className="font-mono max-h-[70vh] overflow-y-auto rounded-b-xl bg-gray-900 p-4 text-xs">
           {selectedLogs.map((logGroup: any, gIndex: number) => (
             <div key={gIndex} className="mb-6 last:mb-0">
-              <div className="flex items-center gap-2 mb-2 border-b border-gray-700 pb-1">
-                <span className="text-blue-400 font-bold uppercase tracking-widest">{logGroup.stepName}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] ${logGroup.status === 'Pass' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
+              <div className="mb-2 flex items-center gap-2 border-b border-gray-700 pb-1">
+                <span className="font-bold uppercase tracking-widest text-blue-400">
+                  {logGroup.stepName}
+                </span>
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[10px] ${logGroup.status === "Pass" ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300"}`}
+                >
                   {logGroup.status}
                 </span>
-                <span className="text-gray-500 text-[10px] ml-auto">
+                <span className="ml-auto text-[10px] text-gray-500">
                   {new Date(logGroup.createdAt).toLocaleTimeString()}
                 </span>
               </div>
 
               {logGroup.logData?.terminalLogs?.length > 0 ? (
                 <div className="space-y-1">
-                  {logGroup.logData.terminalLogs.map((log: any, lIndex: number) => (
-                    <div key={lIndex} className="flex gap-2">
-                      <span className="text-gray-600 shrink-0">[{new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}]</span>
-                      <span className={`
-                        ${log.type === 'error' ? 'text-red-400' :
-                          log.type === 'success' ? 'text-green-400' :
-                            log.type === 'info' ? 'text-blue-300' :
-                              'text-gray-300'}
-                      `}>
-                        {log.message}
-                      </span>
-                    </div>
-                  ))}
+                  {logGroup.logData.terminalLogs.map(
+                    (log: any, lIndex: number) => (
+                      <div key={lIndex} className="flex gap-2">
+                        <span className="shrink-0 text-gray-600">
+                          [
+                          {new Date(log.timestamp).toLocaleTimeString([], {
+                            hour12: false,
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          })}
+                          ]
+                        </span>
+                        <span
+                          className={`
+                        ${log.type === "error"
+                              ? "text-red-400"
+                              : log.type === "success"
+                                ? "text-green-400"
+                                : log.type === "info"
+                                  ? "text-blue-300"
+                                  : "text-gray-300"
+                            }
+                      `}
+                        >
+                          {log.message}
+                        </span>
+                      </div>
+                    ),
+                  )}
                 </div>
               ) : (
-                <div className="text-gray-500 italic">No terminal logs available for this step.</div>
+                <div className="italic text-gray-500">
+                  No terminal logs available for this step.
+                </div>
               )}
 
               {logGroup.logData?.reason && (
-                <div className="mt-2 p-2 bg-red-900/20 border border-red-900/30 rounded text-red-300">
-                  <span className="font-bold">Failure Reason:</span> {logGroup.logData.reason}
+                <div className="mt-2 rounded border border-red-900/30 bg-red-900/20 p-2 text-red-300">
+                  <span className="font-bold">Failure Reason:</span>{" "}
+                  {logGroup.logData.reason}
                 </div>
               )}
             </div>
           ))}
           {selectedLogs.length === 0 && (
-            <div className="text-center py-10 text-gray-500 italic">No logs found for this record.</div>
+            <div className="py-10 text-center italic text-gray-500">
+              No logs found for this record.
+            </div>
           )}
         </div>
       </Modal>

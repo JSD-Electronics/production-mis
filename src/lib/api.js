@@ -922,6 +922,15 @@ export const createDeviceTestEntry = async (data) => {
     );
   }
 };
+export const searchByJigFields = async (data) => {
+  try {
+    const response = await api.post(`/devices/searchByJigFields`, data);
+    return response.data;
+  } catch (error) {
+    console.error(`Error searching device by jig fields:`, error);
+    throw error.response?.data || { message: "Error searching device" };
+  }
+};
 export const getOverallDeviceTestEntry = async (id) => {
   try {
     let response = await api.get(`/getOverallDeviceTestEntry`);
@@ -1114,7 +1123,7 @@ export const addUserRole = async (formData) => {
     let response = await api.post(`/user-roles/create`, formData);
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const updateProductionStatus = async (formData) => {
@@ -1125,7 +1134,7 @@ export const updateProductionStatus = async (formData) => {
     );
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const updateOperatorSkillSet = async (formData, id) => {
@@ -1136,7 +1145,7 @@ export const updateOperatorSkillSet = async (formData, id) => {
     );
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const createOperatorSkill = async (formData) => {
@@ -1144,7 +1153,7 @@ export const createOperatorSkill = async (formData) => {
     let response = await api.post(`/skill-management/create`, formData);
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const getOperatorSkills = async () => {
@@ -1152,7 +1161,7 @@ export const getOperatorSkills = async () => {
     let response = await api.get(`/skill-management/get`);
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const deleteOperatorSkill = async (id) => {
@@ -1178,7 +1187,7 @@ export const updateQuantity = async (formData, id) => {
     let response = await api.put(`/process/updateQuantity/${id}`, formData);
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const updateMarkAsComplete = async (formData, id) => {
@@ -1189,7 +1198,7 @@ export const updateMarkAsComplete = async (formData, id) => {
     );
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const updateKitsEntry = async (formData, id) => {
@@ -1197,7 +1206,7 @@ export const updateKitsEntry = async (formData, id) => {
     let response = await api.put(`/store/updateKitsStatus/${id}`, formData);
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const createProcessKits = async (data) => {
@@ -1205,7 +1214,7 @@ export const createProcessKits = async (data) => {
     let response = await api.post(`/production/returnKitsToStore`, data);
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const createAssignedJigs = async (formData) => {
@@ -1213,7 +1222,7 @@ export const createAssignedJigs = async (formData) => {
     let response = await api.post("/planing/createAssignedJigs", formData);
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const getUpdateStatus = async (id, data) => {
@@ -1221,7 +1230,7 @@ export const getUpdateStatus = async (id, data) => {
     let response = await api.put(`/operator/updateStatus/${id}`, data);
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const updateJigStatus = async (id, data) => {
@@ -1229,7 +1238,7 @@ export const updateJigStatus = async (id, data) => {
     let response = await api.put(`/jig/updateStatus/${id}`, data);
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const updateIssuedKitsToLine = async (formData) => {
@@ -1237,7 +1246,7 @@ export const updateIssuedKitsToLine = async (formData) => {
     let response = await api.put(`/process/updateIssueKitsToLine`, formData);
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const updateStatusRecivedKitToLine = async (id, formData) => {
@@ -1248,7 +1257,7 @@ export const updateStatusRecivedKitToLine = async (id, formData) => {
     );
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const getDeviceTestRecordsByProcessId = async (id) => {
@@ -1269,7 +1278,7 @@ export const getOrderConfirmationNumers = async () => {
     let reponse = await api.get("/process/orderConfirmation/get");
     return reponse.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const createOrderConfirmationNumbers = async (formData) => {
@@ -1280,7 +1289,7 @@ export const createOrderConfirmationNumbers = async (formData) => {
     );
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const updateDownTimeProcess = async (id, formData) => {
@@ -1288,7 +1297,7 @@ export const updateDownTimeProcess = async (id, formData) => {
     let response = await api.put(`/process/addDownTime/${id}`, formData);
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 
@@ -1313,7 +1322,7 @@ export const updateProcessStatus = async (id, formData) => {
     );
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const getPlanningAndSchedulingDate = async (
@@ -1334,7 +1343,15 @@ export const getPlanningAndSchedulingDate = async (
     }
     return response.data;
   } catch (error) {
-
+    throw error;
+  }
+};
+export const getDeviceCountByProcessId = async (processId) => {
+  try {
+    const response = await api.get(`/devices/countByProcessId/${processId}`);
+    return response.data;
+  } catch (error) {
+    throw error;
   }
 };
 export const getLastEntryBasedUponPrefixAndSuffix = async (prefix, suffix) => {
@@ -1344,7 +1361,7 @@ export const getLastEntryBasedUponPrefixAndSuffix = async (prefix, suffix) => {
     );
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const createCarton = async (formData) => {
@@ -1352,7 +1369,15 @@ export const createCarton = async (formData) => {
     let response = await api.post(`/carton/createCarton`, formData);
     return response.data;
   } catch (error) {
-
+    throw error; throw error;
+  }
+};
+export const verifyCartonSticker = async (cartonSerial) => {
+  try {
+    let response = await api.post(`/carton/verifySticker`, { cartonSerial });
+    return response.data;
+  } catch (error) {
+    throw error;
   }
 };
 export const fetchCartonByProcessID = async (processID) => {
@@ -1372,12 +1397,12 @@ export const fetchCartons = async (processID) => {
 
   }
 };
-export const shiftToPDI = async (formData) => {
+export const shiftToPDI = async (cartons) => {
   try {
-    let response = await api.post(`cartons/shift-to-pdi`, formData);
+    let response = await api.post(`cartons/shift-to-pdi`, { cartons });
     return response.data;
   } catch (error) {
-
+    throw error;
   }
 };
 export const shiftToNextCommonStage = async (processId, formData) => {
@@ -1640,6 +1665,93 @@ export const deleteMultipleOrderConfirmationNumbers = async (ids) => {
     return response.data;
   } catch (error) {
     throw error.response?.data || { message: "Error deleting multiple Order Confirmations" };
+  }
+};
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Operator work tracking (sessions + breaks + event logs)
+// ───────────────────────────────────────────────────────────────────────────────
+
+export const startOperatorWorkSession = async (data) => {
+  try {
+    const response = await api.post("/operator-work/sessions/start", data);
+    return response.data;
+  } catch (error) {
+    console.error("Error starting operator work session:", error);
+    throw error.response?.data || { message: "Error starting operator work session" };
+  }
+};
+
+export const getActiveOperatorWorkSession = async (processId) => {
+  try {
+    let url = "/operator-work/sessions/active";
+    if (processId) {
+      url += `?processId=${processId}`;
+    }
+    const response = await api.get(url);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching active operator work session:", error);
+    throw error.response?.data || { message: "Error fetching active operator work session" };
+  }
+};
+
+export const stopOperatorWorkSession = async (sessionId, data) => {
+  try {
+    const response = await api.post(`/operator-work/sessions/${sessionId}/stop`, data || {});
+    return response.data;
+  } catch (error) {
+    console.error("Error stopping operator work session:", error);
+    throw error.response?.data || { message: "Error stopping operator work session" };
+  }
+};
+
+export const startOperatorWorkBreak = async (sessionId, data) => {
+  try {
+    const response = await api.post(
+      `/operator-work/sessions/${sessionId}/breaks/start`,
+      data || {},
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error starting operator break:", error);
+    throw error.response?.data || { message: "Error starting operator break" };
+  }
+};
+
+export const endOperatorWorkBreak = async (sessionId) => {
+  try {
+    const response = await api.post(
+      `/operator-work/sessions/${sessionId}/breaks/end`,
+      {},
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error ending operator break:", error);
+    throw error.response?.data || { message: "Error ending operator break" };
+  }
+};
+
+export const logOperatorWorkEvent = async (sessionId, data) => {
+  try {
+    const response = await api.post(
+      `/operator-work/sessions/${sessionId}/events`,
+      data,
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error logging operator work event:", error);
+    throw error.response?.data || { message: "Error logging operator work event" };
+  }
+};
+
+export const getFGInventory = async () => {
+  try {
+    const response = await api.get("/process/getFGInventory");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching FG inventory:", error);
+    throw error.response?.data || { message: "Error fetching FG inventory" };
   }
 };
 

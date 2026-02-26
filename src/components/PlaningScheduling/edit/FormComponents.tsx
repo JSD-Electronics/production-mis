@@ -906,7 +906,7 @@ const FormComponent: React.FC<FormComponentProps> = ({
     //                 </div>
     //                 <div className="col-span-3">
     //                   <strong>Dimension:</strong>{" "}
-    //                   {packagingData[0].packagingData.cartonWidth} Ã—{" "}
+    //                   {packagingData[0].packagingData.cartonWidth} x{" "}
     //                   {packagingData[0].packagingData.cartonHeight}
     //                 </div>
     //               </div>
@@ -1221,7 +1221,7 @@ const FormComponent: React.FC<FormComponentProps> = ({
     //               </div>
     //               <div className="col-span-3">
     //                 <strong>Dimension:</strong>{" "}
-    //                 {packagingData[0].packagingData.cartonWidth} Ã—{" "}
+    //                 {packagingData[0].packagingData.cartonWidth} x{" "}
     //                 {packagingData[0].packagingData.cartonHeight}
     //               </div>
     //             </div>

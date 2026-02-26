@@ -21,14 +21,62 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
     let baseValue = field.value || "";
     if (!device) return baseValue;
 
+    // Custom Fields Lookup Preparation
+    const customFields = device?.customFields || device?.custom_fields || device?.customfields;
+    let customFieldsObj: any = null;
+    if (customFields) {
+      customFieldsObj = customFields;
+      if (typeof customFieldsObj === "string") {
+        try { customFieldsObj = JSON.parse(customFieldsObj); } catch (e) { customFieldsObj = null; }
+      }
+    }
+
+    const normalize = (s: any) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    // Helper to find a value in a potentially nested object
+    const findDeep = (obj: any, targetSlug: string, targetCamel: string): any => {
+      if (!obj || typeof obj !== "object") return undefined;
+
+      const keys = Object.keys(obj);
+      const normTarget = normalize(targetSlug);
+
+      // Try shallow first
+      const foundKey = keys.find(k =>
+        k === targetSlug ||
+        k === targetCamel ||
+        normalize(k) === normTarget
+      );
+
+      if (foundKey && typeof obj[foundKey] !== "object") {
+        return obj[foundKey];
+      }
+
+      // Try nested
+      for (const k of keys) {
+        if (typeof obj[k] === "object" && obj[k] !== null) {
+          const deepVal = findDeep(obj[k], targetSlug, targetCamel);
+          if (deepVal !== undefined) return deepVal;
+        }
+      }
+      return undefined;
+    };
+
     // Slug replacement logic for any field type (allows dynamic barcodes/qr/text)
     if (typeof baseValue === "string" && baseValue.includes("{")) {
       const slugs = baseValue.match(/{[^{}]+}/g) || [];
       slugs.forEach((slugBox: string) => {
         const slug = slugBox.slice(1, -1);
         const camelSlug = toCamelCase(slug);
-        const val = device[camelSlug] || device[slug] || "";
-        baseValue = baseValue.replace(slugBox, val);
+
+        // Priority lookup: direct device property -> camelCase device property -> custom fields
+        let val = device[camelSlug] !== undefined ? device[camelSlug] :
+          device[slug] !== undefined ? device[slug] : undefined;
+
+        if (val === undefined && customFieldsObj) {
+          val = findDeep(customFieldsObj, slug, camelSlug);
+        }
+
+        baseValue = baseValue.replace(slugBox, val !== undefined ? String(val) : "");
       });
       if (field.type === "dynamic_url") return baseValue;
     }
@@ -36,37 +84,16 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
     const formattedKey = field.slug ? toCamelCase(field.slug) : "";
     let fieldValue = (formattedKey && device) ? device[formattedKey] : undefined;
 
-    // Custom Fields Lookup
-    const customFields = device?.customFields || device?.custom_fields || device?.customfields;
-    if (field.slug !== "serial_no" && !fieldValue && customFields) {
-      let customFieldsObj = customFields;
-      if (typeof customFieldsObj === "string") {
-        try { customFieldsObj = JSON.parse(customFieldsObj); } catch (e) { customFieldsObj = null; }
-      }
+    // Individual Field Slug Lookup (Fallback)
+    if (field.slug !== "serial_no" && !fieldValue && customFieldsObj) {
+      fieldValue = findDeep(customFieldsObj, field.slug || "", formattedKey);
 
-      if (customFieldsObj) {
-        const slug = (field.slug || "").toLowerCase();
-        const displayName = (field.name || "").toLowerCase();
-        const keys = Object.keys(customFieldsObj);
-        const normalize = (s: any) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-
-        const foundKey = keys.find(k => {
-          const kLower = k.toLowerCase();
-          return kLower === slug ||
-            kLower === displayName ||
-            normalize(k) === normalize(slug) ||
-            normalize(k) === normalize(displayName);
-        });
-
-        if (foundKey) {
-          fieldValue = customFieldsObj[foundKey];
-        } else {
-          fieldValue = customFieldsObj[formattedKey] ||
-            customFieldsObj[formattedKey.charAt(0).toUpperCase() + formattedKey.slice(1)];
-        }
+      // Also try normalize(field.name) if slug fails
+      if (fieldValue === undefined && field.name) {
+        fieldValue = findDeep(customFieldsObj, field.name, toCamelCase(field.name));
       }
     }
-    return fieldValue || baseValue || "";
+    return fieldValue !== undefined ? String(fieldValue) : baseValue || "";
   };
 
   return (

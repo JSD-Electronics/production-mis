@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useState } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -82,6 +82,10 @@ interface Stage {
   cycleTime: string;
   videoLinks: string[];
   sopFile?: string;
+  // Stage-level search type (e.g. Through Serial / Through Jig Stages)
+  searchType?: string;
+  // Jig fields used when stage search type is "Through Jig Stages"
+  jigStageFields?: any[];
   jigId?: string;
   isExpanded: boolean;
   subSteps: SubStep[];
@@ -135,6 +139,8 @@ const EditProduct = () => {
       videoLinks: [""],
       sopFile: "",
       jigId: "",
+      searchType: "",
+      jigStageFields: [],
       isExpanded: true,
       subSteps: [
         {
@@ -347,6 +353,7 @@ const EditProduct = () => {
               ? [stage.videoLink]
               : [""],
           dragId: stage.dragId || `stage-${sIdx}-${Date.now()}`,
+          jigStageFields: stage.jigStageFields || [],
           subSteps: (stage.subSteps || []).map((step: any, stIdx: number) => {
             const jigFields = [...(step.jigFields || [])];
             if (step.customFields && step.customFields.length > 0) {
@@ -411,6 +418,8 @@ const EditProduct = () => {
         cycleTime: "",
         videoLinks: [""],
         sopFile: "",
+        searchType: "",
+        jigStageFields: [],
         isExpanded: false,
         jigId: "",
         subSteps: [
@@ -496,6 +505,51 @@ const EditProduct = () => {
   };
 
   // Function to remove a stage field
+  const handleAddStageJigField = (stageIndex: number) => {
+    pushToHistory();
+    const newStages = [...stages];
+    const current = newStages[stageIndex].jigStageFields || [];
+    newStages[stageIndex].jigStageFields = [
+      ...current,
+      {
+        jigName: "",
+        validationType: "value",
+        value: "",
+        rangeFrom: "",
+        rangeTo: "",
+        lengthFrom: "",
+        lengthTo: "",
+      },
+    ];
+    setStages(newStages);
+  };
+
+  const handleStageJigFieldChange = (
+    stageIndex: number,
+    jigIndex: number,
+    event: React.ChangeEvent<HTMLInputElement>,
+    param: string,
+  ) => {
+    const newStages = [...stages];
+    const list = newStages[stageIndex].jigStageFields || [];
+    list[jigIndex] = {
+      ...(list[jigIndex] || {}),
+      [param]: event.target.value,
+    };
+    newStages[stageIndex].jigStageFields = list;
+    setStages(newStages);
+  };
+
+  const handleRemoveStageJigField = (stageIndex: number, jigIndex: number) => {
+    pushToHistory();
+    const newStages = [...stages];
+    const list = newStages[stageIndex].jigStageFields || [];
+    newStages[stageIndex].jigStageFields = list.filter(
+      (_: any, idx: number) => idx !== jigIndex,
+    );
+    setStages(newStages);
+  };
+
   const handleRemoveStage = (index: number) => {
     pushToHistory();
     const newStages = stages.filter((_, i) => i !== index);
@@ -1626,6 +1680,88 @@ const EditProduct = () => {
                                     className="w-full rounded-lg border-[1.5px] border-gray-300 bg-gray-50 px-5 py-3 text-sm text-gray-800 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
                                   />
                                 </div>
+
+                                {/* Stage Search Type */}
+                                <div>
+                                  <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                    <BarChart3 className="h-4 w-4 text-primary" />
+                                    Stage Search Type
+                                  </label>
+                                  <select
+                                    value={stage.searchType || ""}
+                                    onChange={(e) =>
+                                      handleStageChange(index, e, "searchType")
+                                    }
+                                    className="w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-800 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-strokedark dark:bg-form-input dark:text-white"
+                                  >
+                                    <option value="">Select Stage Search Type</option>
+                                    <option value="Through Serial">Through Serial</option>
+                                    <option value="Through Jig Stages">Through Jig Stages</option>
+                                  </select>
+                                </div>
+
+                                {stage.searchType === "Through Jig Stages" && (
+                                  <div className="col-span-1 lg:col-span-3 mt-4">
+                                    <div className="mb-2 flex items-center justify-between">
+                                      <label className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                        <BarChart3 className="h-4 w-4 text-primary" />
+                                        Jig Stage Fields
+                                      </label>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAddStageJigField(index)}
+                                        className="flex items-center gap-1 rounded-md border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary hover:text-white transition"
+                                      >
+                                        <FontAwesomeIcon icon={faPlus} className="h-3 w-3" />
+                                        Add Jig Field
+                                      </button>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                      {(stage.jigStageFields || []).map(
+                                        (jigField: any, jigIndex: number) => (
+                                          <div
+                                            key={`${stage.dragId}-stage-jig-${jigIndex}`}
+                                            className="rounded-lg border border-gray-200 p-3 dark:border-form-strokedark"
+                                          >
+                                            <div className="flex items-center gap-3">
+                                              <div className="flex-1">
+                                                <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
+                                                  Jig Field Name
+                                                </label>
+                                                <input
+                                                  type="text"
+                                                  value={jigField?.jigName || ""}
+                                                  onChange={(e) =>
+                                                    handleStageJigFieldChange(
+                                                      index,
+                                                      jigIndex,
+                                                      e,
+                                                      "jigName",
+                                                    )
+                                                  }
+                                                  placeholder="Name"
+                                                  className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                                />
+                                              </div>
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  handleRemoveStageJigField(index, jigIndex)
+                                                }
+                                                className="mt-5 flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700"
+                                              >
+                                                <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
+                                                Remove
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ),
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
                                 <div>
                                   <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-200">
                                     <BarChart3 className="h-4 w-4 text-primary" />

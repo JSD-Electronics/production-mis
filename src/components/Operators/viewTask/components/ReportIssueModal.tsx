@@ -35,7 +35,7 @@ export default function ReportIssueModal({
               onChange={(e) => setIssueType(e.target.value)}
             >
               <option value="">-- Select an Issue --</option>
-              <option value="not_found">ðŸ“¦ Device Not Found</option>
+              <option value="not_found"> Device Not Found</option>
               <option value="technical_fault">âš¡ Technical Fault</option>
             </select>
           </div>

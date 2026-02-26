@@ -54,7 +54,7 @@ export default function PackagingSection({
       <div className="mb-4 flex items-center gap-2">
         <Box className="h-6 w-6 text-primary" />
         <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
-          {isCarton ? "ðŸ“¦ Carton Details" : "ðŸ“„ Single Device Sticker"}
+          {isCarton ? "Carton Details" : "ðŸ“„ Single Device Sticker"}
         </h3>
       </div>
       <hr className="mb-4 border-gray-300 dark:border-gray-700" />
@@ -66,7 +66,7 @@ export default function PackagingSection({
             <p className="flex items-center gap-2">
               <Package className="h-5 w-5 text-blue-500" />
               <span className="font-medium">Dimensions:</span>{" "}
-              {subStep?.packagingData?.cartonWidth} Ã—{" "}
+              {subStep?.packagingData?.cartonWidth} x{" "}
               {subStep?.packagingData?.cartonHeight}
             </p>
             <p className="flex items-center gap-2">
