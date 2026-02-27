@@ -6,7 +6,6 @@ import CartonSearchableInput from "@/components/SearchableInput/CartonSearchable
 import NGModel from "@/components/Operators/viewTask/components/NGModal";
 import {
   createCarton,
-  verifyCartonSticker,
   fetchCartonByProcessID,
   fetchCartons,
   shiftToPDI,
@@ -252,13 +251,6 @@ export default function DeviceTestComponent({
   const [isCartonDevicesModalOpen, setIsCartonDevicesModalOpen] =
     useState(false);
   const [isVerifyCartonModal, setIsVerifyCartonModal] = useState(false);
-  const [isAllCartonsPopupOpen, setIsAllCartonsPopupOpen] = useState(false);
-  const [verifyingCartonSerial, setVerifyingCartonSerial] = useState<string | null>(
-    null,
-  );
-  const [scannedCartonSerial, setScannedCartonSerial] = useState("");
-  const [isPreviewPrintModalOpen, setIsPreviewPrintModalOpen] = useState(false);
-  const [previewCartonData, setPreviewCartonData] = useState<any>(null);
   const [selectedLogs, setSelectedLogs] = useState<any[]>([]);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
   const [manualFieldValues, setManualFieldValues] = useState<
@@ -318,25 +310,12 @@ export default function DeviceTestComponent({
     }
   };
 
-  const handleVerifyCarton = async () => {
-    if (!verifyingCartonSerial) return;
-    if (scannedCartonSerial === verifyingCartonSerial) {
-      try {
-        await verifyCartonSticker(verifyingCartonSerial);
-        toast.success("Carton Verified Successfully!");
-        setIsVerifyCartonModal(false);
-        setScannedCartonSerial("");
-        setVerifyingCartonSerial(null);
-        // Refresh cartons
-        if (processData?._id) {
-          fetchProcessCartons();
-          fetchExistingCartonsByProcessID();
-        }
-      } catch (error) {
-        toast.error("Failed to verify carton");
-      }
+  const handleVerifyCarton = (scannedValue: string) => {
+    if (scannedValue === selectedCarton) {
+      alert("Carton Verified Successfully!");
+      setIsVerifyCartonModal(false);
     } else {
-      toast.error("Incorrect Carton Serial! Please scan the correct carton.");
+      alert("Incorrect Carton Serial! Please scan the correct carton.");
     }
   };
 
@@ -690,85 +669,6 @@ export default function DeviceTestComponent({
       console.error("Error generating QR Code:", error);
     }
   };
-
-  const handlePrintPreview = () => {
-    const printContent = document.getElementById("carton-sticker-preview");
-    if (!printContent) return;
-
-    const printWindow = window.open("", "_blank", "width=800,height=600");
-    if (printWindow) {
-      // Find the canvas element and get its data URL if it exists
-      const canvas = printContent.querySelector("canvas");
-      const qrImage = canvas ? canvas.toDataURL("image/png") : "";
-
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Print Carton Sticker</title>
-            <style>
-              @page { size: auto; margin: 0mm; }
-              body { 
-                font-family: 'Courier New', Courier, monospace; 
-                display: flex; 
-                justify-content: center; 
-                align-items: center; 
-                min-height: 100vh; 
-                margin: 0; 
-                color: #000;
-              }
-              .sticker { 
-                border: 1px solid #000; 
-                padding: 10px; 
-                width: 240px; 
-                background: #fff;
-              }
-              .row { 
-                display: flex; 
-                justify-content: space-between; 
-                align-items: flex-start;
-                border-bottom: 1px dashed #eee; 
-                padding: 2px 0;
-                font-size: 9px;
-                gap: 5px;
-              }
-              .row span:first-child { font-weight: bold; color: #777; white-space: nowrap; font-size: 8px; }
-              .row span:last-child { font-weight: 800; text-align: right; word-break: break-all; }
-              .qr-box { 
-                text-align: center; 
-                margin-top: 8px; 
-              }
-              .qr-image { width: 90px; height: 90px; margin-bottom: 2px; }
-              .serial-text { font-size: 9px; font-weight: bold; letter-spacing: 0.5px; }
-              @media print {
-                body { min-height: auto; }
-                .sticker { border: none; }
-              }
-            </style>
-          </head>
-          <body>
-            <div class="sticker">
-              <div class="row"><span>PROCESS:</span> <span>${assignedTaskDetails?.processName || "N/A"}</span></div>
-              <div class="row"><span>PRODUCT:</span> <span>${product?.name || "N/A"}</span></div>
-              <div class="row"><span>CARTON SN:</span> <span>${previewCartonData?.cartonSerial}</span></div>
-              <div class="row"><span>QTY:</span> <span>${previewCartonData?.devices?.length || 0} PCS</span></div>
-              <div class="qr-box">
-                ${qrImage ? `<img src="${qrImage}" class="qr-image" />` : ""}
-                <div class="serial-text">${previewCartonData?.cartonSerial}</div>
-              </div>
-            </div>
-            <script>
-              window.onload = function() {
-                window.print();
-                setTimeout(() => { window.close(); }, 500);
-              };
-            </script>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      setIsPreviewPrintModalOpen(false);
-    }
-  };
   const handleGenerateQRCode = async (carton: any) => {
     try {
       if (!carton.cartonSerial) {
@@ -948,7 +848,7 @@ export default function DeviceTestComponent({
       cartonSerials.forEach((serial: string, index: number) => {
         formData.append(`cartons[${index}]`, serial);
       });
-      const response = await shiftToPDI(cartonSerials);
+      const response = await shiftToPDI(formData);
       if (response) {
         const data = response;
         alert("Cartons shifted to PDI successfully!");
@@ -1264,13 +1164,6 @@ export default function DeviceTestComponent({
               Refresh
             </button>
             <button
-              onClick={() => setIsAllCartonsPopupOpen(true)}
-              className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-xs font-bold text-indigo-600 transition-all hover:bg-indigo-100 active:scale-95"
-            >
-              <Box className="h-4 w-4" />
-              Carton Details
-            </button>
-            <button
               onClick={() => setIsHistoryOpen(true)}
               className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow transition-all hover:bg-indigo-700 active:scale-95"
             >
@@ -1280,262 +1173,13 @@ export default function DeviceTestComponent({
           </div>
         </div>
 
-        {/* Carton Details Popup */}
-        <Modal
-          isOpen={isAllCartonsPopupOpen}
-          onClose={() => setIsAllCartonsPopupOpen(false)}
-          title="Carton Tracking & Verification"
-          submitOption={false}
-          width="max-w-4xl"
-        >
-          <div className="space-y-6">
-            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 text-xs font-bold uppercase tracking-wider text-gray-500">
-                  <tr>
-                    <th className="px-6 py-4">Carton Serial</th>
-                    <th className="px-6 py-4">Devices</th>
-                    <th className="px-6 py-4">Verification</th>
-                    <th className="px-6 py-4 text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {(() => {
-                    const cartonList = Array.isArray(processCartons)
-                      ? processCartons
-                      : processCartons?.cartonDetails || [];
-                    return cartonList.length > 0 ? (
-                      cartonList.map((row: any, idx: number) => (
-                        <tr key={idx} className="hover:bg-gray-50/50">
-                          <td className="px-6 py-4 font-bold text-gray-900">
-                            {row?.cartonSerial}
-                          </td>
-                          <td className="px-6 py-4 text-gray-600">
-                            {row?.devices?.length || 0} / {row?.maxCapacity || 5}
-                          </td>
-                          <td className="px-6 py-4">
-                            {row?.isStickerVerified ? (
-                              <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
-                                <CheckCircle className="h-3.5 w-3.5" />
-                                Verified
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-700">
-                                <AlertTriangle className="h-3.5 w-3.5" />
-                                Pending
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex justify-center gap-2">
-                              <button
-                                onClick={() => {
-                                  setPreviewCartonData(row);
-                                  setIsPreviewPrintModalOpen(true);
-                                }}
-                                className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100"
-                                title="Preview & Print"
-                              >
-                                <Printer className="h-4 w-4" />
-                              </button>
-                              {!row?.isStickerVerified && (
-                                <button
-                                  onClick={() => {
-                                    setVerifyingCartonSerial(row.cartonSerial);
-                                    setIsVerifyCartonModal(true);
-                                  }}
-                                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
-                                  title="Verify"
-                                >
-                                  <ClipboardCheck className="h-4 w-4" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          className="px-6 py-10 text-center italic text-gray-400"
-                        >
-                          No cartons created yet for this process.
-                        </td>
-                      </tr>
-                    );
-                  })()}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Shift to PDI Footer */}
-            {(() => {
-              const cartonList = Array.isArray(processCartons)
-                ? processCartons
-                : processCartons?.cartonDetails || [];
-              const allVerified =
-                cartonList.length > 0 &&
-                cartonList.every((c: any) => c.isStickerVerified);
-              return (
-                <div className="flex items-center justify-between rounded-xl bg-gray-50 p-4">
-                  <div className="text-sm text-gray-600">
-                    {allVerified ? (
-                      <span className="flex items-center gap-2 font-bold text-green-600">
-                        <CheckCircle className="h-4 w-4" /> All cartons
-                        verified. Ready for PDI.
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-2 font-medium text-gray-500">
-                        <AlertTriangle className="h-4 w-4" /> All cartons must
-                        be verified to enable PDI shift.
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    disabled={!allVerified}
-                    onClick={handleShiftToPDI}
-                    className={`flex items-center gap-2 rounded-lg px-6 py-2 text-xs font-bold text-white shadow transition-all ${allVerified ? "bg-indigo-600 hover:bg-indigo-700" : "cursor-not-allowed bg-gray-400"}`}
-                  >
-                    <ArrowRightCircle className="h-4 w-4" />
-                    Shift to PDI
-                  </button>
-                </div>
-              );
-            })()}
-
-            {/* Hidden Barcode Area for Printing */}
-            <div className="hidden">
-              <div id="barcode-area">
-                {Object.keys(qrCartons).map(
-                  (serial) =>
-                    qrCartons[serial] && (
-                      <div key={serial} className="m-4 text-center">
-                        <Canvas
-                          text={serial}
-                          options={{
-                            margin: 2,
-                            scale: 4,
-                            width: 200,
-                            color: { dark: "#000000", light: "#ffffff" },
-                          }}
-                        />
-                        <p className="mt-2 font-bold">{serial}</p>
-                      </div>
-                    ),
-                )}
-              </div>
-            </div>
-          </div>
-        </Modal>
-
-        {/* Verify Carton Serial Modal */}
-        <Modal
-          isOpen={isVerifyCartonModal}
-          onClose={() => {
-            setIsVerifyCartonModal(false);
-            setScannedCartonSerial("");
-          }}
-          title="Verify Carton"
-          onSubmit={handleVerifyCarton}
-        >
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Verifying:{" "}
-              <span className="font-bold text-indigo-600">
-                {verifyingCartonSerial}
-              </span>
-            </p>
-            <div>
-              <label className="mb-2 block text-sm font-bold text-gray-700">
-                Scan Carton Serial
-              </label>
-              <input
-                type="text"
-                value={scannedCartonSerial}
-                onChange={(e) => setScannedCartonSerial(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleVerifyCarton();
-                }}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Scan / Enter carton serial..."
-                autoFocus
-              />
-            </div>
-          </div>
-        </Modal>
-
-        {/* Carton Sticker Preview Modal */}
-        <Modal
-          isOpen={isPreviewPrintModalOpen}
-          onClose={() => setIsPreviewPrintModalOpen(false)}
-          title="Sticker Preview"
-          onSubmit={handlePrintPreview}
-          submitText="Print Sticker"
-        >
-          <div className="flex flex-col items-center gap-6 p-4">
-            <div
-              id="carton-sticker-preview"
-              className="w-[200px] rounded-lg border-2 border-gray-100 bg-white p-3 shadow-sm"
-              style={{
-                fontFamily: "monospace",
-              }}
-            >
-              <div className="space-y-1.5 text-[10px] text-gray-800">
-                <div className="flex justify-between border-b border-gray-50 pb-0.5">
-                  <span className="font-bold uppercase text-gray-400 text-[8px]">Process:</span>
-                  <span className="max-w-[100px] text-right font-black leading-tight text-[9px]">
-                    {assignedTaskDetails?.processName || "N/A"}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b border-gray-50 pb-0.5">
-                  <span className="font-bold uppercase text-gray-400 text-[8px]">Product:</span>
-                  <span className="max-w-[100px] text-right font-black leading-tight text-[9px]">
-                    {product?.name || "N/A"}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b border-gray-50 pb-0.5">
-                  <span className="font-bold uppercase text-gray-400 text-[8px]">Carton SN:</span>
-                  <span className="max-w-[100px] break-all text-right font-black text-indigo-600 text-[9px]">
-                    {previewCartonData?.cartonSerial}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b border-gray-50 pb-0.5">
-                  <span className="font-bold uppercase text-gray-400 text-[8px]">Qty:</span>
-                  <span className="font-black text-[9px]">
-                    {previewCartonData?.devices?.length || 0} PCS
-                  </span>
-                </div>
-
-                <div className="flex flex-col items-center gap-1 pt-2">
-                  <Canvas
-                    text={previewCartonData?.cartonSerial || "N/A"}
-                    options={{
-                      margin: 2,
-                      scale: 4,
-                      width: 90,
-                      color: { dark: "#000000", light: "#ffffff" },
-                    }}
-                  />
-                  <span className="text-[8px] font-bold tracking-wider">
-                    {previewCartonData?.cartonSerial}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <p className="text-center text-[10px] italic text-gray-500">
-              Verify the details above before printing. Verification is enabled after printing.
-            </p>
-          </div>
-        </Modal>
-
         {/* Content */}
         <div className="mt-5 space-y-5">
           {/* Device Search Box */}
           <div
-            className={`${isPaused && "blur-sm"
-              } rounded-xl border border-gray-200 bg-white p-4 shadow-sm`}
+            className={`${
+              isPaused && "blur-sm"
+            } rounded-xl border border-gray-200 bg-white p-4 shadow-sm`}
           >
             {assignedTaskDetails?.stageType == "common" ? (
               <>
@@ -1640,10 +1284,11 @@ export default function DeviceTestComponent({
                         return (
                           <div className="relative z-10 mt-5">
                             <span
-                              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-bold ${isFull
-                                ? "border-red-100 bg-red-50 text-red-700"
-                                : "border-blue-100 bg-blue-50 text-blue-700"
-                                }`}
+                              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-bold ${
+                                isFull
+                                  ? "border-red-100 bg-red-50 text-red-700"
+                                  : "border-blue-100 bg-blue-50 text-blue-700"
+                              }`}
                             >
                               {isFull ? (
                                 <AlertTriangle className="h-3.5 w-3.5" />
@@ -1771,21 +1416,22 @@ export default function DeviceTestComponent({
                                   </td>
                                   <td className="px-6 py-4">
                                     <span
-                                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${device.status === "Pass"
-                                        ? "bg-green-100 text-green-700"
-                                        : device.status === "Fail" ||
-                                          device.status === "NG"
-                                          ? "bg-red-100 text-red-700"
-                                          : "bg-gray-100 text-gray-600"
-                                        }`}
+                                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                                        device.status === "Pass"
+                                          ? "bg-green-100 text-green-700"
+                                          : device.status === "Fail" ||
+                                              device.status === "NG"
+                                            ? "bg-red-100 text-red-700"
+                                            : "bg-gray-100 text-gray-600"
+                                      }`}
                                     >
                                       {device.status === "Pass" && (
                                         <Check className="h-3 w-3" />
                                       )}
                                       {(device.status === "Fail" ||
                                         device.status === "NG") && (
-                                          <X className="h-3 w-3" />
-                                        )}
+                                        <X className="h-3 w-3" />
+                                      )}
                                       {device.status || "N/A"}
                                     </span>
                                   </td>
@@ -1851,7 +1497,7 @@ export default function DeviceTestComponent({
                                                   <span>User:</span>
                                                   <span className="font-medium text-gray-900">
                                                     {typeof record.operatorId ===
-                                                      "object"
+                                                    "object"
                                                       ? record.operatorId.name
                                                       : record.operatorId}
                                                   </span>
@@ -1861,9 +1507,9 @@ export default function DeviceTestComponent({
                                                     <span>Plan:</span>
                                                     <span className="ml-2 truncate font-medium text-gray-900">
                                                       {typeof record.planId ===
-                                                        "object"
+                                                      "object"
                                                         ? record.planId
-                                                          .processName
+                                                            .processName
                                                         : record.planId}
                                                     </span>
                                                   </div>
@@ -1927,7 +1573,7 @@ export default function DeviceTestComponent({
                   onClose={() => setIsVerifyCartonModal(false)}
                   title="Verify Carton Sticker"
                   submitOption={false}
-                  onSubmit={() => { }}
+                  onSubmit={() => {}}
                 >
                   <div className="space-y-6 p-6">
                     <div className="flex flex-col items-center justify-center space-y-4 text-center">
@@ -2005,12 +1651,13 @@ export default function DeviceTestComponent({
                                 {device.currentStage}
                               </td>
                               <td
-                                className={`px-4 py-3 font-semibold ${device.status === "Pass"
-                                  ? "text-green-600"
-                                  : device.status === "Fail"
-                                    ? "text-red-600"
-                                    : "text-gray-500"
-                                  }`}
+                                className={`px-4 py-3 font-semibold ${
+                                  device.status === "Pass"
+                                    ? "text-green-600"
+                                    : device.status === "Fail"
+                                      ? "text-red-600"
+                                      : "text-gray-500"
+                                }`}
                               >
                                 {device.status || "N/A"}
                               </td>
@@ -2019,7 +1666,7 @@ export default function DeviceTestComponent({
                               </td>
                               <td className="px-4 py-3">
                                 {device.testRecords &&
-                                  device.testRecords.length > 0 ? (
+                                device.testRecords.length > 0 ? (
                                   <div className="overflow-x-auto">
                                     <table className="w-full rounded-md border text-xs">
                                       <thead className="bg-gray-50 text-gray-600">
@@ -2041,10 +1688,11 @@ export default function DeviceTestComponent({
                                                 {record.stageName}
                                               </td>
                                               <td
-                                                className={`px-2 py-1 font-semibold ${record.status === "Pass"
-                                                  ? "text-green-600"
-                                                  : "text-red-600"
-                                                  }`}
+                                                className={`px-2 py-1 font-semibold ${
+                                                  record.status === "Pass"
+                                                    ? "text-green-600"
+                                                    : "text-red-600"
+                                                }`}
                                               >
                                                 {record.status}
                                               </td>
@@ -2135,12 +1783,13 @@ export default function DeviceTestComponent({
                         return (
                           <div
                             key={idx}
-                            className={`group relative flex shrink-0 items-center gap-2 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${isPass
-                              ? "border-green-200 bg-green-50/50 text-green-700 shadow-sm hover:shadow-green-100/50"
-                              : isNG
-                                ? "border-red-200 bg-red-50/50 text-red-700 shadow-sm hover:shadow-red-100/50"
-                                : "border-gray-100 bg-gray-50 text-gray-400 opacity-60"
-                              }`}
+                            className={`group relative flex shrink-0 items-center gap-2 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
+                              isPass
+                                ? "border-green-200 bg-green-50/50 text-green-700 shadow-sm hover:shadow-green-100/50"
+                                : isNG
+                                  ? "border-red-200 bg-red-50/50 text-red-700 shadow-sm hover:shadow-red-100/50"
+                                  : "border-gray-100 bg-gray-50 text-gray-400 opacity-60"
+                            }`}
                           >
                             <div
                               className={`rounded-md p-1 ${isPass ? "bg-green-500/10" : isNG ? "bg-red-500/10" : "bg-gray-500/10"}`}
@@ -2244,7 +1893,7 @@ export default function DeviceTestComponent({
                                             {Math.round(
                                               (currentJigStepIndex /
                                                 testSteps.length) *
-                                              100,
+                                                100,
                                             )}
                                             %
                                           </span>
@@ -2263,68 +1912,68 @@ export default function DeviceTestComponent({
                                       {testSteps.some(
                                         (s: any) => s.stepType === "jig",
                                       ) && (
-                                          <div
-                                            className={
-                                              currentSubStep.stepType === "jig"
-                                                ? "space-y-4"
-                                                : "hidden"
-                                            }
-                                          >
-                                            <div className="flex items-center justify-between">
-                                              <div>
-                                                <h4 className="flex items-center gap-2 text-lg font-bold text-gray-800">
-                                                  <Cpu className="h-5 w-5 text-blue-600" />
-                                                  {currentSubStep.stepName ||
-                                                    currentSubStep.name ||
-                                                    `Automated Test`}
-                                                </h4>
-                                                <p className="ml-7 text-sm text-gray-500">
-                                                  Step {currentJigStepIndex + 1}{" "}
-                                                  of {testSteps.length}
-                                                </p>
-                                              </div>
-                                              <span className="rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-blue-700">
-                                                Automated Jig
-                                              </span>
+                                        <div
+                                          className={
+                                            currentSubStep.stepType === "jig"
+                                              ? "space-y-4"
+                                              : "hidden"
+                                          }
+                                        >
+                                          <div className="flex items-center justify-between">
+                                            <div>
+                                              <h4 className="flex items-center gap-2 text-lg font-bold text-gray-800">
+                                                <Cpu className="h-5 w-5 text-blue-600" />
+                                                {currentSubStep.stepName ||
+                                                  currentSubStep.name ||
+                                                  `Automated Test`}
+                                              </h4>
+                                              <p className="ml-7 text-sm text-gray-500">
+                                                Step {currentJigStepIndex + 1}{" "}
+                                                of {testSteps.length}
+                                              </p>
                                             </div>
-                                            <JigSection
-                                              key={`jig-${searchResult?.serialNo || searchResult}`}
-                                              subStep={currentSubStep}
-                                              isLastStep={
-                                                currentJigStepIndex ===
-                                                testSteps.length - 1
-                                              }
-                                              onDataReceived={(data: any) => { }}
-                                              onDecision={handleStepDecision}
-                                              onDisconnect={(fn: () => void) => {
-                                                jigDisconnectRef.current = fn;
-                                              }}
-                                              searchQuery={searchQuery}
-                                              onConnectionChange={
-                                                setIsJigConnected
-                                              }
-                                              finalResult={
-                                                jigResults[currentJigStepIndex]
-                                                  ?.status
-                                              }
-                                              finalReason={
-                                                jigResults[currentJigStepIndex]
-                                                  ?.reason
-                                              }
-                                              onStatusUpdate={(
-                                                status: string,
-                                              ) => {
-                                                pendingJigErrorRef.current =
-                                                  status;
-                                              }}
-                                              generatedCommand={generatedCommand}
-                                              setGeneratedCommand={
-                                                setGeneratedCommand
-                                              }
-                                              autoConnect={!!searchResult}
-                                            />
+                                            <span className="rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-blue-700">
+                                              Automated Jig
+                                            </span>
                                           </div>
-                                        )}
+                                          <JigSection
+                                            key={`jig-${searchResult?.serialNo || searchResult}`}
+                                            subStep={currentSubStep}
+                                            isLastStep={
+                                              currentJigStepIndex ===
+                                              testSteps.length - 1
+                                            }
+                                            onDataReceived={(data: any) => {}}
+                                            onDecision={handleStepDecision}
+                                            onDisconnect={(fn: () => void) => {
+                                              jigDisconnectRef.current = fn;
+                                            }}
+                                            searchQuery={searchQuery}
+                                            onConnectionChange={
+                                              setIsJigConnected
+                                            }
+                                            finalResult={
+                                              jigResults[currentJigStepIndex]
+                                                ?.status
+                                            }
+                                            finalReason={
+                                              jigResults[currentJigStepIndex]
+                                                ?.reason
+                                            }
+                                            onStatusUpdate={(
+                                              status: string,
+                                            ) => {
+                                              pendingJigErrorRef.current =
+                                                status;
+                                            }}
+                                            generatedCommand={generatedCommand}
+                                            setGeneratedCommand={
+                                              setGeneratedCommand
+                                            }
+                                            autoConnect={!!searchResult}
+                                          />
+                                        </div>
+                                      )}
 
                                       {/* MANUAL STEP UI */}
                                       {currentSubStep.stepType === "manual" &&
@@ -2363,8 +2012,8 @@ export default function DeviceTestComponent({
                                               {(() => {
                                                 const fields =
                                                   currentSubStep?.jigFields &&
-                                                    currentSubStep.jigFields
-                                                      .length > 0
+                                                  currentSubStep.jigFields
+                                                    .length > 0
                                                     ? currentSubStep.jigFields
                                                     : currentSubStep?.customFields;
                                                 const hasFields =
@@ -2394,55 +2043,57 @@ export default function DeviceTestComponent({
                                                       )}
                                                     {(!hasFields ||
                                                       hasManualValues) && (
-                                                        <div className="flex flex-col gap-4 pt-4 sm:flex-row">
-                                                          <button
-                                                            onClick={
-                                                              handleManualPass
-                                                            }
-                                                            disabled={
-                                                              !!jigDecision ||
-                                                              (hasFields &&
-                                                                fields.some(
-                                                                  (cf: any) => {
-                                                                    const name =
-                                                                      cf?.fieldName ||
-                                                                      cf?.jigName;
-                                                                    const v =
-                                                                      manualFieldValues[
+                                                      <div className="flex flex-col gap-4 pt-4 sm:flex-row">
+                                                        <button
+                                                          onClick={
+                                                            handleManualPass
+                                                          }
+                                                          disabled={
+                                                            !!jigDecision ||
+                                                            (hasFields &&
+                                                              fields.some(
+                                                                (cf: any) => {
+                                                                  const name =
+                                                                    cf?.fieldName ||
+                                                                    cf?.jigName;
+                                                                  const v =
+                                                                    manualFieldValues[
                                                                       name ?? ""
-                                                                      ] ?? "";
-                                                                    return !validateCustomField(
-                                                                      cf,
-                                                                      v,
-                                                                    ).valid;
-                                                                  },
-                                                                ))
-                                                            }
-                                                            className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
+                                                                    ] ?? "";
+                                                                  return !validateCustomField(
+                                                                    cf,
+                                                                    v,
+                                                                  ).valid;
+                                                                },
+                                                              ))
+                                                          }
+                                                          className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${
+                                                            jigDecision
                                                               ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none"
                                                               : "bg-success hover:bg-green-600"
-                                                              }`}
-                                                          >
-                                                            <CheckCircle className="h-5 w-5" />
-                                                            Confirm & Mark Pass
-                                                          </button>
-                                                          <button
-                                                            onClick={
-                                                              handleManualNG
-                                                            }
-                                                            disabled={
-                                                              !!jigDecision
-                                                            }
-                                                            className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
+                                                          }`}
+                                                        >
+                                                          <CheckCircle className="h-5 w-5" />
+                                                          Confirm & Mark Pass
+                                                        </button>
+                                                        <button
+                                                          onClick={
+                                                            handleManualNG
+                                                          }
+                                                          disabled={
+                                                            !!jigDecision
+                                                          }
+                                                          className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${
+                                                            jigDecision
                                                               ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none"
                                                               : "bg-danger hover:bg-red-600"
-                                                              }`}
-                                                          >
-                                                            <XCircle className="h-5 w-5" />
-                                                            Report Issue (NG)
-                                                          </button>
-                                                        </div>
-                                                      )}
+                                                          }`}
+                                                        >
+                                                          <XCircle className="h-5 w-5" />
+                                                          Report Issue (NG)
+                                                        </button>
+                                                      </div>
+                                                    )}
                                                   </>
                                                 );
                                               })()}
@@ -2476,8 +2127,8 @@ export default function DeviceTestComponent({
                                             {(() => {
                                               const fields =
                                                 currentSubStep?.jigFields &&
-                                                  currentSubStep.jigFields
-                                                    .length > 0
+                                                currentSubStep.jigFields
+                                                  .length > 0
                                                   ? currentSubStep.jigFields
                                                   : currentSubStep?.customFields;
                                               return Array.isArray(fields) &&
@@ -2493,12 +2144,12 @@ export default function DeviceTestComponent({
                                                       "value";
                                                     const inputType =
                                                       vtype === "range" ||
-                                                        vtype === "length"
+                                                      vtype === "length"
                                                         ? "number"
                                                         : "text"; // Keep text for simplicity, validate logically
                                                     const val =
                                                       manualFieldValues[
-                                                      fname
+                                                        fname
                                                       ] ?? "";
                                                     const res =
                                                       validateCustomField(
@@ -2536,7 +2187,7 @@ export default function DeviceTestComponent({
                                                             {vtype === "range"
                                                               ? `Range: ${cf?.rangeFrom} - ${cf?.rangeTo}`
                                                               : vtype ===
-                                                                "value"
+                                                                  "value"
                                                                 ? `Exact: ${cf?.value}`
                                                                 : "Required"}
                                                           </span>
@@ -2546,7 +2197,7 @@ export default function DeviceTestComponent({
                                                           <input
                                                             type={
                                                               inputType ===
-                                                                "number"
+                                                              "number"
                                                                 ? "number"
                                                                 : "text"
                                                             }
@@ -2575,7 +2226,7 @@ export default function DeviceTestComponent({
                                                                     r.valid
                                                                       ? null
                                                                       : r.message ||
-                                                                      "Invalid value",
+                                                                        "Invalid value",
                                                                 }),
                                                               );
                                                             }}
@@ -2638,12 +2289,12 @@ export default function DeviceTestComponent({
                                                           (d: any) =>
                                                             String(
                                                               d.serialNo ||
-                                                              d.serial_no ||
-                                                              "",
+                                                                d.serial_no ||
+                                                                "",
                                                             ).trim() ===
                                                             String(
                                                               searchResult ||
-                                                              "",
+                                                                "",
                                                             ).trim(),
                                                         )}
                                                       />
@@ -2855,7 +2506,7 @@ export default function DeviceTestComponent({
                                                     {(() => {
                                                       const activeCarton =
                                                         cartons[
-                                                        cartons.length - 1
+                                                          cartons.length - 1
                                                         ];
                                                       const capacity =
                                                         currentSubStep
@@ -3285,14 +2936,15 @@ export default function DeviceTestComponent({
                                     >
                                       <div className="flex items-center gap-3">
                                         <div
-                                          className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${status === "Pass"
-                                            ? "bg-green-100 text-green-700"
-                                            : status === "NG"
-                                              ? "bg-red-100 text-red-700"
-                                              : index === currentJigStepIndex
-                                                ? "animate-pulse bg-blue-100 text-blue-700"
-                                                : "bg-gray-100 text-gray-500"
-                                            }`}
+                                          className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                                            status === "Pass"
+                                              ? "bg-green-100 text-green-700"
+                                              : status === "NG"
+                                                ? "bg-red-100 text-red-700"
+                                                : index === currentJigStepIndex
+                                                  ? "animate-pulse bg-blue-100 text-blue-700"
+                                                  : "bg-gray-100 text-gray-500"
+                                          }`}
                                         >
                                           {index + 1}
                                         </div>
@@ -3349,90 +3001,90 @@ export default function DeviceTestComponent({
                               </div>
                             </div>
 
-                            {/* {/* Carton Details (Moved from Recent Activity) */}
-                            {/* {processAssignUserStage?.subSteps?.some(
+                            {/* Carton Details (Moved from Recent Activity) */}
+                            {processAssignUserStage?.subSteps?.some(
                               (s: any) => s.isPackagingStatus,
                             ) && (
-                                <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-                                  <div className="border-b border-gray-100 bg-gray-50/50 px-4 py-3">
-                                    <h4 className="flex items-center gap-2 text-sm font-bold text-gray-800">
-                                      <Box className="h-4 w-4 text-orange-500" />
-                                      Carton Details
-                                    </h4>
-                                  </div>
-                                  <div className="p-0">
-                                    <table className="w-full text-left text-xs">
-                                      <thead className="bg-gray-50 font-medium uppercase tracking-wider text-gray-500">
-                                        <tr>
-                                          <th className="px-4 py-3">Serial</th>
-                                          <th className="px-4 py-3">Status</th>
-                                          <th className="px-4 py-3 text-right">
-                                            Timestamp
-                                          </th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-gray-100">
-                                        {(() => {
-                                          const cartonList = Array.isArray(
-                                            processCartons,
-                                          )
-                                            ? processCartons
-                                            : processCartons?.cartonDetails || [];
-                                          return cartonList.length > 0 ? (
-                                            cartonList.map(
-                                              (row: any, rowIndex: number) => (
-                                                <tr
-                                                  key={rowIndex}
-                                                  className="transition-colors hover:bg-gray-50/50"
-                                                >
-                                                  <td className="px-4 py-3 font-semibold text-gray-900">
-                                                    {row?.cartonSerial}
-                                                  </td>
-                                                  <td className="px-4 py-3">
-                                                    <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
-                                                      {row?.status}
-                                                    </span>
-                                                  </td>
-                                                  <td className="px-4 py-3 text-right text-gray-400">
-                                                    {new Date(
-                                                      row?.createdAt,
-                                                    ).toLocaleTimeString([], {
-                                                      hour: "2-digit",
-                                                      minute: "2-digit",
-                                                    })}
-                                                  </td>
-                                                </tr>
-                                              ),
-                                            )
-                                          ) : (
-                                            <tr>
-                                              <td
-                                                colSpan={3}
-                                                className="p-6 text-center italic text-gray-400"
-                                              >
-                                                No cartons found
-                                              </td>
-                                            </tr>
-                                          );
-                                        })()}
-                                      </tbody>
-                                    </table>
-                                    {(Array.isArray(processCartons)
-                                      ? processCartons.length > 0
-                                      : processCartons?.cartonDetails?.length >
-                                      0) && (
-                                        <div className="flex justify-end border-t border-gray-100 bg-gray-50/50 p-4">
-                                          <button
-                                            className="rounded-lg bg-cyan-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-cyan-700"
-                                            onClick={handleShiftToPDI}
-                                          >
-                                            Shift to PDI
-                                          </button>
-                                        </div>
-                                      )}
-                                  </div>
+                              <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                                <div className="border-b border-gray-100 bg-gray-50/50 px-4 py-3">
+                                  <h4 className="flex items-center gap-2 text-sm font-bold text-gray-800">
+                                    <Box className="h-4 w-4 text-orange-500" />
+                                    Carton Details
+                                  </h4>
                                 </div>
-                              )} */}
+                                <div className="p-0">
+                                  <table className="w-full text-left text-xs">
+                                    <thead className="bg-gray-50 font-medium uppercase tracking-wider text-gray-500">
+                                      <tr>
+                                        <th className="px-4 py-3">Serial</th>
+                                        <th className="px-4 py-3">Status</th>
+                                        <th className="px-4 py-3 text-right">
+                                          Timestamp
+                                        </th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                      {(() => {
+                                        const cartonList = Array.isArray(
+                                          processCartons,
+                                        )
+                                          ? processCartons
+                                          : processCartons?.cartonDetails || [];
+                                        return cartonList.length > 0 ? (
+                                          cartonList.map(
+                                            (row: any, rowIndex: number) => (
+                                              <tr
+                                                key={rowIndex}
+                                                className="transition-colors hover:bg-gray-50/50"
+                                              >
+                                                <td className="px-4 py-3 font-semibold text-gray-900">
+                                                  {row?.cartonSerial}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                  <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
+                                                    {row?.status}
+                                                  </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-gray-400">
+                                                  {new Date(
+                                                    row?.createdAt,
+                                                  ).toLocaleTimeString([], {
+                                                    hour: "2-digit",
+                                                    minute: "2-digit",
+                                                  })}
+                                                </td>
+                                              </tr>
+                                            ),
+                                          )
+                                        ) : (
+                                          <tr>
+                                            <td
+                                              colSpan={3}
+                                              className="p-6 text-center italic text-gray-400"
+                                            >
+                                              No cartons found
+                                            </td>
+                                          </tr>
+                                        );
+                                      })()}
+                                    </tbody>
+                                  </table>
+                                  {(Array.isArray(processCartons)
+                                    ? processCartons.length > 0
+                                    : processCartons?.cartonDetails?.length >
+                                      0) && (
+                                    <div className="flex justify-end border-t border-gray-100 bg-gray-50/50 p-4">
+                                      <button
+                                        className="rounded-lg bg-cyan-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-cyan-700"
+                                        onClick={handleShiftToPDI}
+                                      >
+                                        Shift to PDI
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -3516,8 +3168,9 @@ export default function DeviceTestComponent({
 
       {/* History Drawer */}
       <div
-        className={`fixed inset-0 z-50 flex justify-end transition-opacity duration-300 ${isHistoryOpen ? "visible opacity-100" : "invisible opacity-0"
-          }`}
+        className={`fixed inset-0 z-50 flex justify-end transition-opacity duration-300 ${
+          isHistoryOpen ? "visible opacity-100" : "invisible opacity-0"
+        }`}
       >
         {/* Backdrop */}
         <div
@@ -3527,8 +3180,9 @@ export default function DeviceTestComponent({
 
         {/* Drawer Panel */}
         <div
-          className={`relative h-full w-full max-w-md transform bg-white shadow-2xl transition-transform duration-300 ${isHistoryOpen ? "translate-x-0" : "translate-x-full"
-            }`}
+          className={`relative h-full w-full max-w-md transform bg-white shadow-2xl transition-transform duration-300 ${
+            isHistoryOpen ? "translate-x-0" : "translate-x-full"
+          }`}
         >
           {/* Drawer Header */}
           <div className="flex items-center justify-between border-b bg-gray-50/50 px-6 py-4">
@@ -3592,10 +3246,11 @@ export default function DeviceTestComponent({
                           </td>
                           <td className="px-4 py-3">
                             <span
-                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${row?.status === "Pass"
-                                ? "bg-green-100 text-green-700"
-                                : "bg-red-100 text-red-700"
-                                }`}
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                row?.status === "Pass"
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-red-100 text-red-700"
+                              }`}
                             >
                               {row?.status}
                             </span>
@@ -3626,7 +3281,7 @@ export default function DeviceTestComponent({
         isOpen={isCartonDevicesModalOpen}
         onClose={() => setIsCartonDevicesModalOpen(false)}
         title="Devices in Current Carton"
-        onSubmit={() => { }}
+        onSubmit={() => {}}
         submitOption={false}
       >
         <div className="max-h-[60vh] overflow-y-auto">
@@ -3639,8 +3294,8 @@ export default function DeviceTestComponent({
             </thead>
             <tbody className="divide-y divide-gray-100">
               {cartons &&
-                cartons.length > 0 &&
-                Array.isArray(cartons[cartons.length - 1]?.devices) ? (
+              cartons.length > 0 &&
+              Array.isArray(cartons[cartons.length - 1]?.devices) ? (
                 cartons[cartons.length - 1].devices.map(
                   (device: any, idx: number) => (
                     <tr key={idx} className="hover:bg-gray-50/50">
@@ -3675,7 +3330,7 @@ export default function DeviceTestComponent({
         onClose={() => setIsLogsModalOpen(false)}
         title="Detailed Step Logs"
         submitOption={false}
-        onSubmit={() => { }}
+        onSubmit={() => {}}
       >
         <div className="font-mono max-h-[70vh] overflow-y-auto rounded-b-xl bg-gray-900 p-4 text-xs">
           {selectedLogs.map((logGroup: any, gIndex: number) => (
@@ -3711,14 +3366,15 @@ export default function DeviceTestComponent({
                         </span>
                         <span
                           className={`
-                        ${log.type === "error"
-                              ? "text-red-400"
-                              : log.type === "success"
-                                ? "text-green-400"
-                                : log.type === "info"
-                                  ? "text-blue-300"
-                                  : "text-gray-300"
-                            }
+                        ${
+                          log.type === "error"
+                            ? "text-red-400"
+                            : log.type === "success"
+                              ? "text-green-400"
+                              : log.type === "info"
+                                ? "text-blue-300"
+                                : "text-gray-300"
+                        }
                       `}
                         >
                           {log.message}

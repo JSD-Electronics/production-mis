@@ -527,7 +527,7 @@ const EditProduct = () => {
   const handleStageJigFieldChange = (
     stageIndex: number,
     jigIndex: number,
-    event: React.ChangeEvent<HTMLInputElement>,
+    event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
     param: string,
   ) => {
     const newStages = [...stages];
@@ -1722,11 +1722,11 @@ const EditProduct = () => {
                                         (jigField: any, jigIndex: number) => (
                                           <div
                                             key={`${stage.dragId}-stage-jig-${jigIndex}`}
-                                            className="rounded-lg border border-gray-200 p-3 dark:border-form-strokedark"
+                                            className="rounded-lg border border-gray-200 p-4 dark:border-form-strokedark"
                                           >
-                                            <div className="flex items-center gap-3">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                               <div className="flex-1">
-                                                <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
+                                                <label className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">
                                                   Jig Field Name
                                                 </label>
                                                 <input
@@ -1744,15 +1744,159 @@ const EditProduct = () => {
                                                   className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
                                                 />
                                               </div>
+                                              <div>
+                                                <label className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">
+                                                  Validation Type
+                                                </label>
+                                                <select
+                                                  value={jigField.validationType || "value"}
+                                                  onChange={(e) =>
+                                                    handleStageJigFieldChange(
+                                                      index,
+                                                      jigIndex,
+                                                      e,
+                                                      "validationType",
+                                                    )
+                                                  }
+                                                  className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                                >
+                                                  <option value="value">Value</option>
+                                                  <option value="range">Range</option>
+                                                  <option value="length">Length</option>
+                                                </select>
+                                              </div>
+
+                                              {jigField.validationType === "value" && (
+                                                <div className="md:col-span-2">
+                                                  <label className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">
+                                                    Validation Value
+                                                  </label>
+                                                  <input
+                                                    type="text"
+                                                    value={jigField.value || ""}
+                                                    onChange={(e) =>
+                                                      handleStageJigFieldChange(
+                                                        index,
+                                                        jigIndex,
+                                                        e,
+                                                        "value",
+                                                      )
+                                                    }
+                                                    placeholder="Expected Value"
+                                                    className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                                  />
+                                                </div>
+                                              )}
+
+                                              {jigField.validationType === "range" && (
+                                                <>
+                                                  <div>
+                                                    <label className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">
+                                                      Range From
+                                                    </label>
+                                                    <input
+                                                      type="number"
+                                                      value={jigField.rangeFrom || ""}
+                                                      onChange={(e) =>
+                                                        handleStageJigFieldChange(
+                                                          index,
+                                                          jigIndex,
+                                                          e,
+                                                          "rangeFrom",
+                                                        )
+                                                      }
+                                                      placeholder="Min"
+                                                      className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                                    />
+                                                  </div>
+                                                  <div>
+                                                    <label className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">
+                                                      Range To
+                                                    </label>
+                                                    <input
+                                                      type="number"
+                                                      value={jigField.rangeTo || ""}
+                                                      onChange={(e) =>
+                                                        handleStageJigFieldChange(
+                                                          index,
+                                                          jigIndex,
+                                                          e,
+                                                          "rangeTo",
+                                                        )
+                                                      }
+                                                      placeholder="Max"
+                                                      className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                                    />
+                                                  </div>
+                                                </>
+                                              )}
+
+                                              {jigField.validationType === "length" && (
+                                                <>
+                                                  <div>
+                                                    <label className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">
+                                                      Length From
+                                                    </label>
+                                                    <input
+                                                      type="number"
+                                                      value={jigField.lengthFrom || ""}
+                                                      onChange={(e) =>
+                                                        handleStageJigFieldChange(
+                                                          index,
+                                                          jigIndex,
+                                                          e,
+                                                          "lengthFrom",
+                                                        )
+                                                      }
+                                                      placeholder="Min Length"
+                                                      className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                                    />
+                                                  </div>
+                                                  <div>
+                                                    <label className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">
+                                                      Length To
+                                                    </label>
+                                                    <div className="flex gap-2">
+                                                      <input
+                                                        type="number"
+                                                        value={jigField.lengthTo || ""}
+                                                        onChange={(e) =>
+                                                          handleStageJigFieldChange(
+                                                            index,
+                                                            jigIndex,
+                                                            e,
+                                                            "lengthTo",
+                                                          )
+                                                        }
+                                                        placeholder="Max Length"
+                                                        className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-800 outline-none transition focus:border-primary focus:ring-1 focus:ring-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                                                      />
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          const val = jigField.lengthFrom;
+                                                          handleStageJigFieldChange(index, jigIndex, { target: { value: val } } as any, "lengthTo");
+                                                        }}
+                                                        className="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-semibold text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300"
+                                                        title="Set as exact length"
+                                                      >
+                                                        Exact
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                </>
+                                              )}
+                                            </div>
+                                            <div className="mt-3 flex justify-end">
                                               <button
                                                 type="button"
                                                 onClick={() =>
                                                   handleRemoveStageJigField(index, jigIndex)
                                                 }
-                                                className="mt-5 flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700"
+                                                className="flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700"
                                               >
                                                 <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
-                                                Remove
+                                                Remove Field
                                               </button>
                                             </div>
                                           </div>
@@ -2787,25 +2931,38 @@ const EditProduct = () => {
                                                                               Length
                                                                               To
                                                                             </label>
-                                                                            <input
-                                                                              type="number"
-                                                                              value={
-                                                                                jigField.lengthTo
-                                                                              }
-                                                                              onChange={(
-                                                                                e,
-                                                                              ) =>
-                                                                                handleJigSubStepChange(
-                                                                                  index,
-                                                                                  subIndex,
-                                                                                  jigIndex,
+                                                                            <div className="flex gap-2">
+                                                                              <input
+                                                                                type="number"
+                                                                                value={
+                                                                                  jigField.lengthTo
+                                                                                }
+                                                                                onChange={(
                                                                                   e,
-                                                                                  "lengthTo",
-                                                                                )
-                                                                              }
-                                                                              placeholder={`Length To`}
-                                                                              className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                                                                            />
+                                                                                ) =>
+                                                                                  handleJigSubStepChange(
+                                                                                    index,
+                                                                                    subIndex,
+                                                                                    jigIndex,
+                                                                                    e,
+                                                                                    "lengthTo",
+                                                                                  )
+                                                                                }
+                                                                                placeholder={`Length To`}
+                                                                                className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                                                                              />
+                                                                              <button
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                  const val = jigField.lengthFrom;
+                                                                                  handleJigSubStepChange(index, subIndex, jigIndex, { target: { value: val } } as any, "lengthTo");
+                                                                                }}
+                                                                                className="rounded-md bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300"
+                                                                                title="Set as exact length"
+                                                                              >
+                                                                                Exact
+                                                                              </button>
+                                                                            </div>
                                                                           </div>
                                                                         </>
                                                                       )}

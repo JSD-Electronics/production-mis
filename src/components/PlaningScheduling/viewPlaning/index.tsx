@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useState, useEffect } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import FormComponent from "@/components/PlaningScheduling/edit/FormComponents";
@@ -29,7 +29,7 @@ import {
   FiTrendingUp,
   FiDownload,
 } from "react-icons/fi";
-import { FiUsers, FiActivity, FiCheckCircle, FiXCircle, FiSearch, FiFilter, FiRefreshCcw } from "react-icons/fi";
+import { FiUsers, FiActivity, FiCheckCircle, FiXCircle, FiSearch, FiFilter, FiRefreshCcw, FiEye } from "react-icons/fi";
 import { formatDate } from "@/lib/common";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -41,6 +41,7 @@ import { FiCodepen, FiEdit } from "react-icons/fi";
 import { Tab, Tabs, TabList, TabPanel } from "react-tabs";
 import "react-tabs/style/react-tabs.css";
 import CardDataStats from "@/components/CardDataStats";
+import Loader from "@/components/common/Loader";
 const DraggableGridItem = ({
   item,
   rowIndex,
@@ -62,6 +63,29 @@ const DraggableGridItem = ({
   jigCategories,
   selectedProcess,
   seatStatusFilter,
+  onViewDevices,
+}: {
+  item: any;
+  rowIndex: any;
+  seatIndex: any;
+  handleDrop: any;
+  handleDragOver: any;
+  handleRemoveStage: any;
+  assignedStages: any;
+  coordinates: any;
+  moveItem: any;
+  operators: any;
+  assignedOperators: any;
+  setAssignedOperators: any;
+  filteredOperators: any;
+  setFilteredOperators: any;
+  rowSeatLength: any;
+  setAssignedJigs: any;
+  assignedJigs: any;
+  jigCategories: any;
+  selectedProcess: any;
+  seatStatusFilter: any;
+  onViewDevices: (seat: string, stageName: string) => void;
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -120,6 +144,18 @@ const DraggableGridItem = ({
       {/* Seat Number */}
       <span className="text-gray-800 flex items-center justify-between text-xs font-bold">
         <p className="text-sm">S{item.seatNumber}</p>
+        {assignedStages[coordinates] && assignedStages[coordinates].length > 0 && (
+          <span
+            className="cursor-pointer text-blue-500 hover:text-blue-700"
+            title="View Devices"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewDevices(coordinates, assignedStages[coordinates][0].name);
+            }}
+          >
+            <FiEye size={14} />
+          </span>
+        )}
       </span>
 
       {/* Assigned Stages */}
@@ -240,7 +276,7 @@ const ViewPlanSchedule = () => {
   const [downTimeDesc, setDownTimeDescription] = useState("");
   const [downTimeval, setDownTimeVal] = useState({});
   const [id, setID] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [isDownTimeModalOpen, setIsDownTimeModalOpen] = useState(false);
   const closeDownTimeModal = () => setIsDownTimeModalOpen(false);
   const [showPopup, setShowPopup] = useState(false);
@@ -263,7 +299,56 @@ const ViewPlanSchedule = () => {
   const [showOccupiedOnly, setShowOccupiedOnly] = useState(true);
   const [seatSearch, setSeatSearch] = useState("");
   const [lastRefreshed, setLastRefreshed] = useState("");
+  const [allDeviceTests, setAllDeviceTests] = useState([]);
+  const [processDevices, setProcessDevices] = useState<any[]>([]);
+  const [isDevicesModalOpen, setIsDevicesModalOpen] = useState(false);
+  const [selectedSeatForDevices, setSelectedSeatForDevices] = useState<string | null>(null);
+  const [selectedStageNameForDevices, setSelectedStageNameForDevices] = useState("");
+  const [modalFilterDateStart, setModalFilterDateStart] = useState("");
+  const [modalFilterDateEnd, setModalFilterDateEnd] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const filteredDeviceTests = React.useMemo(() => {
+    const start =
+      modalFilterDateStart
+        ? new Date(`${modalFilterDateStart}T00:00:00.000`)
+        : null;
+    const end =
+      modalFilterDateEnd
+        ? new Date(`${modalFilterDateEnd}T23:59:59.999`)
+        : null;
+    const seatKey = selectedSeatForDevices || "";
+    const stageKey = (selectedStageNameForDevices || "").trim().toLowerCase();
+
+    return (allDeviceTests || []).filter((record: any) => {
+      const recSeat = String(record?.seatNumber ?? record?.coordinates ?? "").trim();
+      const recStage = String(record?.stageName ?? "").trim().toLowerCase();
+      if (!recSeat || !recStage) return false;
+
+      if (recSeat !== seatKey) return false;
+      if (recStage !== stageKey) return false;
+
+      const createdAt = record?.createdAt ? new Date(record.createdAt) : null;
+      if (!createdAt || isNaN(createdAt.getTime())) return false;
+      if (start && createdAt < start) return false;
+      if (end && createdAt > end) return false;
+      return true;
+    });
+  }, [
+    allDeviceTests,
+    selectedSeatForDevices,
+    selectedStageNameForDevices,
+    modalFilterDateStart,
+    modalFilterDateEnd,
+  ]);
+  const wipDevicesForStage = React.useMemo(() => {
+    const stageKey = (selectedStageNameForDevices || "").trim().toLowerCase();
+    if (!stageKey) return [];
+    return (processDevices || []).filter((device: any) => {
+      const currentStage = String(device?.currentStage || "").trim().toLowerCase();
+      const status = String(device?.status || "").trim().toLowerCase();
+      return currentStage === stageKey && status !== "pass";
+    });
+  }, [processDevices, selectedStageNameForDevices]);
   const occupancyStats = React.useMemo(() => {
     let active = 0;
     let downtime = 0;
@@ -409,7 +494,7 @@ const ViewPlanSchedule = () => {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [loading]);
+  }, []);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -508,6 +593,7 @@ const ViewPlanSchedule = () => {
   }
   const getPlaningById = async (id: any) => {
     try {
+      // Keep existing UI visible; refresh in background
       let result = await getPlaningAndSchedulingById(id);
       setPlanData(result);
       let shifts = await getAllShifts();
@@ -531,10 +617,22 @@ const ViewPlanSchedule = () => {
       let deviceTestEntry = await getDeviceTestRecordsByProcessId(
         result.selectedProcess,
       );
-      let deviceTests = deviceTestEntry?.deviceTestRecords;
+      let deviceTests = deviceTestEntry?.deviceTestRecords || [];
+      setAllDeviceTests(deviceTests);
 
       if (singleProcess?.selectedProduct) {
         processData = await getProductById(singleProcess?.selectedProduct);
+        // Fetch all devices for this product and filter to current process for WIP view
+        try {
+          const deviceResult = await getDeviceByProductId(singleProcess.selectedProduct);
+          const allDevices = deviceResult?.data || [];
+          const onlyProcessDevices = allDevices.filter(
+            (d: any) => String(d.processID) === String(singleProcess._id),
+          );
+          setProcessDevices(onlyProcessDevices);
+        } catch (e) {
+          console.error("Failed to fetch devices for process:", e);
+        }
       }
       const stageHeaders =
         processData?.product?.stages?.map((stage) =>
@@ -1148,6 +1246,24 @@ const ViewPlanSchedule = () => {
     const id = pathname.split("/").pop();
     window.open(`/planing-scheduling/edit/${id}`, "_blank");
   };
+
+
+
+  const handleViewDevices = (seat: string, stageName: string) => {
+    setSelectedSeatForDevices(seat);
+    setSelectedStageNameForDevices(stageName);
+    // Default to current week span for richer history
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(today.getDate() - 7);
+    const toIsoDate = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+        d.getDate(),
+      ).padStart(2, "0")}`;
+    setModalFilterDateStart(toIsoDate(start));
+    setModalFilterDateEnd(toIsoDate(today));
+    setIsDevicesModalOpen(true);
+  };
   const calculateEstimatedEndDate = async (totalDays: any) => {
     const [datePart, timePart] = startDate.split(" ");
     const [day, month, year] = datePart.split("/").map(Number);
@@ -1479,623 +1595,611 @@ const ViewPlanSchedule = () => {
   };
   return (
     <DndProvider backend={HTML5Backend}>
-      <Breadcrumb
-        parentName="Planning & Scheduling Management"
-        pageName="View Planing "
-      />
-      <ToastContainer
-        position="top-center"
-        closeOnClick
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-      />
-      <div className="container mx-auto grid grid-cols-1 gap-9 p-6 sm:grid-cols-1">
-        <div className="flex flex-col gap-9">
-          <div className="rounded-lg border border-stroke bg-white p-6 shadow-lg dark:border-strokedark dark:bg-boxdark">
-            <div className="flex flex-wrap items-center justify-between border-b border-stroke px-2 py-4 dark:border-strokedark">
-              {/* Title */}
-              <div className="flex items-center gap-4">
-                <h3 className="text-xl font-semibold text-black dark:text-white">
-                  View Planning
-                </h3>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleRefresh}
-                    title="Manual Refresh"
-                    className={`flex items-center justify-center rounded-full p-2 transition-all hover:bg-gray-100 dark:hover:bg-gray-700 ${isRefreshing ? "animate-spin cursor-not-allowed opacity-50" : ""
-                      }`}
-                  >
-                    <FiRefreshCcw className="h-5 w-5 text-primary" />
-                  </button>
-                  {lastRefreshed && (
-                    <span className="text-xs text-black/50 dark:text-white/50">
-                      Last Sync: {lastRefreshed}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Status Message */}
-              {downTimeval &&
-                (() => {
-                  const currentDate = new Date();
-                  const downTimeFrom = new Date(downTimeval?.downTimeFrom);
-                  const downTimeTo = new Date(downTimeval?.downTimeTo);
-                  currentDate.setHours(0, 0, 0, 0);
-                  downTimeFrom.setHours(0, 0, 0, 0);
-                  downTimeTo.setHours(0, 0, 0, 0);
-
-                  return (
-                    downTimeFrom <= currentDate &&
-                    currentDate <= downTimeTo &&
-                    selectedProcess.status !== "completed"
-                  );
-                })() && (
-                  <div className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-md px-3 py-1 text-sm font-medium">
-                    â¸ On Hold (
-                    {new Date(downTimeval?.downTimeFrom).toLocaleDateString()} â€“{" "}
-                    {new Date(downTimeval?.downTimeTo).toLocaleDateString()}) Â·
-                    Reason: {downTimeval?.downTimeDesc}
+      <>
+        <Breadcrumb
+          parentName="Planning & Scheduling Management"
+          pageName="View Planing "
+        />
+        <ToastContainer
+          position="top-center"
+          closeOnClick
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+        />
+        {/* Removed blocking loader to avoid slow full-page reload */}
+        <div className="container mx-auto grid grid-cols-1 gap-9 p-6 sm:grid-cols-1">
+          <div className="flex flex-col gap-9">
+            <div className="rounded-lg border border-stroke bg-white p-6 shadow-lg dark:border-strokedark dark:bg-boxdark">
+              <div className="flex flex-wrap items-center justify-between border-b border-stroke px-2 py-4 dark:border-strokedark">
+                {/* Title */}
+                <div className="flex items-center gap-4">
+                  <h3 className="text-xl font-semibold text-black dark:text-white">
+                    View Planning
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleRefresh}
+                      title="Manual Refresh"
+                      className={`flex items-center justify-center rounded-full p-2 transition-all hover:bg-gray-100 dark:hover:bg-gray-700 ${isRefreshing ? "animate-spin cursor-not-allowed opacity-50" : ""
+                        }`}
+                    >
+                      <FiRefreshCcw className="h-5 w-5 text-primary" />
+                    </button>
+                    {lastRefreshed && (
+                      <span className="text-xs text-black/50 dark:text-white/50">
+                        Last Sync: {lastRefreshed}
+                      </span>
+                    )}
                   </div>
+                </div>
+
+                {/* Status Message */}
+                {downTimeval &&
+                  (() => {
+                    const currentDate = new Date();
+                    const downTimeFrom = new Date(downTimeval?.downTimeFrom);
+                    const downTimeTo = new Date(downTimeval?.downTimeTo);
+                    currentDate.setHours(0, 0, 0, 0);
+                    downTimeFrom.setHours(0, 0, 0, 0);
+                    downTimeTo.setHours(0, 0, 0, 0);
+
+                    return (
+                      downTimeFrom <= currentDate &&
+                      currentDate <= downTimeTo &&
+                      selectedProcess.status !== "completed"
+                    );
+                  })() && (
+                    <div className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-md px-3 py-1 text-sm font-medium">
+                      â¸ On Hold (
+                      {new Date(downTimeval?.downTimeFrom).toLocaleDateString()} â€“{" "}
+                      {new Date(downTimeval?.downTimeTo).toLocaleDateString()}) Â·
+                      Reason: {downTimeval?.downTimeDesc}
+                    </div>
+                  )}
+
+                {/* Actions */}
+                {selectedProcess?.status !== "completed" ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleDeviceSerialNo}
+                      className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white shadow-md transition hover:bg-primary/90"
+                    >
+                      <FiCodepen size={16} />
+                      Generate Serials
+                    </button>
+                    <button
+                      onClick={handleEditPlaning}
+                      className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-md transition hover:bg-blue-700"
+                    >
+                      <FiEdit size={16} />
+                      Edit Planning
+                    </button>
+                  </div>
+                ) : (
+                  <span className="rounded-lg bg-green-100 px-3 py-1 text-sm font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                    Completed
+                  </span>
                 )}
-
-              {/* Actions */}
-              {selectedProcess?.status !== "completed" ? (
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={handleDeviceSerialNo}
-                    className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white shadow-md transition hover:bg-primary/90"
-                  >
-                    <FiCodepen size={16} />
-                    Generate Serials
-                  </button>
-                  <button
-                    onClick={handleEditPlaning}
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-md transition hover:bg-blue-700"
-                  >
-                    <FiEdit size={16} />
-                    Edit Planning
-                  </button>
-                </div>
-              ) : (
-                <span className="rounded-lg bg-green-100 px-3 py-1 text-sm font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                  Completed
-                </span>
-              )}
-            </div>
-            <form action="#">
-              <div className="p-6">
-                <div className="space-y-6">
-                  {/* Top Summary */}
-                  <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <CardDataStats title="Required Qty" total={`${summaryData.required}`} rate="" levelUp>
-                      <FiBox size={20} />
-                    </CardDataStats>
-                    <CardDataStats title="Issued Kits" total={`${summaryData.issued}`} rate="" levelUp>
-                      <FiPackage size={20} />
-                    </CardDataStats>
-                    <CardDataStats title="Consumed Kits" total={`${totalConsumedKits}`} rate="" levelUp>
-                      <FiCheckCircle size={20} />
-                    </CardDataStats>
-                    <CardDataStats title="Avg UPH (Last Stage)" total={`${summaryData.avg}`} rate="" levelUp>
-                      <FiTrendingUp size={20} />
-                    </CardDataStats>
-                  </div>
-                  {/* Process Info */}
-                  <div className="dark:bg-gray-800 rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-md">
-                    <div className="mb-3 flex items-center justify-between">
-                      <h3 className="flex items-center gap-2 text-lg font-semibold text-blue-600 dark:text-blue-400">
-                        <FiClipboard /> Process Details
-                      </h3>
-                      <button
-                        type="button"
-                        onClick={handleDownloadSerials}
-                        className="flex items-center gap-2 rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900"
-                        title="Download Generated & Assigned Serials"
-                      >
-                        <FiDownload /> Download Serials
-                      </button>
+              </div>
+              <form action="#">
+                <div className="p-6">
+                  <div className="space-y-6">
+                    {/* Top Summary */}
+                    <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                      <CardDataStats title="Required Qty" total={`${summaryData.required}`} rate="" levelUp>
+                        <FiBox size={20} />
+                      </CardDataStats>
+                      <CardDataStats title="Issued Kits" total={`${summaryData.issued}`} rate="" levelUp>
+                        <FiPackage size={20} />
+                      </CardDataStats>
+                      <CardDataStats title="Consumed Kits" total={`${totalConsumedKits}`} rate="" levelUp>
+                        <FiCheckCircle size={20} />
+                      </CardDataStats>
+                      <CardDataStats title="Avg UPH (Last Stage)" total={`${summaryData.avg}`} rate="" levelUp>
+                        <FiTrendingUp size={20} />
+                      </CardDataStats>
                     </div>
-                    <div className="text-gray-700 dark:text-gray-300 grid gap-2 text-sm sm:grid-cols-2">
-                      <div>
-                        <FiTag className="inline text-primary" />{" "}
-                        <strong>Product:</strong> {productName}
+                    {/* Process Info */}
+                    <div className="dark:bg-gray-800 rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-md">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="flex items-center gap-2 text-lg font-semibold text-blue-600 dark:text-blue-400">
+                          <FiClipboard /> Process Details
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={handleDownloadSerials}
+                          className="flex items-center gap-2 rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900"
+                          title="Download Generated & Assigned Serials"
+                        >
+                          <FiDownload /> Download Serials
+                        </button>
                       </div>
-                      <div>
-                        <FiClock className="inline text-primary" />{" "}
-                        <strong>Shift:</strong>{" "}
-                        {shiftChangedFromDate
-                          ? `${selectedShift?.name} (${startTime} - ${endTime})`
-                          : `${selectedShift?.name} (${selectedShift?.startTime} - ${selectedShift?.endTime})`}
-                      </div>
-                      <div>
-                        <FiClock className="inline text-yellow-500" />{" "}
-                        <strong>Break:</strong> {selectedShift?.totalBreakTime}{" "}
-                        min
-                      </div>
-                      <div>
-                        <FiHash className="inline text-green-500" />{" "}
-                        <strong>Order No:</strong>{" "}
-                        {selectedProcess?.orderConfirmationNo}
-                      </div>
-                      <div>
-                        <FiLayers className="inline text-indigo-500" />{" "}
-                        <strong>Process ID:</strong>{" "}
-                        {selectedProcess?.processID}
-                      </div>
-                      <div>
-                        <FiBox className="inline text-pink-500" />{" "}
-                        <strong>Qty:</strong> {selectedProcess?.quantity}
-                      </div>
-                      <div className="sm:col-span-2">
-                        <FiCalendar className="text-red-500 inline" />{" "}
-                        <strong>Shift Days:</strong>{" "}
-                        {Object.keys(selectedShift?.weekDays || {})
-                          .filter(
-                            (d) => d !== "_id" && selectedShift?.weekDays[d],
-                          )
-                          .join(", ")}
-                      </div>
-                      <div className="sm:col-span-2">
-                        <FiInfo className="inline text-blue-400" />{" "}
-                        <strong>Description:</strong>{" "}
-                        {selectedProcess?.descripition}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Kits */}
-                  {inventoryData && (
-                    <div className="dark:bg-gray-800 rounded-lg border-l-4 border-green-500 bg-white p-4 shadow-md">
-                      <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-green-600 dark:text-green-400">
-                        <FiPackage /> Kits
-                      </h3>
-                      <div className="text-gray-700 dark:text-gray-300 grid gap-3 text-sm sm:grid-cols-3">
+                      <div className="text-gray-700 dark:text-gray-300 grid gap-2 text-sm sm:grid-cols-2">
                         <div>
-                          <strong>Required:</strong> {selectedProcess?.quantity}
+                          <FiTag className="inline text-primary" />{" "}
+                          <strong>Product:</strong> {productName}
                         </div>
                         <div>
-                          <strong>Available:</strong> {inventoryData?.quantity}
+                          <FiClock className="inline text-primary" />{" "}
+                          <strong>Shift:</strong>{" "}
+                          {shiftChangedFromDate
+                            ? `${selectedShift?.name} (${startTime} - ${endTime})`
+                            : `${selectedShift?.name} (${selectedShift?.startTime} - ${selectedShift?.endTime})`}
                         </div>
                         <div>
-                          <strong>Issued:</strong> {summaryData.issued}
+                          <FiClock className="inline text-yellow-500" />{" "}
+                          <strong>Break:</strong> {selectedShift?.totalBreakTime}{" "}
+                          min
                         </div>
                         <div>
-                          <strong>Consumed:</strong> {summaryData.consumed}
+                          <FiHash className="inline text-green-500" />{" "}
+                          <strong>Order No:</strong>{" "}
+                          {selectedProcess?.orderConfirmationNo}
                         </div>
                         <div>
-                          <strong>WIP:</strong> {summaryData.wip}
+                          <FiLayers className="inline text-indigo-500" />{" "}
+                          <strong>Process ID:</strong>{" "}
+                          {selectedProcess?.processID}
                         </div>
                         <div>
-                          <strong>Pending:</strong> {summaryData.pending}
+                          <FiBox className="inline text-pink-500" />{" "}
+                          <strong>Qty:</strong> {selectedProcess?.quantity}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="bg-red-100 text-red-600 rounded-full px-2 py-0.5 text-xs font-medium">
-                            Short: {Math.max(0, summaryData.required - summaryData.issued)}
-                          </span>
+                        <div className="sm:col-span-2">
+                          <FiCalendar className="text-red-500 inline" />{" "}
+                          <strong>Shift Days:</strong>{" "}
+                          {Object.keys(selectedShift?.weekDays || {})
+                            .filter(
+                              (d) => d !== "_id" && selectedShift?.weekDays[d],
+                            )
+                            .join(", ")}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
-                            Surplus: {Math.max(0, summaryData.issued - summaryData.required)}
-                          </span>
-                        </div>
-                        <div>
-                          <strong>Total Store Stock:</strong>{" "}
-                          {(inventoryData?.quantity || 0) + summaryData.issued}
+                        <div className="sm:col-span-2">
+                          <FiInfo className="inline text-blue-400" />{" "}
+                          <strong>Description:</strong>{" "}
+                          {selectedProcess?.descripition}
                         </div>
                       </div>
                     </div>
-                  )}
 
-                  {/* Cartons */}
-                  {packagingData.length > 0 &&
-                    packagingData[0].packagingData.packagingType ===
-                    "Carton" && (
-                      <div className="dark:bg-gray-800 rounded-lg border-l-4 border-orange-500 bg-white p-4 shadow-md">
-                        <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-orange-600 dark:text-orange-400">
-                          <FiArchive /> Cartons
+                    {/* Kits */}
+                    {inventoryData && (
+                      <div className="dark:bg-gray-800 rounded-lg border-l-4 border-green-500 bg-white p-4 shadow-md">
+                        <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-green-600 dark:text-green-400">
+                          <FiPackage /> Kits
                         </h3>
                         <div className="text-gray-700 dark:text-gray-300 grid gap-3 text-sm sm:grid-cols-3">
                           <div>
-                            <strong>Required:</strong>{" "}
-                            {(
-                              selectedProcess?.quantity /
-                              packagingData[0].packagingData.maxCapacity
-                            ).toFixed(0)}
+                            <strong>Required:</strong> {selectedProcess?.quantity}
                           </div>
                           <div>
-                            <strong>Available:</strong>{" "}
-                            {selectedProcess?.issuedCartons}
+                            <strong>Available:</strong> {inventoryData?.quantity}
                           </div>
                           <div>
+                            <strong>Issued:</strong> {summaryData.issued}
+                          </div>
+                          <div>
+                            <strong>Consumed:</strong> {summaryData.consumed}
+                          </div>
+                          <div>
+                            <strong>WIP:</strong> {summaryData.wip}
+                          </div>
+                          <div>
+                            <strong>Pending:</strong> {summaryData.pending}
+                          </div>
+                          <div className="flex items-center gap-2">
                             <span className="bg-red-100 text-red-600 rounded-full px-2 py-0.5 text-xs font-medium">
-                              Short:{" "}
-                              {Math.max(
-                                0,
-                                (
-                                  selectedProcess?.quantity /
-                                  packagingData[0].packagingData.maxCapacity -
-                                  selectedProcess?.issuedCartons
-                                ).toFixed(0),
-                              )}
+                              Short: {Math.max(0, summaryData.required - summaryData.issued)}
                             </span>
                           </div>
-                          <div>
+                          <div className="flex items-center gap-2">
                             <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
-                              Surplus:{" "}
-                              {Math.max(
-                                0,
-                                (
-                                  selectedProcess?.issuedCartons -
-                                  selectedProcess?.quantity /
-                                  packagingData[0].packagingData.maxCapacity
-                                ).toFixed(0),
-                              )}
+                              Surplus: {Math.max(0, summaryData.issued - summaryData.required)}
                             </span>
                           </div>
                           <div>
-                            <strong>Dimensions:</strong>{" "}
-                            {packagingData[0].packagingData.cartonWidth} x{" "}
-                            {packagingData[0].packagingData.cartonHeight}
+                            <strong>Total Store Stock:</strong>{" "}
+                            {(inventoryData?.quantity || 0) + summaryData.issued}
                           </div>
                         </div>
                       </div>
                     )}
 
-                  {/* Shift Summary */}
-                  <div className="dark:bg-gray-800 rounded-lg border-l-4 border-purple-500 bg-white p-4 shadow-md">
-                    <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-purple-600 dark:text-purple-400">
-                      <FiClock /> Shift Summary
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedShift?.intervals?.map((interval, i) => (
-                        <span
-                          key={i}
-                          className={`rounded-full px-3 py-1 text-xs font-medium ${interval.breakTime
-                            ? "bg-[#fbc0c0] text-danger dark:bg-danger dark:text-danger"
-                            : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-                            }`}
-                        >
-                          {interval.breakTime
-                            ? `Break: ${interval.startTime} - ${interval.endTime}`
-                            : `Interval: ${interval.startTime} - ${interval.endTime}`}
-                        </span>
-                      ))}
+                    {/* Cartons */}
+                    {packagingData.length > 0 &&
+                      packagingData[0].packagingData.packagingType ===
+                      "Carton" && (
+                        <div className="dark:bg-gray-800 rounded-lg border-l-4 border-orange-500 bg-white p-4 shadow-md">
+                          <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-orange-600 dark:text-orange-400">
+                            <FiArchive /> Cartons
+                          </h3>
+                          <div className="text-gray-700 dark:text-gray-300 grid gap-3 text-sm sm:grid-cols-3">
+                            <div>
+                              <strong>Required:</strong>{" "}
+                              {(
+                                selectedProcess?.quantity /
+                                packagingData[0].packagingData.maxCapacity
+                              ).toFixed(0)}
+                            </div>
+                            <div>
+                              <strong>Available:</strong>{" "}
+                              {selectedProcess?.issuedCartons}
+                            </div>
+                            <div>
+                              <span className="bg-red-100 text-red-600 rounded-full px-2 py-0.5 text-xs font-medium">
+                                Short:{" "}
+                                {Math.max(
+                                  0,
+                                  (
+                                    selectedProcess?.quantity /
+                                    packagingData[0].packagingData.maxCapacity -
+                                    selectedProcess?.issuedCartons
+                                  ).toFixed(0),
+                                )}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
+                                Surplus:{" "}
+                                {Math.max(
+                                  0,
+                                  (
+                                    selectedProcess?.issuedCartons -
+                                    selectedProcess?.quantity /
+                                    packagingData[0].packagingData.maxCapacity
+                                  ).toFixed(0),
+                                )}
+                              </span>
+                            </div>
+                            <div>
+                              <strong>Dimensions:</strong>{" "}
+                              {packagingData[0].packagingData.cartonWidth} x{" "}
+                              {packagingData[0].packagingData.cartonHeight}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                    {/* Shift Summary */}
+                    <div className="dark:bg-gray-800 rounded-lg border-l-4 border-purple-500 bg-white p-4 shadow-md">
+                      <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-purple-600 dark:text-purple-400">
+                        <FiClock /> Shift Summary
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedShift?.intervals?.map((interval, i) => (
+                          <span
+                            key={i}
+                            className={`rounded-full px-3 py-1 text-xs font-medium ${interval.breakTime
+                              ? "bg-[#fbc0c0] text-danger dark:bg-danger dark:text-danger"
+                              : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+                              }`}
+                          >
+                            {interval.breakTime
+                              ? `Break: ${interval.startTime} - ${interval.endTime}`
+                              : `Interval: ${interval.startTime} - ${interval.endTime}`}
+                          </span>
+                        ))}
+                      </div>
                     </div>
+
+                    {/* Time Estimation */}
+                    {totalTimeEstimation && (
+                      <div className="dark:bg-gray-800 mb-4 rounded-lg border-l-4 border-indigo-500 bg-white p-4 shadow-md">
+                        <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-indigo-600 dark:text-indigo-400">
+                          <FiTrendingUp /> Time Estimation
+                        </h3>
+                        <div className="text-gray-700 dark:text-gray-300 grid gap-1 text-sm">
+                          <p>
+                            <strong>Start:</strong> {startDate || "N/A"}
+                          </p>
+                          <p>
+                            <strong>End:</strong>{" "}
+                            {estimatedEndDate || "Not calculated"}
+                          </p>
+                          <p>
+                            <strong>Days:</strong> {totalTimeEstimation || "N/A"}
+                          </p>
+                          <p>
+                            <strong>Units/Day:</strong> {totalUPHA || "N/A"} (per{" "}
+                            {(
+                              shiftTime -
+                              selectedShift?.totalBreakTime / 60
+                            ).toFixed(2)}{" "}
+                            hrs)
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
+                  {/* component 2 */}
 
-                  {/* Time Estimation */}
-                  {totalTimeEstimation && (
-                    <div className="dark:bg-gray-800 mb-4 rounded-lg border-l-4 border-indigo-500 bg-white p-4 shadow-md">
-                      <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-indigo-600 dark:text-indigo-400">
-                        <FiTrendingUp /> Time Estimation
-                      </h3>
-                      <div className="text-gray-700 dark:text-gray-300 grid gap-1 text-sm">
-                        <p>
-                          <strong>Start:</strong> {startDate || "N/A"}
-                        </p>
-                        <p>
-                          <strong>End:</strong>{" "}
-                          {estimatedEndDate || "Not calculated"}
-                        </p>
-                        <p>
-                          <strong>Days:</strong> {totalTimeEstimation || "N/A"}
-                        </p>
-                        <p>
-                          <strong>Units/Day:</strong> {totalUPHA || "N/A"} (per{" "}
-                          {(
-                            shiftTime -
-                            selectedShift?.totalBreakTime / 60
-                          ).toFixed(2)}{" "}
-                          hrs)
-                        </p>
+                  <div className="mt-6 flex gap-10">
+                    <div className="w-full">
+                      {/* Header */}
+                      <div className="mb-6 flex items-center justify-between">
+                        <h3 className="text-gray-900 text-2xl font-bold dark:text-white">
+                          Room Overview
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          <button className="flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-danger">
+                            Consumed: {totalConsumedKits}
+                          </button>
+                          <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                            Active: {occupancyStats.active}
+                          </span>
+                          <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700">
+                            Downtime: {occupancyStats.downtime}
+                          </span>
+                          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                            Completed: {occupancyStats.completed}
+                          </span>
+                          <span className="rounded-full bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700">
+                            Reserved: {occupancyStats.reserved}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-                {/* component 2 */}
 
-                <div className="mt-6 flex gap-10">
-                  <div className="w-full">
-                    {/* Header */}
-                    <div className="mb-6 flex items-center justify-between">
-                      <h3 className="text-gray-900 text-2xl font-bold dark:text-white">
-                        Room Overview
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <button className="flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-danger">
-                          Consumed: {totalConsumedKits}
-                        </button>
-                        <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                          Active: {occupancyStats.active}
-                        </span>
-                        <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700">
-                          Downtime: {occupancyStats.downtime}
-                        </span>
-                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-                          Completed: {occupancyStats.completed}
-                        </span>
-                        <span className="rounded-full bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700">
-                          Reserved: {occupancyStats.reserved}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Tabs */}
-                    <Tabs>
-                      <TabList className="flex space-x-3">
-                        {["Floor View", "Table View"].map((tab) => (
-                          <Tab
-                            key={tab}
-                            className={({ selected }) =>
-                              `inline-flex items-center justify-center rounded-lg px-6 py-2 text-sm font-semibold transition-all duration-200
+                      {/* Tabs */}
+                      <Tabs>
+                        <TabList className="flex space-x-3">
+                          {["Floor View", "Table View"].map((tab) => (
+                            <Tab
+                              key={tab}
+                              className={({ selected }) =>
+                                `inline-flex items-center justify-center rounded-lg px-6 py-2 text-sm font-semibold transition-all duration-200
                               focus:outline-none focus:ring-2 focus:ring-offset-1
                               ${selected
-                                ? "bg-blue-600 text-white shadow-md hover:bg-blue-700 focus:ring-blue-600"
-                                : "bg-gray-200 text-gray-800 hover:bg-gray-300 border-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:border-gray-600 border"
-                              }`
-                            }
-                          >
-                            {tab}
-                          </Tab>
-                        ))}
-                      </TabList>
+                                  ? "bg-blue-600 text-white shadow-md hover:bg-blue-700 focus:ring-blue-600"
+                                  : "bg-gray-200 text-gray-800 hover:bg-gray-300 border-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:border-gray-600 border"
+                                }`
+                              }
+                            >
+                              {tab}
+                            </Tab>
+                          ))}
+                        </TabList>
 
-                      {/* Floor View */}
-                      <TabPanel>
-                        <div className="mt-6 rounded-md border border-primary p-2 pt-3">
-                          <div className="mb-4 flex items-center gap-2 flex-nowrap overflow-x-auto">
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
-                                Active
-                              </span>
-                              <span className="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-700">
-                                Downtime
-                              </span>
-                              <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
-                                Completed
-                              </span>
-                              <span className="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-700">
-                                Reserved
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center gap-1 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
-                                <FiFilter size={14} />
-                                <select
-                                  value={seatStatusFilter}
-                                  onChange={(e) => setSeatStatusFilter(e.target.value)}
-                                  className="h-8 rounded bg-transparent px-2 outline-none"
-                                >
-                                  <option value="all">All</option>
-                                  <option value="Active">Active</option>
-                                  <option value="Downtime">Downtime</option>
-                                  <option value="Completed">Completed</option>
-                                  <option value="Reserved">Reserved</option>
-                                </select>
+                        {/* Floor View */}
+                        <TabPanel>
+                          <div className="mt-6 rounded-md border border-primary p-2 pt-3">
+                            <div className="mb-4 flex items-center gap-2 flex-nowrap overflow-x-auto">
+                              <div className="flex items-center gap-2">
+                                <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+                                  Active
+                                </span>
+                                <span className="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-700">
+                                  Downtime
+                                </span>
+                                <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                                  Completed
+                                </span>
+                                <span className="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-700">
+                                  Reserved
+                                </span>
                               </div>
-                              <label className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
-                                <input
-                                  type="checkbox"
-                                  checked={showOccupiedOnly}
-                                  onChange={(e) => setShowOccupiedOnly(e.target.checked)}
-                                />
-                                <span>Occupied only</span>
-                              </label>
-                              <div className="flex items-center gap-1 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
-                                <FiSearch size={14} />
-                                <input
-                                  type="text"
-                                  value={seatSearch}
-                                  onChange={(e) => setSeatSearch(e.target.value)}
-                                  placeholder="Search seat/stage/operator"
-                                  className="h-8 w-44 sm:w-56 bg-transparent px-2 outline-none"
-                                />
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
+                                  <FiFilter size={14} />
+                                  <select
+                                    value={seatStatusFilter}
+                                    onChange={(e) => setSeatStatusFilter(e.target.value)}
+                                    className="h-8 rounded bg-transparent px-2 outline-none"
+                                  >
+                                    <option value="all">All</option>
+                                    <option value="Active">Active</option>
+                                    <option value="Downtime">Downtime</option>
+                                    <option value="Completed">Completed</option>
+                                    <option value="Reserved">Reserved</option>
+                                  </select>
+                                </div>
+                                <label className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
+                                  <input
+                                    type="checkbox"
+                                    checked={showOccupiedOnly}
+                                    onChange={(e) => setShowOccupiedOnly(e.target.checked)}
+                                  />
+                                  <span>Occupied only</span>
+                                </label>
+                                <div className="flex items-center gap-1 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
+                                  <FiSearch size={14} />
+                                  <input
+                                    type="text"
+                                    value={seatSearch}
+                                    onChange={(e) => setSeatSearch(e.target.value)}
+                                    placeholder="Search seat/stage/operator"
+                                    className="h-8 w-44 sm:w-56 bg-transparent px-2 outline-none"
+                                  />
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          {/* Assigned Custom Stages */}
-                          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                            {assignedCustomStages.length > 0 &&
-                              assignedCustomStages.map((stage, index) => (
-                                <div
-                                  key={index}
-                                  className="rounded-xl border border-green-400 bg-green-50 p-4 shadow transition hover:shadow-md dark:border-green-600 dark:bg-green-900"
-                                >
-                                  <div className="mb-3 flex items-center justify-between">
-                                    <p className="text-gray-900 text-base font-semibold dark:text-white">
-                                      {stage?.stage}
-                                    </p>
-                                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-600 dark:bg-orange-700 dark:text-orange-300">
-                                      Active
-                                    </span>
-                                  </div>
-
-                                  {/* Quick Stats */}
-                                  <div className="text-gray-700 dark:text-gray-200 grid gap-1 text-xs">
-                                    <p className="flex items-center gap-1">
-                                      <FiTrendingUp /> UPH Target:{" "}
-                                      {stage?.upha || "100"}
-                                    </p>
-                                    <p className="flex items-center gap-1">
-                                      <FiActivity /> Achieved:{" "}
-                                      {stage?.achievedUph || "0"}
-                                    </p>
-                                    <p className="flex items-center gap-1">
-                                      <FiUsers /> WIP: {stage?.wip || "0"}
-                                    </p>
-                                    <p className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                                      <FiCheckCircle /> Pass:{" "}
-                                      {stage?.pass || "0"}
-                                    </p>
-                                    <p className="text-red-600 dark:text-red-400 flex items-center gap-1">
-                                      <FiXCircle /> NG: {stage?.ng || "0"}
-                                    </p>
-                                  </div>
-
-                                  {/* Operators */}
-                                  {assignedCustomOperators[index] && (
-                                    <div className="text-gray-600 dark:text-gray-300 mt-3 text-xs">
-                                      <strong>Operators:</strong>
-                                      <div className="mt-1 flex flex-wrap gap-1">
-                                        {assignedCustomOperators[index].map(
-                                          (op, i) => (
-                                            <span
-                                              key={i}
-                                              className="bg-gray-200 dark:bg-gray-700 inline-block rounded-full px-2 py-0.5 text-xs font-medium"
-                                            >
-                                              {op.name}
-                                            </span>
-                                          ),
-                                        )}
-                                      </div>
+                            {/* Assigned Custom Stages */}
+                            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                              {assignedCustomStages.length > 0 &&
+                                assignedCustomStages.map((stage, index) => (
+                                  <div
+                                    key={index}
+                                    className="rounded-xl border border-green-400 bg-green-50 p-4 shadow transition hover:shadow-md dark:border-green-600 dark:bg-green-900"
+                                  >
+                                    <div className="mb-3 flex items-center justify-between">
+                                      <p className="text-gray-900 text-base font-semibold dark:text-white">
+                                        {stage?.stage}
+                                      </p>
+                                      <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-600 dark:bg-orange-700 dark:text-orange-300">
+                                        Active
+                                      </span>
                                     </div>
-                                  )}
-                                </div>
-                              ))}
-                          </div>
 
-                          {/* Room Layout */}
-                          {selectedRoom &&
-                            selectedRoom.lines
-                              .filter((row, rowIndex) =>
-                                row.seats?.some((seat, seatIndex) =>
-                                  seatMatches(rowIndex, seatIndex, seat),
+                                    {/* Quick Stats */}
+                                    <div className="text-gray-700 dark:text-gray-200 grid gap-1 text-xs">
+                                      <p className="flex items-center gap-1">
+                                        <FiTrendingUp /> UPH Target:{" "}
+                                        {stage?.upha || "100"}
+                                      </p>
+                                      <p className="flex items-center gap-1">
+                                        <FiActivity /> Achieved:{" "}
+                                        {stage?.achievedUph || "0"}
+                                      </p>
+                                      <p className="flex items-center gap-1">
+                                        <FiUsers /> WIP: {stage?.wip || "0"}
+                                      </p>
+                                      <p className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                        <FiCheckCircle /> Pass:{" "}
+                                        {stage?.pass || "0"}
+                                      </p>
+                                      <p className="text-red-600 dark:text-red-400 flex items-center gap-1">
+                                        <FiXCircle /> NG: {stage?.ng || "0"}
+                                      </p>
+                                    </div>
+
+                                    {/* Operators */}
+                                    {assignedCustomOperators[index] && (
+                                      <div className="text-gray-600 dark:text-gray-300 mt-3 text-xs">
+                                        <strong>Operators:</strong>
+                                        <div className="mt-1 flex flex-wrap gap-1">
+                                          {assignedCustomOperators[index].map(
+                                            (op, i) => (
+                                              <span
+                                                key={i}
+                                                className="bg-gray-200 dark:bg-gray-700 inline-block rounded-full px-2 py-0.5 text-xs font-medium"
+                                              >
+                                                {op.name}
+                                              </span>
+                                            ),
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                            </div>
+
+                            {/* Room Layout */}
+                            {selectedRoom &&
+                              selectedRoom.lines
+                                .filter((row, rowIndex) =>
+                                  row.seats?.some((seat, seatIndex) =>
+                                    seatMatches(rowIndex, seatIndex, seat),
+                                  ),
+                                )
+                                .map((row, rowIndex) => (
+                                  <div key={rowIndex} className="space-y-2">
+                                    <h4 className="text-gray-800 mt-3 text-sm font-bold dark:text-white">
+                                      {row.rowName}
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                                      {row.seats
+                                        ?.filter((seat, seatIndex) =>
+                                          seatMatches(rowIndex, seatIndex, seat),
+                                        )
+                                        .map((seat, seatIndex) => (
+                                          <DraggableGridItem
+                                            key={`${rowIndex}-${seatIndex}`}
+                                            rowIndex={rowIndex}
+                                            seatIndex={seatIndex}
+                                            handleDrop={handleDrop}
+                                            handleDragOver={handleDragOver}
+                                            handleRemoveStage={handleRemoveStage}
+                                            item={seat}
+                                            assignedStages={assignedStages}
+                                            coordinates={`${rowIndex}-${seatIndex}`}
+                                            moveItem={moveItem}
+                                            operators={operators}
+                                            assignedOperators={assignedOperators}
+                                            setAssignedOperators={
+                                              setAssignedOperators
+                                            }
+                                            filteredOperators={filteredOperators}
+                                            setFilteredOperators={
+                                              setFilteredOperators
+                                            }
+                                            rowSeatLength={row.seats.length}
+                                            setAssignedJigs={setAssignedJigs}
+                                            assignedJigs={assignedJigs}
+                                            jigCategories={jigCategories}
+                                            selectedProcess={selectedProcess}
+                                            seatStatusFilter={seatStatusFilter}
+                                            onViewDevices={handleViewDevices}
+                                          />
+                                        ))}
+                                    </div>
+                                  </div>
+                                ))}
+                          </div>
+                        </TabPanel>
+
+                        {/* Table View */}
+                        <TabPanel>
+                          <div className=" bg-gray-50 dark:bg-gray-800 mt-6 h-90 overflow-x-auto rounded-md rounded-xl border border-primary p-2 p-4 pt-3 shadow">
+                            {/* Common Stages */}
+                            <div className="mb-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                              {selectedProcess?.commonStages.map(
+                                (stage, index) => (
+                                  <div
+                                    key={index}
+                                    className="rounded-xl border border-green-400 bg-green-50 p-4 shadow hover:shadow-md dark:border-green-600 dark:bg-green-900"
+                                  >
+                                    <p className="text-gray-900 mb-2 text-base font-semibold dark:text-white">
+                                      {stage?.stageName}
+                                    </p>
+                                    <div className="text-gray-700 dark:text-gray-200 space-y-1 text-xs">
+                                      <p>UPH Target: {stage?.upha || "100"}</p>
+                                      <p>
+                                        Achieved UPH: {stage?.achievedUph || "0"}
+                                      </p>
+                                      <p>WIP: {stage?.wip || "0"}</p>
+                                      <p className="text-green-600 dark:text-green-400">
+                                        Pass: {stage?.pass || "0"}
+                                      </p>
+                                      <p className="text-red-600 dark:text-red-400">
+                                        NG: {stage?.ng || "0"}
+                                      </p>
+                                      <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-600 dark:bg-orange-700 dark:text-orange-300">
+                                        Active
+                                      </span>
+                                    </div>
+                                  </div>
                                 ),
-                              )
-                              .map((row, rowIndex) => (
-                                <div key={rowIndex} className="space-y-2">
-                                  <h4 className="text-gray-800 mt-3 text-sm font-bold dark:text-white">
-                                    {row.rowName}
-                                  </h4>
-                                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                                    {row.seats
-                                      ?.filter((seat, seatIndex) =>
-                                        seatMatches(rowIndex, seatIndex, seat),
-                                      )
-                                      .map((seat, seatIndex) => (
-                                        <DraggableGridItem
-                                          key={`${rowIndex}-${seatIndex}`}
-                                          rowIndex={rowIndex}
-                                          seatIndex={seatIndex}
-                                          handleDrop={handleDrop}
-                                          handleDragOver={handleDragOver}
-                                          handleRemoveStage={handleRemoveStage}
-                                          item={seat}
-                                          assignedStages={assignedStages}
-                                          coordinates={`${rowIndex}-${seatIndex}`}
-                                          moveItem={moveItem}
-                                          operators={operators}
-                                          assignedOperators={assignedOperators}
-                                          setAssignedOperators={
-                                            setAssignedOperators
-                                          }
-                                          filteredOperators={filteredOperators}
-                                          setFilteredOperators={
-                                            setFilteredOperators
-                                          }
-                                          rowSeatLength={row.seats.length}
-                                          setAssignedJigs={setAssignedJigs}
-                                          assignedJigs={assignedJigs}
-                                          jigCategories={jigCategories}
-                                          selectedProcess={selectedProcess}
-                                          seatStatusFilter={seatStatusFilter}
-                                        />
-                                      ))}
-                                  </div>
-                                </div>
-                              ))}
-                        </div>
-                      </TabPanel>
+                              )}
+                            </div>
 
-                      {/* Table View */}
-                      <TabPanel>
-                        <div className=" bg-gray-50 dark:bg-gray-800 mt-6 h-90 overflow-x-auto rounded-md rounded-xl border border-primary p-2 p-4 pt-3 shadow">
-                          {/* Common Stages */}
-                          <div className="mb-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                            {selectedProcess?.commonStages.map(
-                              (stage, index) => (
-                                <div
-                                  key={index}
-                                  className="rounded-xl border border-green-400 bg-green-50 p-4 shadow hover:shadow-md dark:border-green-600 dark:bg-green-900"
-                                >
-                                  <p className="text-gray-900 mb-2 text-base font-semibold dark:text-white">
-                                    {stage?.stageName}
-                                  </p>
-                                  <div className="text-gray-700 dark:text-gray-200 space-y-1 text-xs">
-                                    <p>UPH Target: {stage?.upha || "100"}</p>
-                                    <p>
-                                      Achieved UPH: {stage?.achievedUph || "0"}
-                                    </p>
-                                    <p>WIP: {stage?.wip || "0"}</p>
-                                    <p className="text-green-600 dark:text-green-400">
-                                      Pass: {stage?.pass || "0"}
-                                    </p>
-                                    <p className="text-red-600 dark:text-red-400">
-                                      NG: {stage?.ng || "0"}
-                                    </p>
-                                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-600 dark:bg-orange-700 dark:text-orange-300">
-                                      Active
-                                    </span>
-                                  </div>
-                                </div>
-                              ),
-                            )}
-                          </div>
-
-                          {/* Table */}
-                          <div className="border-gray-200 dark:border-gray-700 overflow-x-auto rounded-xl border shadow-md">
-                            <table className="min-w-full text-sm">
-                              <thead className="bg-blue-500 text-white">
-                                <tr>
-                                  {selectedProcess?.stages?.map(
-                                    (value, index) => (
-                                      <th
-                                        key={index}
-                                        className="px-4 py-3 text-left uppercase tracking-wide"
-                                      >
-                                        {value.stageName}
-                                      </th>
-                                    ),
-                                  )}
-                                </tr>
-                              </thead>
-                              <tbody className="divide-gray-200 dark:divide-gray-700 divide-y">
-                                {rows
-                                  .map((rowKeys) =>
-                                    rowKeys.filter((key) => keyMatches(key)),
-                                  )
-                                  .filter((filtered) => filtered.length > 0)
-                                  .map((rowKeys, rowIndex) => (
-                                    <tr
-                                      key={rowIndex}
-                                      className="hover:bg-gray-100 dark:hover:bg-gray-700 transition"
-                                    >
-                                      {rowKeys.map((key, colIndex) => (
-                                        <td
-                                          key={colIndex}
-                                          className="px-4 py-3 align-top"
+                            {/* Table */}
+                            <div className="border-gray-200 dark:border-gray-700 overflow-x-auto rounded-xl border shadow-md">
+                              <table className="min-w-full text-sm">
+                                <thead className="bg-blue-500 text-white">
+                                  <tr>
+                                    {selectedProcess?.stages?.map(
+                                      (value, index) => (
+                                        <th
+                                          key={index}
+                                          className="px-4 py-3 text-left uppercase tracking-wide"
                                         >
-                                          {assignedStages[key] &&
-                                            assignedStages[key].length > 0 &&
-                                            assignedStages[key].filter((stage: any) => {
-                                              const status =
-                                                stage?.reserved
-                                                  ? "Reserved"
-                                                  : selectedProcess?.quantity >
-                                                    stage?.totalUPHA
-                                                    ? stage?.totalUPHA > 0
-                                                      ? "Active"
-                                                      : "Downtime"
-                                                    : "Completed";
-                                              return seatStatusFilter === "all"
-                                                ? true
-                                                : seatStatusFilter === status;
-                                            }).length > 0 ? (
-                                            assignedStages[key]
-                                              .filter((stage: any) => {
+                                          {value.stageName}
+                                        </th>
+                                      ),
+                                    )}
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-gray-200 dark:divide-gray-700 divide-y">
+                                  {rows
+                                    .map((rowKeys) =>
+                                      rowKeys.filter((key) => keyMatches(key)),
+                                    )
+                                    .filter((filtered) => filtered.length > 0)
+                                    .map((rowKeys, rowIndex) => (
+                                      <tr
+                                        key={rowIndex}
+                                        className="hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                                      >
+                                        {rowKeys.map((key, colIndex) => (
+                                          <td
+                                            key={colIndex}
+                                            className="px-4 py-3 align-top"
+                                          >
+                                            {assignedStages[key] &&
+                                              assignedStages[key].length > 0 &&
+                                              assignedStages[key].filter((stage: any) => {
                                                 const status =
                                                   stage?.reserved
                                                     ? "Reserved"
@@ -2108,296 +2212,458 @@ const ViewPlanSchedule = () => {
                                                 return seatStatusFilter === "all"
                                                   ? true
                                                   : seatStatusFilter === status;
-                                              })
-                                              .map((stage, stageIndex) => (
-                                                <div
-                                                  key={stageIndex}
-                                                  className="dark:bg-gray-900 mb-2 rounded-lg bg-white p-3 shadow-sm"
-                                                >
-                                                  <p className="text-xs font-medium">
-                                                    <FiTrendingUp className="mr-1 inline-block" />
-                                                    UPH Target: {stage.upha || 0}
-                                                  </p>
-                                                  <p className="text-xs">
-                                                    Achieved:{" "}
-                                                    {stage.achievedUph || 0}
-                                                  </p>
-                                                  <p className="text-xs">
-                                                    WIP: {stage?.totalUPHA ?? "N/A"}
-                                                  </p>
-                                                  <p className="text-xs text-green-600">
-                                                    Pass: {stage.passedDevice || 0}
-                                                  </p>
-                                                  <p className="text-red-600 text-xs">
-                                                    NG: {stage.ngDevice || 0}
-                                                  </p>
-                                                  <p className="text-xs">
-                                                    <strong>Status:</strong>{" "}
-                                                    <span
-                                                      className={
-                                                        selectedProcess?.quantity >
-                                                          stage?.totalUPHA
-                                                          ? stage?.totalUPHA > 0
-                                                            ? "font-semibold text-orange-500"
-                                                            : "text-red-500 font-semibold"
-                                                          : "font-semibold text-green-600"
-                                                      }
-                                                    >
-                                                      {selectedProcess?.quantity >
+                                              }).length > 0 ? (
+                                              assignedStages[key]
+                                                .filter((stage: any) => {
+                                                  const status =
+                                                    stage?.reserved
+                                                      ? "Reserved"
+                                                      : selectedProcess?.quantity >
                                                         stage?.totalUPHA
                                                         ? stage?.totalUPHA > 0
                                                           ? "Active"
                                                           : "Downtime"
-                                                        : "Completed"}
-                                                    </span>
-                                                  </p>
-                                                </div>
-                                              ))
-                                          ) : (
-                                            <div className="mb-2 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-gray-900 dark:text-gray-300">
-                                              Empty
-                                            </div>
-                                          )}
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  ))}
-                              </tbody>
-                            </table>
+                                                        : "Completed";
+                                                  return seatStatusFilter === "all"
+                                                    ? true
+                                                    : seatStatusFilter === status;
+                                                })
+                                                .map((stage, stageIndex) => (
+                                                  <div
+                                                    key={stageIndex}
+                                                    className="dark:bg-gray-900 mb-2 rounded-lg bg-white p-3 shadow-sm"
+                                                  >
+                                                    <p className="text-xs font-medium">
+                                                      <FiTrendingUp className="mr-1 inline-block" />
+                                                      UPH Target: {stage.upha || 0}
+                                                    </p>
+                                                    <p className="text-xs">
+                                                      Achieved:{" "}
+                                                      {stage.achievedUph || 0}
+                                                    </p>
+                                                    <p className="text-xs">
+                                                      WIP: {stage?.totalUPHA ?? "N/A"}
+                                                    </p>
+                                                    <p className="text-xs text-green-600">
+                                                      Pass: {stage.passedDevice || 0}
+                                                    </p>
+                                                    <p className="text-red-600 text-xs">
+                                                      NG: {stage.ngDevice || 0}
+                                                    </p>
+                                                    <p className="text-xs">
+                                                      <strong>Status:</strong>{" "}
+                                                      <span
+                                                        className={
+                                                          selectedProcess?.quantity >
+                                                            stage?.totalUPHA
+                                                            ? stage?.totalUPHA > 0
+                                                              ? "font-semibold text-orange-500"
+                                                              : "text-red-500 font-semibold"
+                                                            : "font-semibold text-green-600"
+                                                        }
+                                                      >
+                                                        {selectedProcess?.quantity >
+                                                          stage?.totalUPHA
+                                                          ? stage?.totalUPHA > 0
+                                                            ? "Active"
+                                                            : "Downtime"
+                                                          : "Completed"}
+                                                      </span>
+                                                    </p>
+                                                  </div>
+                                                ))
+                                            ) : (
+                                              <div className="mb-2 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-gray-900 dark:text-gray-300">
+                                                Empty
+                                              </div>
+                                            )}
+                                          </td>
+                                        ))}
+                                      </tr>
+                                    ))}
+                                </tbody>
+                              </table>
+                            </div>
                           </div>
-                        </div>
-                      </TabPanel>
-                    </Tabs>
+                        </TabPanel>
+                      </Tabs>
+                    </div>
                   </div>
+                  {/* end component 2 */}
                 </div>
-                {/* end component 2 */}
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
-      </div>
-      <div className="container mx-auto grid grid-cols-1 gap-9 p-6 sm:grid-cols-1">
-        <div className="flex flex-col gap-9">
-          <div className="rounded-lg border border-stroke bg-white p-6 shadow-lg dark:border-strokedark dark:bg-boxdark">
-            <div className="flex items-center justify-between border-b border-stroke px-6 py-4 dark:border-strokedark">
-              <div className="flex w-full items-center justify-between text-center">
-                <div>
-                  <h3 className="text-xl font-semibold text-black dark:text-white">
-                    UPH
-                  </h3>
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
-                    <input
-                      type="date"
-                      value={filterDate}
-                      onChange={(e) => setFilterDate(e.target.value)}
-                      placeholder=""
-                      className="h-10 w-44 sm:w-56 rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                    />
-                    <button
-                      onClick={handleFilter}
-                      disabled={planData?.processStatus === "down_time_hold"}
-                      className={`flex h-10 items-center gap-2 rounded px-3 text-xs font-semibold text-white
+        <div className="container mx-auto grid grid-cols-1 gap-9 p-6 sm:grid-cols-1">
+          <div className="flex flex-col gap-9">
+            <div className="rounded-lg border border-stroke bg-white p-6 shadow-lg dark:border-strokedark dark:bg-boxdark">
+              <div className="flex items-center justify-between border-b border-stroke px-6 py-4 dark:border-strokedark">
+                <div className="flex w-full items-center justify-between text-center">
+                  <div>
+                    <h3 className="text-xl font-semibold text-black dark:text-white">
+                      UPH
+                    </h3>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
+                      <input
+                        type="date"
+                        value={filterDate}
+                        onChange={(e) => setFilterDate(e.target.value)}
+                        placeholder=""
+                        className="h-10 w-44 sm:w-56 rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                      />
+                      <button
+                        onClick={handleFilter}
+                        disabled={planData?.processStatus === "down_time_hold"}
+                        className={`flex h-10 items-center gap-2 rounded px-3 text-xs font-semibold text-white
                         ${planData?.processStatus === "down_time_hold" ? "cursor-not-allowed bg-gray" : "bg-primary"}
                       `}
-                    >
-                      Apply
-                    </button>
-                    <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                      Pass: {uphStats.pass}
-                    </span>
-                    <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
-                      NG: {uphStats.ng}
-                    </span>
-                    <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-                      Avg UPH: {uphStats.avg}
-                    </span>
-                    <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-                      Hours: {uphStats.hoursWithData}
-                    </span>
+                      >
+                        Apply
+                      </button>
+                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                        Pass: {uphStats.pass}
+                      </span>
+                      <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+                        NG: {uphStats.ng}
+                      </span>
+                      <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                        Avg UPH: {uphStats.avg}
+                      </span>
+                      <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
+                        Hours: {uphStats.hoursWithData}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-            {planData?.processStatus === "active" && (
-              <>
-                <div className="p-4">
-                  <p className="pb-3">
-                    <strong>Stage Wise</strong>
-                  </p>
-                  <table className="min-w-full table-auto text-center text-sm">
-                    <thead className="bg-gray-100 font-semibold">
-                      <tr>
-                        <th className="border p-2">UPH Stage Wise</th>
-                        {stages.map((stage, idx) => (
-                          <th key={idx} className="border p-2">
-                            {stage.stageName}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {overAllUPHA?.map((row, rowIndex) => {
-                        let bgColorClass = "";
-                        if (row.status === "current") {
-                          bgColorClass = "bg-yellow-100";
-                        } else if (row.status === "past") {
-                          bgColorClass = "bg-green-50";
-                        } else if (row.status === "future") {
-                          bgColorClass = "bg-gray-100";
-                        }
+              {planData?.processStatus === "active" && (
+                <>
+                  <div className="p-4">
+                    <p className="pb-3">
+                      <strong>Stage Wise</strong>
+                    </p>
+                    <table className="min-w-full table-auto text-center text-sm">
+                      <thead className="bg-gray-100 font-semibold">
+                        <tr>
+                          <th className="border p-2">UPH Stage Wise</th>
+                          {stages.map((stage, idx) => (
+                            <th key={idx} className="border p-2">
+                              {stage.stageName}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {overAllUPHA?.map((row, rowIndex) => {
+                          let bgColorClass = "";
+                          if (row.status === "current") {
+                            bgColorClass = "bg-yellow-100";
+                          } else if (row.status === "past") {
+                            bgColorClass = "bg-green-50";
+                          } else if (row.status === "future") {
+                            bgColorClass = "bg-gray-100";
+                          }
 
-                        return (
-                          <tr
-                            key={rowIndex}
-                            className={`${bgColorClass} border-b`}
-                          >
-                            <td className="border p-2 font-semibold">
-                              {row.hour}
-                            </td>
-                            {row.isBreak ? (
-                              <td
-                                colSpan={stages.length}
-                                className="border bg-gray-50/50 p-4 font-medium italic text-gray-400"
-                              >
-                                <div className="flex items-center justify-center gap-2">
-                                  <FiClock className="animate-pulse text-gray-400" />
-                                  <span>Break Time ({row.hour})</span>
-                                </div>
+                          return (
+                            <tr
+                              key={rowIndex}
+                              className={`${bgColorClass} border-b`}
+                            >
+                              <td className="border p-2 font-semibold">
+                                {row.hour}
                               </td>
-                            ) : (
-                              row.hour !== "Total Count" &&
-                                row.hour !== "Avg UPH"
-                                ? row?.values?.map((val, i) => (
-                                  <td key={i} className="border p-2">
-                                    <div className="text-xs">
-                                      <p className="text-left">
-                                        <strong>Pass:</strong> {val?.Pass},
-                                      </p>
-                                      <p className="text-left">
-                                        <strong>NG:</strong> {val?.NG},
-                                      </p>
-                                      <p className="text-left">
-                                        <strong>Target UPH:</strong>{" "}
-                                        {val?.targetUPH}
-                                      </p>
-                                      <p
-                                        className={`text-left ${val?.Pass + val?.NG <= val?.targetUPH && row?.status !== "future" ? "text-danger" : "text-grey"}`}
-                                      >
-                                        <strong>UPH:</strong>{" "}
-                                        {val?.Pass + val?.NG}
-                                      </p>
-                                      <div className="mt-1 h-2 w-full rounded bg-gray-200">
-                                        <div
-                                          className="h-2 rounded bg-blue-500"
-                                          style={{
-                                            width: `${Math.min(
-                                              100,
-                                              Math.round(
-                                                (((val?.Pass || 0) + (val?.NG || 0)) /
-                                                  (val?.targetUPH || 1)) * 100,
-                                              ),
-                                            )}%`,
-                                          }}
-                                        ></div>
-                                      </div>
-                                      <p className="text-[10px] text-gray-500">
-                                        {Math.min(
-                                          100,
-                                          Math.round(
-                                            (((val?.Pass || 0) + (val?.NG || 0)) /
-                                              (val?.targetUPH || 1)) * 100,
-                                          ),
-                                        )}
-                                        % of target
-                                      </p>
-                                    </div>
-                                  </td>
-                                ))
-                                : row?.values?.map((val, i) => (
-                                  <td key={i} className="border p-2">
-                                    <div className="text-xs">
-                                      <p className="text-left">
-                                        <strong>Pass:</strong> {val?.Pass},
-                                      </p>
-                                      <p className="text-left">
-                                        <strong>NG:</strong> {val?.NG},
-                                      </p>
-                                      <p className="text-left">
-                                        <strong>UPH:</strong>{" "}
-                                        {val?.Pass + val?.NG}
-                                      </p>
-                                    </div>
-                                  </td>
-                                ))
-                            )}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="p-4">
-                  <p className="pb-3">
-                    <strong>Overall</strong>
-                  </p>
-                  <table className="mt-4 w-full table-auto border text-center">
-                    <thead>
-                      <tr className="bg-gray-200">
-                        <th className="border px-4 py-2">Overall UPH</th>
-                        <th className="border px-4 py-2">Complete Device</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {completedKitsUPH?.map((row, idx) => {
-                        let rowColor = "";
-
-                        if (row.status === "past") {
-                          rowColor = "bg-green-50";
-                        } else if (row.status === "current") {
-                          rowColor = "bg-yellow-100";
-                        } else if (row.status === "future") {
-                          rowColor = "bg-gray-100";
-                        }
-
-                        return (
-                          <tr key={idx} className={`${rowColor}`}>
-                            <td className="border px-4 py-2">{row?.hour}</td>
-                            <td className="border px-4 py-2">
                               {row.isBreak ? (
-                                <span className="italic text-gray-400">
-                                  Break
-                                </span>
+                                <td
+                                  colSpan={stages.length}
+                                  className="border bg-gray-50/50 p-4 font-medium italic text-gray-400"
+                                >
+                                  <div className="flex items-center justify-center gap-2">
+                                    <FiClock className="animate-pulse text-gray-400" />
+                                    <span>Break Time ({row.hour})</span>
+                                  </div>
+                                </td>
                               ) : (
-                                row?.Pass + row?.NG
+                                row.hour !== "Total Count" &&
+                                  row.hour !== "Avg UPH"
+                                  ? row?.values?.map((val, i) => (
+                                    <td key={i} className="border p-2">
+                                      <div className="text-xs">
+                                        <p className="text-left">
+                                          <strong>Pass:</strong> {val?.Pass},
+                                        </p>
+                                        <p className="text-left">
+                                          <strong>NG:</strong> {val?.NG},
+                                        </p>
+                                        <p className="text-left">
+                                          <strong>Target UPH:</strong>{" "}
+                                          {val?.targetUPH}
+                                        </p>
+                                        <p
+                                          className={`text-left ${val?.Pass + val?.NG <= val?.targetUPH && row?.status !== "future" ? "text-danger" : "text-grey"}`}
+                                        >
+                                          <strong>UPH:</strong>{" "}
+                                          {val?.Pass + val?.NG}
+                                        </p>
+                                        <div className="mt-1 h-2 w-full rounded bg-gray-200">
+                                          <div
+                                            className="h-2 rounded bg-blue-500"
+                                            style={{
+                                              width: `${Math.min(
+                                                100,
+                                                Math.round(
+                                                  (((val?.Pass || 0) + (val?.NG || 0)) /
+                                                    (val?.targetUPH || 1)) * 100,
+                                                ),
+                                              )}%`,
+                                            }}
+                                          ></div>
+                                        </div>
+                                        <p className="text-[10px] text-gray-500">
+                                          {Math.min(
+                                            100,
+                                            Math.round(
+                                              (((val?.Pass || 0) + (val?.NG || 0)) /
+                                                (val?.targetUPH || 1)) * 100,
+                                            ),
+                                          )}
+                                          % of target
+                                        </p>
+                                      </div>
+                                    </td>
+                                  ))
+                                  : row?.values?.map((val, i) => (
+                                    <td key={i} className="border p-2">
+                                      <div className="text-xs">
+                                        <p className="text-left">
+                                          <strong>Pass:</strong> {val?.Pass},
+                                        </p>
+                                        <p className="text-left">
+                                          <strong>NG:</strong> {val?.NG},
+                                        </p>
+                                        <p className="text-left">
+                                          <strong>UPH:</strong>{" "}
+                                          {val?.Pass + val?.NG}
+                                        </p>
+                                      </div>
+                                    </td>
+                                  ))
                               )}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="p-4">
+                    <p className="pb-3">
+                      <strong>Overall</strong>
+                    </p>
+                    <table className="mt-4 w-full table-auto border text-center">
+                      <thead>
+                        <tr className="bg-gray-200">
+                          <th className="border px-4 py-2">Overall UPH</th>
+                          <th className="border px-4 py-2">Complete Device</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {completedKitsUPH?.map((row, idx) => {
+                          let rowColor = "";
 
-                      <tr className="bg-purple-100 font-semibold">
-                        <td className="border px-4 py-2">Avg UPH</td>
-                        <td className="border px-4 py-2">
-                          {lastStageOverallSummary}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-            {planData?.processStatus === "down_time_hold" && (
-              <>
-                <div className="flex items-center justify-center py-4">
-                  <p className="text-danger">The process has been on hold.</p>
-                </div>
-              </>
-            )}
+                          if (row.status === "past") {
+                            rowColor = "bg-green-50";
+                          } else if (row.status === "current") {
+                            rowColor = "bg-yellow-100";
+                          } else if (row.status === "future") {
+                            rowColor = "bg-gray-100";
+                          }
+
+                          return (
+                            <tr key={idx} className={`${rowColor}`}>
+                              <td className="border px-4 py-2">{row?.hour}</td>
+                              <td className="border px-4 py-2">
+                                {row.isBreak ? (
+                                  <span className="italic text-gray-400">
+                                    Break
+                                  </span>
+                                ) : (
+                                  row?.Pass + row?.NG
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+
+                        <tr className="bg-purple-100 font-semibold">
+                          <td className="border px-4 py-2">Avg UPH</td>
+                          <td className="border px-4 py-2">
+                            {lastStageOverallSummary}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+              {planData?.processStatus === "down_time_hold" && (
+                <>
+                  <div className="flex items-center justify-center py-4">
+                    <p className="text-danger">The process has been on hold.</p>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+        <Modal
+          isOpen={isDevicesModalOpen}
+          onClose={() => setIsDevicesModalOpen(false)}
+          title={`Records for ${selectedStageNameForDevices} (Seat ${selectedSeatForDevices})`}
+          submitOption={false}
+          maxWidth="max-w-4xl"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 items-end">
+            <div>
+              <label className="block text-sm font-medium mb-1">From Date</label>
+              <input
+                type="date"
+                value={modalFilterDateStart}
+                onChange={(e) => setModalFilterDateStart(e.target.value)}
+                className="w-full rounded border-[1.5px] border-stroke px-3 py-2 outline-none focus:border-primary dark:border-strokedark dark:bg-form-input"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">To Date</label>
+              <input
+                type="date"
+                value={modalFilterDateEnd}
+                onChange={(e) => setModalFilterDateEnd(e.target.value)}
+                className="w-full rounded border-[1.5px] border-stroke px-3 py-2 outline-none focus:border-primary dark:border-strokedark dark:bg-form-input"
+              />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <p className="text-sm font-semibold">
+              Showing {filteredDeviceTests.length} records
+            </p>
+          </div>
+
+          <div className="overflow-x-auto overflow-y-auto max-h-[50vh]">
+            <table className="w-full table-auto border-collapse">
+              <thead className="bg-gray-100 dark:bg-meta-4 sticky top-0">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Date / Time</th>
+                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Stage</th>
+                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Serial/IMEI</th>
+                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Operator</th>
+                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stroke dark:divide-strokedark">
+                {(filteredDeviceTests as any[])
+                  .sort(
+                    (a: any, b: any) =>
+                      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+                  )
+                  .map((record: any, idx: number) => (
+                    <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-meta-4">
+                      <td className="px-4 py-2 text-xs text-nowrap">
+                        {new Date(record.createdAt).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        {record.stageName || selectedStageNameForDevices || "-"}
+                      </td>
+                      <td className="px-4 py-2 text-xs font-mono">
+                        {record.serialNo || record.imei || "N/A"}
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        <span className={`px-2 py-1 rounded text-[10px] font-bold ${record.status === "Pass" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                          }`}>
+                          {record.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        {record?.operatorName ||
+                          record?.operatorId?.name ||
+                          record?.operatorId?.employeeCode ||
+                          "N/A"}
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        {record.status === "NG" && record.assignedDeviceTo && (
+                          <div className="text-red-500 mb-1 font-semibold">
+                            Assigned To: {record.assignedDeviceTo}
+                          </div>
+                        )}
+                        {Array.isArray(record?.trcRemarks) && record.trcRemarks.length > 0 && (
+                          <div className="text-[10px] text-gray-700 dark:text-gray-200">
+                            {record.trcRemarks.slice(0, 3).map((r: any, i: number) => (
+                              <div key={i}>{typeof r === "string" ? r : JSON.stringify(r)}</div>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+
+          {wipDevicesForStage.length > 0 && (
+            <div className="mt-6">
+              <h3 className="mb-2 text-sm font-semibold">
+                WIP Devices (not yet passed from {selectedStageNameForDevices})
+              </h3>
+              <div className="overflow-x-auto max-h-[30vh] border border-stroke rounded-md">
+                <table className="w-full table-auto border-collapse text-xs">
+                  <thead className="bg-gray-100 dark:bg-meta-4 sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">
+                        Serial/IMEI
+                      </th>
+                      <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">
+                        Current Stage
+                      </th>
+                      <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">
+                        Created At
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stroke dark:divide-strokedark">
+                    {wipDevicesForStage.map((d: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-meta-4">
+                        <td className="px-3 py-2 font-mono">{d.serialNo}</td>
+                        <td className="px-3 py-2">{d.currentStage || "-"}</td>
+                        <td className="px-3 py-2">
+                          {(d.status || "WIP").toString()}
+                        </td>
+                        <td className="px-3 py-2">
+                          {d.createdAt
+                            ? new Date(d.createdAt).toLocaleString()
+                            : "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </Modal>
+        {showPopup && (
+          <ConfirmationPopup
+            onConfirm={handleRefresh}
+            onCancel={() => setShowPopup(false)}
+            message="Are you sure you want to Refresh the Data?"
+          />
+        )}
+      </>
     </DndProvider>
   );
 };

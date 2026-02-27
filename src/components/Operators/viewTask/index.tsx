@@ -508,23 +508,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     try {
       const result = await getDeviceByProductId(id);
       // result?.data contains product devices
-      // 
-      const existingDevices = await getDeviceTestEntryOverall();
-      const existingSerials = new Set(
-        (existingDevices || [])
-          .filter((device: any) => device.processId === pId && device.stageName === (assignStageToUser?.[0]?.name || assignStageToUser?.name))
-          .map((device: any) => device.serialNo),
-      );
-      // 
-      // 
-      const filteredDeviceList = result?.data.filter(
-        (device: any) =>
-          !existingSerials.has(device.serialNo) &&
-          device.currentStage === (assignStageToUser?.[0]?.name || assignStageToUser?.name) &&
-          (device.processID === pId || device.processId === pId) &&
-          device.assignDeviceTo !== "TRC" &&
-          device.assignDeviceTo !== "QC"
-      );
+      const targetStageName = (assignStageToUser?.[0]?.name || assignStageToUser?.name || "").trim();
+      const filteredDeviceList = (result?.data || []).filter((device: any) => {
+        const deviceStage = String(device?.currentStage || "").trim();
+        const deviceProcessId = String(device?.processID || device?.processId || "");
+        return (
+          deviceStage === targetStageName &&
+          deviceProcessId === String(pId)
+        );
+      });
 
       // set filtered list
       setDeviceList(filteredDeviceList);

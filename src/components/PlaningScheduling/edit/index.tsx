@@ -854,27 +854,28 @@ const EditPlanSchedule = () => {
         let newPlaningData = result?.newPlanAndScheduling;
         if (Object.keys(filteredCustomOperators).length > 0) {
           Object.keys(filteredCustomOperators).forEach(async (operatorKey) => {
-            const formDataCustomOp = new FormData();
-            formDataCustomOp.append("processId", selectedProcess?._id);
-            formDataCustomOp.append(
-              "userId",
-              filteredCustomOperators[operatorKey]?.[0]?._id,
-            );
-            formDataCustomOp.append("roomName", selectedRoom?._id);
-            formDataCustomOp.append("seatDetails", JSON.stringify({}));
-            formDataCustomOp.append("stageType", "common");
-            formDataCustomOp.append(
-              "ProcessShiftMappings",
-              JSON.stringify({
-                formattedShiftDate: startDate,
-                startTime: selectedShift?.startTime,
-                endTime: selectedShift?.endTime,
-              }),
-            );
-            formDataCustomOp.append("status", "Occupied");
-            formDataCustomOp.append("startDate", startDate);
-            const setAssignedOperators =
-              await createAssignedOperatorsToPlan(formDataCustomOp);
+            const operatorsForStage = filteredCustomOperators[operatorKey];
+            if (operatorsForStage && operatorsForStage.length > 0) {
+              operatorsForStage.forEach(async (operator: any) => {
+                const formDataCustomOp = new FormData();
+                formDataCustomOp.append("processId", selectedProcess?._id);
+                formDataCustomOp.append("userId", operator?._id);
+                formDataCustomOp.append("roomName", selectedRoom?._id);
+                formDataCustomOp.append("seatDetails", JSON.stringify({}));
+                formDataCustomOp.append("stageType", "common");
+                formDataCustomOp.append(
+                  "ProcessShiftMappings",
+                  JSON.stringify({
+                    formattedShiftDate: startDate,
+                    startTime: selectedShift?.startTime,
+                    endTime: selectedShift?.endTime,
+                  }),
+                );
+                formDataCustomOp.append("status", "Occupied");
+                formDataCustomOp.append("startDate", startDate);
+                await createAssignedOperatorsToPlan(formDataCustomOp);
+              });
+            }
           });
         }
         if (Object.keys(filteredOperators).length > 0) {
