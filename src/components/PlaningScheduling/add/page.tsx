@@ -905,6 +905,8 @@ const ADDPlanSchedule = () => {
       formData.append("assignedJigs", JSON.stringify(assignedJigs));
       formData.append("assignedOperators", JSON.stringify(assignedOperators));
       formData.append("assignedStages", JSON.stringify(filteredData));
+      formData.append("assignedCustomStages", JSON.stringify(commonStages));
+      formData.append("assignedCustomStagesOp", JSON.stringify(assignedCustomOperators));
       formData.append("isDrafted", 1);
       formData.append("status", "Draft");
       const result = await createPlaningAndScheduling(formData);
@@ -985,6 +987,8 @@ const ADDPlanSchedule = () => {
       formData.append("assignedJigs", JSON.stringify(filteredJigs));
       formData.append("assignedOperators", JSON.stringify(filteredOperators));
       formData.append("assignedStages", JSON.stringify(filteredData));
+      formData.append("assignedCustomStages", JSON.stringify(commonStages));
+      formData.append("assignedCustomStagesOp", JSON.stringify(assignedCustomOperators));
       formData.append("isDrafted", 0);
       formData.append("status", "Waiting_Kits_allocation");
 
@@ -1026,6 +1030,38 @@ const ADDPlanSchedule = () => {
               const result = await createProcessLogs(formData3);
             } catch (error) {
               console.error("Error creating plan logs: ", error);
+            }
+          });
+        }
+        if (Object.keys(assignedCustomOperators).length > 0) {
+          Object.keys(assignedCustomOperators).forEach(async (customOpKey) => {
+            const operatorsForStage = assignedCustomOperators[parseInt(customOpKey)];
+            if (operatorsForStage && operatorsForStage.length > 0) {
+              operatorsForStage.forEach(async (operator: any) => {
+                const formData4 = new FormData();
+                formData4.append("action", "PLANING_CREATED");
+                formData4.append("processId", selectedProcess?._id || "");
+                formData4.append("userId", userDetails?._id || "");
+                formData4.append(
+                  "description",
+                  `${operator?.name} Operator successfully assigned to ${newPlaningData?.processName} at Common Stage ${commonStages[parseInt(customOpKey)]?.stageName} by ${userDetails?.name}.`,
+                );
+
+                try {
+                  const formAssignOperator = new FormData();
+                  formAssignOperator.append("processId", selectedProcess?._id);
+                  formAssignOperator.append("userId", operator?._id);
+                  formAssignOperator.append("roomName", selectedRoom?._id);
+                  formAssignOperator.append("seatDetails", JSON.stringify({}));
+                  formAssignOperator.append("startDate", startDate);
+                  formAssignOperator.append("status", "Occupied");
+                  formAssignOperator.append("stageType", "common");
+                  await createAssignedOperatorsToPlan(formAssignOperator);
+                  await createProcessLogs(formData4);
+                } catch (error) {
+                  console.error("Error creating custom plan logs: ", error);
+                }
+              });
             }
           });
         }
