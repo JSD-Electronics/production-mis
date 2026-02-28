@@ -17,7 +17,8 @@ import {
   Wrench,
   ShieldCheck,
   CheckCircle2,
-  X
+  X,
+  FileText
 } from "lucide-react";
 import { BallTriangle } from "react-loader-spinner";
 import { ToastContainer, toast } from "react-toastify";
@@ -254,6 +255,13 @@ const ViewOperatorList = () => {
               <UserCog size={18} />
             </button>
           )}
+          <button
+            onClick={() => router.push(`/operators/logs/${row._id}`)}
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 text-orange-600 transition-all hover:bg-orange-600 hover:text-white shadow-sm"
+            title="View Productivity Logs"
+          >
+            <FileText size={18} />
+          </button>
         </div>
       ),
     },

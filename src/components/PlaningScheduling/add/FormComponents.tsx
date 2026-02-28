@@ -342,101 +342,125 @@ const FormComponent: React.FC<FormComponentProps> = ({
 
       {/* 📦 Section: Inventory Health Check */}
       {inventoryData && selectedProcess && (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          {/* Kit Health */}
-          <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-800/20">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
-                  <MdInventory className="h-4 w-4" />
-                </div>
-                <h3 className="text-md font-bold text-gray-900 dark:text-white font-outfit">Kit Readiness</h3>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-black text-gray-400 uppercase">Avail.</span>
-                <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-900 rounded-md text-xs font-black text-gray-900 dark:text-white">{inventoryData?.quantity}</span>
-              </div>
-            </div>
+        (() => {
+          const totalAvailableKits = (inventoryData.quantity || 0) + (selectedProcess.issuedKits || 0);
+          const totalAvailableCartons = (inventoryData.cartonQuantity || 0) + (selectedProcess.issuedCartons || 0);
+          const kitsShortage = selectedProcess.quantity - totalAvailableKits;
 
-            <div className="grid grid-cols-3 gap-3">
-              <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50 text-center">
-                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter mb-1">Required</p>
-                <p className="text-lg font-black text-gray-900 dark:text-white font-outfit">{selectedProcess?.quantity}</p>
-              </div>
-
-              <div className={`p-3 rounded-xl border text-center ${selectedProcess?.quantity > inventoryData?.quantity ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800/50 text-red-600' : 'bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/50 text-green-600'}`}>
-                <p className="text-[9px] font-bold uppercase tracking-tighter mb-1 opacity-70">{selectedProcess?.quantity > inventoryData?.quantity ? 'Shortage' : 'Surplus'}</p>
-                <p className="text-lg font-black font-outfit">{Math.abs(selectedProcess?.quantity - inventoryData?.quantity)}</p>
-              </div>
-
-              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 dark:bg-blue-900/10 dark:border-blue-800/50 text-center">
-                <p className="text-[9px] font-bold text-blue-400 uppercase tracking-tighter mb-1">Cap</p>
-                <p className="text-lg font-black text-blue-600 dark:text-blue-400 font-outfit">{Math.min(selectedProcess?.quantity, inventoryData?.quantity)}</p>
-              </div>
-            </div>
-
-            <div className="mt-6">
-              <div className="flex justify-between items-center mb-1.5">
-                <span className="text-[9px] font-black text-gray-400 uppercase">Coverage</span>
-                <span className={`text-[9px] font-black uppercase ${inventoryData?.quantity >= selectedProcess?.quantity ? 'text-green-500' : 'text-red-500'}`}>
-                  {Math.min(Math.round((inventoryData?.quantity / selectedProcess?.quantity) * 100), 100)}%
-                </span>
-              </div>
-              <div className="h-1.5 w-full bg-gray-100 rounded-full dark:bg-gray-900 overflow-hidden shadow-inner">
-                <div
-                  className={`h-full transition-all duration-700 rounded-full ${inventoryData?.quantity >= selectedProcess?.quantity ? 'bg-green-500' : 'bg-red-500'}`}
-                  style={{ width: `${Math.min((inventoryData?.quantity / selectedProcess?.quantity) * 100, 100)}%` }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Carton Health */}
-          {packagingData?.length > 0 && packagingData[0]?.packagingType === "Carton" && (
-            <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-800/20">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-50 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400">
-                    <FaBox className="h-4 w-4" />
+          return (
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {/* Kit Health */}
+              <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-800/20">
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">
+                      <MdInventory className="h-4 w-4" />
+                    </div>
+                    <h3 className="text-md font-bold text-gray-900 dark:text-white font-outfit">Kit Readiness</h3>
                   </div>
-                  <h3 className="text-md font-bold text-gray-900 dark:text-white font-outfit">Carton Availability</h3>
+                  <div className="flex items-center gap-1.5" title={`Store: ${inventoryData.quantity} | Issued: ${selectedProcess.issuedKits}`}>
+                    <span className="text-[9px] font-black text-gray-400 uppercase">Avail.</span>
+                    <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-900 rounded-md text-xs font-black text-gray-900 dark:text-white">
+                      {totalAvailableKits}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50 text-center">
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter mb-1">Required</p>
+                    <p className="text-lg font-black text-gray-900 dark:text-white font-outfit">{selectedProcess?.quantity}</p>
+                  </div>
+
+                  <div className={`p-3 rounded-xl border text-center ${kitsShortage > 0 ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800/50 text-red-600' : 'bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/50 text-green-600'}`}>
+                    <p className="text-[9px] font-bold uppercase tracking-tighter mb-1 opacity-70">{kitsShortage > 0 ? 'Shortage' : 'Surplus'}</p>
+                    <p className="text-lg font-black font-outfit">{Math.abs(kitsShortage)}</p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 dark:bg-blue-900/10 dark:border-blue-800/50 text-center">
+                    <p className="text-[9px] font-bold text-blue-400 uppercase tracking-tighter mb-1">Cap</p>
+                    <p className="text-lg font-black text-blue-600 dark:text-blue-400 font-outfit">
+                      {Math.max(0, Math.min(selectedProcess?.quantity, totalAvailableKits))}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-[9px] font-black text-gray-400 uppercase">Coverage</span>
+                    <span className={`text-[9px] font-black uppercase ${totalAvailableKits >= selectedProcess?.quantity ? 'text-green-500' : 'text-red-500'}`}>
+                      {Math.max(0, Math.min(Math.round((totalAvailableKits / selectedProcess?.quantity) * 100), 100))}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-gray-100 rounded-full dark:bg-gray-900 overflow-hidden shadow-inner">
+                    <div
+                      className={`h-full transition-all duration-700 rounded-full ${totalAvailableKits >= selectedProcess?.quantity ? 'bg-green-500' : 'bg-red-500'}`}
+                      style={{ width: `${Math.max(0, Math.min((totalAvailableKits / selectedProcess?.quantity) * 100, 100))}%` }}
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50 text-center">
-                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter mb-1">Needed</p>
-                  <p className="text-lg font-black text-gray-900 dark:text-white font-outfit">
-                    {Math.ceil(selectedProcess?.quantity / packagingData[0]?.maxCapacity)}
-                  </p>
-                </div>
+              {/* Carton Health */}
+              {packagingData?.length > 0 && packagingData[0]?.packagingType === "Carton" && (
+                (() => {
+                  const cartonsNeeded = Math.ceil(selectedProcess?.quantity / packagingData[0]?.maxCapacity);
+                  const cartonsShortage = cartonsNeeded - totalAvailableCartons;
+                  return (
+                    <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-800/20">
+                      <div className="mb-4 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-50 text-cyan-600 dark:bg-cyan-900/30 dark:text-cyan-400">
+                            <FaBox className="h-4 w-4" />
+                          </div>
+                          <h3 className="text-md font-bold text-gray-900 dark:text-white font-outfit">Carton Availability</h3>
+                        </div>
+                        <div className="flex items-center gap-1.5" title={`Store: ${inventoryData.cartonQuantity} | Issued: ${selectedProcess.issuedCartons}`}>
+                          <span className="text-[9px] font-black text-gray-400 uppercase">Avail.</span>
+                          <span className="px-2 py-0.5 bg-gray-100 dark:bg-gray-900 rounded-md text-xs font-black text-gray-900 dark:text-white">
+                            {totalAvailableCartons}
+                          </span>
+                        </div>
+                      </div>
 
-                <div className={`p-3 rounded-xl border text-center ${inventoryData?.cartonQuantity < (selectedProcess?.quantity / packagingData[0]?.maxCapacity) ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800/50 text-red-600' : 'bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/50 text-green-600'}`}>
-                  <p className="text-[9px] font-bold uppercase tracking-tighter mb-1 opacity-70">
-                    {inventoryData?.cartonQuantity < (selectedProcess?.quantity / packagingData[0]?.maxCapacity) ? 'Short' : 'Surp'}
-                  </p>
-                  <p className="text-lg font-black font-outfit">
-                    {Math.abs(Math.ceil(selectedProcess?.quantity / packagingData[0]?.maxCapacity) - inventoryData?.cartonQuantity)}
-                  </p>
-                </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50 text-center">
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter mb-1">Needed</p>
+                          <p className="text-lg font-black text-gray-900 dark:text-white font-outfit">
+                            {cartonsNeeded}
+                          </p>
+                        </div>
 
-                <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50 text-center">
-                  <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter mb-1">Avail.</p>
-                  <p className="text-lg font-black text-gray-900 dark:text-white font-outfit">{inventoryData?.cartonQuantity}</p>
-                </div>
-              </div>
+                        <div className={`p-3 rounded-xl border text-center ${cartonsShortage > 0 ? 'bg-red-50 border-red-200 dark:bg-red-900/10 dark:border-red-800/50 text-red-600' : 'bg-green-50 border-green-200 dark:bg-green-900/10 dark:border-green-800/50 text-green-600'}`}>
+                          <p className="text-[9px] font-bold uppercase tracking-tighter mb-1 opacity-70">
+                            {cartonsShortage > 0 ? 'Short' : 'Surp'}
+                          </p>
+                          <p className="text-lg font-black font-outfit">
+                            {Math.abs(cartonsShortage)}
+                          </p>
+                        </div>
 
-              <div className="mt-6 flex items-center justify-between p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900/80">
-                <div className="flex items-center gap-2">
-                  <span className={`text-[9px] font-black uppercase ${inventoryData?.cartonQuantity < (selectedProcess?.quantity / packagingData[0]?.maxCapacity) ? 'text-red-500' : 'text-green-500'}`}>
-                    {inventoryData?.cartonQuantity < (selectedProcess?.quantity / packagingData[0]?.maxCapacity) ? 'Packaging Block' : 'Stock Coverage'}
-                  </span>
-                </div>
-                <span className="text-[8px] font-bold text-gray-400 uppercase">Max {packagingData[0]?.maxCapacity}/Ctn</span>
-              </div>
+                        <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-700/50 text-center">
+                          <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter mb-1">Store</p>
+                          <p className="text-lg font-black text-gray-900 dark:text-white font-outfit">{inventoryData?.cartonQuantity}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 flex items-center justify-between p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900/80">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[9px] font-black uppercase ${cartonsShortage > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                            {cartonsShortage > 0 ? 'Packaging Block' : 'Stock Coverage'}
+                          </span>
+                        </div>
+                        <span className="text-[8px] font-bold text-gray-400 uppercase">Max {packagingData[0]?.maxCapacity}/Ctn</span>
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
             </div>
-          )}
-        </div>
+          );
+        })()
       )}
 
       {/* 🚀 Action: Calculation */}

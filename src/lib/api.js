@@ -1179,7 +1179,33 @@ export const deleteOperatorSkillMultiple = async (ids) => {
     });
     return response.data;
   } catch (error) {
-    throw error.response?.data || { message: "Error deleting skills" };
+    throw error.response?.data || { message: "Error deleting multiple skills" };
+  }
+};
+
+export const getOperatorWorkSessions = async (operatorId, startDate, endDate) => {
+  try {
+    let url = `/operator-work/operator/${operatorId}/sessions`;
+    const params = new URLSearchParams();
+    if (startDate) params.append("startDate", startDate);
+    if (endDate) params.append("endDate", endDate);
+    if (params.toString()) url += `?${params.toString()}`;
+
+    const response = await api.get(url);
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching operator sessions:`, error);
+    throw error.response?.data || { message: "Error fetching operator sessions" };
+  }
+};
+
+export const getSessionWorkDetails = async (sessionId) => {
+  try {
+    const response = await api.get(`/operator-work/sessions/${sessionId}/work-details`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching session work details:`, error);
+    throw error.response?.data || { message: "Error fetching session details" };
   }
 };
 export const updateQuantity = async (formData, id) => {
@@ -1295,6 +1321,14 @@ export const createOrderConfirmationNumbers = async (formData) => {
 export const updateDownTimeProcess = async (id, formData) => {
   try {
     let response = await api.put(`/process/addDownTime/${id}`, formData);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+export const getDowntimeReasons = async () => {
+  try {
+    const response = await api.get("/planing/downtime-reasons");
     return response.data;
   } catch (error) {
     throw error;

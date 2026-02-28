@@ -14,6 +14,9 @@ import {
   viewJigCategory,
   getDeviceTestRecordsByProcessId,
   getDeviceByProductId,
+  getDowntimeReasons,
+  updateDownTimeProcess,
+  updateProcessStatus,
 } from "@/lib/api";
 import {
   FiClipboard,
@@ -271,12 +274,13 @@ const ViewPlanSchedule = () => {
   const [assignedOperators, setAssignedOperators] = useState([]);
   const [filteredOperators, setFilteredOperators] = useState([]);
   const [productName, setProductName] = useState("");
+  const [downTimeval, setDownTimeVal] = useState<any>({});
+  const [downtimeReasons, setDowntimeReasons] = useState<string[]>([]);
+  const [selectedReason, setSelectedReason] = useState("");
+  const [id, setID] = useState("");
+  const [loading, setLoading] = useState(true);
   const [downTimeFrom, setDownTimeFrom] = useState("");
   const [downTimeTo, setDownTimeTo] = useState("");
-  const [downTimeDesc, setDownTimeDescription] = useState("");
-  const [downTimeval, setDownTimeVal] = useState({});
-  const [id, setID] = useState("");
-  const [loading, setLoading] = useState(false);
   const [isDownTimeModalOpen, setIsDownTimeModalOpen] = useState(false);
   const closeDownTimeModal = () => setIsDownTimeModalOpen(false);
   const [showPopup, setShowPopup] = useState(false);
@@ -485,6 +489,7 @@ const ViewPlanSchedule = () => {
     const id = pathname.split("/").pop();
     setID(id);
     getPlaningById(id);
+    fetchDowntimeReasons();
     setLastRefreshed(new Date().toLocaleTimeString());
 
     // Polling for live updates every 30 seconds
@@ -496,6 +501,15 @@ const ViewPlanSchedule = () => {
     return () => clearInterval(interval);
   }, []);
 
+  const fetchDowntimeReasons = async () => {
+    try {
+      const resp = await getDowntimeReasons();
+      setDowntimeReasons(resp.reasons || []);
+    } catch (e) {
+      console.error("Failed to fetch downtime reasons", e);
+    }
+  };
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     const pathname = window.location.pathname;
@@ -504,6 +518,53 @@ const ViewPlanSchedule = () => {
     setLastRefreshed(new Date().toLocaleTimeString());
     toast.success("Data Refreshed Successfully");
     setIsRefreshing(false);
+  };
+
+  const handleManualResume = async () => {
+    try {
+      setLoading(true);
+      await updateProcessStatus(id, {
+        selectedProcess: selectedProcess?._id,
+        status: "active",
+      });
+      toast.success("Process resumed successfully");
+      await getPlaningById(id);
+    } catch (e) {
+      console.error("Manual resume failed:", e);
+      toast.error("Failed to resume process");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmitDowntime = async () => {
+    if (!downTimeFrom || !downTimeTo || !selectedReason) {
+      toast.error("Please fill all downtime fields");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const downtimeData = {
+        downTimeFrom: new Date(downTimeFrom).toISOString(),
+        downTimeTo: new Date(downTimeTo).toISOString(),
+        downTimeDesc: selectedReason,
+      };
+
+      await updateDownTimeProcess(id, {
+        selectedProcess: selectedProcess?._id,
+        downTime: JSON.stringify(downtimeData),
+      });
+
+      toast.success("Downtime scheduled and process put on hold");
+      setIsDownTimeModalOpen(false);
+      await getPlaningById(id);
+    } catch (e) {
+      console.error("Downtime submission failed:", e);
+      toast.error("Failed to schedule downtime");
+    } finally {
+      setLoading(false);
+    }
   };
   const assignedStageKeys = Object.keys(assignedStages || {}).filter(
     (key) => assignedStages[key][0].name !== "Reserved",
@@ -596,6 +657,9 @@ const ViewPlanSchedule = () => {
       // Keep existing UI visible; refresh in background
       let result = await getPlaningAndSchedulingById(id);
       setPlanData(result);
+      if (result.downTime) {
+        setDownTimeVal(result.downTime);
+      }
       let shifts = await getAllShifts();
       let roomPlan = await getAllRoomPlan();
       let processes = await getAllProcess();
@@ -603,6 +667,29 @@ const ViewPlanSchedule = () => {
       const singleProcess = processes.find(
         (value) => value?._id === result.selectedProcess,
       );
+      const currentStatus = result.processStatus || singleProcess?.status;
+      // Check for automatic resume
+      if (currentStatus === "down_time_hold" && result.downTime?.to) {
+        const now = new Date();
+        const endTime = new Date(result.downTime.to);
+        if (now > endTime) {
+          console.log("Downtime completed, auto-resuming...");
+          try {
+            await updateProcessStatus(id, {
+              selectedProcess: singleProcess._id,
+              status: "active"
+            });
+            // Re-fetch since status changed
+            result = await getPlaningAndSchedulingById(id);
+            const refetchedProcesses = await getAllProcess();
+            const updatedSingleProcess = refetchedProcesses.find(p => p._id === result.selectedProcess);
+            setSelectedProcess(updatedSingleProcess);
+          } catch (err) {
+            console.error("Auto-resume failed", err);
+          }
+        }
+      }
+
       if (singleProcess?.selectedProduct) {
         getProduct(singleProcess?.selectedProduct);
       }
@@ -788,9 +875,17 @@ const ViewPlanSchedule = () => {
       setEstimatedEndDate(formatDate(result?.estimatedEndDate));
       setTotalTimeEstimation(result?.totalTimeEstimation);
       const downTimeArr = result.downTime;
-      setDownTimeFrom(downTimeArr?.downTimeFrom);
-      setDownTimeTo(downTimeArr?.downTimeTo);
-      setDownTimeDescription(downTimeArr.downTimeDesc);
+      if (downTimeArr && downTimeArr.from) {
+        const toLocalIso = (d: any) => {
+          if (!d) return "";
+          const date = new Date(d);
+          const tzOffset = date.getTimezoneOffset() * 60000;
+          return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
+        };
+        setDownTimeFrom(toLocalIso(downTimeArr.from));
+        setDownTimeTo(toLocalIso(downTimeArr.to));
+        setSelectedReason(downTimeArr.downTimeType);
+      }
       setDownTimeVal(downTimeArr);
       setTotalUPHA(result?.totalUPHA);
       setShiftChangedFromDate(result?.ProcessShiftMappings?.formattedShiftDate);
@@ -1607,1061 +1702,1138 @@ const ViewPlanSchedule = () => {
           draggable
           pauseOnHover
         />
-        {/* Removed blocking loader to avoid slow full-page reload */}
-        <div className="container mx-auto grid grid-cols-1 gap-9 p-6 sm:grid-cols-1">
-          <div className="flex flex-col gap-9">
-            <div className="rounded-lg border border-stroke bg-white p-6 shadow-lg dark:border-strokedark dark:bg-boxdark">
-              <div className="flex flex-wrap items-center justify-between border-b border-stroke px-2 py-4 dark:border-strokedark">
-                {/* Title */}
-                <div className="flex items-center gap-4">
-                  <h3 className="text-xl font-semibold text-black dark:text-white">
-                    View Planning
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={handleRefresh}
-                      title="Manual Refresh"
-                      className={`flex items-center justify-center rounded-full p-2 transition-all hover:bg-gray-100 dark:hover:bg-gray-700 ${isRefreshing ? "animate-spin cursor-not-allowed opacity-50" : ""
-                        }`}
-                    >
-                      <FiRefreshCcw className="h-5 w-5 text-primary" />
-                    </button>
-                    {lastRefreshed && (
-                      <span className="text-xs text-black/50 dark:text-white/50">
-                        Last Sync: {lastRefreshed}
+        {loading ? (
+          <Loader />
+        ) : (
+          <>
+            <div className="container mx-auto grid grid-cols-1 gap-9 p-6 sm:grid-cols-1">
+              <div className="flex flex-col gap-9">
+                <div className="rounded-lg border border-stroke bg-white p-6 shadow-lg dark:border-strokedark dark:bg-boxdark">
+                  <div className="flex flex-wrap items-center justify-between border-b border-stroke px-2 py-4 dark:border-strokedark">
+                    {/* Title */}
+                    <div className="flex items-center gap-4">
+                      <h3 className="text-xl font-semibold text-black dark:text-white">
+                        View Planning
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleRefresh}
+                          title="Manual Refresh"
+                          className={`flex items-center justify-center rounded-full p-2 transition-all hover:bg-gray-100 dark:hover:bg-gray-700 ${isRefreshing ? "animate-spin cursor-not-allowed opacity-50" : ""
+                            }`}
+                        >
+                          <FiRefreshCcw className="h-5 w-5 text-primary" />
+                        </button>
+                        {lastRefreshed && (
+                          <span className="text-xs text-black/50 dark:text-white/50">
+                            Last Sync: {lastRefreshed}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Status Message */}
+                    {planData?.processStatus === "down_time_hold" && (
+                      <div className="flex animate-pulse items-center gap-2 rounded-full bg-red-100 px-4 py-1.5 text-xs font-bold text-red-700 dark:bg-red-900/40 dark:text-red-400">
+                        <FiClock className="animate-spin-slow" />
+                        SYSTEM ON HOLD
+                        {downTimeval?.to && (
+                          <span className="ml-1 opacity-75">
+                            Until {new Date(downTimeval.to).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    {selectedProcess?.status !== "completed" ? (
+                      <div className="flex flex-wrap gap-2">
+                        {planData?.processStatus === "down_time_hold" ? (
+                          <button
+                            onClick={handleManualResume}
+                            className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white shadow-lg transition-all hover:bg-green-700 hover:scale-105 active:scale-95"
+                          >
+                            <FiRefreshCcw size={16} />
+                            Resume Process
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setIsDownTimeModalOpen(true)}
+                            className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white shadow-lg transition-all hover:bg-orange-600 hover:scale-105 active:scale-95"
+                          >
+                            <FiClock size={16} />
+                            Downtime Hold
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleDeviceSerialNo}
+                          className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white shadow-md transition hover:bg-primary/90"
+                        >
+                          <FiCodepen size={16} />
+                          Generate Serials
+                        </button>
+                        <button
+                          onClick={handleEditPlaning}
+                          className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-md transition hover:bg-blue-700"
+                        >
+                          <FiEdit size={16} />
+                          Edit Planning
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="rounded-lg bg-green-100 px-3 py-1 text-sm font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                        Completed
                       </span>
                     )}
                   </div>
-                </div>
-
-                {/* Status Message */}
-                {downTimeval &&
-                  (() => {
-                    const currentDate = new Date();
-                    const downTimeFrom = new Date(downTimeval?.downTimeFrom);
-                    const downTimeTo = new Date(downTimeval?.downTimeTo);
-                    currentDate.setHours(0, 0, 0, 0);
-                    downTimeFrom.setHours(0, 0, 0, 0);
-                    downTimeTo.setHours(0, 0, 0, 0);
-
-                    return (
-                      downTimeFrom <= currentDate &&
-                      currentDate <= downTimeTo &&
-                      selectedProcess.status !== "completed"
-                    );
-                  })() && (
-                    <div className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 rounded-md px-3 py-1 text-sm font-medium">
-                      â¸ On Hold (
-                      {new Date(downTimeval?.downTimeFrom).toLocaleDateString()} â€“{" "}
-                      {new Date(downTimeval?.downTimeTo).toLocaleDateString()}) Â·
-                      Reason: {downTimeval?.downTimeDesc}
-                    </div>
-                  )}
-
-                {/* Actions */}
-                {selectedProcess?.status !== "completed" ? (
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={handleDeviceSerialNo}
-                      className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white shadow-md transition hover:bg-primary/90"
-                    >
-                      <FiCodepen size={16} />
-                      Generate Serials
-                    </button>
-                    <button
-                      onClick={handleEditPlaning}
-                      className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-md transition hover:bg-blue-700"
-                    >
-                      <FiEdit size={16} />
-                      Edit Planning
-                    </button>
-                  </div>
-                ) : (
-                  <span className="rounded-lg bg-green-100 px-3 py-1 text-sm font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                    Completed
-                  </span>
-                )}
-              </div>
-              <form action="#">
-                <div className="p-6">
-                  <div className="space-y-6">
-                    {/* Top Summary */}
-                    <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                      <CardDataStats title="Required Qty" total={`${summaryData.required}`} rate="" levelUp>
-                        <FiBox size={20} />
-                      </CardDataStats>
-                      <CardDataStats title="Issued Kits" total={`${summaryData.issued}`} rate="" levelUp>
-                        <FiPackage size={20} />
-                      </CardDataStats>
-                      <CardDataStats title="Consumed Kits" total={`${totalConsumedKits}`} rate="" levelUp>
-                        <FiCheckCircle size={20} />
-                      </CardDataStats>
-                      <CardDataStats title="Avg UPH (Last Stage)" total={`${summaryData.avg}`} rate="" levelUp>
-                        <FiTrendingUp size={20} />
-                      </CardDataStats>
-                    </div>
-                    {/* Process Info */}
-                    <div className="dark:bg-gray-800 rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-md">
-                      <div className="mb-3 flex items-center justify-between">
-                        <h3 className="flex items-center gap-2 text-lg font-semibold text-blue-600 dark:text-blue-400">
-                          <FiClipboard /> Process Details
-                        </h3>
-                        <button
-                          type="button"
-                          onClick={handleDownloadSerials}
-                          className="flex items-center gap-2 rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900"
-                          title="Download Generated & Assigned Serials"
-                        >
-                          <FiDownload /> Download Serials
-                        </button>
-                      </div>
-                      <div className="text-gray-700 dark:text-gray-300 grid gap-2 text-sm sm:grid-cols-2">
-                        <div>
-                          <FiTag className="inline text-primary" />{" "}
-                          <strong>Product:</strong> {productName}
+                  <form action="#">
+                    <div className="p-6">
+                      <div className="space-y-6">
+                        {/* Top Summary */}
+                        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                          <CardDataStats title="Required Qty" total={`${summaryData.required}`} rate="" levelUp>
+                            <FiBox size={20} />
+                          </CardDataStats>
+                          <CardDataStats title="Issued Kits" total={`${summaryData.issued}`} rate="" levelUp>
+                            <FiPackage size={20} />
+                          </CardDataStats>
+                          <CardDataStats title="Consumed Kits" total={`${totalConsumedKits}`} rate="" levelUp>
+                            <FiCheckCircle size={20} />
+                          </CardDataStats>
+                          <CardDataStats title="Avg UPH (Last Stage)" total={`${summaryData.avg}`} rate="" levelUp>
+                            <FiTrendingUp size={20} />
+                          </CardDataStats>
                         </div>
-                        <div>
-                          <FiClock className="inline text-primary" />{" "}
-                          <strong>Shift:</strong>{" "}
-                          {shiftChangedFromDate
-                            ? `${selectedShift?.name} (${startTime} - ${endTime})`
-                            : `${selectedShift?.name} (${selectedShift?.startTime} - ${selectedShift?.endTime})`}
-                        </div>
-                        <div>
-                          <FiClock className="inline text-yellow-500" />{" "}
-                          <strong>Break:</strong> {selectedShift?.totalBreakTime}{" "}
-                          min
-                        </div>
-                        <div>
-                          <FiHash className="inline text-green-500" />{" "}
-                          <strong>Order No:</strong>{" "}
-                          {selectedProcess?.orderConfirmationNo}
-                        </div>
-                        <div>
-                          <FiLayers className="inline text-indigo-500" />{" "}
-                          <strong>Process ID:</strong>{" "}
-                          {selectedProcess?.processID}
-                        </div>
-                        <div>
-                          <FiBox className="inline text-pink-500" />{" "}
-                          <strong>Qty:</strong> {selectedProcess?.quantity}
-                        </div>
-                        <div className="sm:col-span-2">
-                          <FiCalendar className="text-red-500 inline" />{" "}
-                          <strong>Shift Days:</strong>{" "}
-                          {Object.keys(selectedShift?.weekDays || {})
-                            .filter(
-                              (d) => d !== "_id" && selectedShift?.weekDays[d],
-                            )
-                            .join(", ")}
-                        </div>
-                        <div className="sm:col-span-2">
-                          <FiInfo className="inline text-blue-400" />{" "}
-                          <strong>Description:</strong>{" "}
-                          {selectedProcess?.descripition}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Kits */}
-                    {inventoryData && (
-                      <div className="dark:bg-gray-800 rounded-lg border-l-4 border-green-500 bg-white p-4 shadow-md">
-                        <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-green-600 dark:text-green-400">
-                          <FiPackage /> Kits
-                        </h3>
-                        <div className="text-gray-700 dark:text-gray-300 grid gap-3 text-sm sm:grid-cols-3">
-                          <div>
-                            <strong>Required:</strong> {selectedProcess?.quantity}
+                        {/* Process Info */}
+                        <div className="dark:bg-gray-800 rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-md">
+                          <div className="mb-3 flex items-center justify-between">
+                            <h3 className="flex items-center gap-2 text-lg font-semibold text-blue-600 dark:text-blue-400">
+                              <FiClipboard /> Process Details
+                            </h3>
+                            <button
+                              type="button"
+                              onClick={handleDownloadSerials}
+                              className="flex items-center gap-2 rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-900"
+                              title="Download Generated & Assigned Serials"
+                            >
+                              <FiDownload /> Download Serials
+                            </button>
                           </div>
-                          <div>
-                            <strong>Available:</strong> {inventoryData?.quantity}
-                          </div>
-                          <div>
-                            <strong>Issued:</strong> {summaryData.issued}
-                          </div>
-                          <div>
-                            <strong>Consumed:</strong> {summaryData.consumed}
-                          </div>
-                          <div>
-                            <strong>WIP:</strong> {summaryData.wip}
-                          </div>
-                          <div>
-                            <strong>Pending:</strong> {summaryData.pending}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="bg-red-100 text-red-600 rounded-full px-2 py-0.5 text-xs font-medium">
-                              Short: {Math.max(0, summaryData.required - summaryData.issued)}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
-                              Surplus: {Math.max(0, summaryData.issued - summaryData.required)}
-                            </span>
-                          </div>
-                          <div>
-                            <strong>Total Store Stock:</strong>{" "}
-                            {(inventoryData?.quantity || 0) + summaryData.issued}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Cartons */}
-                    {packagingData.length > 0 &&
-                      packagingData[0].packagingData.packagingType ===
-                      "Carton" && (
-                        <div className="dark:bg-gray-800 rounded-lg border-l-4 border-orange-500 bg-white p-4 shadow-md">
-                          <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-orange-600 dark:text-orange-400">
-                            <FiArchive /> Cartons
-                          </h3>
-                          <div className="text-gray-700 dark:text-gray-300 grid gap-3 text-sm sm:grid-cols-3">
+                          <div className="text-gray-700 dark:text-gray-300 grid gap-2 text-sm sm:grid-cols-2">
                             <div>
-                              <strong>Required:</strong>{" "}
-                              {(
-                                selectedProcess?.quantity /
-                                packagingData[0].packagingData.maxCapacity
-                              ).toFixed(0)}
+                              <FiTag className="inline text-primary" />{" "}
+                              <strong>Product:</strong> {productName}
                             </div>
                             <div>
-                              <strong>Available:</strong>{" "}
-                              {selectedProcess?.issuedCartons}
+                              <FiClock className="inline text-primary" />{" "}
+                              <strong>Shift:</strong>{" "}
+                              {shiftChangedFromDate
+                                ? `${selectedShift?.name} (${startTime} - ${endTime})`
+                                : `${selectedShift?.name} (${selectedShift?.startTime} - ${selectedShift?.endTime})`}
                             </div>
                             <div>
-                              <span className="bg-red-100 text-red-600 rounded-full px-2 py-0.5 text-xs font-medium">
-                                Short:{" "}
-                                {Math.max(
-                                  0,
-                                  (
-                                    selectedProcess?.quantity /
-                                    packagingData[0].packagingData.maxCapacity -
-                                    selectedProcess?.issuedCartons
-                                  ).toFixed(0),
-                                )}
-                              </span>
+                              <FiClock className="inline text-yellow-500" />{" "}
+                              <strong>Break:</strong> {selectedShift?.totalBreakTime}{" "}
+                              min
                             </div>
                             <div>
-                              <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
-                                Surplus:{" "}
-                                {Math.max(
-                                  0,
-                                  (
-                                    selectedProcess?.issuedCartons -
+                              <FiHash className="inline text-green-500" />{" "}
+                              <strong>Order No:</strong>{" "}
+                              {selectedProcess?.orderConfirmationNo}
+                            </div>
+                            <div>
+                              <FiLayers className="inline text-indigo-500" />{" "}
+                              <strong>Process ID:</strong>{" "}
+                              {selectedProcess?.processID}
+                            </div>
+                            <div>
+                              <FiBox className="inline text-pink-500" />{" "}
+                              <strong>Qty:</strong> {selectedProcess?.quantity}
+                            </div>
+                            <div className="sm:col-span-2">
+                              <FiCalendar className="text-red-500 inline" />{" "}
+                              <strong>Shift Days:</strong>{" "}
+                              {Object.keys(selectedShift?.weekDays || {})
+                                .filter(
+                                  (d) => d !== "_id" && selectedShift?.weekDays[d],
+                                )
+                                .join(", ")}
+                            </div>
+                            <div className="sm:col-span-2">
+                              <FiInfo className="inline text-blue-400" />{" "}
+                              <strong>Description:</strong>{" "}
+                              {selectedProcess?.descripition}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Kits */}
+                        {inventoryData && (
+                          <div className="dark:bg-gray-800 rounded-lg border-l-4 border-green-500 bg-white p-4 shadow-md">
+                            <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-green-600 dark:text-green-400">
+                              <FiPackage /> Kits
+                            </h3>
+                            <div className="text-gray-700 dark:text-gray-300 grid gap-3 text-sm sm:grid-cols-3">
+                              <div>
+                                <strong>Required:</strong> {selectedProcess?.quantity}
+                              </div>
+                              <div>
+                                <strong>Available:</strong> {inventoryData?.quantity}
+                              </div>
+                              <div>
+                                <strong>Issued:</strong> {summaryData.issued}
+                              </div>
+                              <div>
+                                <strong>Consumed:</strong> {summaryData.consumed}
+                              </div>
+                              <div>
+                                <strong>WIP:</strong> {summaryData.wip}
+                              </div>
+                              <div>
+                                <strong>Pending:</strong> {summaryData.pending}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="bg-red-100 text-red-600 rounded-full px-2 py-0.5 text-xs font-medium">
+                                  Short: {Math.max(0, summaryData.required - summaryData.issued)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
+                                  Surplus: {Math.max(0, summaryData.issued - summaryData.required)}
+                                </span>
+                              </div>
+                              <div>
+                                <strong>Total Store Stock:</strong>{" "}
+                                {(inventoryData?.quantity || 0) + summaryData.issued}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Cartons */}
+                        {packagingData.length > 0 &&
+                          packagingData[0].packagingData.packagingType ===
+                          "Carton" && (
+                            <div className="dark:bg-gray-800 rounded-lg border-l-4 border-orange-500 bg-white p-4 shadow-md">
+                              <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-orange-600 dark:text-orange-400">
+                                <FiArchive /> Cartons
+                              </h3>
+                              <div className="text-gray-700 dark:text-gray-300 grid gap-3 text-sm sm:grid-cols-3">
+                                <div>
+                                  <strong>Required:</strong>{" "}
+                                  {(
                                     selectedProcess?.quantity /
                                     packagingData[0].packagingData.maxCapacity
-                                  ).toFixed(0),
-                                )}
+                                  ).toFixed(0)}
+                                </div>
+                                <div>
+                                  <strong>Available:</strong>{" "}
+                                  {selectedProcess?.issuedCartons}
+                                </div>
+                                <div>
+                                  <span className="bg-red-100 text-red-600 rounded-full px-2 py-0.5 text-xs font-medium">
+                                    Short:{" "}
+                                    {Math.max(
+                                      0,
+                                      (
+                                        selectedProcess?.quantity /
+                                        packagingData[0].packagingData.maxCapacity -
+                                        selectedProcess?.issuedCartons
+                                      ).toFixed(0),
+                                    )}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-600">
+                                    Surplus:{" "}
+                                    {Math.max(
+                                      0,
+                                      (
+                                        selectedProcess?.issuedCartons -
+                                        selectedProcess?.quantity /
+                                        packagingData[0].packagingData.maxCapacity
+                                      ).toFixed(0),
+                                    )}
+                                  </span>
+                                </div>
+                                <div>
+                                  <strong>Dimensions:</strong>{" "}
+                                  {packagingData[0].packagingData.cartonWidth} x{" "}
+                                  {packagingData[0].packagingData.cartonHeight}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                        {/* Shift Summary */}
+                        <div className="dark:bg-gray-800 rounded-lg border-l-4 border-purple-500 bg-white p-4 shadow-md">
+                          <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-purple-600 dark:text-purple-400">
+                            <FiClock /> Shift Summary
+                          </h3>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedShift?.intervals?.map((interval, i) => (
+                              <span
+                                key={i}
+                                className={`rounded-full px-3 py-1 text-xs font-medium ${interval.breakTime
+                                  ? "bg-[#fbc0c0] text-danger dark:bg-danger dark:text-danger"
+                                  : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+                                  }`}
+                              >
+                                {interval.breakTime
+                                  ? `Break: ${interval.startTime} - ${interval.endTime}`
+                                  : `Interval: ${interval.startTime} - ${interval.endTime}`}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Time Estimation */}
+                        {totalTimeEstimation && (
+                          <div className="dark:bg-gray-800 mb-4 rounded-lg border-l-4 border-indigo-500 bg-white p-4 shadow-md">
+                            <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-indigo-600 dark:text-indigo-400">
+                              <FiTrendingUp /> Time Estimation
+                            </h3>
+                            <div className="text-gray-700 dark:text-gray-300 grid gap-1 text-sm">
+                              <p>
+                                <strong>Start:</strong> {startDate || "N/A"}
+                              </p>
+                              <p>
+                                <strong>End:</strong>{" "}
+                                {estimatedEndDate || "Not calculated"}
+                              </p>
+                              <p>
+                                <strong>Days:</strong> {totalTimeEstimation || "N/A"}
+                              </p>
+                              <p>
+                                <strong>Units/Day:</strong> {totalUPHA || "N/A"} (per{" "}
+                                {(
+                                  shiftTime -
+                                  selectedShift?.totalBreakTime / 60
+                                ).toFixed(2)}{" "}
+                                hrs)
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      {/* component 2 */}
+
+                      <div className="mt-6 flex gap-10">
+                        <div className="w-full">
+                          {/* Header */}
+                          <div className="mb-6 flex items-center justify-between">
+                            <h3 className="text-gray-900 text-2xl font-bold dark:text-white">
+                              Room Overview
+                            </h3>
+                            <div className="flex items-center gap-2">
+                              <button className="flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-danger">
+                                Consumed: {totalConsumedKits}
+                              </button>
+                              <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                                Active: {occupancyStats.active}
+                              </span>
+                              <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700">
+                                Downtime: {occupancyStats.downtime}
+                              </span>
+                              <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                                Completed: {occupancyStats.completed}
+                              </span>
+                              <span className="rounded-full bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700">
+                                Reserved: {occupancyStats.reserved}
                               </span>
                             </div>
-                            <div>
-                              <strong>Dimensions:</strong>{" "}
-                              {packagingData[0].packagingData.cartonWidth} x{" "}
-                              {packagingData[0].packagingData.cartonHeight}
-                            </div>
                           </div>
-                        </div>
-                      )}
 
-                    {/* Shift Summary */}
-                    <div className="dark:bg-gray-800 rounded-lg border-l-4 border-purple-500 bg-white p-4 shadow-md">
-                      <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-purple-600 dark:text-purple-400">
-                        <FiClock /> Shift Summary
-                      </h3>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedShift?.intervals?.map((interval, i) => (
-                          <span
-                            key={i}
-                            className={`rounded-full px-3 py-1 text-xs font-medium ${interval.breakTime
-                              ? "bg-[#fbc0c0] text-danger dark:bg-danger dark:text-danger"
-                              : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-                              }`}
-                          >
-                            {interval.breakTime
-                              ? `Break: ${interval.startTime} - ${interval.endTime}`
-                              : `Interval: ${interval.startTime} - ${interval.endTime}`}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Time Estimation */}
-                    {totalTimeEstimation && (
-                      <div className="dark:bg-gray-800 mb-4 rounded-lg border-l-4 border-indigo-500 bg-white p-4 shadow-md">
-                        <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-indigo-600 dark:text-indigo-400">
-                          <FiTrendingUp /> Time Estimation
-                        </h3>
-                        <div className="text-gray-700 dark:text-gray-300 grid gap-1 text-sm">
-                          <p>
-                            <strong>Start:</strong> {startDate || "N/A"}
-                          </p>
-                          <p>
-                            <strong>End:</strong>{" "}
-                            {estimatedEndDate || "Not calculated"}
-                          </p>
-                          <p>
-                            <strong>Days:</strong> {totalTimeEstimation || "N/A"}
-                          </p>
-                          <p>
-                            <strong>Units/Day:</strong> {totalUPHA || "N/A"} (per{" "}
-                            {(
-                              shiftTime -
-                              selectedShift?.totalBreakTime / 60
-                            ).toFixed(2)}{" "}
-                            hrs)
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {/* component 2 */}
-
-                  <div className="mt-6 flex gap-10">
-                    <div className="w-full">
-                      {/* Header */}
-                      <div className="mb-6 flex items-center justify-between">
-                        <h3 className="text-gray-900 text-2xl font-bold dark:text-white">
-                          Room Overview
-                        </h3>
-                        <div className="flex items-center gap-2">
-                          <button className="flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-danger">
-                            Consumed: {totalConsumedKits}
-                          </button>
-                          <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                            Active: {occupancyStats.active}
-                          </span>
-                          <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700">
-                            Downtime: {occupancyStats.downtime}
-                          </span>
-                          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-                            Completed: {occupancyStats.completed}
-                          </span>
-                          <span className="rounded-full bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700">
-                            Reserved: {occupancyStats.reserved}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Tabs */}
-                      <Tabs>
-                        <TabList className="flex space-x-3">
-                          {["Floor View", "Table View"].map((tab) => (
-                            <Tab
-                              key={tab}
-                              className={({ selected }) =>
-                                `inline-flex items-center justify-center rounded-lg px-6 py-2 text-sm font-semibold transition-all duration-200
+                          {/* Tabs */}
+                          <Tabs>
+                            <TabList className="flex space-x-3">
+                              {["Floor View", "Table View"].map((tab) => (
+                                <Tab
+                                  key={tab}
+                                  className={({ selected }) =>
+                                    `inline-flex items-center justify-center rounded-lg px-6 py-2 text-sm font-semibold transition-all duration-200
                               focus:outline-none focus:ring-2 focus:ring-offset-1
                               ${selected
-                                  ? "bg-blue-600 text-white shadow-md hover:bg-blue-700 focus:ring-blue-600"
-                                  : "bg-gray-200 text-gray-800 hover:bg-gray-300 border-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:border-gray-600 border"
-                                }`
-                              }
-                            >
-                              {tab}
-                            </Tab>
-                          ))}
-                        </TabList>
+                                      ? "bg-blue-600 text-white shadow-md hover:bg-blue-700 focus:ring-blue-600"
+                                      : "bg-gray-200 text-gray-800 hover:bg-gray-300 border-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:border-gray-600 border"
+                                    }`
+                                  }
+                                >
+                                  {tab}
+                                </Tab>
+                              ))}
+                            </TabList>
 
-                        {/* Floor View */}
-                        <TabPanel>
-                          <div className="mt-6 rounded-md border border-primary p-2 pt-3">
-                            <div className="mb-4 flex items-center gap-2 flex-nowrap overflow-x-auto">
-                              <div className="flex items-center gap-2">
-                                <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
-                                  Active
-                                </span>
-                                <span className="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-700">
-                                  Downtime
-                                </span>
-                                <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
-                                  Completed
-                                </span>
-                                <span className="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-700">
-                                  Reserved
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="flex items-center gap-1 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
-                                  <FiFilter size={14} />
-                                  <select
-                                    value={seatStatusFilter}
-                                    onChange={(e) => setSeatStatusFilter(e.target.value)}
-                                    className="h-8 rounded bg-transparent px-2 outline-none"
-                                  >
-                                    <option value="all">All</option>
-                                    <option value="Active">Active</option>
-                                    <option value="Downtime">Downtime</option>
-                                    <option value="Completed">Completed</option>
-                                    <option value="Reserved">Reserved</option>
-                                  </select>
-                                </div>
-                                <label className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
-                                  <input
-                                    type="checkbox"
-                                    checked={showOccupiedOnly}
-                                    onChange={(e) => setShowOccupiedOnly(e.target.checked)}
-                                  />
-                                  <span>Occupied only</span>
-                                </label>
-                                <div className="flex items-center gap-1 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
-                                  <FiSearch size={14} />
-                                  <input
-                                    type="text"
-                                    value={seatSearch}
-                                    onChange={(e) => setSeatSearch(e.target.value)}
-                                    placeholder="Search seat/stage/operator"
-                                    className="h-8 w-44 sm:w-56 bg-transparent px-2 outline-none"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                            {/* Assigned Custom Stages */}
-                            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                              {assignedCustomStages.length > 0 &&
-                                assignedCustomStages.map((stage, index) => (
-                                  <div
-                                    key={index}
-                                    className="rounded-xl border border-green-400 bg-green-50 p-4 shadow transition hover:shadow-md dark:border-green-600 dark:bg-green-900"
-                                  >
-                                    <div className="mb-3 flex items-center justify-between">
-                                      <p className="text-gray-900 text-base font-semibold dark:text-white">
-                                        {stage?.stage}
-                                      </p>
-                                      <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-600 dark:bg-orange-700 dark:text-orange-300">
-                                        Active
-                                      </span>
+                            {/* Floor View */}
+                            <TabPanel>
+                              <div className="mt-6 rounded-md border border-primary p-2 pt-3">
+                                <div className="mb-4 flex items-center gap-2 flex-nowrap overflow-x-auto">
+                                  <div className="flex items-center gap-2">
+                                    <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+                                      Active
+                                    </span>
+                                    <span className="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-700">
+                                      Downtime
+                                    </span>
+                                    <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                                      Completed
+                                    </span>
+                                    <span className="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-700">
+                                      Reserved
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
+                                      <FiFilter size={14} />
+                                      <select
+                                        value={seatStatusFilter}
+                                        onChange={(e) => setSeatStatusFilter(e.target.value)}
+                                        className="h-8 rounded bg-transparent px-2 outline-none"
+                                      >
+                                        <option value="all">All</option>
+                                        <option value="Active">Active</option>
+                                        <option value="Downtime">Downtime</option>
+                                        <option value="Completed">Completed</option>
+                                        <option value="Reserved">Reserved</option>
+                                      </select>
                                     </div>
-
-                                    {/* Quick Stats */}
-                                    <div className="text-gray-700 dark:text-gray-200 grid gap-1 text-xs">
-                                      <p className="flex items-center gap-1">
-                                        <FiTrendingUp /> UPH Target:{" "}
-                                        {stage?.upha || "100"}
-                                      </p>
-                                      <p className="flex items-center gap-1">
-                                        <FiActivity /> Achieved:{" "}
-                                        {stage?.achievedUph || "0"}
-                                      </p>
-                                      <p className="flex items-center gap-1">
-                                        <FiUsers /> WIP: {stage?.wip || "0"}
-                                      </p>
-                                      <p className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                                        <FiCheckCircle /> Pass:{" "}
-                                        {stage?.pass || "0"}
-                                      </p>
-                                      <p className="text-red-600 dark:text-red-400 flex items-center gap-1">
-                                        <FiXCircle /> NG: {stage?.ng || "0"}
-                                      </p>
+                                    <label className="flex items-center gap-2 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
+                                      <input
+                                        type="checkbox"
+                                        checked={showOccupiedOnly}
+                                        onChange={(e) => setShowOccupiedOnly(e.target.checked)}
+                                      />
+                                      <span>Occupied only</span>
+                                    </label>
+                                    <div className="flex items-center gap-1 rounded-lg border border-stroke bg-white px-2 py-1 text-sm dark:border-strokedark dark:bg-boxdark">
+                                      <FiSearch size={14} />
+                                      <input
+                                        type="text"
+                                        value={seatSearch}
+                                        onChange={(e) => setSeatSearch(e.target.value)}
+                                        placeholder="Search seat/stage/operator"
+                                        className="h-8 w-44 sm:w-56 bg-transparent px-2 outline-none"
+                                      />
                                     </div>
+                                  </div>
+                                </div>
+                                {/* Assigned Custom Stages */}
+                                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                                  {assignedCustomStages.length > 0 &&
+                                    assignedCustomStages.map((stage, index) => (
+                                      <div
+                                        key={index}
+                                        className="rounded-xl border border-green-400 bg-green-50 p-4 shadow transition hover:shadow-md dark:border-green-600 dark:bg-green-900"
+                                      >
+                                        <div className="mb-3 flex items-center justify-between">
+                                          <p className="text-gray-900 text-base font-semibold dark:text-white">
+                                            {stage?.stage}
+                                          </p>
+                                          <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-600 dark:bg-orange-700 dark:text-orange-300">
+                                            Active
+                                          </span>
+                                        </div>
 
-                                    {/* Operators */}
-                                    {assignedCustomOperators[index] && (
-                                      <div className="text-gray-600 dark:text-gray-300 mt-3 text-xs">
-                                        <strong>Operators:</strong>
-                                        <div className="mt-1 flex flex-wrap gap-1">
-                                          {assignedCustomOperators[index].map(
-                                            (op, i) => (
-                                              <span
-                                                key={i}
-                                                className="bg-gray-200 dark:bg-gray-700 inline-block rounded-full px-2 py-0.5 text-xs font-medium"
-                                              >
-                                                {op.name}
-                                              </span>
-                                            ),
-                                          )}
+                                        {/* Quick Stats */}
+                                        <div className="text-gray-700 dark:text-gray-200 grid gap-1 text-xs">
+                                          <p className="flex items-center gap-1">
+                                            <FiTrendingUp /> UPH Target:{" "}
+                                            {stage?.upha || "100"}
+                                          </p>
+                                          <p className="flex items-center gap-1">
+                                            <FiActivity /> Achieved:{" "}
+                                            {stage?.achievedUph || "0"}
+                                          </p>
+                                          <p className="flex items-center gap-1">
+                                            <FiUsers /> WIP: {stage?.wip || "0"}
+                                          </p>
+                                          <p className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                            <FiCheckCircle /> Pass:{" "}
+                                            {stage?.pass || "0"}
+                                          </p>
+                                          <p className="text-red-600 dark:text-red-400 flex items-center gap-1">
+                                            <FiXCircle /> NG: {stage?.ng || "0"}
+                                          </p>
+                                        </div>
+
+                                        {/* Operators */}
+                                        {assignedCustomOperators[index] && (
+                                          <div className="text-gray-600 dark:text-gray-300 mt-3 text-xs">
+                                            <strong>Operators:</strong>
+                                            <div className="mt-1 flex flex-wrap gap-1">
+                                              {assignedCustomOperators[index].map(
+                                                (op, i) => (
+                                                  <span
+                                                    key={i}
+                                                    className="bg-gray-200 dark:bg-gray-700 inline-block rounded-full px-2 py-0.5 text-xs font-medium"
+                                                  >
+                                                    {op.name}
+                                                  </span>
+                                                ),
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                </div>
+
+                                {/* Room Layout */}
+                                {selectedRoom &&
+                                  selectedRoom.lines
+                                    .filter((row, rowIndex) =>
+                                      row.seats?.some((seat, seatIndex) =>
+                                        seatMatches(rowIndex, seatIndex, seat),
+                                      ),
+                                    )
+                                    .map((row, rowIndex) => (
+                                      <div key={rowIndex} className="space-y-2">
+                                        <h4 className="text-gray-800 mt-3 text-sm font-bold dark:text-white">
+                                          {row.rowName}
+                                        </h4>
+                                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                                          {row.seats
+                                            ?.filter((seat, seatIndex) =>
+                                              seatMatches(rowIndex, seatIndex, seat),
+                                            )
+                                            .map((seat, seatIndex) => (
+                                              <DraggableGridItem
+                                                key={`${rowIndex}-${seatIndex}`}
+                                                rowIndex={rowIndex}
+                                                seatIndex={seatIndex}
+                                                handleDrop={handleDrop}
+                                                handleDragOver={handleDragOver}
+                                                handleRemoveStage={handleRemoveStage}
+                                                item={seat}
+                                                assignedStages={assignedStages}
+                                                coordinates={`${rowIndex}-${seatIndex}`}
+                                                moveItem={moveItem}
+                                                operators={operators}
+                                                assignedOperators={assignedOperators}
+                                                setAssignedOperators={
+                                                  setAssignedOperators
+                                                }
+                                                filteredOperators={filteredOperators}
+                                                setFilteredOperators={
+                                                  setFilteredOperators
+                                                }
+                                                rowSeatLength={row.seats.length}
+                                                setAssignedJigs={setAssignedJigs}
+                                                assignedJigs={assignedJigs}
+                                                jigCategories={jigCategories}
+                                                selectedProcess={selectedProcess}
+                                                seatStatusFilter={seatStatusFilter}
+                                                onViewDevices={handleViewDevices}
+                                              />
+                                            ))}
                                         </div>
                                       </div>
-                                    )}
-                                  </div>
-                                ))}
-                            </div>
+                                    ))}
+                              </div>
+                            </TabPanel>
 
-                            {/* Room Layout */}
-                            {selectedRoom &&
-                              selectedRoom.lines
-                                .filter((row, rowIndex) =>
-                                  row.seats?.some((seat, seatIndex) =>
-                                    seatMatches(rowIndex, seatIndex, seat),
-                                  ),
-                                )
-                                .map((row, rowIndex) => (
-                                  <div key={rowIndex} className="space-y-2">
-                                    <h4 className="text-gray-800 mt-3 text-sm font-bold dark:text-white">
-                                      {row.rowName}
-                                    </h4>
-                                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                                      {row.seats
-                                        ?.filter((seat, seatIndex) =>
-                                          seatMatches(rowIndex, seatIndex, seat),
-                                        )
-                                        .map((seat, seatIndex) => (
-                                          <DraggableGridItem
-                                            key={`${rowIndex}-${seatIndex}`}
-                                            rowIndex={rowIndex}
-                                            seatIndex={seatIndex}
-                                            handleDrop={handleDrop}
-                                            handleDragOver={handleDragOver}
-                                            handleRemoveStage={handleRemoveStage}
-                                            item={seat}
-                                            assignedStages={assignedStages}
-                                            coordinates={`${rowIndex}-${seatIndex}`}
-                                            moveItem={moveItem}
-                                            operators={operators}
-                                            assignedOperators={assignedOperators}
-                                            setAssignedOperators={
-                                              setAssignedOperators
-                                            }
-                                            filteredOperators={filteredOperators}
-                                            setFilteredOperators={
-                                              setFilteredOperators
-                                            }
-                                            rowSeatLength={row.seats.length}
-                                            setAssignedJigs={setAssignedJigs}
-                                            assignedJigs={assignedJigs}
-                                            jigCategories={jigCategories}
-                                            selectedProcess={selectedProcess}
-                                            seatStatusFilter={seatStatusFilter}
-                                            onViewDevices={handleViewDevices}
-                                          />
-                                        ))}
-                                    </div>
-                                  </div>
-                                ))}
-                          </div>
-                        </TabPanel>
-
-                        {/* Table View */}
-                        <TabPanel>
-                          <div className=" bg-gray-50 dark:bg-gray-800 mt-6 h-90 overflow-x-auto rounded-md rounded-xl border border-primary p-2 p-4 pt-3 shadow">
-                            {/* Common Stages */}
-                            <div className="mb-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                              {selectedProcess?.commonStages.map(
-                                (stage, index) => (
-                                  <div
-                                    key={index}
-                                    className="rounded-xl border border-green-400 bg-green-50 p-4 shadow hover:shadow-md dark:border-green-600 dark:bg-green-900"
-                                  >
-                                    <p className="text-gray-900 mb-2 text-base font-semibold dark:text-white">
-                                      {stage?.stageName}
-                                    </p>
-                                    <div className="text-gray-700 dark:text-gray-200 space-y-1 text-xs">
-                                      <p>UPH Target: {stage?.upha || "100"}</p>
-                                      <p>
-                                        Achieved UPH: {stage?.achievedUph || "0"}
-                                      </p>
-                                      <p>WIP: {stage?.wip || "0"}</p>
-                                      <p className="text-green-600 dark:text-green-400">
-                                        Pass: {stage?.pass || "0"}
-                                      </p>
-                                      <p className="text-red-600 dark:text-red-400">
-                                        NG: {stage?.ng || "0"}
-                                      </p>
-                                      <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-600 dark:bg-orange-700 dark:text-orange-300">
-                                        Active
-                                      </span>
-                                    </div>
-                                  </div>
-                                ),
-                              )}
-                            </div>
-
-                            {/* Table */}
-                            <div className="border-gray-200 dark:border-gray-700 overflow-x-auto rounded-xl border shadow-md">
-                              <table className="min-w-full text-sm">
-                                <thead className="bg-blue-500 text-white">
-                                  <tr>
-                                    {selectedProcess?.stages?.map(
-                                      (value, index) => (
-                                        <th
-                                          key={index}
-                                          className="px-4 py-3 text-left uppercase tracking-wide"
-                                        >
-                                          {value.stageName}
-                                        </th>
-                                      ),
-                                    )}
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-gray-200 dark:divide-gray-700 divide-y">
-                                  {rows
-                                    .map((rowKeys) =>
-                                      rowKeys.filter((key) => keyMatches(key)),
-                                    )
-                                    .filter((filtered) => filtered.length > 0)
-                                    .map((rowKeys, rowIndex) => (
-                                      <tr
-                                        key={rowIndex}
-                                        className="hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                            {/* Table View */}
+                            <TabPanel>
+                              <div className=" bg-gray-50 dark:bg-gray-800 mt-6 h-90 overflow-x-auto rounded-md rounded-xl border border-primary p-2 p-4 pt-3 shadow">
+                                {/* Common Stages */}
+                                <div className="mb-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                                  {selectedProcess?.commonStages.map(
+                                    (stage, index) => (
+                                      <div
+                                        key={index}
+                                        className="rounded-xl border border-green-400 bg-green-50 p-4 shadow hover:shadow-md dark:border-green-600 dark:bg-green-900"
                                       >
-                                        {rowKeys.map((key, colIndex) => (
-                                          <td
-                                            key={colIndex}
-                                            className="px-4 py-3 align-top"
+                                        <p className="text-gray-900 mb-2 text-base font-semibold dark:text-white">
+                                          {stage?.stageName}
+                                        </p>
+                                        <div className="text-gray-700 dark:text-gray-200 space-y-1 text-xs">
+                                          <p>UPH Target: {stage?.upha || "100"}</p>
+                                          <p>
+                                            Achieved UPH: {stage?.achievedUph || "0"}
+                                          </p>
+                                          <p>WIP: {stage?.wip || "0"}</p>
+                                          <p className="text-green-600 dark:text-green-400">
+                                            Pass: {stage?.pass || "0"}
+                                          </p>
+                                          <p className="text-red-600 dark:text-red-400">
+                                            NG: {stage?.ng || "0"}
+                                          </p>
+                                          <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-600 dark:bg-orange-700 dark:text-orange-300">
+                                            Active
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ),
+                                  )}
+                                </div>
+
+                                {/* Table */}
+                                <div className="border-gray-200 dark:border-gray-700 overflow-x-auto rounded-xl border shadow-md">
+                                  <table className="min-w-full text-sm">
+                                    <thead className="bg-blue-500 text-white">
+                                      <tr>
+                                        {selectedProcess?.stages?.map(
+                                          (value, index) => (
+                                            <th
+                                              key={index}
+                                              className="px-4 py-3 text-left uppercase tracking-wide"
+                                            >
+                                              {value.stageName}
+                                            </th>
+                                          ),
+                                        )}
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-gray-200 dark:divide-gray-700 divide-y">
+                                      {rows
+                                        .map((rowKeys) =>
+                                          rowKeys.filter((key) => keyMatches(key)),
+                                        )
+                                        .filter((filtered) => filtered.length > 0)
+                                        .map((rowKeys, rowIndex) => (
+                                          <tr
+                                            key={rowIndex}
+                                            className="hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                                           >
-                                            {assignedStages[key] &&
-                                              assignedStages[key].length > 0 &&
-                                              assignedStages[key].filter((stage: any) => {
-                                                const status =
-                                                  stage?.reserved
-                                                    ? "Reserved"
-                                                    : selectedProcess?.quantity >
-                                                      stage?.totalUPHA
-                                                      ? stage?.totalUPHA > 0
-                                                        ? "Active"
-                                                        : "Downtime"
-                                                      : "Completed";
-                                                return seatStatusFilter === "all"
-                                                  ? true
-                                                  : seatStatusFilter === status;
-                                              }).length > 0 ? (
-                                              assignedStages[key]
-                                                .filter((stage: any) => {
-                                                  const status =
-                                                    stage?.reserved
-                                                      ? "Reserved"
-                                                      : selectedProcess?.quantity >
-                                                        stage?.totalUPHA
-                                                        ? stage?.totalUPHA > 0
-                                                          ? "Active"
-                                                          : "Downtime"
-                                                        : "Completed";
-                                                  return seatStatusFilter === "all"
-                                                    ? true
-                                                    : seatStatusFilter === status;
-                                                })
-                                                .map((stage, stageIndex) => (
-                                                  <div
-                                                    key={stageIndex}
-                                                    className="dark:bg-gray-900 mb-2 rounded-lg bg-white p-3 shadow-sm"
-                                                  >
-                                                    <p className="text-xs font-medium">
-                                                      <FiTrendingUp className="mr-1 inline-block" />
-                                                      UPH Target: {stage.upha || 0}
-                                                    </p>
-                                                    <p className="text-xs">
-                                                      Achieved:{" "}
-                                                      {stage.achievedUph || 0}
-                                                    </p>
-                                                    <p className="text-xs">
-                                                      WIP: {stage?.totalUPHA ?? "N/A"}
-                                                    </p>
-                                                    <p className="text-xs text-green-600">
-                                                      Pass: {stage.passedDevice || 0}
-                                                    </p>
-                                                    <p className="text-red-600 text-xs">
-                                                      NG: {stage.ngDevice || 0}
-                                                    </p>
-                                                    <p className="text-xs">
-                                                      <strong>Status:</strong>{" "}
-                                                      <span
-                                                        className={
-                                                          selectedProcess?.quantity >
-                                                            stage?.totalUPHA
-                                                            ? stage?.totalUPHA > 0
-                                                              ? "font-semibold text-orange-500"
-                                                              : "text-red-500 font-semibold"
-                                                            : "font-semibold text-green-600"
-                                                        }
-                                                      >
-                                                        {selectedProcess?.quantity >
+                                            {rowKeys.map((key, colIndex) => (
+                                              <td
+                                                key={colIndex}
+                                                className="px-4 py-3 align-top"
+                                              >
+                                                {assignedStages[key] &&
+                                                  assignedStages[key].length > 0 &&
+                                                  assignedStages[key].filter((stage: any) => {
+                                                    const status =
+                                                      stage?.reserved
+                                                        ? "Reserved"
+                                                        : selectedProcess?.quantity >
                                                           stage?.totalUPHA
                                                           ? stage?.totalUPHA > 0
                                                             ? "Active"
                                                             : "Downtime"
-                                                          : "Completed"}
-                                                      </span>
-                                                    </p>
+                                                          : "Completed";
+                                                    return seatStatusFilter === "all"
+                                                      ? true
+                                                      : seatStatusFilter === status;
+                                                  }).length > 0 ? (
+                                                  assignedStages[key]
+                                                    .filter((stage: any) => {
+                                                      const status =
+                                                        stage?.reserved
+                                                          ? "Reserved"
+                                                          : selectedProcess?.quantity >
+                                                            stage?.totalUPHA
+                                                            ? stage?.totalUPHA > 0
+                                                              ? "Active"
+                                                              : "Downtime"
+                                                            : "Completed";
+                                                      return seatStatusFilter === "all"
+                                                        ? true
+                                                        : seatStatusFilter === status;
+                                                    })
+                                                    .map((stage, stageIndex) => (
+                                                      <div
+                                                        key={stageIndex}
+                                                        className="dark:bg-gray-900 mb-2 rounded-lg bg-white p-3 shadow-sm"
+                                                      >
+                                                        <p className="text-xs font-medium">
+                                                          <FiTrendingUp className="mr-1 inline-block" />
+                                                          UPH Target: {stage.upha || 0}
+                                                        </p>
+                                                        <p className="text-xs">
+                                                          Achieved:{" "}
+                                                          {stage.achievedUph || 0}
+                                                        </p>
+                                                        <p className="text-xs">
+                                                          WIP: {stage?.totalUPHA ?? "N/A"}
+                                                        </p>
+                                                        <p className="text-xs text-green-600">
+                                                          Pass: {stage.passedDevice || 0}
+                                                        </p>
+                                                        <p className="text-red-600 text-xs">
+                                                          NG: {stage.ngDevice || 0}
+                                                        </p>
+                                                        <p className="text-xs">
+                                                          <strong>Status:</strong>{" "}
+                                                          <span
+                                                            className={
+                                                              selectedProcess?.quantity >
+                                                                stage?.totalUPHA
+                                                                ? stage?.totalUPHA > 0
+                                                                  ? "font-semibold text-orange-500"
+                                                                  : "text-red-500 font-semibold"
+                                                                : "font-semibold text-green-600"
+                                                            }
+                                                          >
+                                                            {selectedProcess?.quantity >
+                                                              stage?.totalUPHA
+                                                              ? stage?.totalUPHA > 0
+                                                                ? "Active"
+                                                                : "Downtime"
+                                                              : "Completed"}
+                                                          </span>
+                                                        </p>
+                                                      </div>
+                                                    ))
+                                                ) : (
+                                                  <div className="mb-2 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-gray-900 dark:text-gray-300">
+                                                    Empty
                                                   </div>
-                                                ))
-                                            ) : (
-                                              <div className="mb-2 rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-gray-900 dark:text-gray-300">
-                                                Empty
-                                              </div>
-                                            )}
-                                          </td>
+                                                )}
+                                              </td>
+                                            ))}
+                                          </tr>
                                         ))}
-                                      </tr>
-                                    ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        </TabPanel>
-                      </Tabs>
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </TabPanel>
+                          </Tabs>
+                        </div>
+                      </div>
+                      {/* end component 2 */}
                     </div>
-                  </div>
-                  {/* end component 2 */}
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-        <div className="container mx-auto grid grid-cols-1 gap-9 p-6 sm:grid-cols-1">
-          <div className="flex flex-col gap-9">
-            <div className="rounded-lg border border-stroke bg-white p-6 shadow-lg dark:border-strokedark dark:bg-boxdark">
-              <div className="flex items-center justify-between border-b border-stroke px-6 py-4 dark:border-strokedark">
-                <div className="flex w-full items-center justify-between text-center">
-                  <div>
-                    <h3 className="text-xl font-semibold text-black dark:text-white">
-                      UPH
-                    </h3>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
-                      <input
-                        type="date"
-                        value={filterDate}
-                        onChange={(e) => setFilterDate(e.target.value)}
-                        placeholder=""
-                        className="h-10 w-44 sm:w-56 rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                      />
-                      <button
-                        onClick={handleFilter}
-                        disabled={planData?.processStatus === "down_time_hold"}
-                        className={`flex h-10 items-center gap-2 rounded px-3 text-xs font-semibold text-white
-                        ${planData?.processStatus === "down_time_hold" ? "cursor-not-allowed bg-gray" : "bg-primary"}
-                      `}
-                      >
-                        Apply
-                      </button>
-                      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                        Pass: {uphStats.pass}
-                      </span>
-                      <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
-                        NG: {uphStats.ng}
-                      </span>
-                      <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-                        Avg UPH: {uphStats.avg}
-                      </span>
-                      <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
-                        Hours: {uphStats.hoursWithData}
-                      </span>
-                    </div>
-                  </div>
+                  </form>
                 </div>
               </div>
-              {planData?.processStatus === "active" && (
-                <>
-                  <div className="p-4">
-                    <p className="pb-3">
-                      <strong>Stage Wise</strong>
-                    </p>
-                    <table className="min-w-full table-auto text-center text-sm">
-                      <thead className="bg-gray-100 font-semibold">
-                        <tr>
-                          <th className="border p-2">UPH Stage Wise</th>
-                          {stages.map((stage, idx) => (
-                            <th key={idx} className="border p-2">
-                              {stage.stageName}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {overAllUPHA?.map((row, rowIndex) => {
-                          let bgColorClass = "";
-                          if (row.status === "current") {
-                            bgColorClass = "bg-yellow-100";
-                          } else if (row.status === "past") {
-                            bgColorClass = "bg-green-50";
-                          } else if (row.status === "future") {
-                            bgColorClass = "bg-gray-100";
-                          }
+            </div>
+            <div className="container mx-auto grid grid-cols-1 gap-9 p-6 sm:grid-cols-1">
+              <div className="flex flex-col gap-9">
+                <div className="rounded-lg border border-stroke bg-white p-6 shadow-lg dark:border-strokedark dark:bg-boxdark">
+                  <div className="flex items-center justify-between border-b border-stroke px-6 py-4 dark:border-strokedark">
+                    <div className="flex w-full items-center justify-between text-center">
+                      <div>
+                        <h3 className="text-xl font-semibold text-black dark:text-white">
+                          UPH
+                        </h3>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
+                          <input
+                            type="date"
+                            value={filterDate}
+                            onChange={(e) => setFilterDate(e.target.value)}
+                            placeholder=""
+                            className="h-10 w-44 sm:w-56 rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                          />
+                          <button
+                            onClick={handleFilter}
+                            disabled={planData?.processStatus === "down_time_hold"}
+                            className={`flex h-10 items-center gap-2 rounded px-3 text-xs font-semibold text-white
+                        ${planData?.processStatus === "down_time_hold" ? "cursor-not-allowed bg-gray" : "bg-primary"}
+                      `}
+                          >
+                            Apply
+                          </button>
+                          <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                            Pass: {uphStats.pass}
+                          </span>
+                          <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+                            NG: {uphStats.ng}
+                          </span>
+                          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                            Avg UPH: {uphStats.avg}
+                          </span>
+                          <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
+                            Hours: {uphStats.hoursWithData}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  {planData?.processStatus === "active" && (
+                    <>
+                      <div className="p-4">
+                        <p className="pb-3">
+                          <strong>Stage Wise</strong>
+                        </p>
+                        <table className="min-w-full table-auto text-center text-sm">
+                          <thead className="bg-gray-100 font-semibold">
+                            <tr>
+                              <th className="border p-2">UPH Stage Wise</th>
+                              {stages.map((stage, idx) => (
+                                <th key={idx} className="border p-2">
+                                  {stage.stageName}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {overAllUPHA?.map((row, rowIndex) => {
+                              let bgColorClass = "";
+                              if (row.status === "current") {
+                                bgColorClass = "bg-yellow-100";
+                              } else if (row.status === "past") {
+                                bgColorClass = "bg-green-50";
+                              } else if (row.status === "future") {
+                                bgColorClass = "bg-gray-100";
+                              }
 
-                          return (
-                            <tr
-                              key={rowIndex}
-                              className={`${bgColorClass} border-b`}
-                            >
-                              <td className="border p-2 font-semibold">
-                                {row.hour}
-                              </td>
-                              {row.isBreak ? (
-                                <td
-                                  colSpan={stages.length}
-                                  className="border bg-gray-50/50 p-4 font-medium italic text-gray-400"
+                              return (
+                                <tr
+                                  key={rowIndex}
+                                  className={`${bgColorClass} border-b`}
                                 >
-                                  <div className="flex items-center justify-center gap-2">
-                                    <FiClock className="animate-pulse text-gray-400" />
-                                    <span>Break Time ({row.hour})</span>
-                                  </div>
-                                </td>
-                              ) : (
-                                row.hour !== "Total Count" &&
-                                  row.hour !== "Avg UPH"
-                                  ? row?.values?.map((val, i) => (
-                                    <td key={i} className="border p-2">
-                                      <div className="text-xs">
-                                        <p className="text-left">
-                                          <strong>Pass:</strong> {val?.Pass},
-                                        </p>
-                                        <p className="text-left">
-                                          <strong>NG:</strong> {val?.NG},
-                                        </p>
-                                        <p className="text-left">
-                                          <strong>Target UPH:</strong>{" "}
-                                          {val?.targetUPH}
-                                        </p>
-                                        <p
-                                          className={`text-left ${val?.Pass + val?.NG <= val?.targetUPH && row?.status !== "future" ? "text-danger" : "text-grey"}`}
-                                        >
-                                          <strong>UPH:</strong>{" "}
-                                          {val?.Pass + val?.NG}
-                                        </p>
-                                        <div className="mt-1 h-2 w-full rounded bg-gray-200">
-                                          <div
-                                            className="h-2 rounded bg-blue-500"
-                                            style={{
-                                              width: `${Math.min(
+                                  <td className="border p-2 font-semibold">
+                                    {row.hour}
+                                  </td>
+                                  {row.isBreak ? (
+                                    <td
+                                      colSpan={stages.length}
+                                      className="border bg-gray-50/50 p-4 font-medium italic text-gray-400"
+                                    >
+                                      <div className="flex items-center justify-center gap-2">
+                                        <FiClock className="animate-pulse text-gray-400" />
+                                        <span>Break Time ({row.hour})</span>
+                                      </div>
+                                    </td>
+                                  ) : (
+                                    row.hour !== "Total Count" &&
+                                      row.hour !== "Avg UPH"
+                                      ? row?.values?.map((val, i) => (
+                                        <td key={i} className="border p-2">
+                                          <div className="text-xs">
+                                            <p className="text-left">
+                                              <strong>Pass:</strong> {val?.Pass},
+                                            </p>
+                                            <p className="text-left">
+                                              <strong>NG:</strong> {val?.NG},
+                                            </p>
+                                            <p className="text-left">
+                                              <strong>Target UPH:</strong>{" "}
+                                              {val?.targetUPH}
+                                            </p>
+                                            <p
+                                              className={`text-left ${val?.Pass + val?.NG <= val?.targetUPH && row?.status !== "future" ? "text-danger" : "text-grey"}`}
+                                            >
+                                              <strong>UPH:</strong>{" "}
+                                              {val?.Pass + val?.NG}
+                                            </p>
+                                            <div className="mt-1 h-2 w-full rounded bg-gray-200">
+                                              <div
+                                                className="h-2 rounded bg-blue-500"
+                                                style={{
+                                                  width: `${Math.min(
+                                                    100,
+                                                    Math.round(
+                                                      (((val?.Pass || 0) + (val?.NG || 0)) /
+                                                        (val?.targetUPH || 1)) * 100,
+                                                    ),
+                                                  )}%`,
+                                                }}
+                                              ></div>
+                                            </div>
+                                            <p className="text-[10px] text-gray-500">
+                                              {Math.min(
                                                 100,
                                                 Math.round(
                                                   (((val?.Pass || 0) + (val?.NG || 0)) /
                                                     (val?.targetUPH || 1)) * 100,
                                                 ),
-                                              )}%`,
-                                            }}
-                                          ></div>
-                                        </div>
-                                        <p className="text-[10px] text-gray-500">
-                                          {Math.min(
-                                            100,
-                                            Math.round(
-                                              (((val?.Pass || 0) + (val?.NG || 0)) /
-                                                (val?.targetUPH || 1)) * 100,
-                                            ),
-                                          )}
-                                          % of target
-                                        </p>
-                                      </div>
-                                    </td>
-                                  ))
-                                  : row?.values?.map((val, i) => (
-                                    <td key={i} className="border p-2">
-                                      <div className="text-xs">
-                                        <p className="text-left">
-                                          <strong>Pass:</strong> {val?.Pass},
-                                        </p>
-                                        <p className="text-left">
-                                          <strong>NG:</strong> {val?.NG},
-                                        </p>
-                                        <p className="text-left">
-                                          <strong>UPH:</strong>{" "}
-                                          {val?.Pass + val?.NG}
-                                        </p>
-                                      </div>
-                                    </td>
-                                  ))
-                              )}
+                                              )}
+                                              % of target
+                                            </p>
+                                          </div>
+                                        </td>
+                                      ))
+                                      : row?.values?.map((val, i) => (
+                                        <td key={i} className="border p-2">
+                                          <div className="text-xs">
+                                            <p className="text-left">
+                                              <strong>Pass:</strong> {val?.Pass},
+                                            </p>
+                                            <p className="text-left">
+                                              <strong>NG:</strong> {val?.NG},
+                                            </p>
+                                            <p className="text-left">
+                                              <strong>UPH:</strong>{" "}
+                                              {val?.Pass + val?.NG}
+                                            </p>
+                                          </div>
+                                        </td>
+                                      ))
+                                  )}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="p-4">
+                        <p className="pb-3">
+                          <strong>Overall</strong>
+                        </p>
+                        <table className="mt-4 w-full table-auto border text-center">
+                          <thead>
+                            <tr className="bg-gray-200">
+                              <th className="border px-4 py-2">Overall UPH</th>
+                              <th className="border px-4 py-2">Complete Device</th>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="p-4">
-                    <p className="pb-3">
-                      <strong>Overall</strong>
-                    </p>
-                    <table className="mt-4 w-full table-auto border text-center">
-                      <thead>
-                        <tr className="bg-gray-200">
-                          <th className="border px-4 py-2">Overall UPH</th>
-                          <th className="border px-4 py-2">Complete Device</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {completedKitsUPH?.map((row, idx) => {
-                          let rowColor = "";
+                          </thead>
+                          <tbody>
+                            {completedKitsUPH?.map((row, idx) => {
+                              let rowColor = "";
 
-                          if (row.status === "past") {
-                            rowColor = "bg-green-50";
-                          } else if (row.status === "current") {
-                            rowColor = "bg-yellow-100";
-                          } else if (row.status === "future") {
-                            rowColor = "bg-gray-100";
-                          }
+                              if (row.status === "past") {
+                                rowColor = "bg-green-50";
+                              } else if (row.status === "current") {
+                                rowColor = "bg-yellow-100";
+                              } else if (row.status === "future") {
+                                rowColor = "bg-gray-100";
+                              }
 
-                          return (
-                            <tr key={idx} className={`${rowColor}`}>
-                              <td className="border px-4 py-2">{row?.hour}</td>
+                              return (
+                                <tr key={idx} className={`${rowColor}`}>
+                                  <td className="border px-4 py-2">{row?.hour}</td>
+                                  <td className="border px-4 py-2">
+                                    {row.isBreak ? (
+                                      <span className="italic text-gray-400">
+                                        Break
+                                      </span>
+                                    ) : (
+                                      row?.Pass + row?.NG
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+
+                            <tr className="bg-purple-100 font-semibold">
+                              <td className="border px-4 py-2">Avg UPH</td>
                               <td className="border px-4 py-2">
-                                {row.isBreak ? (
-                                  <span className="italic text-gray-400">
-                                    Break
-                                  </span>
-                                ) : (
-                                  row?.Pass + row?.NG
-                                )}
+                                {lastStageOverallSummary}
                               </td>
                             </tr>
-                          );
-                        })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                  {planData?.processStatus === "down_time_hold" && (
+                    <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
+                      <div className="mb-4 rounded-full bg-red-50 p-6 dark:bg-red-900/20">
+                        <FiClock className="h-16 w-16 text-red-500 animate-pulse" />
+                      </div>
+                      <h3 className="text-xl font-bold text-red-700 dark:text-red-400">
+                        Process Currently on Hold
+                      </h3>
+                      <p className="mt-2 text-gray-600 dark:text-gray-400 max-w-md">
+                        This process has been temporarily suspended due to
+                        <strong> {downTimeval?.downTimeType || "scheduled downtime"}</strong>.
+                        UPH tracking and seat updates are paused.
+                      </p>
+                      <button
+                        onClick={handleManualResume}
+                        className="mt-6 flex items-center gap-2 rounded-full bg-green-600 px-8 py-3 font-bold text-white shadow-xl transition-all hover:bg-green-700 hover:scale-105"
+                      >
+                        <FiRefreshCcw /> Resume Now
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
 
-                        <tr className="bg-purple-100 font-semibold">
-                          <td className="border px-4 py-2">Avg UPH</td>
-                          <td className="border px-4 py-2">
-                            {lastStageOverallSummary}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+            <Modal
+              isOpen={isDownTimeModalOpen}
+              onClose={closeDownTimeModal}
+              title="Schedule Downtime Hold"
+              submitOption={true}
+              onSubmit={handleSubmitDowntime}
+            >
+              <div className="space-y-4 p-4">
+                <div className="rounded-lg bg-orange-50 p-4 border-l-4 border-orange-500 text-orange-800 text-sm">
+                  <p className="font-bold flex items-center gap-2">
+                    <FiInfo /> Warning:
+                  </p>
+                  <p>Putting the process on hold will prevent any further work logs until it is resumed.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">DownTime From</label>
+                    <input
+                      type="datetime-local"
+                      value={downTimeFrom}
+                      onChange={(e) => setDownTimeFrom(e.target.value)}
+                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-4 py-2 text-black outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                    />
                   </div>
-                </>
-              )}
-              {planData?.processStatus === "down_time_hold" && (
-                <>
-                  <div className="flex items-center justify-center py-4">
-                    <p className="text-danger">The process has been on hold.</p>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">DownTime To</label>
+                    <input
+                      type="datetime-local"
+                      value={downTimeTo}
+                      onChange={(e) => setDownTimeTo(e.target.value)}
+                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-4 py-2 text-black outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                    />
                   </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-        <Modal
-          isOpen={isDevicesModalOpen}
-          onClose={() => setIsDevicesModalOpen(false)}
-          title={`Records for ${selectedStageNameForDevices} (Seat ${selectedSeatForDevices})`}
-          submitOption={false}
-          maxWidth="max-w-4xl"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 items-end">
-            <div>
-              <label className="block text-sm font-medium mb-1">From Date</label>
-              <input
-                type="date"
-                value={modalFilterDateStart}
-                onChange={(e) => setModalFilterDateStart(e.target.value)}
-                className="w-full rounded border-[1.5px] border-stroke px-3 py-2 outline-none focus:border-primary dark:border-strokedark dark:bg-form-input"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">To Date</label>
-              <input
-                type="date"
-                value={modalFilterDateEnd}
-                onChange={(e) => setModalFilterDateEnd(e.target.value)}
-                className="w-full rounded border-[1.5px] border-stroke px-3 py-2 outline-none focus:border-primary dark:border-strokedark dark:bg-form-input"
-              />
-            </div>
-          </div>
+                </div>
 
-          <div className="mb-4">
-            <p className="text-sm font-semibold">
-              Showing {filteredDeviceTests.length} records
-            </p>
-          </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-1">Reason for Downtime</label>
+                  <select
+                    value={selectedReason}
+                    onChange={(e) => setSelectedReason(e.target.value)}
+                    className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-4 py-2 text-black outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                  >
+                    <option value="">Select a reason</option>
+                    {downtimeReasons.map((reason, idx) => (
+                      <option key={idx} value={reason}>{reason}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </Modal>
+            <Modal
+              isOpen={isDevicesModalOpen}
+              onClose={() => setIsDevicesModalOpen(false)}
+              title={`Records for ${selectedStageNameForDevices} (Seat ${selectedSeatForDevices})`}
+              submitOption={false}
+              maxWidth="max-w-4xl"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 items-end">
+                <div>
+                  <label className="block text-sm font-medium mb-1">From Date</label>
+                  <input
+                    type="date"
+                    value={modalFilterDateStart}
+                    onChange={(e) => setModalFilterDateStart(e.target.value)}
+                    className="w-full rounded border-[1.5px] border-stroke px-3 py-2 outline-none focus:border-primary dark:border-strokedark dark:bg-form-input"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">To Date</label>
+                  <input
+                    type="date"
+                    value={modalFilterDateEnd}
+                    onChange={(e) => setModalFilterDateEnd(e.target.value)}
+                    className="w-full rounded border-[1.5px] border-stroke px-3 py-2 outline-none focus:border-primary dark:border-strokedark dark:bg-form-input"
+                  />
+                </div>
+              </div>
 
-          <div className="overflow-x-auto overflow-y-auto max-h-[50vh]">
-            <table className="w-full table-auto border-collapse">
-              <thead className="bg-gray-100 dark:bg-meta-4 sticky top-0">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Date / Time</th>
-                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Stage</th>
-                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Serial/IMEI</th>
-                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Operator</th>
-                  <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Details</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stroke dark:divide-strokedark">
-                {(filteredDeviceTests as any[])
-                  .sort(
-                    (a: any, b: any) =>
-                      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-                  )
-                  .map((record: any, idx: number) => (
-                    <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-meta-4">
-                      <td className="px-4 py-2 text-xs text-nowrap">
-                        {new Date(record.createdAt).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-2 text-xs">
-                        {record.stageName || selectedStageNameForDevices || "-"}
-                      </td>
-                      <td className="px-4 py-2 text-xs font-mono">
-                        {record.serialNo || record.imei || "N/A"}
-                      </td>
-                      <td className="px-4 py-2 text-xs">
-                        <span className={`px-2 py-1 rounded text-[10px] font-bold ${record.status === "Pass" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                          }`}>
-                          {record.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-xs">
-                        {record?.operatorName ||
-                          record?.operatorId?.name ||
-                          record?.operatorId?.employeeCode ||
-                          "N/A"}
-                      </td>
-                      <td className="px-4 py-2 text-xs">
-                        {record.status === "NG" && record.assignedDeviceTo && (
-                          <div className="text-red-500 mb-1 font-semibold">
-                            Assigned To: {record.assignedDeviceTo}
-                          </div>
-                        )}
-                        {Array.isArray(record?.trcRemarks) && record.trcRemarks.length > 0 && (
-                          <div className="text-[10px] text-gray-700 dark:text-gray-200">
-                            {record.trcRemarks.slice(0, 3).map((r: any, i: number) => (
-                              <div key={i}>{typeof r === "string" ? r : JSON.stringify(r)}</div>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
+              <div className="mb-4">
+                <p className="text-sm font-semibold">
+                  Showing {filteredDeviceTests.length} records
+                </p>
+              </div>
 
-          {wipDevicesForStage.length > 0 && (
-            <div className="mt-6">
-              <h3 className="mb-2 text-sm font-semibold">
-                WIP Devices (not yet passed from {selectedStageNameForDevices})
-              </h3>
-              <div className="overflow-x-auto max-h-[30vh] border border-stroke rounded-md">
-                <table className="w-full table-auto border-collapse text-xs">
+              <div className="overflow-x-auto overflow-y-auto max-h-[50vh]">
+                <table className="w-full table-auto border-collapse">
                   <thead className="bg-gray-100 dark:bg-meta-4 sticky top-0">
                     <tr>
-                      <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">
-                        Serial/IMEI
-                      </th>
-                      <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">
-                        Current Stage
-                      </th>
-                      <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">
-                        Created At
-                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Date / Time</th>
+                      <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Stage</th>
+                      <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Serial/IMEI</th>
+                      <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Operator</th>
+                      <th className="px-4 py-2 text-left text-xs font-bold uppercase tracking-wider">Details</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stroke dark:divide-strokedark">
-                    {wipDevicesForStage.map((d: any, idx: number) => (
-                      <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-meta-4">
-                        <td className="px-3 py-2 font-mono">{d.serialNo}</td>
-                        <td className="px-3 py-2">{d.currentStage || "-"}</td>
-                        <td className="px-3 py-2">
-                          {(d.status || "WIP").toString()}
-                        </td>
-                        <td className="px-3 py-2">
-                          {d.createdAt
-                            ? new Date(d.createdAt).toLocaleString()
-                            : "-"}
-                        </td>
-                      </tr>
-                    ))}
+                    {(filteredDeviceTests as any[])
+                      .sort(
+                        (a: any, b: any) =>
+                          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+                      )
+                      .map((record: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-meta-4">
+                          <td className="px-4 py-2 text-xs text-nowrap">
+                            {new Date(record.createdAt).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2 text-xs">
+                            {record.stageName || selectedStageNameForDevices || "-"}
+                          </td>
+                          <td className="px-4 py-2 text-xs font-mono">
+                            {record.serialNo || record.imei || "N/A"}
+                          </td>
+                          <td className="px-4 py-2 text-xs">
+                            <span className={`px-2 py-1 rounded text-[10px] font-bold ${record.status === "Pass" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                              }`}>
+                              {record.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-xs">
+                            {record?.operatorName ||
+                              record?.operatorId?.name ||
+                              record?.operatorId?.employeeCode ||
+                              "N/A"}
+                          </td>
+                          <td className="px-4 py-2 text-xs">
+                            {record.status === "NG" && record.assignedDeviceTo && (
+                              <div className="text-red-500 mb-1 font-semibold">
+                                Assigned To: {record.assignedDeviceTo}
+                              </div>
+                            )}
+                            {Array.isArray(record?.trcRemarks) && record.trcRemarks.length > 0 && (
+                              <div className="text-[10px] text-gray-700 dark:text-gray-200">
+                                {record.trcRemarks.slice(0, 3).map((r: any, i: number) => (
+                                  <div key={i}>{typeof r === "string" ? r : JSON.stringify(r)}</div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
-        </Modal>
-        {showPopup && (
-          <ConfirmationPopup
-            onConfirm={handleRefresh}
-            onCancel={() => setShowPopup(false)}
-            message="Are you sure you want to Refresh the Data?"
-          />
+
+              {wipDevicesForStage.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="mb-2 text-sm font-semibold">
+                    WIP Devices (not yet passed from {selectedStageNameForDevices})
+                  </h3>
+                  <div className="overflow-x-auto max-h-[30vh] border border-stroke rounded-md">
+                    <table className="w-full table-auto border-collapse text-xs">
+                      <thead className="bg-gray-100 dark:bg-meta-4 sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">
+                            Serial/IMEI
+                          </th>
+                          <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">
+                            Current Stage
+                          </th>
+                          <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">
+                            Created At
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stroke dark:divide-strokedark">
+                        {wipDevicesForStage.map((d: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-meta-4">
+                            <td className="px-3 py-2 font-mono">{d.serialNo}</td>
+                            <td className="px-3 py-2">{d.currentStage || "-"}</td>
+                            <td className="px-3 py-2">
+                              {(d.status || "WIP").toString()}
+                            </td>
+                            <td className="px-3 py-2">
+                              {d.createdAt
+                                ? new Date(d.createdAt).toLocaleString()
+                                : "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </Modal>
+            {showPopup && (
+              <ConfirmationPopup
+                onConfirm={handleRefresh}
+                onCancel={() => setShowPopup(false)}
+                message="Are you sure you want to Refresh the Data?"
+              />
+            )}
+          </>
         )}
       </>
     </DndProvider>
