@@ -1,6 +1,7 @@
 ﻿"use client";
 import Image from "next/image";
 import React, { useMemo } from "react";
+import { Coffee } from "lucide-react";
 
 type SubStep = {
   stepName?: string;
@@ -46,6 +47,7 @@ interface BasicInformationProps {
   shift?: Shift | null;
   setStartTest: (v: boolean) => void;
   processAssignUserStage: any[];
+  isDownTimeEnable?: boolean;
 }
 
 export default function BasicInformation({
@@ -55,6 +57,7 @@ export default function BasicInformation({
   shift,
   setStartTest,
   processAssignUserStage,
+  isDownTimeEnable,
 }: BasicInformationProps) {
   const handleStartTesting = () => setStartTest(true);
 
@@ -331,11 +334,21 @@ export default function BasicInformation({
 
         <div className="mt-6 flex justify-end">
           <button
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            className={`rounded-lg px-4 py-2 text-sm font-medium shadow transition-all focus:outline-none focus:ring-2 
+              ${isDownTimeEnable
+                ? "bg-gray-400 text-gray-200 cursor-not-allowed border border-gray-300"
+                : "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-300"
+              }`}
             onClick={handleStartTesting}
-            aria-label="Start testing"
+            disabled={isDownTimeEnable}
+            aria-label={isDownTimeEnable ? "Testing disabled - process on hold" : "Start testing"}
           >
-            Start Test
+            {isDownTimeEnable ? (
+              <span className="flex items-center gap-2">
+                <Coffee className="h-4 w-4" />
+                System On Hold
+              </span>
+            ) : "Start Test"}
           </button>
         </div>
       </section>

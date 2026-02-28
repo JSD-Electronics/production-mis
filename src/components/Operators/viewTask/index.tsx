@@ -35,7 +35,7 @@ import {
 } from "@/lib/api";
 import { calculateTimeDifference } from "@/lib/common";
 import SearchableInput from "@/components/SearchableInput/SearchableInput";
-import { RefreshCw, Video, ExternalLink } from "lucide-react";
+import { RefreshCw, Video, ExternalLink, Coffee } from "lucide-react";
 
 // Utility: safely read current user from localStorage
 const getCurrentUser = () => {
@@ -252,9 +252,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     const pathname = window.location.pathname;
     const id = pathname.split("/").pop();
     // prefetch using helper
-    const user = getCurrentUser();
     getDeviceTestEntry();
+
+    // Fetch planning data with background polling for status updates
     getPlaningAndSchedulingByID(id);
+    const intervalId = setInterval(() => {
+      getPlaningAndSchedulingByID(id);
+    }, 15000); // Check every 15 seconds
+
+    return () => clearInterval(intervalId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyFilterDate]);
 
@@ -379,7 +385,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
 
       allRecords.forEach((r: any) => {
         const rStage = (r.name || r.stageName)?.trim();
-        if (targetStageNames.has(rStage)) {
+        // Only count records if the stage matches AND it belongs to the current plan
+        if (targetStageNames.has(rStage) && String(r.planId) === String(id)) {
           globalTested++;
           if (r.status === "Pass" || r.status === "Completed") globalPass++;
           else if (r.status === "NG" || r.status === "Fail") globalNg++;
@@ -395,31 +402,21 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       const currentStageName = Array.from(targetStageNames)[0] as string;
       const currentStageIdx = stages.indexOf(currentStageName);
 
-      let incomingCount = 0;
-      if (currentStageIdx === 0) {
-        // First stage: incoming is total kits targeted for this stage globally in the plan
-        let totalTargetForStage = 0;
-        Object.values(assignedStages).forEach((seatS: any) => {
-          const arr = Array.isArray(seatS) ? seatS : [seatS];
-          arr.forEach((s: any) => {
-            if (targetStageNames.has((s.name || s.stageName)?.trim())) {
-              totalTargetForStage += (s.totalUPHA || 0);
-            }
-          });
-        });
-        incomingCount = totalTargetForStage;
-      } else if (currentStageIdx > 0) {
-        // Subsequent stage: incoming is what passed in the PREVIOUS stage globally
-        const prevStageName = stages[currentStageIdx - 1];
-        allRecords.forEach((r: any) => {
-          if ((r.name || r.stageName)?.trim() === prevStageName && (r.status === "Pass" || r.status === "Completed")) {
-            incomingCount++;
+      // Calculate total WIP based on totalUPHA for the assigned stages
+      let totalWipFromUPHA = 0;
+      Object.values(assignedStages).forEach((seatS: any) => {
+        const arr = Array.isArray(seatS) ? seatS : [seatS];
+        arr.forEach((s: any) => {
+          if (targetStageNames.has((s.name || s.stageName)?.trim())) {
+            totalWipFromUPHA += (s.totalUPHA || 0);
           }
         });
-      }
+      });
 
-      const wip = incomingCount - globalTested;
-      setWipKits(wip > 0 ? wip : 0);
+      setWipKits(totalWipFromUPHA);
+      setOverallTotalCompleted(globalPass);
+      setOverallTotalNg(globalNg);
+      setOverallTotalAttempts(globalTested);
     } catch (error: any) {
       console.error("Error fetching process-wide progress:", error);
     }
@@ -836,9 +833,13 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         }
       }
 
-      if (result?.status === "down_time_hold") {
+      const currentStatus = result?.processStatus || result?.status;
+      if (currentStatus === "down_time_hold") {
         setIsDownTimeAvailable(true);
-        setDownTimeVal(JSON.parse(result?.downTime || "{}"));
+        const dt = typeof result?.downTime === 'string' ? JSON.parse(result.downTime) : result.downTime;
+        setDownTimeVal(dt || {});
+      } else {
+        setIsDownTimeAvailable(false);
       }
 
       getShiftByID(result?.selectedShift);
@@ -987,69 +988,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
 
       }
 
-      // Sync WIP counts in Planning and Scheduling record
-      try {
-        const planData = { ...getPlaningAndScheduling };
-        if (planData) {
-          const isCommon = assignedTaskDetails?.stageType === "common";
-          const stageField = isCommon ? "assignedCustomStages" : "assignedStages";
-          let assignedStages = JSON.parse(planData[stageField] || "{}");
-          const currentSeatKey = operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber;
-
-          // 1. Decrement current stage count and increment Pass/NG metrics
-          if (assignedStages[currentSeatKey]) {
-            const currentStageName = Array.isArray(assignUserStage) ? assignUserStage[0]?.name || assignUserStage[0]?.stageName : assignUserStage?.name || assignUserStage?.stageName;
-            const stageIdx = assignedStages[currentSeatKey].findIndex((s: any) => (s.name || s.stageName) === currentStageName);
-            if (stageIdx !== -1) {
-              assignedStages[currentSeatKey][stageIdx].totalUPHA = Math.max(0, (assignedStages[currentSeatKey][stageIdx].totalUPHA || 0) - 1);
-
-              if (status === "Pass") {
-                assignedStages[currentSeatKey][stageIdx].passedDevice = (assignedStages[currentSeatKey][stageIdx].passedDevice || 0) + 1;
-              } else {
-                assignedStages[currentSeatKey][stageIdx].ngDevice = (assignedStages[currentSeatKey][stageIdx].ngDevice || 0) + 1;
-              }
-
-              // Update local state to reflect planning totals
-              const updatedStage = assignedStages[currentSeatKey][stageIdx];
-              setWipKits(updatedStage.totalUPHA || 0);
-              setOverallTotalCompleted(updatedStage.passedDevice || 0);
-              setOverallTotalNg(updatedStage.ngDevice || 0);
-              setOverallTotalAttempts((updatedStage.passedDevice || 0) + (updatedStage.ngDevice || 0));
-            }
-          }
-
-          // 2. If Passed, increment next stage count
-          if (status === "Pass") {
-            const currentIndex = processData?.stages?.findIndex((stage: any) => stage.stageName === stageData?.name);
-            if (currentIndex !== -1 && currentIndex < processData?.stages?.length - 1) {
-              const nextStageName = processData.stages[currentIndex + 1].stageName;
-              // Find which seat handles the next stage
-              for (const seatKey in assignedStages) {
-                const nextStageIdx = assignedStages[seatKey].findIndex((s: any) => (s.name || s.stageName) === nextStageName);
-                if (nextStageIdx !== -1) {
-                  assignedStages[seatKey][nextStageIdx].totalUPHA = (assignedStages[seatKey][nextStageIdx].totalUPHA || 0) + 1;
-                  break;
-                }
-              }
-            }
-          }
-
-          const updatedPlanData = {
-            ...planData,
-            [stageField]: JSON.stringify(assignedStages)
-          };
-
-          await updatePlaningAndScheduling(updatedPlanData, id);
-          setPlaningAndScheduling(updatedPlanData);
-
-          // Also update the local assignUserStage state so the UI reflects it immediately
-          if (assignedStages[currentSeatKey]) {
-            setAssignUserStage(assignedStages[currentSeatKey]);
-          }
-        }
-      } catch (e) {
-        console.error("WIP count sync failed:", e);
-      }
+      // WIP and stat updates are now handled by the backend during createDeviceTestEntry.
+      // We will refresh the plan data after the submission is successful to ensure consistency.
 
       // Build JSON payload
       const payload: any = {
@@ -1096,7 +1036,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           setTotalCompleted((prev) => prev + 1);
         }
 
-        // Refresh seat-wise stats from Planning and overall counts
+        // Refresh the entire planning and progress state from server to ensure accuracy
+        getPlaningAndSchedulingByID(id);
         getOverallProgress(id);
 
         // Robustly remove the device from the searchable list
@@ -1611,6 +1552,48 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       })()}
 
       <div className="px-6 pb-12">
+        {isDownTimeEnable && (
+          <div className="fixed inset-0 z-[999] flex flex-col items-center justify-center bg-black/60 backdrop-blur-md">
+            <div className="flex flex-col items-center gap-6 rounded-3xl bg-white p-10 shadow-2xl text-center max-w-lg border border-red-100">
+              <div className="relative">
+                <div className="absolute inset-0 animate-ping rounded-full bg-red-100 opacity-75"></div>
+                <div className="relative rounded-full bg-red-50 p-6">
+                  <Coffee className="h-16 w-16 text-red-600" />
+                </div>
+              </div>
+
+              <div>
+                <h2 className="text-3xl font-extrabold text-gray-900 mb-2">System On Hold</h2>
+                <div className="inline-flex items-center gap-2 rounded-full bg-orange-50 px-4 py-1 text-orange-700 text-sm font-bold mb-4">
+                  <div className="h-2 w-2 rounded-full bg-orange-500 animate-pulse"></div>
+                  DOWNTIME ACTIVE
+                </div>
+
+                <p className="text-gray-600 text-lg leading-relaxed">
+                  This process is temporarily suspended due to
+                  <strong className="text-red-700"> {getDownTimeVal?.description || getDownTimeVal?.downTimeType || "scheduled maintenance"}</strong>.
+                </p>
+
+                {getDownTimeVal?.to && (
+                  <div className="mt-6 flex flex-col items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Estimated Resume Time</span>
+                    <span className="text-2xl font-black text-gray-800 tabular-nums">
+                      {new Date(getDownTimeVal.to).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 w-full border-t border-gray-100 pt-6">
+                <p className="text-sm text-gray-500 italic">
+                  Task inputs and timers are automatically paused. <br />
+                  Please wait for the process to be resumed.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {startTest ? (
           <DeviceTestComponent
             product={product}
@@ -1695,6 +1678,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
               if (val) handleStart();
             }}
             processAssignUserStage={processAssignUserStage}
+            isDownTimeEnable={isDownTimeEnable}
           />
         )}
       </div>

@@ -150,9 +150,9 @@ const DraggableGridItem = ({
       className={`flex flex-col h-full rounded-xl border-2 p-2 transition-all duration-300 ${assignedStages[coordinates] && assignedStages[coordinates].length > 0
         ? !assignedStages[coordinates][0]?.reserved
           ? "border-green-500/50 bg-green-50 shadow-sm transform hover:scale-[1.01] dark:bg-green-900/20"
-          : "border-red-500/50 bg-red-50 shadow-sm dark:bg-red-900/20"
+          : "border-red-500/50 bg-red-50/80 shadow-sm dark:bg-red-900/20 backdrop-blur-[2px]"
         : "border-dashed border-gray-300 bg-white hover:border-primary/50 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700"
-        }`}
+        } ${assignedStages[coordinates]?.[0]?.reserved ? 'opacity-80 grayscale-[0.4]' : ''}`}
       onDrop={handleDrop(rowIndex, seatIndex)}
       onDragOver={handleDragOver}
       title={
@@ -171,8 +171,17 @@ const DraggableGridItem = ({
               <div key={stageIndex}>
                 <div className="flex items-center justify-between">
                   <strong className="text-gray-900 text-[10px] leading-tight">
-                    {stage.name}
-                    <p className="text-[9px] text-gray-500">{stage.upha}</p>
+                    {stage.reserved ? (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[7px] font-black text-red-600 uppercase tracking-tighter">Occupied By:</span>
+                        <span className="text-gray-800 font-bold truncate max-w-[100px]" title={stage.processName}>{stage.processName || "Active Plan"}</span>
+                      </div>
+                    ) : (
+                      <>
+                        {stage.name}
+                        <p className="text-[9px] text-gray-500">{stage.upha}</p>
+                      </>
+                    )}
                   </strong>
                   {!stage?.reserved && (
                     <button

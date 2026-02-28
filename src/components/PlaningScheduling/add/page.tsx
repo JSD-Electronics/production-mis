@@ -272,7 +272,12 @@ const ADDPlanSchedule = () => {
             if (!acc[seatKey]) {
               acc[seatKey] = [];
             }
-            acc[seatKey] = acc[seatKey].concat(parsedStages[seatKey]);
+            const withProcessName = (Array.isArray(parsedStages[seatKey]) ? parsedStages[seatKey] : [parsedStages[seatKey]]).map((stage: any) => ({
+              ...stage,
+              processName: plan.processDetails?.name || plan.processName,
+              reserved: true,
+            }));
+            acc[seatKey] = acc[seatKey].concat(withProcessName);
           });
         } catch (error) {
           console.error("Error parsing assignedStages:", error);
@@ -565,12 +570,7 @@ const ADDPlanSchedule = () => {
       for (let seatIndex = 0; seatIndex < totalSeats; seatIndex++) {
         const key = `${rowIndex}-${seatIndex}`;
         if (reservedSeats[key]) {
-          newAssignedStages[key] = [
-            {
-              name: "Reserved",
-              reserved: true,
-            },
-          ];
+          newAssignedStages[key] = reservedSeats[key];
           continue;
         }
         if (!newAssignedStages[key]) {
