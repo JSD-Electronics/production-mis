@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 const Modal = ({
@@ -8,6 +8,7 @@ const Modal = ({
   title,
   submitOption = true,
   submitDisabled = false,
+  submitText = "Confirm",
   closeOption = true,
   maxWidth = "max-w-180",
   children,
@@ -18,6 +19,7 @@ const Modal = ({
   title: string;
   submitOption?: boolean;
   submitDisabled?: boolean;
+  submitText?: string;
   closeOption?: boolean;
   maxWidth?: string;
   children: React.ReactNode;
@@ -75,7 +77,7 @@ const Modal = ({
                 : "bg-blue-600 hover:bg-blue-700 hover:shadow-blue-500/40"
                 }`}
             >
-              Confirm
+              {submitText}
             </button>
           )}
         </div>

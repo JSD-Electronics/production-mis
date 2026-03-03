@@ -59,6 +59,7 @@ import StickerGenerator from "../viewTask-old/StickerGenerator";
 import { toast } from "react-toastify";
 import JigSection from "./components/JigSection";
 import JigIdentificationSection from "./components/JigIdentificationSection";
+import CartonDetailsPopup from "./components/CartonDetailsPopup";
 
 interface Cart {
   cartonSerial: string;
@@ -78,6 +79,8 @@ interface DeviceTestComponentProps {
   setDevicePause: any;
   deviceDisplay: any;
   deviceList: any[];
+  expectedScanTypes: string[];
+  currentScanStep: number;
   checkedDevice: any[];
   searchQuery: any;
   setSearchQuery: any;
@@ -147,6 +150,8 @@ export default function DeviceTestComponent({
   setDevicePause,
   deviceDisplay,
   deviceList,
+  expectedScanTypes,
+  currentScanStep,
   setDeviceList,
   checkedDevice,
   searchQuery,
@@ -206,6 +211,21 @@ export default function DeviceTestComponent({
   handlePauseResume,
   handleStop,
 }: DeviceTestComponentProps) {
+  const [multiScanValues, setMultiScanValues] = useState<string[]>([]);
+  useEffect(() => {
+    if (Array.isArray(expectedScanTypes) && expectedScanTypes.length > 1) {
+      setMultiScanValues((prev) => {
+        const next = [...prev];
+        next.length = expectedScanTypes.length;
+        for (let i = 0; i < expectedScanTypes.length; i++) {
+          if (typeof next[i] !== "string") next[i] = "";
+        }
+        return next;
+      });
+    } else {
+      setMultiScanValues([]);
+    }
+  }, [expectedScanTypes.length]);
   useEffect(() => {
     if (processData?._id) {
       fetchExistingCartonsByProcessID();
@@ -218,6 +238,14 @@ export default function DeviceTestComponent({
   const [todaySummary, setTodaySummary] = useState<any>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSopOpen, setIsSopOpen] = useState(true);
+
+  // Reset verification inputs whenever modal opens
+  useEffect(() => {
+    if (isVerifyStickerModal) {
+      setMultiScanValues(expectedScanTypes.length > 0 ? new Array(expectedScanTypes.length).fill("") : []);
+      setSerialNumber("");
+    }
+  }, [isVerifyStickerModal]);
 
   // Ref to hold the disconnect function from the jig interface
   const jigDisconnectRef = React.useRef<(() => void) | null>(null);
@@ -253,6 +281,7 @@ export default function DeviceTestComponent({
   const [isVerifyCartonModal, setIsVerifyCartonModal] = useState(false);
   const [selectedLogs, setSelectedLogs] = useState<any[]>([]);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
+  const [isCartonPopupOpen, setIsCartonPopupOpen] = useState(false);
   const [manualFieldValues, setManualFieldValues] = useState<
     Record<string, string>
   >({});
@@ -1155,6 +1184,17 @@ export default function DeviceTestComponent({
           </div>
 
           <div className="flex items-center gap-2">
+            {processAssignUserStage?.subSteps?.some(
+              (s: any) => s.isPackagingStatus,
+            ) && (
+                <button
+                  onClick={() => setIsCartonPopupOpen(true)}
+                  className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow transition-all hover:bg-emerald-700 active:scale-95"
+                >
+                  <ScanLine className="h-4 w-4" />
+                  Verify & Move Cartons
+                </button>
+              )}
             <button
               onClick={handleRefreshSession}
               title="Refresh – clear current device and restart all operations"
@@ -1284,8 +1324,8 @@ export default function DeviceTestComponent({
                           <div className="relative z-10 mt-5">
                             <span
                               className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-bold ${isFull
-                                  ? "border-red-100 bg-red-50 text-red-700"
-                                  : "border-blue-100 bg-blue-50 text-blue-700"
+                                ? "border-red-100 bg-red-50 text-red-700"
+                                : "border-blue-100 bg-blue-50 text-blue-700"
                                 }`}
                             >
                               {isFull ? (
@@ -1415,11 +1455,11 @@ export default function DeviceTestComponent({
                                   <td className="px-6 py-4">
                                     <span
                                       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ${device.status === "Pass"
-                                          ? "bg-green-100 text-green-700"
-                                          : device.status === "Fail" ||
-                                            device.status === "NG"
-                                            ? "bg-red-100 text-red-700"
-                                            : "bg-gray-100 text-gray-600"
+                                        ? "bg-green-100 text-green-700"
+                                        : device.status === "Fail" ||
+                                          device.status === "NG"
+                                          ? "bg-red-100 text-red-700"
+                                          : "bg-gray-100 text-gray-600"
                                         }`}
                                     >
                                       {device.status === "Pass" && (
@@ -1649,10 +1689,10 @@ export default function DeviceTestComponent({
                               </td>
                               <td
                                 className={`px-4 py-3 font-semibold ${device.status === "Pass"
-                                    ? "text-green-600"
-                                    : device.status === "Fail"
-                                      ? "text-red-600"
-                                      : "text-gray-500"
+                                  ? "text-green-600"
+                                  : device.status === "Fail"
+                                    ? "text-red-600"
+                                    : "text-gray-500"
                                   }`}
                               >
                                 {device.status || "N/A"}
@@ -1685,8 +1725,8 @@ export default function DeviceTestComponent({
                                               </td>
                                               <td
                                                 className={`px-2 py-1 font-semibold ${record.status === "Pass"
-                                                    ? "text-green-600"
-                                                    : "text-red-600"
+                                                  ? "text-green-600"
+                                                  : "text-red-600"
                                                   }`}
                                               >
                                                 {record.status}
@@ -1779,10 +1819,10 @@ export default function DeviceTestComponent({
                           <div
                             key={idx}
                             className={`group relative flex shrink-0 items-center gap-2 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${isPass
-                                ? "border-green-200 bg-green-50/50 text-green-700 shadow-sm hover:shadow-green-100/50"
-                                : isNG
-                                  ? "border-red-200 bg-red-50/50 text-red-700 shadow-sm hover:shadow-red-100/50"
-                                  : "border-gray-100 bg-gray-50 text-gray-400 opacity-60"
+                              ? "border-green-200 bg-green-50/50 text-green-700 shadow-sm hover:shadow-green-100/50"
+                              : isNG
+                                ? "border-red-200 bg-red-50/50 text-red-700 shadow-sm hover:shadow-red-100/50"
+                                : "border-gray-100 bg-gray-50 text-gray-400 opacity-60"
                               }`}
                           >
                             <div
@@ -2056,8 +2096,8 @@ export default function DeviceTestComponent({
                                                                 ))
                                                             }
                                                             className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
-                                                                ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none"
-                                                                : "bg-success hover:bg-green-600"
+                                                              ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none"
+                                                              : "bg-success hover:bg-green-600"
                                                               }`}
                                                           >
                                                             <CheckCircle className="h-5 w-5" />
@@ -2071,8 +2111,8 @@ export default function DeviceTestComponent({
                                                               !!jigDecision
                                                             }
                                                             className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision
-                                                                ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none"
-                                                                : "bg-danger hover:bg-red-600"
+                                                              ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none"
+                                                              : "bg-danger hover:bg-red-600"
                                                               }`}
                                                           >
                                                             <XCircle className="h-5 w-5" />
@@ -2252,7 +2292,7 @@ export default function DeviceTestComponent({
                                       {currentSubStep.isPrinterEnable && (
                                         <div className="space-y-6">
                                           {!isStickerPrinted ? (
-                                            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                                            <div id="printing-stack-section" className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
                                               <div className="mb-6 flex items-center gap-3">
                                                 <Printer className="h-6 w-6 text-primary" />
                                                 <h3 className="text-xl font-bold text-gray-900">
@@ -2312,43 +2352,114 @@ export default function DeviceTestComponent({
                                               </p>
                                               <button
                                                 className="mx-auto flex items-center gap-2 rounded-xl bg-green-600 px-8 py-3.5 font-bold text-white shadow-lg transition-all hover:bg-green-700 active:scale-95"
-                                                onClick={handleVerifySticker}
+                                                onClick={() => {
+                                                  const types: string[] = [];
+                                                  try {
+                                                    currentSubStep?.printerFields?.forEach((pf: any) => {
+                                                      (pf?.fields || []).forEach((f: any) => {
+                                                        if (f?.type === "barcode" || f?.type === "qrcode") {
+                                                          const s = String(f?.slug || f?.name || "").toLowerCase();
+                                                          if (s.includes("serial")) types.push("serial");
+                                                          else if (s.includes("imei")) types.push("imei");
+                                                          else if (s.includes("ccid")) types.push("ccid");
+                                                          else types.push("any");
+                                                        }
+                                                      });
+                                                    });
+                                                  } catch { }
+                                                  handleVerifySticker(types);
+                                                }}
                                               >
                                                 <ScanLine className="h-5 w-5" />
                                                 Start Verification
                                               </button>
                                               <Modal
                                                 isOpen={isVerifyStickerModal}
-                                                onSubmit={
-                                                  handleVerifyStickerModal
+                                                submitText={
+                                                  expectedScanTypes.length > 1 && currentScanStep < expectedScanTypes.length - 1
+                                                    ? "Next"
+                                                    : "Submit"
                                                 }
+                                                onSubmit={() => {
+                                                  if (expectedScanTypes.length > 1) {
+                                                    const val = multiScanValues[currentScanStep] || "";
+                                                    setSerialNumber(val);
+                                                  }
+                                                  handleVerifyStickerModal();
+                                                }}
                                                 onClose={
                                                   closeVerifyStickerModal
                                                 }
                                                 title="Verify Sticker"
                                               >
                                                 <div className="space-y-4">
-                                                  <label className="mb-2 block text-sm font-bold text-gray-700">
-                                                    Enter / Scan Serial Number
-                                                  </label>
-                                                  <input
-                                                    type="text"
-                                                    value={serialNumber || ""}
-                                                    autoComplete="off"
-                                                    onChange={(e) =>
-                                                      setSerialNumber(
-                                                        e.target.value,
-                                                      )
-                                                    }
-                                                    placeholder="Scan QR code..."
-                                                    className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3.5 text-base font-medium outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
-                                                    autoFocus
-                                                  />
+                                                  {expectedScanTypes.length > 1 ? (
+                                                    <>
+                                                      <div className="text-left text-xs font-semibold text-gray-500">
+                                                        Scan {currentScanStep + 1} of {expectedScanTypes.length}
+                                                      </div>
+                                                      {(() => {
+                                                        const t = expectedScanTypes[currentScanStep];
+                                                        return (
+                                                          <div className="space-y-2">
+                                                            <label className="block text-sm font-bold text-gray-700">
+                                                              {t ? `Enter / Scan ${t.toUpperCase()}` : "Enter / Scan Code"}
+                                                            </label>
+                                                            <input
+                                                              type="text"
+                                                              value={multiScanValues[currentScanStep] || ""}
+                                                              autoComplete="off"
+                                                              onChange={(e) => {
+                                                                const next = [...multiScanValues];
+                                                                next[currentScanStep] = e.target.value;
+                                                                setMultiScanValues(next);
+                                                                setSerialNumber(e.target.value);
+                                                              }}
+                                                              placeholder={`Scan ${t || "code"}...`}
+                                                              className="w-full rounded-xl border-2 border-primary bg-gray-50 px-4 py-3.5 text-base font-medium outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+                                                              autoFocus
+                                                            />
+                                                          </div>
+                                                        );
+                                                      })()}
+                                                    </>
+                                                  ) : (
+                                                    <>
+                                                      <label className="mb-2 block text-sm font-bold text-gray-700">
+                                                        Enter / Scan Code
+                                                      </label>
+                                                      <input
+                                                        type="text"
+                                                        value={serialNumber || ""}
+                                                        autoComplete="off"
+                                                        onChange={(e) =>
+                                                          setSerialNumber(
+                                                            e.target.value,
+                                                          )
+                                                        }
+                                                        placeholder="Scan QR code..."
+                                                        className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3.5 text-base font-medium outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+                                                        autoFocus
+                                                      />
+                                                    </>
+                                                  )}
+                                                  <div className="flex justify-end pt-1">
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        closeVerifyStickerModal();
+                                                        if (setIsStickerPrinted) setIsStickerPrinted(false);
+                                                      }}
+                                                      className="text-sm font-semibold text-primary hover:underline"
+                                                    >
+                                                      Reprint Sticker
+                                                    </button>
+                                                  </div>
                                                 </div>
                                               </Modal>
                                             </div>
                                           ) : (
-                                            <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-950/5">
+                                            <div id="manual-verification-anchor" className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-950/5">
                                               <div className="flex items-start gap-4 border-b border-orange-100 bg-orange-50/50 px-6 py-5 text-left">
                                                 <div className="shrink-0 rounded-lg bg-orange-100 p-2 text-orange-600 shadow-sm">
                                                   <ClipboardCheck className="h-6 w-6" />
@@ -2670,7 +2781,7 @@ export default function DeviceTestComponent({
                                                         </Modal>
                                                       </div>
                                                     ) : (
-                                                      <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-950/5">
+                                                      <div id="manual-verification-anchor" className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-950/5">
                                                         <div className="flex items-start gap-4 border-b border-orange-100 bg-orange-50/50 px-6 py-5 text-left">
                                                           <div className="shrink-0 rounded-lg bg-orange-100 p-2 text-orange-600 shadow-sm">
                                                             <ClipboardCheck className="h-6 w-6" />
@@ -2782,9 +2893,23 @@ export default function DeviceTestComponent({
                                                         </p>
                                                         <button
                                                           className="mx-auto flex items-center gap-2 rounded-xl bg-green-600 px-8 py-3.5 font-bold text-white shadow-lg transition-all hover:bg-green-700 active:scale-95"
-                                                          onClick={
-                                                            handleVerifySticker
-                                                          }
+                                                          onClick={() => {
+                                                            const types: string[] = [];
+                                                            try {
+                                                              currentSubStep?.printerFields?.forEach((pf: any) => {
+                                                                (pf?.fields || []).forEach((f: any) => {
+                                                                  if (f?.type === "barcode" || f?.type === "qrcode") {
+                                                                    const s = String(f?.slug || f?.name || "").toLowerCase();
+                                                                    if (s.includes("serial")) types.push("serial");
+                                                                    else if (s.includes("imei")) types.push("imei");
+                                                                    else if (s.includes("ccid")) types.push("ccid");
+                                                                    else types.push("any");
+                                                                  }
+                                                                });
+                                                              });
+                                                            } catch { }
+                                                            handleVerifySticker(types);
+                                                          }}
                                                         >
                                                           <ScanLine className="h-5 w-5" />
                                                           Start Verification
@@ -2792,6 +2917,11 @@ export default function DeviceTestComponent({
                                                         <Modal
                                                           isOpen={
                                                             isVerifyStickerModal
+                                                          }
+                                                          submitText={
+                                                            expectedScanTypes.length > 1 && currentScanStep < expectedScanTypes.length - 1
+                                                              ? "Next"
+                                                              : "Submit"
                                                           }
                                                           onSubmit={
                                                             handleVerifyStickerModal
@@ -2802,27 +2932,67 @@ export default function DeviceTestComponent({
                                                           title="Verify Sticker"
                                                         >
                                                           <div className="space-y-4">
-                                                            <label className="mb-2 block text-sm font-bold text-gray-700">
-                                                              Enter / Scan
-                                                              Serial Number
-                                                            </label>
-                                                            <input
-                                                              type="text"
-                                                              value={
-                                                                serialNumber ||
-                                                                ""
-                                                              }
-                                                              autoComplete="off"
-                                                              onChange={(e) =>
-                                                                setSerialNumber(
-                                                                  e.target
-                                                                    .value,
-                                                                )
-                                                              }
-                                                              placeholder="Scan QR code..."
-                                                              className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3.5 text-base font-medium outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
-                                                              autoFocus
-                                                            />
+                                                            {expectedScanTypes.length > 1 ? (
+                                                              <>
+                                                                <div className="text-left text-xs font-semibold text-gray-500">
+                                                                  Scan {currentScanStep + 1} of {expectedScanTypes.length}
+                                                                </div>
+                                                                {(() => {
+                                                                  const t = expectedScanTypes[currentScanStep];
+                                                                  return (
+                                                                    <div className="space-y-2">
+                                                                      <label className="block text-sm font-bold text-gray-700">
+                                                                        {t ? `Enter / Scan ${t.toUpperCase()}` : "Enter / Scan Code"}
+                                                                      </label>
+                                                                      <input
+                                                                        type="text"
+                                                                        value={serialNumber || ""}
+                                                                        autoComplete="off"
+                                                                        onChange={(e) => setSerialNumber(e.target.value)}
+                                                                        placeholder={`Scan ${t || "code"}...`}
+                                                                        className="w-full rounded-xl border-2 border-primary bg-gray-50 px-4 py-3.5 text-base font-medium outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+                                                                        autoFocus
+                                                                      />
+                                                                    </div>
+                                                                  );
+                                                                })()}
+                                                              </>
+                                                            ) : (
+                                                              <>
+                                                                <label className="mb-2 block text-sm font-bold text-gray-700">
+                                                                  Enter / Scan Code
+                                                                </label>
+                                                                <input
+                                                                  type="text"
+                                                                  value={
+                                                                    serialNumber ||
+                                                                    ""
+                                                                  }
+                                                                  autoComplete="off"
+                                                                  onChange={(e) =>
+                                                                    setSerialNumber(
+                                                                      e.target
+                                                                        .value,
+                                                                    )
+                                                                  }
+                                                                  placeholder="Scan QR code..."
+                                                                  className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3.5 text-base font-medium outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+                                                                  autoFocus
+                                                                />
+                                                              </>
+                                                            )}
+                                                            <div className="flex justify-end pt-1">
+                                                              <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                  closeVerifyStickerModal();
+                                                                  if (setIsStickerPrinted) setIsStickerPrinted(false);
+                                                                }}
+                                                                className="text-sm font-semibold text-primary hover:underline"
+                                                              >
+                                                                Reprint Sticker
+                                                              </button>
+                                                            </div>
                                                           </div>
                                                         </Modal>
                                                       </div>
@@ -2923,12 +3093,12 @@ export default function DeviceTestComponent({
                                       <div className="flex items-center gap-3">
                                         <div
                                           className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${status === "Pass"
-                                              ? "bg-green-100 text-green-700"
-                                              : status === "NG"
-                                                ? "bg-red-100 text-red-700"
-                                                : index === currentJigStepIndex
-                                                  ? "animate-pulse bg-blue-100 text-blue-700"
-                                                  : "bg-gray-100 text-gray-500"
+                                            ? "bg-green-100 text-green-700"
+                                            : status === "NG"
+                                              ? "bg-red-100 text-red-700"
+                                              : index === currentJigStepIndex
+                                                ? "animate-pulse bg-blue-100 text-blue-700"
+                                                : "bg-gray-100 text-gray-500"
                                             }`}
                                         >
                                           {index + 1}
@@ -2996,6 +3166,13 @@ export default function DeviceTestComponent({
                                       <Box className="h-4 w-4 text-orange-500" />
                                       Carton Details
                                     </h4>
+                                    <button
+                                      onClick={() => setIsCartonPopupOpen(true)}
+                                      className="flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600 hover:bg-blue-100 transition-colors"
+                                    >
+                                      <ScanLine className="h-3 w-3" />
+                                      Verify & Move
+                                    </button>
                                   </div>
                                   <div className="p-0">
                                     <table className="w-full text-left text-xs">
@@ -3230,8 +3407,8 @@ export default function DeviceTestComponent({
                           <td className="px-4 py-3">
                             <span
                               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${row?.status === "Pass"
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-red-100 text-red-700"
+                                ? "bg-green-100 text-green-700"
+                                : "bg-red-100 text-red-700"
                                 }`}
                             >
                               {row?.status}
@@ -3385,6 +3562,23 @@ export default function DeviceTestComponent({
           )}
         </div>
       </Modal>
+
+      <CartonDetailsPopup
+        isOpen={isCartonPopupOpen}
+        onClose={() => setIsCartonPopupOpen(false)}
+        cartons={
+          Array.isArray(processCartons)
+            ? processCartons
+            : processCartons?.cartonDetails || []
+        }
+        processData={processData}
+        product={product}
+        assignUserStage={assignUserStage}
+        onUpdate={() => {
+          fetchExistingCartonsByProcessID();
+          fetchProcessCartons();
+        }}
+      />
     </>
   );
 }

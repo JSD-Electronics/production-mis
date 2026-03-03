@@ -30,6 +30,7 @@ interface StageSimulatorProps {
     onClose: () => void;
     initialStageIndex?: number;
     isPageMode?: boolean; // New prop for page mode
+    allowStageSelect?: boolean; // Allow switching stages from UI
 }
 
 interface DummyDevice {
@@ -41,7 +42,7 @@ interface DummyDevice {
     customFields?: Record<string, any>;
 }
 
-export default function StageSimulator({ stages, isOpen, onClose, initialStageIndex = 0, isPageMode = false }: StageSimulatorProps) {
+export default function StageSimulator({ stages, isOpen, onClose, initialStageIndex = 0, isPageMode = false, allowStageSelect = false }: StageSimulatorProps) {
     const [dummyDevices, setDummyDevices] = useState<DummyDevice[]>([]);
     const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
     const [selectedStageIndex, setSelectedStageIndex] = useState<number>(0);
@@ -596,13 +597,13 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                     <div className="shrink-0">
                         <label className="mb-2 block text-xs font-semibold uppercase text-gray-500">Select Stage to Test</label>
                         <select
-                            className="w-full rounded-lg border border-gray-300 bg-gray-100 px-3 py-2 text-sm outline-none dark:bg-gray-800 dark:border-gray-700 cursor-not-allowed opacity-70"
+                            className={`w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none dark:bg-gray-800 dark:border-gray-700 ${allowStageSelect ? "bg-white" : "bg-gray-100 cursor-not-allowed opacity-70"}`}
                             value={selectedStageIndex}
                             onChange={(e) => {
                                 setSelectedStageIndex(Number(e.target.value));
                                 stopTest();
                             }}
-                            disabled={true}
+                            disabled={!allowStageSelect}
                         >
                             {stages.map((s, idx) => (
                                 <option key={s.dragId || idx} value={idx}>

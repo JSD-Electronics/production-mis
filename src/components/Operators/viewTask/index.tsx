@@ -154,6 +154,9 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const [cartons, setCartons] = useState<any[]>([]);
   const [isCartonBarcodePrinted, setIsCartonBarCodePrinted] = useState(false);
   const [isVerifiedSticker, setIsVerifiedSticker] = useState(false);
+  const [expectedScanTypes, setExpectedScanTypes] = useState<string[]>([]);
+  const [currentScanStep, setCurrentScanStep] = useState(0);
+  const [pendingOpenVerify, setPendingOpenVerify] = useState(false);
   const [isAddedToCart, setIsAddedToCart] = useState(false);
   const [isVerifiedPackaging, setIsVerifiedPackaging] = useState(false);
   const [isVerifyPackagingModal, setIsVerifyPackagingModal] = useState(false);
@@ -1176,56 +1179,139 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     setIsReportIssueModal(true);
   };
   const handlePrintSticker = () => {
-    const stickerRoot = document.getElementById("sticker-preview");
-    setIsVerifiedSticker(false);
-    if (!stickerRoot) return;
-
-    const stickerElement = (stickerRoot.querySelector('.actual-sticker-container') || stickerRoot) as HTMLElement;
-    const widthPx = parseInt(stickerElement.getAttribute('data-sticker-width') || '300');
-    const heightPx = parseInt(stickerElement.getAttribute('data-sticker-height') || '150');
-    const stickerWidthMM = Math.round(widthPx * 0.264583);
-    const stickerHeightMM = Math.round(heightPx * 0.264583);
-
-    html2canvas(stickerElement, {
-      scale: 3,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-      logging: false,
-    }).then((canvas) => {
-      const imageData = canvas.toDataURL("image/png");
-      const printWindow = window.open("", "_blank");
-      if (!printWindow) {
-        toast.error("Please allow popups to print stickers");
+    const tryPrint = (attempt = 0) => {
+      try {
+        const sec = document.getElementById("printing-stack-section");
+        sec?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } catch {}
+      const stickerRoot = document.getElementById("sticker-preview");
+      if (!stickerRoot) {
+        if (attempt < 10) {
+          // Ensure printing UI is visible and try again shortly
+          setIsPassNGButtonShow(false);
+          setIsVerifiedSticker(false);
+          try {
+            const sec = document.getElementById("printing-stack-section");
+            sec?.scrollIntoView({ behavior: "smooth", block: "center" });
+          } catch {}
+          setTimeout(() => tryPrint(attempt + 1), 150);
+        }
         return;
       }
-      printWindow.document.write(`
-        <html>
-          <head>
-            <style>
-              @page { size: ${stickerWidthMM}mm ${stickerHeightMM}mm; margin: 0; }
-              body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; }
-              img { width: ${stickerWidthMM}mm; height: ${stickerHeightMM}mm; display: block; }
-            </style>
-          </head>
-          <body>
-            <img src="${imageData}">
-            <script>
-              window.onload = function() {
-                setTimeout(() => { window.print(); window.close(); }, 300);
-              };
-            </script>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-    });
-    setIsPassNGButtonShow(false);
-    setIsStickerPrinted(!isStickerPrinted);
+      setIsVerifiedSticker(false);
+
+      const stickerElement = (stickerRoot.querySelector('.actual-sticker-container') || stickerRoot) as HTMLElement;
+      const widthPx = parseInt(stickerElement.getAttribute('data-sticker-width') || '300');
+      const heightPx = parseInt(stickerElement.getAttribute('data-sticker-height') || '150');
+      const stickerWidthMM = Math.round(widthPx * 0.264583);
+      const stickerHeightMM = Math.round(heightPx * 0.264583);
+
+      html2canvas(stickerElement, {
+        scale: 3,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+      }).then((canvas) => {
+        const imageData = canvas.toDataURL("image/png");
+        const printWindow = window.open("", "_blank");
+        if (!printWindow) {
+          toast.error("Please allow popups to print stickers");
+          return;
+        }
+        try {
+          const sec = document.getElementById("printing-stack-section");
+          sec?.scrollIntoView({ behavior: "smooth", block: "center" });
+        } catch {}
+        printWindow.document.write(`
+          <html>
+            <head>
+              <style>
+                @page { size: ${stickerWidthMM}mm ${stickerHeightMM}mm; margin: 0; }
+                body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; }
+                img { width: ${stickerWidthMM}mm; height: ${stickerHeightMM}mm; display: block; }
+              </style>
+            </head>
+            <body>
+              <img src="${imageData}">
+              <script>
+                window.onload = function() {
+                  setTimeout(() => { window.print(); window.close(); }, 300);
+                };
+              </script>
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+      });
+      setIsPassNGButtonShow(false);
+      setIsStickerPrinted(!isStickerPrinted);
+    };
+    tryPrint(0);
   };
-  const handleVerifySticker = () => {
+  const handleVerifySticker = (types?: string[]) => {
     setSerialNumber("");
-    setIsVerifyStickerModal(true);
+    try {
+      const uniq = (arr: string[]) =>
+        Array.from(new Set(arr.filter((v) => !!v))).map((v) => String(v).toLowerCase());
+      let derived: string[] = Array.isArray(types) ? [...types] : [];
+      // Fallback: derive from current device data if config scan didn't produce multiple
+      if (!Array.isArray(types) || types.length <= 1) {
+        const active = deviceList.find(
+          (d: any) =>
+            String(d?.serialNo || d?.serial_no || "").trim() === String(searchResult || "").trim(),
+        );
+        const hasInCF = (keyLike: string) => {
+          let cf = active?.customFields;
+          if (typeof cf === "string") {
+            try {
+              cf = JSON.parse(cf);
+            } catch {
+              cf = null;
+            }
+          }
+          const vals: string[] = [];
+          const collect = (o: any) => {
+            if (!o || typeof o !== "object") return;
+            Object.keys(o).forEach((k) => {
+              const v = o[k];
+              if (v && typeof v !== "object") {
+                if (String(k).toLowerCase().includes(keyLike)) vals.push(String(v));
+              } else if (v && typeof v === "object") collect(v);
+            });
+          };
+          collect(cf);
+          return vals.length > 0;
+        };
+        const hasImei =
+          !!(active?.imeiNo || active?.imei || active?.imei_no || active?.deviceInfo?.imei) ||
+          hasInCF("imei");
+        const hasCcid = !!active?.ccid || hasInCF("ccid");
+        const hasSerial =
+          !!(active?.serialNo || active?.serial_no || active?.deviceInfo?.serialNo) ||
+          hasInCF("serial");
+        const ordered: string[] = [];
+        if (hasImei) ordered.push("imei");
+        if (hasCcid) ordered.push("ccid");
+        if (hasSerial) ordered.push("serial");
+        derived = uniq([...derived, ...ordered]);
+      } else {
+        derived = uniq(derived);
+      }
+      setExpectedScanTypes(derived);
+      setCurrentScanStep(0);
+      setPendingOpenVerify(true);
+    } catch {
+      setExpectedScanTypes(Array.isArray(types) ? types : []);
+      setCurrentScanStep(0);
+      setPendingOpenVerify(true);
+    }
   };
+  useEffect(() => {
+    if (pendingOpenVerify) {
+      setIsVerifyStickerModal(true);
+      setPendingOpenVerify(false);
+    }
+  }, [pendingOpenVerify, expectedScanTypes]);
   const handleVerifyPackaging = () => {
     setSerialNumber("");
     setIsVerifyPackagingModal(true);
@@ -1234,16 +1320,206 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     setIsVerifyPackagingModal(false);
   };
   const handleVerifyStickerModal = () => {
-    const matchedDevice = deviceList.find(
-      (d: any) => d.serialNo?.toLowerCase() === serialNumber.toLowerCase(),
-    );
+    if (isSubmitting.current) return;
+    isSubmitting.current = true;
+    const input = String(serialNumber || "").trim();
+    if (!input) {
+      toast.error("Sticker Verification Failed. Please try again.");
+      isSubmitting.current = false;
+      return;
+    }
 
-    if (matchedDevice && matchedDevice.serialNo === searchResult) {
-      toast.success("Sticker verified successfully!");
-      setIsVerifiedSticker(true);
-      setIsVerifyStickerModal(false);
+    const lc = (v: any) => String(v || "").trim().toLowerCase();
+    const candidates: string[] = [];
+    candidates.push(lc(input));
+
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(input);
+    } catch {}
+    if (!parsed) {
+      try {
+        const u = new URL(input);
+        const params: Record<string, string> = {};
+        u.searchParams.forEach((val, key) => {
+          params[key] = val;
+        });
+        parsed = params;
+      } catch {}
+    }
+    if (!parsed) {
+      const kvs: Record<string, string> = {};
+      const lines = input.split(/[\n,&]/);
+      lines.forEach((line) => {
+        const m = line.match(/([^:=\s]+)\s*[:=]\s*(\S+)/);
+        if (m) kvs[m[1]] = m[2];
+      });
+      if (Object.keys(kvs).length) parsed = kvs;
+    }
+
+    const getParsed = (k: string) => {
+      if (!parsed) return "";
+      const keys = [k, k.toLowerCase(), k.toUpperCase(), k.replace(/_/g, ""), k.replace(/-/g, "")];
+      for (const key of keys) {
+        if (parsed[key] !== undefined) return String(parsed[key]);
+      }
+      return "";
+    };
+
+    const serialCandidates = [getParsed("serial_no"), getParsed("serialNo"), getParsed("serial")].filter(Boolean);
+    const imeiCandidates = [getParsed("imei"), getParsed("imei_no"), getParsed("IMEI")].filter(Boolean);
+    const ccidCandidates = [getParsed("ccid"), getParsed("CCID")].filter(Boolean);
+    serialCandidates.forEach((v) => candidates.push(lc(v)));
+    imeiCandidates.forEach((v) => candidates.push(lc(v)));
+    ccidCandidates.forEach((v) => candidates.push(lc(v)));
+
+    // Decide if this scan specifies an exact field (for multi-code stickers)
+    let explicitType: "serial" | "imei" | "ccid" | null = null;
+    const presentTypes = [
+      serialCandidates.length > 0 ? "serial" : null,
+      imeiCandidates.length > 0 ? "imei" : null,
+      ccidCandidates.length > 0 ? "ccid" : null,
+    ].filter(Boolean) as ("serial" | "imei" | "ccid")[];
+    if (presentTypes.length === 1) {
+      explicitType = presentTypes[0]!;
+    }
+
+    const matchInCustomFields = (d: any): string | null => {
+      const cf = d?.customFields || d?.custom_fields || d?.customfields;
+      let obj = cf;
+      if (typeof obj === "string") {
+        try {
+          obj = JSON.parse(obj);
+        } catch {
+          obj = null;
+        }
+      }
+      if (!obj || typeof obj !== "object") return null;
+      const vals: string[] = [];
+      const collect = (o: any) => {
+        Object.keys(o).forEach((k) => {
+          const val = o[k];
+          if (val && typeof val !== "object") {
+            if (String(k).toLowerCase().includes("ccid")) vals.push(lc(val));
+            if (String(k).toLowerCase().includes("imei")) vals.push(lc(val));
+            if (String(k).toLowerCase().includes("serial")) vals.push(lc(val));
+          } else if (val && typeof val === "object") {
+            collect(val);
+          }
+        });
+      };
+      collect(obj);
+      const hit = vals.find((v) => candidates.includes(v));
+      return hit || null;
+    };
+
+    const matchesExplicit = (d: any): boolean => {
+      if (!explicitType) return false;
+      const serialVals = [d?.serialNo, d?.serial_no, d?.deviceInfo?.serialNo].map(lc).filter(Boolean);
+      const imeiVals = [d?.imeiNo, d?.imei, d?.imei_no, d?.deviceInfo?.imei].map(lc).filter(Boolean);
+      const ccidVals = [d?.ccid].map(lc).filter(Boolean);
+      const cfMatch = matchInCustomFields(d); // may hold any of serial/imei/ccid found in customFields
+      if (explicitType === "serial") {
+        return serialCandidates.map(lc).some((c) => serialVals.includes(c) || cfMatch === c);
+      }
+      if (explicitType === "imei") {
+        return imeiCandidates.map(lc).some((c) => imeiVals.includes(c) || cfMatch === c);
+      }
+      if (explicitType === "ccid") {
+        // Also look into custom fields for CCID if not present at top-level
+        return ccidCandidates.map(lc).some((c) => ccidVals.includes(c) || cfMatch === c);
+      }
+      return false;
+    };
+
+    // If we are in multi-scan mode, enforce required type order
+    const inMultiMode = expectedScanTypes.length > 1;
+    const requiredType: "serial" | "imei" | "ccid" | "any" | null = inMultiMode
+      ? (expectedScanTypes[currentScanStep] as any || "any")
+      : null;
+
+    const matchesRequiredOnly = (d: any): boolean => {
+      if (!requiredType || requiredType === "any") {
+        // fall back to generic logic below
+        return false;
+      }
+      // If scan provided explicit type but it's not the one required, block
+      if (explicitType && explicitType !== requiredType) return false;
+      // Evaluate by required field only
+      const sn = [d?.serialNo, d?.serial_no, d?.deviceInfo?.serialNo].map(lc).filter(Boolean);
+      const imei = [d?.imeiNo, d?.imei, d?.imei_no, d?.deviceInfo?.imei].map(lc).filter(Boolean);
+      const ccid = [d?.ccid].map(lc).filter(Boolean);
+      const raw = lc(input);
+      const serialCands = serialCandidates.length > 0 ? serialCandidates.map(lc) : [raw];
+      const imeiCands = imeiCandidates.length > 0 ? imeiCandidates.map(lc) : [raw];
+      const ccidCands = ccidCandidates.length > 0 ? ccidCandidates.map(lc) : [raw];
+      const cfMatch = matchInCustomFields(d);
+      if (requiredType === "serial") {
+        return serialCands.some((c) => sn.includes(c) || cfMatch === c);
+      }
+      if (requiredType === "imei") {
+        return imeiCands.some((c) => imei.includes(c) || cfMatch === c);
+      }
+      if (requiredType === "ccid") {
+        return ccidCands.some((c) => ccid.includes(c) || cfMatch === c);
+      }
+      return false;
+    };
+
+    const found = deviceList.find((d: any) => {
+      // Multi-scan step enforcement
+      if (inMultiMode && requiredType && requiredType !== "any") {
+        return matchesRequiredOnly(d);
+      }
+
+      // If explicit field was identified from scan, enforce exact-field verification
+      if (explicitType) {
+        return matchesExplicit(d);
+      }
+
+      const sn = [d?.serialNo, d?.serial_no, d?.deviceInfo?.serialNo].map(lc).filter(Boolean);
+      const imei = [d?.imeiNo, d?.imei, d?.imei_no, d?.deviceInfo?.imei].map(lc).filter(Boolean);
+      const ccid = [d?.ccid].map(lc).filter(Boolean);
+      const anyDirect =
+        sn.some((v) => candidates.includes(v)) ||
+        imei.some((v) => candidates.includes(v)) ||
+        ccid.some((v) => candidates.includes(v));
+      if (anyDirect) return true;
+      const fromCF = matchInCustomFields(d);
+      return !!fromCF;
+    });
+
+    if (found) {
+      if (inMultiMode && currentScanStep < expectedScanTypes.length - 1) {
+        const nextStep = currentScanStep + 1;
+        const nextType = expectedScanTypes[nextStep] || "code";
+        toast.success(`Code ${currentScanStep + 1} verified. Scan next: ${String(nextType).toUpperCase()}`);
+        setCurrentScanStep(nextStep);
+        setSerialNumber("");
+        isSubmitting.current = false;
+      } else {
+        toast.success("Sticker Verification Successful.");
+        setIsVerifiedSticker(true);
+        setIsVerifyStickerModal(false);
+        setExpectedScanTypes([]);
+        setCurrentScanStep(0);
+        try {
+          setTimeout(() => {
+            if (typeof document !== "undefined") {
+              const el = document.getElementById("manual-verification-anchor");
+              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+          }, 100);
+        } catch {}
+        isSubmitting.current = false;
+      }
     } else {
-      toast.error("Serial number does not match. Try again.");
+      if (inMultiMode && requiredType && requiredType !== "any") {
+        toast.error(`Scan ${currentScanStep + 1} failed. Please scan ${String(requiredType).toUpperCase()}.`);
+      } else {
+        toast.error("Sticker Verification Failed. Please try again.");
+      }
+      isSubmitting.current = false;
     }
   };
 
@@ -1607,6 +1883,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             setDevicePause={setDevicePause}
             deviceDisplay={deviceDisplay}
             deviceList={deviceList}
+            expectedScanTypes={expectedScanTypes}
+            currentScanStep={currentScanStep}
             setDeviceList={setDeviceList}
             checkedDevice={checkedDevice}
             searchQuery={searchQuery}

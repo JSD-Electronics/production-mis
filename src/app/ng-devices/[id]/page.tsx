@@ -616,9 +616,32 @@ export default function NGDeviceDetails({
                   <LayoutGrid className="text-gray-600 h-5 w-5" />
                   Stage Summary
                 </h3>
-                <span className="text-gray-500 bg-gray-100 rounded px-2 py-1 text-xs font-semibold">
-                  {events.length} Events
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500 bg-gray-100 rounded px-2 py-1 text-xs font-semibold">
+                    {events.length} Events
+                  </span>
+                  {(() => {
+                    const isNG = String(deviceData?.status || "").toUpperCase() === "NG";
+                    const stage = String(deviceData?.stageName || deviceData?.currentStage || "").toLowerCase();
+                    const isJigNamed =
+                      stage.includes("fqc") || stage.includes("functional");
+                    if (isNG && isJigNamed) {
+                      return (
+                        <button
+                          onClick={() => {
+                            const url = `/ng-devices/${params.id}/simulate`;
+                            window.open(url, "_blank");
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
+                          title="Open Simulation Mode"
+                        >
+                          Simulation Mode
+                        </button>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
               </div>
 
               <div className="border-gray-200 relative ml-3 space-y-8 border-l-2 py-2 pl-8">
