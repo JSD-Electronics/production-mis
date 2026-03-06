@@ -1406,6 +1406,24 @@ export const createCarton = async (formData) => {
     throw error; throw error;
   }
 };
+export const saveCartonWeight = async (data) => {
+  try {
+    let response = await api.put(`/carton/updateWeight`, data);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const updateCartonPrintingStatus = async (cartonSerial) => {
+  try {
+    let response = await api.post(`/carton/updatePrinting`, { cartonSerial });
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
 export const verifyCartonSticker = async (cartonSerial) => {
   try {
     let response = await api.post(`/carton/verifySticker`, { cartonSerial });
@@ -1433,7 +1451,7 @@ export const fetchCartons = async (processID) => {
 };
 export const shiftToPDI = async (cartons) => {
   try {
-    let response = await api.post(`cartons/shift-to-pdi`, { cartons });
+    let response = await api.post(`/cartons/shift-to-pdi`, { cartons });
     return response.data;
   } catch (error) {
     throw error;

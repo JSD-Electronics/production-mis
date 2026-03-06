@@ -130,6 +130,7 @@ export default function NGDevicesPage() {
     return g;
   }, [filteredEntries]);
 
+
   const totalNg = entries.length;
   const totalProcesses = Object.keys(grouped).length;
   const totalTrc = entries.filter((e) => (e.assignedDeviceTo || "").toString().toUpperCase() === "TRC").length;
@@ -364,9 +365,6 @@ export default function NGDevicesPage() {
             ))
           )}
         </div>
-
-        {/* Improved Modal */}
-
 
       </div>
     </DefaultLayout>
