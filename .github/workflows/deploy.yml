@@ -19,6 +19,11 @@ jobs:
           script: |
             set -e
             cd /var/www/html/production-mis
+
+            # Free up space before Git operations
+            rm -rf .next/cache
+            pm2 flush || true
+
             git checkout main
             git pull origin main
 
