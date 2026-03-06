@@ -895,8 +895,7 @@ export default function DeviceTestComponent({
       alert("Something went wrong while shifting cartons.");
     }
   };
-  const isCommon =
-    (assignedTaskDetails?.stageType ?? "").toLowerCase() === "common";
+
   const handleSearchCarton = (carton: any) => {
     let data = cartonDetails.filter(
       (value, index) => value.cartonSerial == carton,
