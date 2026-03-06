@@ -22,6 +22,7 @@ jobs:
 
             # Free up space before Git operations
             rm -rf .next/cache
+            npm cache clean --force
             pm2 flush || true
 
             git checkout main
@@ -32,3 +33,4 @@ jobs:
 
             pm2 restart production-mis || pm2 start npm --name "production-mis" -- start
             pm2 save
+            pm2 status
