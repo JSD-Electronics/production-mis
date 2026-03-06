@@ -597,7 +597,7 @@ export default function DeviceTestComponent({
 
     // For jig steps, timer starts as soon as a device is scanned.
     const isJigStep = currentSubStep?.stepType === "jig";
-    const canStartTimer = !!searchResult;
+    const canStartTimer = isJigStep ? (!!searchResult && isJigConnected) : !!searchResult;
 
     if (
       isJigStep &&
@@ -632,6 +632,7 @@ export default function DeviceTestComponent({
     jigDecision,
     isdevicePassed,
     searchResult,
+    isJigConnected,
   ]);
 
   // Reset test state when scanning a new device
@@ -1897,9 +1898,19 @@ export default function DeviceTestComponent({
                                                 of {testSteps.length}
                                               </p>
                                             </div>
-                                            <span className="rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-blue-700">
-                                              Automated Jig
-                                            </span>
+                                            <div className="flex items-center gap-3">
+                                              {stepTimeLeft !== null && stepTimeLeft > 0 && (
+                                                <div className="flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 animate-pulse">
+                                                  <Timer className="h-4 w-4 text-orange-600" />
+                                                  <span className="text-xs font-bold text-orange-700">
+                                                    Timeout in {stepTimeLeft}s
+                                                  </span>
+                                                </div>
+                                              )}
+                                              <span className="rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-blue-700">
+                                                Automated Jig
+                                              </span>
+                                            </div>
                                           </div>
                                           <JigSection
                                             key={`jig-${searchResult?.serialNo || searchResult}`}

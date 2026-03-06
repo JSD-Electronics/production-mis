@@ -7,7 +7,7 @@ import DefaultLayout from "@/components/Layouts/DefaultLayout";
 import Link from "next/link";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 const normalizeKey = (key: unknown) =>
   String(key ?? "")
@@ -218,12 +218,29 @@ const BulkUploadEsimMaster = () => {
     };
 
     if (ext === "xlsx" || ext === "xls") {
-      reader.onload = () => {
+      reader.onload = async () => {
         try {
           const buf = reader.result as ArrayBuffer;
-          const wb = XLSX.read(buf, { type: "array" });
-          const sheet = wb.Sheets[wb.SheetNames[0]];
-          const raw = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+          const workbook = new ExcelJS.Workbook();
+          await workbook.xlsx.load(buf);
+          const sheet = workbook.worksheets[0];
+          const headers: string[] = [];
+          const raw: any[] = [];
+          sheet.eachRow((row, rowIndex) => {
+            if (rowIndex === 1) {
+              (row.values as any[]).forEach((v, i) => {
+                if (i > 0) headers.push(String(v ?? "").trim());
+              });
+            } else {
+              const obj: any = {};
+              (row.values as any[]).forEach((v, i) => {
+                if (i > 0 && headers[i - 1]) {
+                  obj[headers[i - 1]] = v !== null && v !== undefined ? String(v) : "";
+                }
+              });
+              raw.push(obj);
+            }
+          });
           processData(raw);
         } catch (e: any) {
           toast.error("Error parsing Excel file.");

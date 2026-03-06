@@ -89,7 +89,19 @@ If you like the template, please star this repository to inspire the team to cre
 
 ## Update Logs
 
+### Version 1.3.5 - [March 06, 2026]
+
+#### Issues
+- **Issue 01:** Fixed ERESOLVE dependency conflict between `apexcharts` and `react-apexcharts`.
+- **Issue 02:** Resolved high-severity `glob` command injection vulnerability in sub-dependencies via `overrides`.
+- **Issue 03:** Fixed `No space left on device` deployment errors by adding automated cleanup to `deploy.yml`.
+
+#### Enhancements
+- **Enhancement 01:** Tracked `package-lock.json` in Git for consistent builds across all environments.
+- **Enhancement 02:** Upgraded Core dependencies including `next`, `eslint`, and `typescript` to stable versions.
+
 ### Version 1.3.4 - [July 01, 2024]
+
 
 #### Issues
 

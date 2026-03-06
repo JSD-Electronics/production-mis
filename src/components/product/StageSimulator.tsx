@@ -19,7 +19,8 @@ import {
 } from "lucide-react";
 import JigSection from "../Operators/viewTask/components/JigSection";
 import Loader from "@/components/common/Loader";
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+
 import StickerGenerator from "../Operators/viewTask-old/StickerGenerator";
 import { toast } from "react-toastify";
 import html2canvas from "html2canvas";
@@ -755,7 +756,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                                             'NG Timeout (s)': ngTimeout,
                                             'Action': actionText,
                                             'Reason': result?.status === 'NG' ? (result?.reason || 'Unknown') : '',
-                                            'Buffer Time': ngTimeout - result?.executionTime?.toFixed(2),
+                                            'Buffer Time': ngTimeout - (result?.executionTime || 0),
                                         };
                                     });
 
@@ -775,13 +776,28 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                                         'NG Timeout (s)': totalNGTimeout.toFixed(2),
                                         'Action': '',
                                         'Reason': '',
-                                        'Buffer Time': totalNGTimeout.toFixed(2) - totalExecutionTime.toFixed(2)
+                                        'Buffer Time': Number(totalNGTimeout.toFixed(2)) - Number(totalExecutionTime.toFixed(2))
                                     });
 
-                                    const ws = XLSX.utils.json_to_sheet(excelData);
-                                    const wb = XLSX.utils.book_new();
-                                    XLSX.utils.book_append_sheet(wb, ws, 'Test Results');
-                                    XLSX.writeFile(wb, `${activeStage.stageName}_${activeDevice?.serialNo}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+                                    const workbook = new ExcelJS.Workbook();
+                                    const worksheet = workbook.addWorksheet('Test Results');
+                                    if (excelData.length > 0) {
+                                        worksheet.columns = Object.keys(excelData[0]).map(key => ({
+                                            header: key,
+                                            key,
+                                            width: 22,
+                                        }));
+                                        excelData.forEach(row => worksheet.addRow(row));
+                                    }
+                                    workbook.xlsx.writeBuffer().then((buffer) => {
+                                        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                                        const url = URL.createObjectURL(blob);
+                                        const a = document.createElement('a');
+                                        a.href = url;
+                                        a.download = `${activeStage.stageName}_${activeDevice?.serialNo}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+                                        a.click();
+                                        URL.revokeObjectURL(url);
+                                    });
                                 }}
                                 className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
                                 title="Download Test Results"
