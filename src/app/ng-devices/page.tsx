@@ -83,8 +83,8 @@ export default function NGDevicesPage() {
       }
       // Filter by selected process
       if (selectedProcess) {
-        const pid = e.processId || e.process?._id || "";
-        if (pid !== selectedProcess) return false;
+        const pid = typeof e.processId === "object" ? e.processId?._id : (e.processId || e.process?._id || "");
+        if (String(pid) !== selectedProcess) return false;
       }
       // Filter by search query
       if (q) {
@@ -102,20 +102,22 @@ export default function NGDevicesPage() {
   const processes = useMemo(() => {
     const map = new Map<string, string>();
     entries.forEach((e) => {
-      const pid = e.processId || e.process?._id || "unknown";
+      const pidObj = typeof e.processId === "object" ? e.processId : null;
+      const pid = pidObj?._id || e.processId || e.process?._id || "unknown";
+
       // Try to get process name from various possible fields
-      // If process details are populated in e.process, use e.process.name
-      // If not, fall back to e.processName, then check the fetched process list
-      let pname = e.process?.name || e.processName;
+      // 1. From the populated processId object (pidObj)
+      // 2. From e.process?.name or e.processName
+      let pname = pidObj?.processName || pidObj?.name || e.process?.name || e.processName;
 
       if (!pname && allProcesses.length > 0) {
         const matchingProcess = allProcesses.find(p => p._id === pid);
-        if (matchingProcess) pname = matchingProcess.name;
+        if (matchingProcess) pname = matchingProcess.name || matchingProcess.processName;
       }
 
-      if (!pname) pname = pid; // Fallback to ID if still not found
+      if (!pname) pname = String(pid); // Fallback to ID string if still not found
 
-      if (!map.has(pid)) map.set(pid, pname);
+      if (!map.has(String(pid))) map.set(String(pid), String(pname));
     });
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [entries, allProcesses]);
@@ -123,9 +125,10 @@ export default function NGDevicesPage() {
   const grouped = useMemo(() => {
     const g: Record<string, any[]> = {};
     filteredEntries.forEach((e) => {
-      const pid = e.processId || e.process?._id || "unknown";
-      if (!g[pid]) g[pid] = [];
-      g[pid].push(e);
+      const pid = typeof e.processId === "object" ? e.processId?._id : (e.processId || e.process?._id || "unknown");
+      const pidStr = String(pid);
+      if (!g[pidStr]) g[pidStr] = [];
+      g[pidStr].push(e);
     });
     return g;
   }, [filteredEntries]);

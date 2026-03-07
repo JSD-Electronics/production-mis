@@ -368,14 +368,20 @@ export default function NGDeviceDetails({
 
     const assignedCandidate =
       deviceData.assignedDeviceTo || deviceData.operatorId;
-    if (isObjectId(assignedCandidate)) {
-      getUserDetail(assignedCandidate)
+    const assignedId = typeof assignedCandidate === "object" ? assignedCandidate?._id : assignedCandidate;
+
+    if (isObjectId(assignedId)) {
+      getUserDetail(String(assignedId))
         .then((res: any) => {
-          setAssignedDisplay(res?.user?.name || assignedCandidate);
+          setAssignedDisplay(res?.user?.name || String(assignedId));
         })
-        .catch(() => setAssignedDisplay(assignedCandidate || "-"));
+        .catch(() => setAssignedDisplay(String(assignedId) || "-"));
     } else {
-      setAssignedDisplay(assignedCandidate || "-");
+      setAssignedDisplay(
+        typeof assignedCandidate === "object"
+          ? assignedCandidate?.name || assignedCandidate?.username || String(assignedId)
+          : (assignedCandidate || "-")
+      );
     }
 
     const procNameCandidate =
@@ -384,16 +390,20 @@ export default function NGDeviceDetails({
       setProcessDisplay(procNameCandidate);
     } else {
       const pid = deviceData.processId;
-      if (isObjectId(pid)) {
-        getProcessByID(pid)
+      const pidId = typeof pid === "object" ? pid?._id : pid;
+
+      if (typeof pid === "object" && (pid.processName || pid.name)) {
+        setProcessDisplay(pid.processName || pid.name);
+      } else if (isObjectId(pidId)) {
+        getProcessByID(String(pidId))
           .then((res: any) =>
             setProcessDisplay(
-              res?.processName || res?.name || pid || "Unknown",
+              res?.processName || res?.name || String(pidId) || "Unknown",
             ),
           )
-          .catch(() => setProcessDisplay(pid || "Unknown"));
+          .catch(() => setProcessDisplay(String(pidId) || "Unknown"));
       } else {
-        setProcessDisplay(pid || "Unknown");
+        setProcessDisplay(String(pid || "Unknown"));
       }
     }
   }, [deviceData]);
@@ -418,14 +428,18 @@ export default function NGDeviceDetails({
 
   useEffect(() => {
     const pid = deviceData?.processId;
-    if (isObjectId(pid)) {
-      getProcessByID(pid)
+    const pidId = typeof pid === "object" ? pid?._id : pid;
+    if (isObjectId(pidId)) {
+      getProcessByID(String(pidId))
         .then((res: any) => {
           const s0 =
             res?.stages?.[0]?.stageName || res?.stages?.[0]?.name || "";
           setFirstStageName(s0 || "");
         })
         .catch(() => { });
+    } else if (pid && typeof pid === "object" && pid.stages?.length > 0) {
+      const s0 = pid.stages[0]?.stageName || pid.stages[0]?.name || "";
+      setFirstStageName(s0 || "");
     } else if (deviceData?.process?.stages?.length > 0) {
       const s0 =
         deviceData.process.stages[0]?.stageName ||
