@@ -1015,6 +1015,18 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       if (status === "NG") {
         // Use the passed argument 'deviceDepartment' which contains the selected NG assignment (QC, TRC, Previous Stage)
         payload.assignedDeviceTo = deviceDepartment || selectAssignDeviceDepartment || "";
+
+        // Find the failing step to extract reason and logs for top-level access
+        const failingStepKey = Object.keys(subStepResults || {}).find(key => subStepResults[key].status === "NG");
+        if (failingStepKey) {
+          const failingResult = subStepResults[failingStepKey];
+          payload.reason = failingResult.reason;
+          // Also set logData for top-level if needed by detail page
+          payload.logData = {
+            reason: failingResult.reason,
+            terminalLogs: (logs.find(l => l.status === "NG")?.logData?.terminalLogs) || []
+          };
+        }
       }
 
       let result = await createDeviceTestEntry(payload);
@@ -1183,7 +1195,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       try {
         const sec = document.getElementById("printing-stack-section");
         sec?.scrollIntoView({ behavior: "smooth", block: "center" });
-      } catch {}
+      } catch { }
       const stickerRoot = document.getElementById("sticker-preview");
       if (!stickerRoot) {
         if (attempt < 10) {
@@ -1193,7 +1205,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           try {
             const sec = document.getElementById("printing-stack-section");
             sec?.scrollIntoView({ behavior: "smooth", block: "center" });
-          } catch {}
+          } catch { }
           setTimeout(() => tryPrint(attempt + 1), 150);
         }
         return;
@@ -1221,7 +1233,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         try {
           const sec = document.getElementById("printing-stack-section");
           sec?.scrollIntoView({ behavior: "smooth", block: "center" });
-        } catch {}
+        } catch { }
         printWindow.document.write(`
           <html>
             <head>
@@ -1336,7 +1348,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     let parsed: any = null;
     try {
       parsed = JSON.parse(input);
-    } catch {}
+    } catch { }
     if (!parsed) {
       try {
         const u = new URL(input);
@@ -1345,7 +1357,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           params[key] = val;
         });
         parsed = params;
-      } catch {}
+      } catch { }
     }
     if (!parsed) {
       const kvs: Record<string, string> = {};
@@ -1510,7 +1522,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
               el?.scrollIntoView({ behavior: "smooth", block: "center" });
             }
           }, 100);
-        } catch {}
+        } catch { }
         isSubmitting.current = false;
       }
     } else {

@@ -902,6 +902,14 @@ export const viewIMEI = async () => {
     throw error.response?.data || { message: "Error Fetching Imei" };
   }
 };
+export const getDeviceById = async (id) => {
+  try {
+    let response = await api.get(`/device/get/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error?.response?.data || { message: `Error Fetching Device` };
+  }
+};
 export const getDeviceByProductId = async (id) => {
   try {
     let response = await api.get(`/devices/devicesByProductID/${id}`);

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import DefaultLayout from "@/components/Layouts/DefaultLayout";
 import {
+  getDeviceById,
   getDeviceTestByDeviceId,
   getOverallDeviceTestEntry,
   getProcessByID,
@@ -25,6 +26,7 @@ import {
   ArrowLeft,
   Search,
   X,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -50,6 +52,7 @@ export default function NGDeviceDetails({
     troubleshootedBy: "",
     pcbSerial: "",
     imei: "",
+    ccid: "",
     processId: "",
     ocNumber: "",
     findingsAfterDiagnosis: "",
@@ -61,6 +64,27 @@ export default function NGDeviceDetails({
     faultCategory: "",
     photo: null as File | null,
   });
+
+  const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({});
+
+  const toggleStage = (stageName: string) => {
+    setExpandedStages((prev: any) => ({
+      ...prev,
+      [stageName.toLowerCase()]: !prev[stageName.toLowerCase()],
+    }));
+  };
+
+  const expandAll = () => {
+    const all: Record<string, boolean> = {};
+    events.forEach((e: any) => {
+      all[e.stageName.toLowerCase()] = true;
+    });
+    setExpandedStages(all);
+  };
+
+  const collapseAll = () => {
+    setExpandedStages({});
+  };
 
   // Prefill TRC form when modal opens
   useEffect(() => {
@@ -74,28 +98,89 @@ export default function NGDeviceDetails({
         let processIdValue = "";
         let ocNumberValue = "";
 
-        const pid = deviceData.processId;
-        if (isObjectId(pid)) {
+        const pid = deviceData.processId?._id || deviceData.processId;
+        if (pid) {
           try {
             const processRes = await getProcessByID(pid);
-            processIdValue = processRes?.pid || processRes?._id || pid;
-            ocNumberValue =
-              processRes?.ocNumber || processRes?.orderConfirmationNumber || "";
+            // Attribute name is processID per user instruction
+            processIdValue = processRes?.processID || processRes?.pid || "";
+            // Also fetch OC number
+            ocNumberValue = processRes?.orderConfirmationNo || processRes?.ocNumber || "";
           } catch (error) {
             console.error("Error fetching process data:", error);
-            processIdValue = pid;
+            processIdValue = String(pid);
           }
-        } else {
-          processIdValue = pid || "";
         }
 
+        // Step 1: Identify Device Record
+        let deviceRecord = deviceData?.deviceId;
+        const targetId = deviceRecord?._id || deviceRecord || params.id;
+
+        // Step 2: Ensure we have the full device object (with customFields)
+        // If not populated from the initial call, fetch it explicitly now
+        if (typeof deviceRecord !== "object" || !deviceRecord?.customFields) {
+          try {
+            const res = await getDeviceById(String(targetId));
+            deviceRecord = res?.data;
+          } catch (e) {
+            console.warn("Failed to fetch full device object for TRC prefill:", e);
+          }
+        }
+
+        let customFields = deviceRecord?.customFields || {};
+
+        // Safety for stringified customFields
+        if (typeof customFields === 'string') {
+          try {
+            customFields = JSON.parse(customFields);
+          } catch (e) {
+            customFields = {};
+          }
+        }
+
+        // Helper to find nested values (IMEI/CCID can be under "Functional" or other stage keys)
+        const findInCustomFields = (searchKey: string) => {
+          const keyLower = searchKey.toLowerCase();
+
+          const searchNode = (node: any): string => {
+            if (!node || typeof node !== 'object') return "";
+
+            // 1. Check current node keys first
+            for (const k in node) {
+              if (k.toLowerCase() === keyLower) return String(node[k]);
+            }
+
+            // 2. Prioritize standard stage keys like "Functional" or "Jig Test"
+            const priorityKeys = ["Functional", "Jig Test", "FQC"];
+            for (const pk of priorityKeys) {
+              if (node[pk] && typeof node[pk] === "object") {
+                const found = searchNode(node[pk]);
+                if (found) return found;
+              }
+            }
+
+            // 3. Recursive deep search for anything else
+            for (const k in node) {
+              if (typeof node[k] === 'object' && node[k] !== null && !priorityKeys.includes(k)) {
+                const found = searchNode(node[k]);
+                if (found) return found;
+              }
+            }
+            return "";
+          };
+
+          return searchNode(customFields);
+        };
+
+        const imeiValue = findInCustomFields("IMEI") || deviceRecord?.imeiNo || "";
+        const ccidValue = findInCustomFields("CCID") || "";
+
         setTrcFormData({
-          modelName:
-            deviceData.deviceInfo?.modelName || deviceData.device?.model || "",
-          troubleshootedBy: userDetails.name || "",
-          pcbSerial:
-            deviceData.serialNo || deviceData.deviceInfo?.serialNo || "",
-          imei: deviceData.deviceInfo?.imei || "",
+          modelName: deviceData.productId?.name || deviceRecord?.modelName || "N/A",
+          troubleshootedBy: userDetails.name || "TRC",
+          pcbSerial: deviceData.serialNo || deviceRecord?.serialNo || "",
+          imei: imeiValue,
+          ccid: ccidValue,
           processId: processIdValue,
           ocNumber: ocNumberValue,
           findingsAfterDiagnosis: "",
@@ -133,38 +218,49 @@ export default function NGDeviceDetails({
   const fetchDeviceDetails = async () => {
     setLoading(true);
     setError(null);
+
     try {
-      // 1. Try to get the specific NG entry details from the overall list (for consistent NG status info)
-      // This is a bit inefficient but ensures we match the view from the previous page
+      // 1. Fetch Primary Device Entry
       const overallResult = await getOverallDeviceTestEntry();
       const allEntries = overallResult?.DeviceTestEntry || [];
-      // Finding logic might need adjustment based on what ID is passed (Device ID vs Entry ID)
-      // We'll search by Device._id match first, assuming param is Device ID
-      let mainEntry = allEntries.find(
-        (e: any) =>
-          e.deviceId?._id === params.id ||
-          e.deviceId === params.id ||
-          e._id === params.id,
+
+      // Filtering for the best match: Prefer NG status and latest record
+      const matchingEntries = allEntries.filter(
+        (e: any) => {
+          const dId = e.deviceId?._id || e.deviceId;
+          return dId === params.id || e._id === params.id;
+        }
       );
+
+      // Sort by status (NG first) then by date (latest first)
+      const mainEntry = matchingEntries.sort((a: any, b: any) => {
+        const aStatusNG = (a.status || "").toUpperCase() === "NG";
+        const bStatusNG = (b.status || "").toUpperCase() === "NG";
+        if (aStatusNG && !bStatusNG) return -1;
+        if (!aStatusNG && bStatusNG) return 1;
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      })[0];
 
       setDeviceData(mainEntry);
 
       // 2. Fetch History / Stage Summary
-      // Assuming getDeviceTestByDeviceId takes the Device ID (which mainEntry.deviceId should have)
+      // Using the internal database ID of the device if available
       const targetDeviceId =
         mainEntry?.deviceId?._id || mainEntry?.deviceId || params.id;
 
       try {
         const historyResult = await getDeviceTestByDeviceId(targetDeviceId);
-        // Adjust based on actual API response structure
-        const historyData = historyResult?.data || historyResult || [];
-        setHistory(Array.isArray(historyData) ? historyData : [historyData]);
+
+        // Exhaustive check for various API response patterns
+        const historyData =
+          historyResult?.data ||
+          historyResult?.deviceTestHistory ||
+          historyResult?.deviceTestRecords ||
+          (Array.isArray(historyResult) ? historyResult : []);
+
+        setHistory(historyData);
       } catch (histError) {
         console.warn("Could not fetch detailed history:", histError);
-        // If history API fails, we might still have logs in mainEntry
-        if (mainEntry?.logs) {
-          setHistory(mainEntry.logs.map((l: any) => ({ ...l, isLog: true }))); // Treat logs as history items if needed
-        }
       }
     } catch (err: any) {
       console.error("Error loading device details:", err);
@@ -201,6 +297,7 @@ export default function NGDeviceDetails({
           troubleshootedBy: trcFormData.troubleshootedBy,
           pcbSerial: trcFormData.pcbSerial,
           imei: trcFormData.imei,
+          ccid: trcFormData.ccid,
           processId: trcFormData.processId,
           ocNumber: trcFormData.ocNumber,
           findingsAfterDiagnosis: trcFormData.findingsAfterDiagnosis,
@@ -315,7 +412,7 @@ export default function NGDeviceDetails({
           const name = res?.user?.name || id;
           setUserNames((prev) => ({ ...prev, [id]: name }));
         })
-        .catch(() => {});
+        .catch(() => { });
     });
   }, [history, deviceData]);
 
@@ -328,7 +425,7 @@ export default function NGDeviceDetails({
             res?.stages?.[0]?.stageName || res?.stages?.[0]?.name || "";
           setFirstStageName(s0 || "");
         })
-        .catch(() => {});
+        .catch(() => { });
     } else if (deviceData?.process?.stages?.length > 0) {
       const s0 =
         deviceData.process.stages[0]?.stageName ||
@@ -340,51 +437,83 @@ export default function NGDeviceDetails({
 
   const displayUser = (val: any) => {
     if (!val) return null;
+    if (typeof val === "object") return val.name || val.displayName || JSON.stringify(val);
     if (typeof val !== "string") return String(val);
     return userNames[val] || val;
   };
 
   const events = React.useMemo(() => {
-    const source =
-      history && history.length > 0 ? history : deviceData?.logs || [];
-    const out: any[] = [];
-    if (!source || !Array.isArray(source)) return out;
-    for (const item of source) {
-      if (Array.isArray(item?.logs)) {
-        for (const sub of item.logs) {
-          out.push({
-            stepName: sub?.stepName || sub?.stageName,
-            stageName: sub?.stageName,
-            status: sub?.status || item?.status,
-            assignedTo:
-              sub?.assignedTo || item?.assignedDeviceTo || item?.operatorId,
-            createdAt: sub?.createdAt || item?.createdAt || item?.updatedAt,
-            updatedAt: sub?.updatedAt,
-            reason:
-              sub?.logData?.reason ||
-              sub?.reason ||
-              item?.logData?.reason ||
-              item?.reason,
-            logLines: sub?.logData?.terminalLogs || sub?.terminalLogs || [],
-          });
-        }
-      } else {
-        out.push({
-          stepName: item?.stepName || item?.stageName,
-          stageName: item?.stageName,
+    // 1. Gather all potential sources
+    const histSource = Array.isArray(history) ? history : [];
+    const mainSource = deviceData ? [deviceData] : [];
+    const combined = [...histSource, ...mainSource].filter(Boolean);
+
+    // 2. Build unique stage map
+    const stageMap = new Map();
+
+    combined.forEach(item => {
+      const stageName = String(item?.stageName || item?.stepName || item?.currentStage || "").trim();
+      if (!stageName) return;
+
+      const key = stageName.toLowerCase();
+
+      // Look for logs in EVERY possible field (Very aggressive)
+      let rawLogs = [];
+      const potentialLogs = item?.logs || item?.logData?.logs || item?.subSteps || item?.results || item?.history;
+
+      if (Array.isArray(potentialLogs)) {
+        rawLogs = potentialLogs;
+      } else if (typeof potentialLogs === 'string' && potentialLogs.startsWith('[')) {
+        try { rawLogs = JSON.parse(potentialLogs); } catch (e) { }
+      }
+
+      const subSteps = rawLogs.map((sub: any) => ({
+        stepName: sub?.stepName || sub?.stageName || "Process Step",
+        status: sub?.status,
+        reason: sub?.logData?.reason || sub?.reason,
+        logLines: sub?.logData?.terminalLogs || sub?.terminalLogs || [],
+        parsedData: sub?.logData?.parsedData || sub?.parsedData,
+        createdAt: sub?.createdAt || sub?.updatedAt || item?.createdAt
+      }));
+
+      const existing = stageMap.get(key);
+
+      // Update if this item has more data or is explicitly an NG result
+      const isBetter = !existing ||
+        subSteps.length > (existing.subSteps?.length || 0) ||
+        (item.status === 'NG' && (existing.status !== 'NG' || (existing.subSteps?.length || 0) === 0));
+
+      if (isBetter) {
+        stageMap.set(key, {
+          stageName: stageName,
           status: item?.status,
-          assignedTo:
-            item?.assignedTo || item?.assignedDeviceTo || item?.operatorId,
+          assignedTo: item?.assignedTo || item?.assignedDeviceTo || item?.operatorId,
           createdAt: item?.createdAt || item?.updatedAt,
           updatedAt: item?.updatedAt,
-          reason: item?.logData?.reason || item?.reason,
-          logLines:
-            item?.logData?.terminalLogs ||
-            (Array.isArray(item?.logs) ? [] : item?.logs || []),
+          reason: item?.reason || item?.logData?.reason ||
+            subSteps.find((s: any) => s.status === 'NG')?.reason,
+          logLines: item?.logData?.terminalLogs || (Array.isArray(item?.logs) ? [] : item?.logs || []),
+          subSteps: subSteps
         });
       }
-    }
-    return out;
+    });
+
+    const result = Array.from(stageMap.values()).sort((a, b) =>
+      new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+
+    // Default expand NG stages
+    setTimeout(() => {
+      const initialExpanded: Record<string, boolean> = {};
+      result.forEach((r: any) => {
+        if (r.status === 'NG') initialExpanded[r.stageName.toLowerCase()] = true;
+      });
+      if (typeof setExpandedStages === 'function') {
+        setExpandedStages((prev: any) => ({ ...initialExpanded, ...prev }));
+      }
+    }, 100);
+
+    return result;
   }, [history, deviceData]);
 
   const hasQCResolvedHistory = React.useMemo(() => {
@@ -449,13 +578,12 @@ export default function NGDeviceDetails({
                 "Device Details"}
               <span
                 className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide
-                    ${
-                      deviceData.status === "Pass"
-                        ? "border-green-200 bg-green-100 text-green-700"
-                        : deviceData.status === "NG"
-                          ? "bg-red-100 text-red-700 border-red-200"
-                          : "bg-gray-100 text-gray-600 border-gray-200"
-                    }`}
+                    ${deviceData.status === "Pass"
+                    ? "border-green-200 bg-green-100 text-green-700"
+                    : deviceData.status === "NG"
+                      ? "bg-red-100 text-red-700 border-red-200"
+                      : "bg-gray-100 text-gray-600 border-gray-200"
+                  }`}
               >
                 {deviceData.status || "Unknown"}
               </span>
@@ -555,15 +683,41 @@ export default function NGDeviceDetails({
                 {/* Notes Area */}
                 <div className="pt-2">
                   <div className="text-gray-500 mb-2 text-xs font-semibold uppercase">
-                    Notes / Reason
+                    NG Reason
                   </div>
-                  <div className="text-gray-700 bg-red-50 border-red-100 rounded-lg border p-3 text-sm">
-                    {deviceData.notes ||
-                      deviceData.reason ||
+                  <div className={`rounded-lg border p-3 text-sm font-medium ${deviceData.status === "NG" ? "bg-red-50 border-red-100 text-red-700" : "bg-gray-50 border-gray-100 text-gray-700"}`}>
+                    {deviceData.reason ||
+                      deviceData.notes ||
                       deviceData.logData?.reason ||
-                      "No specific notes."}
+                      // If top-level reason is missing, look for the first NG step in logs
+                      (Array.isArray(deviceData?.logs) && deviceData.logs.find((l: any) => l.status === "NG")?.logData?.reason) ||
+                      (Array.isArray(deviceData?.logs) && deviceData.logs.find((l: any) => l.status === "NG")?.reason) ||
+                      "No specific reason provided."}
                   </div>
                 </div>
+
+                {/* Device Logs Section (Prominent if NG) */}
+                {(deviceData.logData?.terminalLogs || deviceData.terminalLogs) && (
+                  <div className="pt-4">
+                    <div className="text-gray-500 mb-2 flex items-center justify-between text-xs font-semibold uppercase">
+                      <span>Device Logs</span>
+                      <Terminal className="h-3 w-3" />
+                    </div>
+                    <div className="bg-gray-900 custom-scrollbar max-h-60 overflow-y-auto rounded-xl p-4 font-mono text-[11px] leading-relaxed text-emerald-400 shadow-inner">
+                      {(deviceData.logData?.terminalLogs || deviceData.terminalLogs || []).map((log: any, i: number) => (
+                        <div key={i} className="mb-1 flex gap-2 border-b border-white/5 pb-1 last:border-0 last:pb-0">
+                          <span className="text-gray-500 shrink-0 select-none">[{log.timestamp || "--:--:--"}]</span>
+                          <span className={`${log.type === 'error' ? 'text-red-400' : log.type === 'success' ? 'text-green-400' : 'text-emerald-400/90'}`}>
+                            {log.message}
+                          </span>
+                        </div>
+                      ))}
+                      {(!deviceData.logData?.terminalLogs && !deviceData.terminalLogs) && (
+                        <div className="text-gray-500 italic">No terminal logs found for this device.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div className="mt-4 flex w-100 items-end justify-center pr-10">
                   {(() => {
                     const statusText = String(
@@ -591,11 +745,10 @@ export default function NGDeviceDetails({
                             setIsTRCFormOpen(true);
                           }
                         }}
-                        className={`inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold focus:outline-none focus:ring-2 ${
-                          canMarkResolved
-                            ? "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-400"
-                            : "bg-gray-300 text-gray-600 cursor-not-allowed"
-                        }`}
+                        className={`inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold focus:outline-none focus:ring-2 ${canMarkResolved
+                          ? "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-400"
+                          : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                          }`}
                         disabled={!canMarkResolved}
                       >
                         Mark as Resolved
@@ -610,51 +763,79 @@ export default function NGDeviceDetails({
           {/* Right: Stage Summary & Logs */}
           <div className="space-y-6 lg:col-span-2">
             {/* Stage Summary / History */}
-            <div className="ring-gray-100 rounded-2xl bg-white p-6 shadow-sm ring-1">
-              <div className="mb-6 flex items-center justify-between">
-                <h3 className="text-gray-900 flex items-center gap-2 text-lg font-bold">
-                  <LayoutGrid className="text-gray-600 h-5 w-5" />
-                  Stage Summary
-                </h3>
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500 bg-gray-100 rounded px-2 py-1 text-xs font-semibold">
-                    {events.length} Events
-                  </span>
+            <div className="ring-gray-100 rounded-3xl bg-white p-7 shadow-sm ring-1">
+              <div className="mb-8 flex flex-col gap-4 border-b border-gray-50 pb-6 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="bg-blue-600/10 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl">
+                    <Activity className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-gray-900 whitespace-nowrap text-xl font-black tracking-tight">
+                        Stage History
+                      </h3>
+                      <div className="flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-2 py-0.5">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
+                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-blue-500"></span>
+                        </span>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-blue-600">
+                          Live
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mt-0.5 whitespace-nowrap">
+                      {events.length} Historical Events Detected
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
                   {(() => {
                     const isNG = String(deviceData?.status || "").toUpperCase() === "NG";
                     const stage = String(deviceData?.stageName || deviceData?.currentStage || "").toLowerCase();
-                    const isJigNamed =
-                      stage.includes("fqc") || stage.includes("functional");
+                    const isJigNamed = stage.includes("fqc") || stage.includes("functional");
                     if (isNG && isJigNamed) {
                       return (
                         <button
-                          onClick={() => {
-                            const url = `/ng-devices/${params.id}/simulate`;
-                            window.open(url, "_blank");
-                          }}
-                          className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
-                          title="Open Simulation Mode"
+                          onClick={() => window.open(`/ng-devices/${params.id}/simulate`, "_blank")}
+                          className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-emerald-100 transition-all hover:bg-emerald-600 active:scale-95 whitespace-nowrap"
                         >
-                          Simulation Mode
+                          <Terminal className="h-3.5 w-3.5" shrink-0 /> <span>Simulate</span>
                         </button>
                       );
                     }
                     return null;
                   })()}
+
+                  <div className="flex items-center gap-1 rounded-xl bg-gray-50 p-1">
+                    <button
+                      onClick={expandAll}
+                      className="rounded-lg px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-blue-600 transition-all hover:bg-white whitespace-nowrap"
+                    >
+                      Expand
+                    </button>
+                    <button
+                      onClick={collapseAll}
+                      className="rounded-lg px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-gray-400 transition-all hover:bg-white whitespace-nowrap"
+                    >
+                      Collapse
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="border-gray-200 relative ml-3 space-y-8 border-l-2 py-2 pl-8">
+              <div className="border-gray-200 relative ml-3 space-y-8 border-l-2 py-2 pl-10">
                 {events.map((item: any, idx: number) => {
                   const isPass = item.status === "Pass";
                   const isNG = item.status === "NG";
+                  const isExpanded = !!expandedStages[item.stageName.toLowerCase()];
 
                   return (
-                    <div key={idx} className="relative">
-                      {/* Connector Node */}
+                    <div key={idx} className="relative group/timeline">
                       <div
-                        className={`ring-gray-200 absolute -left-[41px] top-1 flex h-6 w-6 items-center justify-center rounded-full border-4 border-white ring-1
-                                ${isPass ? "bg-green-500" : isNG ? "bg-danger" : "bg-gray-400"}`}
+                        className={`absolute -left-[51px] top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full border-4 border-white shadow-sm ring-1 ring-gray-200
+                                 ${isPass ? "bg-green-500" : isNG ? "bg-red-500" : "bg-gray-400"}`}
                       >
                         {isPass ? (
                           <CheckCircle className="h-3 w-3 text-white" />
@@ -665,77 +846,154 @@ export default function NGDeviceDetails({
                         )}
                       </div>
 
-                      <div className="bg-gray-50/50 border-gray-100 rounded-xl border p-4 transition-all hover:bg-white hover:shadow-md">
-                        <div className="mb-2 flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-                          <h4 className="text-gray-900 text-base font-bold">
-                            {item.stepName || `Step ${idx + 1}`}
-                            {item.stageName &&
-                              item.stageName !==
-                                (item.stepName || `Step ${idx + 1}`) && (
-                                <span className="text-gray-500 ml-2 text-xs">
-                                  Stage: {item.stageName}
+                      <div
+                        className={`bg-white border-gray-100 rounded-2xl border transition-all duration-300 hover:shadow-xl hover:border-blue-100
+                                  ${isExpanded ? 'shadow-md ring-1 ring-blue-50' : 'shadow-sm opacity-90'}`}
+                      >
+                        <div
+                          className="flex cursor-pointer flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between"
+                          onClick={() => toggleStage(item.stageName)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <h4 className="text-gray-900 text-lg font-black tracking-tight">
+                              {item.stageName}
+                            </h4>
+                            <span
+                              className={`rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest
+                                        ${isPass ? "bg-green-100 text-green-700" : isNG ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-600"}`}
+                            >
+                              {item.status || "INFO"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-4">
+                            <div className="flex flex-col items-end">
+                              <span className="font-mono text-[10px] font-bold text-gray-400">
+                                {formatDate(item.createdAt || item.updatedAt)}
+                              </span>
+                              {item.assignedTo && (
+                                <span className="text-gray-500 flex items-center gap-1 text-[10px] font-medium">
+                                  <User className="h-2.5 w-2.5" /> {displayUser(item.assignedTo)}
                                 </span>
                               )}
-                          </h4>
-                          <span className="font-mono text-gray-400 text-xs">
-                            {formatDate(item.createdAt || item.updatedAt)}
-                          </span>
-                        </div>
-
-                        <div className="mb-3 flex items-center gap-2">
-                          <span
-                            className={`rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide
-                                      ${
-                                        isPass
-                                          ? "border-green-200 bg-green-50 text-green-700"
-                                          : isNG
-                                            ? "bg-red-50 text-red-700 border-red-200"
-                                            : "bg-gray-100 text-gray-600 border-gray-200"
-                                      }`}
-                          >
-                            {item.status || "INFO"}
-                          </span>
-                          {item.assignedTo && (
-                            <span className="text-gray-500 flex items-center gap-1 text-xs">
-                              <User className="h-3 w-3" />{" "}
-                              {displayUser(item.assignedTo)}
-                            </span>
-                          )}
-                        </div>
-
-                        {item.logLines && item.logLines.length > 0 && (
-                          <div className="mt-3">
-                            <div className="text-gray-700 mb-2 flex items-center gap-1.5 text-xs font-bold">
-                              <Terminal className="h-3.5 w-3.5" /> Terminal
-                              Output
                             </div>
-                            <div className="bg-gray-900 font-mono custom-scrollbar max-h-48 overflow-x-auto rounded-lg p-3 text-[10px] text-green-400">
-                              {item.logLines.map((log: any, i: number) => (
-                                <div
-                                  key={i}
-                                  className="mb-0.5 whitespace-nowrap last:mb-0"
-                                >
-                                  <span className="text-gray-500 mr-2 select-none">
-                                    [{log.timestamp || "00:00:00"}]
-                                  </span>
-                                  {log.message}
+                            <div className={`p-1 rounded-full transition-transform duration-300 bg-gray-50 text-gray-400 ${isExpanded ? 'rotate-180 bg-blue-50 text-blue-500' : ''}`}>
+                              <ChevronRight className="h-4 w-4" />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Expandable Content */}
+                        <div className={`overflow-hidden transition-all duration-500 ${isExpanded ? 'max-h-[5000px] opacity-100 p-5 pt-0 border-t border-gray-50' : 'max-h-0 opacity-0'}`}>
+                          <div className="mt-4">
+                            {/* Nested Sub-Steps */}
+                            {item.subSteps && item.subSteps.length > 0 ? (
+                              <div className="space-y-4 pl-4 border-l-2 border-dashed border-gray-200">
+                                {item.subSteps.map((step: any, sidx: number) => (
+                                  <div key={sidx} className="relative pl-4">
+                                    <div className={`absolute -left-[9px] top-1.5 h-2 w-2 rounded-full ${step.status === 'Pass' ? 'bg-green-400' : step.status === 'NG' ? 'bg-red-400' : 'bg-gray-300'}`} />
+                                    <div className="flex items-center justify-between gap-4">
+                                      <span className={`text-xs font-bold ${step.status === 'NG' ? 'text-red-600' : 'text-gray-700'}`}>
+                                        {step.stepName}
+                                      </span>
+                                      {step.status && (
+                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase ${step.status === 'Pass' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                          {step.status}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {step.reason && (
+                                      <p className="mt-1 text-[10px] text-red-500 font-medium italic">
+                                        Reason: {step.reason}
+                                      </p>
+                                    )}
+
+                                    {step.parsedData && Object.keys(step.parsedData).length > 0 && (
+                                      <div className="mt-2 space-y-2">
+                                        <details className="group/data">
+                                          <summary className="text-[10px] text-gray-500 font-bold hover:text-blue-600 transition-colors list-none flex items-center gap-1 cursor-pointer">
+                                            <Search className="h-3 w-3" /> View Data Details
+                                          </summary>
+                                          <div className="mt-2 space-y-3 bg-gray-50 rounded-lg p-3 border border-gray-100">
+                                            {Object.entries(step.parsedData).map(([section, data]: [string, any]) => (
+                                              <div key={section}>
+                                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter mb-1 block">{section}</span>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1.5 ">
+                                                  {data && typeof data === 'object' ? Object.entries(data).map(([k, v]: [string, any]) => (
+                                                    <div key={k} className="flex justify-between border-b border-gray-200/50 pb-0.5 text-[10px]">
+                                                      <span className="text-gray-500 truncate mr-2" title={k}>{k}</span>
+                                                      <span className="text-gray-900 font-mono font-bold shrink-0">{String(v)}</span>
+                                                    </div>
+                                                  )) : (
+                                                    <div className="text-[10px] text-gray-600 font-mono">{String(data)}</div>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </details>
+                                      </div>
+                                    )}
+
+                                    {step.logLines && step.logLines.length > 0 && (
+                                      <div className="mt-2 group">
+                                        <details className="cursor-pointer">
+                                          <summary className="text-[10px] text-blue-500 font-bold hover:underline list-none flex items-center gap-1">
+                                            <Terminal className="h-3 w-3" /> View Terminal Output
+                                          </summary>
+                                          <div className="mt-2 bg-gray-900 font-mono rounded-lg p-2.5 text-[10px] text-green-400 max-h-40 overflow-y-auto custom-scrollbar shadow-inner">
+                                            {step.logLines.map((log: any, i: number) => (
+                                              <div key={i} className="mb-0.5 flex gap-2 border-b border-white/5 pb-0.5 last:border-0 last:pb-0">
+                                                <span className="text-gray-500 shrink-0 select-none">[{log.timestamp || "--:--:--"}]</span>
+                                                <span className={`${log.type === 'error' ? 'text-red-400' : log.type === 'success' ? 'text-green-400' : 'text-emerald-400/80'}`}>
+                                                  {log.message}
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </details>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center py-8 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                                <FileText className="h-8 w-8 text-gray-300 mb-2" />
+                                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">No detailed logs for this stage</p>
+                              </div>
+                            )}
+
+                            {/* Fallback for top-level logs if no sub-steps exist */}
+                            {(!item.subSteps || item.subSteps.length === 0) && item.logLines && item.logLines.length > 0 && (
+                              <div className="mt-6 border-t border-gray-50 pt-4">
+                                <div className="text-gray-900 mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-tighter">
+                                  <Terminal className="h-3 w-3 text-blue-500" /> Summary terminal log
                                 </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                                <div className="bg-gray-950 font-mono custom-scrollbar max-h-60 overflow-x-auto rounded-xl p-4 text-[10px] leading-relaxed text-emerald-400 shadow-2xl">
+                                  {item.logLines.map((log: any, i: number) => (
+                                    <div key={i} className="mb-1.5 flex gap-3 last:mb-0">
+                                      <span className="text-white/20 shrink-0 select-none">[{log.timestamp || "--:--:--"}]</span>
+                                      <span>{log.message}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
 
-                        {item.reason && (
-                          <div className="text-red-600 bg-red-50 border-red-100 mt-3 flex items-start gap-2 rounded border p-2.5 text-sm">
-                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                            <div>
-                              <span className="mb-0.5 block text-xs font-bold uppercase">
-                                Failure Reason
-                              </span>
-                              {item.reason}
-                            </div>
+                            {item.reason && !item.subSteps?.some((s: any) => s.reason === item.reason) && (
+                              <div className="border-red-100 bg-red-50/50 mt-6 flex items-start gap-3 rounded-xl border px-4 py-3">
+                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                                <div>
+                                  <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-red-500">
+                                    Stage Failure Reason
+                                  </span>
+                                  <p className="text-sm font-bold text-red-800 leading-tight">{item.reason}</p>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -819,8 +1077,8 @@ export default function NGDeviceDetails({
                       value={trcFormData.modelName}
                       readOnly
                       disabled
-                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="Enter model name"
+                      className="border-gray-300 w-full rounded-lg border bg-gray-50 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="N/A"
                     />
                   </div>
 
@@ -834,8 +1092,8 @@ export default function NGDeviceDetails({
                       value={trcFormData.troubleshootedBy}
                       readOnly
                       disabled
-                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="Enter name"
+                      className="border-gray-300 w-full rounded-lg border bg-gray-50 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="N/A"
                     />
                   </div>
 
@@ -849,8 +1107,8 @@ export default function NGDeviceDetails({
                       value={trcFormData.pcbSerial}
                       readOnly
                       disabled
-                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="Scan QR or fill complete PCB serial number"
+                      className="border-gray-300 w-full rounded-lg border bg-gray-50 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="N/A"
                     />
                   </div>
 
@@ -864,8 +1122,23 @@ export default function NGDeviceDetails({
                       value={trcFormData.imei}
                       readOnly
                       disabled
-                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="Enter IMEI"
+                      className="border-gray-300 w-full rounded-lg border bg-gray-50 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="IMEI not found"
+                    />
+                  </div>
+
+                  {/* CCID */}
+                  <div>
+                    <label className="text-gray-700 mb-1 block text-sm font-semibold">
+                      CCID
+                    </label>
+                    <input
+                      type="text"
+                      value={trcFormData.ccid}
+                      readOnly
+                      disabled
+                      className="border-gray-300 w-full rounded-lg border bg-gray-50 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="CCID not found"
                     />
                   </div>
 
@@ -879,8 +1152,8 @@ export default function NGDeviceDetails({
                       value={trcFormData.processId}
                       readOnly
                       disabled
-                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="Enter process ID"
+                      className="border-gray-300 w-full rounded-lg border bg-gray-50 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="N/A"
                     />
                   </div>
 
@@ -894,8 +1167,8 @@ export default function NGDeviceDetails({
                       value={trcFormData.ocNumber}
                       readOnly
                       disabled
-                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="Enter OC number"
+                      className="border-gray-300 w-full rounded-lg border bg-gray-50 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="N/A"
                     />
                   </div>
 
