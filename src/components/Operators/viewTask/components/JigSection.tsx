@@ -253,14 +253,17 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
     });
   }, []);
 
+  const currentStepIdRef = useRef<string | null>(null);
+
   // No longer clearing logs on subStep change to preserve history for download
   useEffect(() => {
-    accumulatedDataRef.current = "";
-    if (subStep && !finalResult) {
+    const stepId = subStep?._id || subStep?.stepName || subStep?.name || "unknown";
+    if (subStep && !finalResult && currentStepIdRef.current !== stepId) {
+      currentStepIdRef.current = stepId;
+      accumulatedDataRef.current = "";
       stepStartTime.current = Date.now();
-      const stepName = subStep.stepName || subStep.name || "Unknown Step";
       const actionType = subStep.stepFields?.actionType || "Process";
-      addLog(`--- STARTING STEP: ${stepName} (${actionType}) ---`, "info");
+      addLog(`--- STARTING STEP: ${stepId} (${actionType}) ---`, "info");
 
       // Also log expected values/ranges if they exist
       if (subStep.jigFields && Array.isArray(subStep.jigFields)) {
@@ -465,14 +468,14 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                 if (setGeneratedCommandRef.current) {
                   setGeneratedCommandRef.current(cmd);
                 }
-                onDecisionRef.current?.("Pass", undefined, { ccid, generatedCommand: cmd, parsedData });
+                onDecisionRef.current?.("Pass", undefined, { ccid, generatedCommand: cmd, parsedData }, true);
               } else {
                 addLog(`ESIM Master NOT found for CCID: ${ccid}`, "error");
-                onDecisionRef.current?.("NG", `ESIM Master for CCID ${ccid} not found`, { ccid, parsedData });
+                onDecisionRef.current?.("NG", `ESIM Master for CCID ${ccid} not found`, { ccid, parsedData }, false);
               }
             } catch (err: any) {
               addLog(`Error checking CCID: ${err.message || err}`, "error");
-              onDecisionRef.current?.("NG", `Database error: ${err.message || "Unknown error"}`, { ccid, parsedData });
+              onDecisionRef.current?.("NG", `Database error: ${err.message || "Unknown error"}`, { ccid, parsedData }, false);
             }
           })();
           accumulatedDataRef.current = "";
@@ -531,31 +534,31 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                   const duration = ((Date.now() - stepStartTime.current) / 1000).toFixed(2);
                   addLog("ESIM Settings Validation Passed!", "success");
                   addLog(`Step Duration: ${duration}s`, "success");
-                  onDecisionRef.current?.("Pass", undefined, { ccid, parsedData, masterData: d });
+                  onDecisionRef.current?.("Pass", undefined, { ccid, parsedData, masterData: d }, true);
                 } else {
                   const errorMsg = validationErrors.join(", ");
                   addLog(`Validation Failed: ${errorMsg}`, "error");
-                  // Make NG immediate for ESIM Settings validation
-                  onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { ccid, parsedData, masterData: d }, true);
+                  // Wait for timeout for NG in ESIM Settings validation
+                  onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { ccid, parsedData, masterData: d }, false);
                 }
               } else {
                 addLog(`Invalid generated command format: ${cmd}`, "error");
-                onDecisionRef.current?.("NG", "Invalid generated command format", { ccid, parsedData });
+                onDecisionRef.current?.("NG", "Invalid generated command format", { ccid, parsedData }, false);
               }
             } catch (err: any) {
               addLog(`Error during validation: ${err.message || err}`, "error");
-              onDecisionRef.current?.("NG", `Validation error: ${err.message || "Unknown error"}`, { ccid, parsedData });
+              onDecisionRef.current?.("NG", `Validation error: ${err.message || "Unknown error"}`, { ccid, parsedData }, false);
             }
           } else {
             addLog(`Generated command not found for validation.`, "error");
-            onDecisionRef.current?.("NG", "Generated command missing", { ccid, parsedData });
+            onDecisionRef.current?.("NG", "Generated command missing", { ccid, parsedData }, false);
           }
           accumulatedDataRef.current = "";
           return;
         } else if (matchCount >= requiredFieldsCount) {
           // If we have all fields but no CCID, mark as NG as per requirement
           addLog("Validation Failed: CCID missing in jig output", "error");
-          onDecisionRef.current?.("NG", "CCID missing in jig output", { parsedData });
+          onDecisionRef.current?.("NG", "CCID missing in jig output", { parsedData }, false);
           accumulatedDataRef.current = "";
           return;
         }
@@ -655,14 +658,14 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                 const errorMsg = errors.join(", ");
                 if (switchProfileCompletedRef.current) {
                   addLog(`Validation Failed: ${errorMsg}`, "error");
-                  // Make NG immediate for Switch Profile validation
-                  onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { parsedData }, true);
+                  // Delegate NG decision to timeout for Switch Profile validation
+                  onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { parsedData }, false);
                 }
               }
             } catch (err: any) {
               if (switchProfileCompletedRef.current) {
                 addLog(`Error during validation: ${err.message || err}`, "error");
-                onDecisionRef.current?.("NG", `Validation error: ${err.message || "Unknown error"}`, { parsedData });
+                onDecisionRef.current?.("NG", `Validation error: ${err.message || "Unknown error"}`, { parsedData }, false);
               }
             }
           })();
@@ -671,7 +674,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
         } else if (matchCount >= requiredFieldsCount) {
           // If we have all fields but no relevant eSIM fields, fail
           addLog("Validation Failed: Relevant fields (N/W, APN, PF) missing in jig output", "error");
-          onDecisionRef.current?.("NG", "Relevant fields missing in jig output", { parsedData });
+          onDecisionRef.current?.("NG", "Relevant fields missing in jig output", { parsedData }, false);
           accumulatedDataRef.current = "";
           return;
         }
@@ -802,8 +805,8 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
             parsedData: parsedData
           };
 
-          // Always immediate when matchCount >= requiredFieldsCount (defined response)
-          onDecisionRef.current(status, reasonStr, dataWithLogs, true);
+          // Pass is immediate, NG waits for timeout
+          onDecisionRef.current(status, reasonStr, dataWithLogs, status === "Pass");
 
           if (allPassed && isLastStepRef.current) {
             disconnectJig();
