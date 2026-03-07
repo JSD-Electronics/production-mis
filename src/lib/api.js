@@ -1815,4 +1815,14 @@ export const getFGInventory = async () => {
   }
 };
 
+export const getStorePortalCartons = async () => {
+  try {
+    let result = await api.get(`/cartons/store-portal`);
+    return result.data;
+  } catch (error) {
+    console.error("Error Fetching Store Portal Cartons: ", error.message);
+    throw error;
+  }
+};
+
 export default api;

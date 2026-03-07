@@ -57,7 +57,7 @@ export default function NGDeviceDetails({
     ocNumber: "",
     findingsAfterDiagnosis: "",
     problemType: "",
-    problemCategory: "",
+    problemCategory: [] as string[],
     trcStatus: "",
     resolutionSteps: "",
     componentCategory: "",
@@ -95,13 +95,15 @@ export default function NGDeviceDetails({
         );
 
         // Fetch process data to get PID and OC Number
+        const pidRaw = deviceData.processId;
+        const pid = typeof pidRaw === "object" ? pidRaw?._id : pidRaw;
+
         let processIdValue = "";
         let ocNumberValue = "";
 
-        const pid = deviceData.processId?._id || deviceData.processId;
-        if (pid) {
+        if (isObjectId(pid)) {
           try {
-            const processRes = await getProcessByID(pid);
+            const processRes = await getProcessByID(String(pid));
             // Attribute name is processID per user instruction
             processIdValue = processRes?.processID || processRes?.pid || "";
             // Also fetch OC number
@@ -185,7 +187,7 @@ export default function NGDeviceDetails({
           ocNumber: ocNumberValue,
           findingsAfterDiagnosis: "",
           problemType: "",
-          problemCategory: "",
+          problemCategory: [] as string[],
           trcStatus: "",
           resolutionSteps: "",
           componentCategory: "",
@@ -481,14 +483,34 @@ export default function NGDeviceDetails({
         try { rawLogs = JSON.parse(potentialLogs); } catch (e) { }
       }
 
-      const subSteps = rawLogs.map((sub: any) => ({
-        stepName: sub?.stepName || sub?.stageName || "Process Step",
-        status: sub?.status,
-        reason: sub?.logData?.reason || sub?.reason,
-        logLines: sub?.logData?.terminalLogs || sub?.terminalLogs || [],
-        parsedData: sub?.logData?.parsedData || sub?.parsedData,
-        createdAt: sub?.createdAt || sub?.updatedAt || item?.createdAt
-      }));
+      const subSteps = rawLogs.map((sub: any) => {
+        // Aggressive log extraction
+        const rawLogLines = sub?.logData?.terminalLogs ||
+          sub?.terminalLogs ||
+          sub?.logLines ||
+          sub?.logs ||
+          sub?.logData?.logs || [];
+        const logLines = Array.isArray(rawLogLines) ? rawLogLines : [];
+
+        // Aggressive data extraction
+        const parsedData = sub?.logData?.parsedData || sub?.parsedData || sub?.data || sub?.logData?.data;
+
+        // Auto-capture last 2 lines for NG steps as a summary
+        let summaryTerminal = "";
+        if (sub.status === 'NG' && Array.isArray(logLines) && logLines.length > 0) {
+          summaryTerminal = logLines.slice(-2).map((l: any) => typeof l === 'string' ? l : l.message).join("\n");
+        }
+
+        return {
+          stepName: sub?.stepName || sub?.stageName || "Process Step",
+          status: sub?.status,
+          reason: sub?.logData?.reason || sub?.reason,
+          logLines: logLines,
+          parsedData: parsedData,
+          summaryTerminal: summaryTerminal,
+          createdAt: sub?.createdAt || sub?.updatedAt || item?.createdAt
+        };
+      });
 
       const existing = stageMap.get(key);
 
@@ -498,6 +520,15 @@ export default function NGDeviceDetails({
         (item.status === 'NG' && (existing.status !== 'NG' || (existing.subSteps?.length || 0) === 0));
 
       if (isBetter) {
+        const stageLogLines = item?.logData?.terminalLogs ||
+          item?.terminalLogs ||
+          (Array.isArray(item?.logs) && typeof item?.logs[0] === 'string' ? item?.logs : []);
+
+        let stageSummary = "";
+        if (item.status === 'NG' && Array.isArray(stageLogLines) && stageLogLines.length > 0) {
+          stageSummary = stageLogLines.slice(-3).map((l: any) => typeof l === 'string' ? l : (l.message || l.line || JSON.stringify(l))).join("\n");
+        }
+
         stageMap.set(key, {
           stageName: stageName,
           status: item?.status,
@@ -506,7 +537,8 @@ export default function NGDeviceDetails({
           updatedAt: item?.updatedAt,
           reason: item?.reason || item?.logData?.reason ||
             subSteps.find((s: any) => s.status === 'NG')?.reason,
-          logLines: item?.logData?.terminalLogs || (Array.isArray(item?.logs) ? [] : item?.logs || []),
+          logLines: stageLogLines,
+          stageSummary: stageSummary, // Extra summary field
           subSteps: subSteps
         });
       }
@@ -917,9 +949,19 @@ export default function NGDeviceDetails({
                                       )}
                                     </div>
                                     {step.reason && (
-                                      <p className="mt-1 text-[10px] text-red-500 font-medium italic">
-                                        Reason: {step.reason}
-                                      </p>
+                                      <div className="mt-1 space-y-1">
+                                        <p className="text-[10px] text-red-500 font-medium italic underline underline-offset-2 decoration-red-200">
+                                          Reason: {step.reason}
+                                        </p>
+                                        {step.summaryTerminal && (
+                                          <div className="mt-2 bg-red-50/70 p-2 px-3 rounded-lg border border-red-100 flex items-start gap-2 shadow-sm animate-in fade-in slide-in-from-top-1 duration-300">
+                                            <Terminal className="h-3 w-3 text-red-400 mt-0.5 shrink-0" />
+                                            <div className="font-mono text-[9px] text-red-800 whitespace-pre-wrap leading-relaxed">
+                                              {step.summaryTerminal}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
                                     )}
 
                                     {step.parsedData && Object.keys(step.parsedData).length > 0 && (
@@ -951,19 +993,33 @@ export default function NGDeviceDetails({
 
                                     {step.logLines && step.logLines.length > 0 && (
                                       <div className="mt-2 group">
-                                        <details className="cursor-pointer">
-                                          <summary className="text-[10px] text-blue-500 font-bold hover:underline list-none flex items-center gap-1">
-                                            <Terminal className="h-3 w-3" /> View Terminal Output
+                                        <details className="cursor-pointer" open={step.status === 'NG'}>
+                                          <summary className={`text-[10px] font-bold hover:underline list-none flex items-center gap-1 transition-colors ${step.status === 'NG' ? 'text-red-500' : 'text-blue-500'}`}>
+                                            <Terminal className="h-3 w-3" /> {step.status === 'NG' ? 'View Failure Terminal Output' : 'View Terminal Output'}
                                           </summary>
-                                          <div className="mt-2 bg-gray-900 font-mono rounded-lg p-2.5 text-[10px] text-green-400 max-h-40 overflow-y-auto custom-scrollbar shadow-inner">
-                                            {step.logLines.map((log: any, i: number) => (
-                                              <div key={i} className="mb-0.5 flex gap-2 border-b border-white/5 pb-0.5 last:border-0 last:pb-0">
-                                                <span className="text-gray-500 shrink-0 select-none">[{log.timestamp || "--:--:--"}]</span>
-                                                <span className={`${log.type === 'error' ? 'text-red-400' : log.type === 'success' ? 'text-green-400' : 'text-emerald-400/80'}`}>
-                                                  {log.message}
-                                                </span>
-                                              </div>
-                                            ))}
+                                          <div className={`mt-2 font-mono rounded-lg p-2.5 text-[10px] max-h-60 overflow-y-auto custom-scrollbar shadow-inner border ${step.status === 'NG'
+                                            ? 'bg-red-950/20 text-red-200 border-red-200/20'
+                                            : 'bg-gray-900 text-green-400 border-white/5'
+                                            }`}>
+                                            {step.logLines.map((log: any, i: number) => {
+                                              const isString = typeof log === 'string';
+                                              const msg = isString ? log : log.message || JSON.stringify(log);
+                                              const time = isString ? "" : log.timestamp;
+                                              const type = isString ? (msg.toLowerCase().includes('error') ? 'error' : 'normal') : log.type;
+
+                                              return (
+                                                <div key={i} className={`mb-0.5 flex gap-2 border-b last:border-0 pb-0.5 last:pb-0 ${step.status === 'NG' ? 'border-red-500/10' : 'border-white/5'
+                                                  }`}>
+                                                  {time && <span className="text-gray-500 shrink-0 select-none">[{time}]</span>}
+                                                  <span className={`${type === 'error' ? 'text-red-400' :
+                                                    type === 'success' ? 'text-green-400' :
+                                                      step.status === 'NG' ? 'text-red-200/80' : 'text-emerald-400/80'
+                                                    }`}>
+                                                    {msg}
+                                                  </span>
+                                                </div>
+                                              );
+                                            })}
                                           </div>
                                         </details>
                                       </div>
@@ -996,14 +1052,24 @@ export default function NGDeviceDetails({
                             )}
 
                             {item.reason && !item.subSteps?.some((s: any) => s.reason === item.reason) && (
-                              <div className="border-red-100 bg-red-50/50 mt-6 flex items-start gap-3 rounded-xl border px-4 py-3">
-                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
-                                <div>
-                                  <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-red-500">
-                                    Stage Failure Reason
-                                  </span>
-                                  <p className="text-sm font-bold text-red-800 leading-tight">{item.reason}</p>
+                              <div className="border-red-100 bg-red-50 mt-6 flex flex-col gap-3 rounded-xl border px-4 py-3 shadow-sm backdrop-blur-sm">
+                                <div className="flex items-start gap-3">
+                                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                                  <div>
+                                    <p className="text-[10px] font-black uppercase tracking-tighter text-red-600">
+                                      Failure Reason
+                                    </p>
+                                    <p className="mt-0.5 text-xs font-bold text-red-700">
+                                      {item.reason}
+                                    </p>
+                                  </div>
                                 </div>
+                                {item.stageSummary && (
+                                  <div className="bg-red-950/90 rounded-lg p-3 font-mono text-[9px] text-red-300 border border-red-900 shadow-2xl flex items-start gap-2">
+                                    <Terminal className="h-3 w-3 mt-0.5 shrink-0 text-red-500" />
+                                    <div className="whitespace-pre-wrap leading-relaxed">{item.stageSummary}</div>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1076,6 +1142,10 @@ export default function NGDeviceDetails({
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
+                if (trcFormData.problemCategory.length === 0) {
+                  alert("Please select at least one Problem Category");
+                  return;
+                }
                 await resolveDevice("TRC");
               }}
             >
@@ -1205,45 +1275,59 @@ export default function NGDeviceDetails({
                       <option value="">Select problem type</option>
                       <option value="Hardware">Hardware</option>
                       <option value="Software">Software</option>
-                      <option value="Firmware">Firmware</option>
-                      <option value="Assembly">Assembly</option>
-                      <option value="Component">Component</option>
-                      <option value="Other">Other</option>
+                      <option value="Jig">Jig</option>
+                      <option value="System">System</option>
+                      <option value="Process">Process</option>
                     </select>
                   </div>
 
-                  {/* Problem Category */}
-                  <div>
+                  {/* Problem Category - Multi-Selection Grid */}
+                  <div className="md:col-span-2">
                     <label className="text-gray-700 mb-1 block text-sm font-semibold">
                       Problem Category <span className="text-red-500">*</span>
                     </label>
-                    <select
-                      required
-                      value={trcFormData.problemCategory}
-                      onChange={(e) =>
-                        setTrcFormData({
-                          ...trcFormData,
-                          problemCategory: e.target.value,
-                        })
-                      }
-                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="">Select problem category</option>
-                      <option value="Display Issue">Display Issue</option>
-                      <option value="Battery Issue">Battery Issue</option>
-                      <option value="Connectivity Issue">
-                        Connectivity Issue
-                      </option>
-                      <option value="Audio Issue">Audio Issue</option>
-                      <option value="Camera Issue">Camera Issue</option>
-                      <option value="Power Issue">Power Issue</option>
-                      <option value="Sensor Issue">Sensor Issue</option>
-                      <option value="Physical Damage">Physical Damage</option>
-                      <option value="Performance Issue">
-                        Performance Issue
-                      </option>
-                      <option value="Other">Other</option>
-                    </select>
+                    <div className="mt-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                      {[
+                        "External Battery Issue",
+                        "3V3 Error",
+                        "CCID Error",
+                        "GSM Error",
+                        "GPS Error",
+                        "Accelerometer Error",
+                        "RS232 Error",
+                        "Flash Error",
+                        "Panic Error",
+                        "Analog Error",
+                        "Digital Input Error",
+                        "Digital Output Error",
+                        "Reset Button Error",
+                        "Other"
+                      ].map((category) => (
+                        <label
+                          key={category}
+                          className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all duration-200 ${trcFormData.problemCategory.includes(category)
+                            ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm'
+                            : 'bg-white border-gray-100 text-gray-600 hover:border-gray-200'
+                            }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 rounded text-blue-600 border-gray-300 focus:ring-blue-500"
+                            checked={trcFormData.problemCategory.includes(category)}
+                            onChange={(e) => {
+                              const updated = e.target.checked
+                                ? [...trcFormData.problemCategory, category]
+                                : trcFormData.problemCategory.filter((item) => item !== category);
+                              setTrcFormData({ ...trcFormData, problemCategory: updated });
+                            }}
+                          />
+                          <span className="text-xs font-medium">{category}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {trcFormData.problemCategory.length === 0 && (
+                      <p className="mt-1 text-[10px] text-red-500 italic">Please select at least one problem category</p>
+                    )}
                   </div>
 
                   {/* TRC Status */}
@@ -1270,7 +1354,7 @@ export default function NGDeviceDetails({
                   </div>
 
                   {/* Component Category */}
-                  <div>
+                  {/* <div>
                     <label className="text-gray-700 mb-1 block text-sm font-semibold">
                       Component Category, if any changed / Re-soldered?
                     </label>
@@ -1286,7 +1370,7 @@ export default function NGDeviceDetails({
                       className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       placeholder="Enter component details"
                     />
-                  </div>
+                  </div> */}
 
                   {/* Fault Category */}
                   <div>
