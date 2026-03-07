@@ -256,8 +256,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
   // No longer clearing logs on subStep change to preserve history for download
   useEffect(() => {
     accumulatedDataRef.current = "";
-    accumulatedDataRef.current = "";
-    if (subStep) {
+    if (subStep && !finalResult) {
       stepStartTime.current = Date.now();
       const stepName = subStep.stepName || subStep.name || "Unknown Step";
       const actionType = subStep.stepFields?.actionType || "Process";
@@ -274,7 +273,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
         });
       }
     }
-  }, [subStep, addLog]);
+  }, [subStep, addLog, finalResult]);
 
   // Log final decisions from parent
   useEffect(() => {
@@ -536,7 +535,8 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                 } else {
                   const errorMsg = validationErrors.join(", ");
                   addLog(`Validation Failed: ${errorMsg}`, "error");
-                  onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { ccid, parsedData, masterData: d }, false);
+                  // Make NG immediate for ESIM Settings validation
+                  onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { ccid, parsedData, masterData: d }, true);
                 }
               } else {
                 addLog(`Invalid generated command format: ${cmd}`, "error");
@@ -655,7 +655,8 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                 const errorMsg = errors.join(", ");
                 if (switchProfileCompletedRef.current) {
                   addLog(`Validation Failed: ${errorMsg}`, "error");
-                  onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { parsedData }, false);
+                  // Make NG immediate for Switch Profile validation
+                  onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { parsedData }, true);
                 }
               }
             } catch (err: any) {
@@ -801,7 +802,8 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
             parsedData: parsedData
           };
 
-          onDecisionRef.current(status, reasonStr, dataWithLogs, allPassed);
+          // Always immediate when matchCount >= requiredFieldsCount (defined response)
+          onDecisionRef.current(status, reasonStr, dataWithLogs, true);
 
           if (allPassed && isLastStepRef.current) {
             disconnectJig();

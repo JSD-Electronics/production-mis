@@ -351,6 +351,7 @@ export default function DeviceTestComponent({
     }
   };
 
+  const subStepsString = JSON.stringify(processAssignUserStage?.subSteps || []);
   const testSteps = React.useMemo(() => {
     return (
       processAssignUserStage?.subSteps?.filter(
@@ -361,7 +362,7 @@ export default function DeviceTestComponent({
           s.isPackagingStatus,
       ) || []
     );
-  }, [processAssignUserStage]);
+  }, [subStepsString]);
 
   const validateCustomField = (cf: any, valRaw: string) => {
     const fname = cf?.fieldName || cf?.jigName || "";
@@ -591,74 +592,103 @@ export default function DeviceTestComponent({
   };
   // ... rest of the file ...
 
+  // Session tracking to prevent resets on background polling
+  const [activeSessionSerial, setActiveSessionSerial] = useState<string>("");
+  const timerStartedRef = React.useRef<string | null>(null);
+  const timerDecisionTriggeredRef = React.useRef<string | null>(null);
+
   useEffect(() => {
-    if (testSteps.length === 0) return;
-    const currentSubStep = testSteps[currentJigStepIndex];
+    const currentSerial = typeof searchResult === "string" ? searchResult : (searchResult?.serialNo || "");
 
-    // For jig steps, timer starts as soon as a device is scanned.
-    const isJigStep = currentSubStep?.stepType === "jig";
-    const canStartTimer = isJigStep ? (!!searchResult && isJigConnected) : !!searchResult;
-
-    if (
-      isJigStep &&
-      currentSubStep?.ngTimeout > 0 &&
-      !jigDecision &&
-      !isdevicePassed &&
-      searchResult &&
-      canStartTimer
-    ) {
-      setStepTimeLeft(currentSubStep.ngTimeout);
-      const timer = setInterval(() => {
-        setStepTimeLeft((prev) => {
-          if (prev === null) return null;
-          if (prev <= 1) {
-            clearInterval(timer);
-            handleStepDecision(
-              "NG",
-              pendingJigErrorRef.current || "Step timeout reached",
-            );
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(timer);
-    } else {
+    // If the serial is valid and DIFFERENT from our current session, initialize a new test session
+    if (currentSerial && currentSerial !== activeSessionSerial) {
+      setActiveSessionSerial(currentSerial);
+      setCurrentJigStepIndex(0);
+      setJigResults({});
+      setJigDecision(null);
+      setIsJigConnected(false);
       setStepTimeLeft(null);
+      timerStartedRef.current = null;
+      timerDecisionTriggeredRef.current = null;
+      stepStartTimeRef.current = Date.now();
+      totalProcessStartTimeRef.current = Date.now();
     }
+    // If the serial is cleared, reset everything
+    else if (!currentSerial && activeSessionSerial) {
+      setActiveSessionSerial("");
+      setCurrentJigStepIndex(0);
+      setJigResults({});
+      setJigDecision(null);
+      setStepTimeLeft(null);
+      timerStartedRef.current = null;
+      timerDecisionTriggeredRef.current = null;
+    }
+  }, [searchResult, activeSessionSerial]);
+
+  // Handle step-level resets (timer results when moving between steps)
+  useEffect(() => {
+    if (activeSessionSerial) {
+      stepStartTimeRef.current = Date.now();
+      if (setIsStickerPrinted) setIsStickerPrinted(false);
+      if (setIsVerifiedSticker) setIsVerifiedSticker(false);
+      if (setIsAddedToCart) setIsAddedToCart(false);
+      if (setIsVerifiedPackaging) setIsVerifiedPackaging(false);
+    }
+  }, [currentJigStepIndex, activeSessionSerial]);
+
+  // Robust NG Timeout Timer
+  useEffect(() => {
+    if (testSteps.length === 0 || !activeSessionSerial) return;
+
+    const currentSubStep = testSteps[currentJigStepIndex];
+    const isJigStep = currentSubStep?.stepType === "jig";
+    const canStartTimer = isJigStep ? isJigConnected : !!activeSessionSerial;
+    const currentStepKey = `${activeSessionSerial}-${currentJigStepIndex}`;
+
+    // Condition 1: If we have a finalized decision or no timeout configured, ensure timer is null
+    if (jigDecision || isdevicePassed || !currentSubStep?.ngTimeout || currentSubStep.ngTimeout <= 0) {
+      setStepTimeLeft(null);
+      return;
+    }
+
+    // Condition 2: Check if we are ready to count (jig connected if needed)
+    if (!canStartTimer) {
+      return;
+    }
+
+    // Condition 3: Initialize time if this is a new step or it hasn't been started yet
+    if (timerStartedRef.current !== currentStepKey) {
+      setStepTimeLeft(currentSubStep.ngTimeout);
+      timerStartedRef.current = currentStepKey;
+      timerDecisionTriggeredRef.current = null;
+    }
+
+    // Condition 4: Start the countdown interval
+    const timerId = setInterval(() => {
+      setStepTimeLeft((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          clearInterval(timerId);
+          // Only trigger NG if we haven't already for this specific step
+          if (timerDecisionTriggeredRef.current !== currentStepKey) {
+            timerDecisionTriggeredRef.current = currentStepKey;
+            handleStepDecision("NG", pendingJigErrorRef.current || "Step timeout reached");
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timerId);
   }, [
+    activeSessionSerial,
     currentJigStepIndex,
     testSteps,
     jigDecision,
     isdevicePassed,
-    searchResult,
     isJigConnected,
   ]);
-
-  // Reset test state when scanning a new device
-  useEffect(() => {
-    setCurrentJigStepIndex(0);
-    setJigResults({});
-    setJigDecision(null);
-    setIsJigConnected(false);
-    setStepTimeLeft(null);
-    pendingJigErrorRef.current = null;
-    setPendingJigErrorState(null);
-    setGeneratedCommand("");
-    setGeneratedCommand("");
-    stepStartTimeRef.current = Date.now();
-    totalProcessStartTimeRef.current = Date.now();
-  }, [searchResult]);
-
-  useEffect(() => {
-    // Reset start time when step index changes
-    stepStartTimeRef.current = Date.now();
-
-    if (setIsStickerPrinted) setIsStickerPrinted(false);
-    if (setIsVerifiedSticker) setIsVerifiedSticker(false);
-    if (setIsAddedToCart) setIsAddedToCart(false);
-    if (setIsVerifiedPackaging) setIsVerifiedPackaging(false);
-  }, [currentJigStepIndex, searchResult]);
   const handlePrint = () => {
     setIsCartonBarCodePrinted(true);
     const printContents = document.getElementById("barcode-area")?.innerHTML;
@@ -3085,18 +3115,35 @@ export default function DeviceTestComponent({
                                           Failed
                                         </span>
                                       )}
-                                      {!status &&
-                                        index === currentJigStepIndex && (
-                                          <span className="animate-pulse text-xs font-bold text-blue-600">
-                                            In Progress...
-                                          </span>
-                                        )}
-                                      {!status &&
-                                        index !== currentJigStepIndex && (
-                                          <span className="text-xs font-medium text-gray-400">
-                                            Pending
-                                          </span>
-                                        )}
+                                      {!status && (
+                                        <div className="flex flex-col items-end gap-1">
+                                          {index === currentJigStepIndex ? (
+                                            <>
+                                              <span className="animate-pulse text-xs font-bold text-blue-600">
+                                                In Progress
+                                              </span>
+                                              {stepTimeLeft !== null && (
+                                                <span className="inline-flex items-center gap-1 rounded bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-700 animate-pulse">
+                                                  <Timer className="h-3 w-3" />
+                                                  {stepTimeLeft}s
+                                                </span>
+                                              )}
+                                            </>
+                                          ) : (
+                                            <>
+                                              <span className="text-xs font-medium text-gray-400">
+                                                Pending
+                                              </span>
+                                              {step.ngTimeout > 0 && (
+                                                <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-400">
+                                                  <Timer className="h-3 w-3" />
+                                                  {step.ngTimeout}s
+                                                </span>
+                                              )}
+                                            </>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 );
