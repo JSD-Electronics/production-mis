@@ -923,7 +923,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           : processAssignUserStage;
 
         const testSteps = processStageData?.subSteps?.filter(
-          (s: any) => s.stepType === "jig" || s.stepType === "manual"
+          (s: any) => !s?.disabled && (s.stepType === "jig" || s.stepType === "manual")
         ) || [];
 
         // 
@@ -1977,3 +1977,4 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
 };
 
 export default ViewTaskDetailsComponent;
+

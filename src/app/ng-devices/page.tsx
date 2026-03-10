@@ -134,9 +134,26 @@ export default function NGDevicesPage() {
   }, [filteredEntries]);
 
 
-  const totalNg = entries.length;
+  const userRoleUpper = String(currentUserType || "").toUpperCase();
+  const isQC = userRoleUpper === "QC";
+  const isTRC = userRoleUpper === "TRC";
+  const isRoleFiltered = isQC || isTRC;
+
+  // Role-scoped counts: if QC/TRC, count only their own devices; otherwise full set
+  const roleEntries = isRoleFiltered
+    ? entries.filter((e) => (e.assignedDeviceTo || "").toString().toUpperCase() === userRoleUpper)
+    : entries;
+
+  const totalNg = isRoleFiltered ? roleEntries.length : entries.length;
   const totalProcesses = Object.keys(grouped).length;
-  const totalTrc = entries.filter((e) => (e.assignedDeviceTo || "").toString().toUpperCase() === "TRC").length;
+
+  // 3rd card: for QC show QC count, for TRC show TRC count, for admin show TRC count
+  const card3Role = isQC ? "QC" : isTRC ? "TRC" : "TRC";
+  const counterpartRole = card3Role; // kept as counterpartRole for template compatibility
+  const counterpartCount = entries.filter(
+    (e) => (e.assignedDeviceTo || "").toString().toUpperCase() === card3Role,
+  ).length;
+
   const visibleProcesses = Object.keys(grouped);
 
   // Helper for cleaner dates
@@ -171,12 +188,14 @@ export default function NGDevicesPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {/* Total NG Card */}
-            <div className="relative overflow-hidden  rounded-2xl bg-blue-50 p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
+            {/* Card 1 — Total NG (role-scoped) */}
+            <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
               <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 translate-y-[-30%] rounded-full bg-red-50/50 blur-2xl"></div>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Total NG Devices</p>
+                  <p className="text-sm font-medium text-gray-500">
+                    {isRoleFiltered ? `My NG Devices (${userRoleUpper})` : "Total NG Devices"}
+                  </p>
                   <h3 className="mt-2 text-3xl font-bold text-gray-900">{loading ? "..." : totalNg}</h3>
                 </div>
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-50 text-red-500 ring-4 ring-red-50/50">
@@ -185,11 +204,11 @@ export default function NGDevicesPage() {
               </div>
               <div className="mt-4 flex items-center gap-2 text-xs font-medium text-red-600 bg-red-50 w-fit px-2 py-1 rounded-lg">
                 <Activity className="h-3.5 w-3.5" />
-                <span>Requires Attention</span>
+                <span>{isRoleFiltered ? "Assigned to you" : "Requires Attention"}</span>
               </div>
             </div>
 
-            {/* Processes Card */}
+            {/* Card 2 — Active Processes */}
             <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
               <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 translate-y-[-30%] rounded-full bg-blue-50/50 blur-2xl"></div>
               <div className="flex items-center justify-between">
@@ -207,13 +226,13 @@ export default function NGDevicesPage() {
               </div>
             </div>
 
-            {/* TRC Card */}
+            {/* Card 3 — Counterpart role count (QC sees TRC count, TRC sees QC count, admin sees TRC) */}
             <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
               <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 translate-y-[-30%] rounded-full bg-amber-50/50 blur-2xl"></div>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500">TRC Assigned</p>
-                  <h3 className="mt-2 text-3xl font-bold text-gray-900">{loading ? "..." : totalTrc}</h3>
+                  <p className="text-sm font-medium text-gray-500">{counterpartRole} Assigned</p>
+                  <h3 className="mt-2 text-3xl font-bold text-gray-900">{loading ? "..." : counterpartCount}</h3>
                 </div>
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50 text-amber-500 ring-4 ring-amber-50/50">
                   <Wrench className="h-6 w-6" />
@@ -221,7 +240,7 @@ export default function NGDevicesPage() {
               </div>
               <div className="mt-4 flex items-center gap-2 text-xs font-medium text-amber-600 bg-amber-50 w-fit px-2 py-1 rounded-lg">
                 <User className="h-3.5 w-3.5" />
-                <span>Technician Review</span>
+                <span>{counterpartRole === "TRC" ? "Technician Review" : "Quality Control"}</span>
               </div>
             </div>
           </div>

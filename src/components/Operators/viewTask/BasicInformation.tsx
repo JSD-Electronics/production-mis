@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import Image from "next/image";
 import React, { useMemo } from "react";
 import { Coffee } from "lucide-react";
@@ -6,6 +6,7 @@ import { Coffee } from "lucide-react";
 type SubStep = {
   stepName?: string;
   stepType?: string;
+  disabled?: boolean;
   stepFields?: {
     validationType?: string;
     value?: string | number;
@@ -164,63 +165,47 @@ export default function BasicInformation({
             Steps to Perform
           </h3>
           <ul className="scrollbar-thin scrollbar-thumb-gray-200 mt-3 max-h-60 space-y-3 overflow-y-auto pr-2">
-            {processAssignUserStage?.subSteps?.length ? (
-              processAssignUserStage?.subSteps?.map((stage, index) => (
-                <li key={index} className="bg-gray-50 rounded-lg border p-3">
-                  <p className="text-gray-900 font-medium">
-                    Step {index + 1}: {stage.stepName ?? "Unnamed"}
-                  </p>
-                  <div className="text-gray-600 mt-2 text-sm">
-                    {stage.stepType === "manual" ? (
-                      stage.stepFields?.validationType === "value" ? (
-                        <div>
-                          Value: <b>{stage.stepFields?.value ?? "--"}</b>
-                        </div>
-                      ) : stage.stepFields?.rangeFrom ? (
-                        <div>
-                          Range: <b>{stage.stepFields?.rangeFrom ?? "--"}</b> -{" "}
-                          <b>{stage.stepFields?.rangeTo ?? "--"}</b>
-                        </div>
-                      ) : null
-                    ) : (
-                      stage.jigFields?.map((jf, i) => (
-                        <div key={i}>
-                          <b>{jf.jigName ?? "Jig"}:</b>{" "}
-                          {jf.validationType === "value" ? (
-                            <b>{jf.value ?? "--"}</b>
-                          ) : jf.validationType === "range" ? (
-                            <>
-                              <b>{jf.rangeFrom ?? "--"}</b> -{" "}
-                              <b>{jf.rangeTo ?? "--"}</b>
-                            </>
-                          ) : (
-                            "--"
-                          )}
-                        </div>
-                      ))
-                    )}
-
-                    {/* {stage.stepType === "manual" ? (
-                      stage.stepFields?.validationType === "value" ? (
-                        <div>
-                          Value: <b>{stage.stepFields?.value ?? "--"}</b>
-                        </div>
-                      ) : stage.stepFields?.rangeFrom ? (
-                        <div>
-                          Range: <b>{stage.stepFields?.rangeFrom ?? "--"}</b> -{" "}
-                          <b>{stage.stepFields?.rangeTo ?? "--"}</b>
-                        </div>
-                      ) : null
-                    ) : (
-                      stage.jigFields?.map((jf, i) => (
-                        <div key={i}>
-                          <b>{jf.jigName ?? "Jig"}:</b> {jf.value ?? "--"}
-                        </div>
-                      ))
-                    )} */}
-                  </div>
-                </li>
-              ))
+            {processAssignUserStage?.subSteps?.filter((s: SubStep) => !s?.disabled)
+              ?.length ? (
+              processAssignUserStage?.subSteps
+                ?.filter((s: SubStep) => !s?.disabled)
+                .map((stage, index) => (
+                  <li key={index} className="bg-gray-50 rounded-lg border p-3">
+                    <p className="text-gray-900 font-medium">
+                      Step {index + 1}: {stage.stepName ?? "Unnamed"}
+                    </p>
+                    <div className="text-gray-600 mt-2 text-sm">
+                      {stage.stepType === "manual" ? (
+                        stage.stepFields?.validationType === "value" ? (
+                          <div>
+                            Value: <b>{stage.stepFields?.value ?? "--"}</b>
+                          </div>
+                        ) : stage.stepFields?.rangeFrom ? (
+                          <div>
+                            Range: <b>{stage.stepFields?.rangeFrom ?? "--"}</b> -{" "}
+                            <b>{stage.stepFields?.rangeTo ?? "--"}</b>
+                          </div>
+                        ) : null
+                      ) : (
+                        stage.jigFields?.map((jf, i) => (
+                          <div key={i}>
+                            <b>{jf.jigName ?? "Jig"}:</b>{" "}
+                            {jf.validationType === "value" ? (
+                              <b>{jf.value ?? "--"}</b>
+                            ) : jf.validationType === "range" ? (
+                              <>
+                                <b>{jf.rangeFrom ?? "--"}</b> -{" "}
+                                <b>{jf.rangeTo ?? "--"}</b>
+                              </>
+                            ) : (
+                              "--"
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </li>
+                ))
             ) : (
               <li className="text-gray-500">
                 No steps configured for this stage.

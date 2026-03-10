@@ -32,7 +32,7 @@ import {
   FiTrendingUp,
   FiDownload,
 } from "react-icons/fi";
-import { FiUsers, FiActivity, FiCheckCircle, FiXCircle, FiSearch, FiFilter, FiRefreshCcw, FiEye } from "react-icons/fi";
+import { FiUsers, FiActivity, FiCheckCircle, FiXCircle, FiSearch, FiFilter, FiRefreshCcw, FiEye, FiGrid, FiList } from "react-icons/fi";
 import { formatDate } from "@/lib/common";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -738,9 +738,7 @@ const ViewPlanSchedule = () => {
       const rawIntervals = Shift?.intervals || [];
       const intervals = [];
       rawIntervals.forEach((interval) => {
-        if (interval.breakTime) {
-          intervals.push(interval);
-        } else {
+        if (!interval.breakTime) {
           let curr = toDate(interval.startTime);
           const end = toDate(interval.endTime);
           while (curr < end) {
@@ -1554,9 +1552,7 @@ const ViewPlanSchedule = () => {
     const rawIntervals = selectedShift?.intervals || [];
     const intervals = [];
     rawIntervals.forEach((interval) => {
-      if (interval.breakTime) {
-        intervals.push(interval);
-      } else {
+      if (!interval.breakTime) {
         let curr = toDate(interval.startTime);
         const end = toDate(interval.endTime);
         while (curr < end) {
@@ -1790,20 +1786,31 @@ const ViewPlanSchedule = () => {
                   <form action="#">
                     <div className="p-6">
                       <div className="space-y-6">
-                        {/* Top Summary */}
-                        <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                          <CardDataStats title="Required Qty" total={`${summaryData.required}`} rate="" levelUp>
-                            <FiBox size={20} />
-                          </CardDataStats>
-                          <CardDataStats title="Issued Kits" total={`${summaryData.issued}`} rate="" levelUp>
-                            <FiPackage size={20} />
-                          </CardDataStats>
-                          <CardDataStats title="Consumed Kits" total={`${totalConsumedKits}`} rate="" levelUp>
-                            <FiCheckCircle size={20} />
-                          </CardDataStats>
-                          <CardDataStats title="Avg UPH (Last Stage)" total={`${summaryData.avg}`} rate="" levelUp>
-                            <FiTrendingUp size={20} />
-                          </CardDataStats>
+                        {/* Top Summary / Compact KPI Cards */}
+                        <div className="mb-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                          {[
+                            { title: "TOTAL PLANNED", value: summaryData.required, icon: <FiBox />, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-900/20" },
+                            { title: "ISSUED KITS", value: summaryData.issued, icon: <FiPackage />, color: "text-purple-600", bg: "bg-purple-50 dark:bg-purple-900/20" },
+                            { title: "CONSUMED KITS", value: totalConsumedKits, icon: <FiCheckCircle />, color: "text-green-600", bg: "bg-green-50 dark:bg-green-900/20" },
+                            { title: "PENDING KITS", value: summaryData.pending, icon: <FiArchive />, color: "text-orange-600", bg: "bg-orange-50 dark:bg-orange-900/20" },
+                            { title: "AVG UPH (LAST STAGE)", value: summaryData.avg, icon: <FiTrendingUp />, color: "text-teal-600", bg: "bg-teal-50 dark:bg-teal-900/20" },
+                          ].map((stat, idx) => (
+                            <div key={idx} className="bg-white dark:bg-boxdark rounded-xl border border-stroke dark:border-strokedark p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow">
+                              <div className="flex justify-between items-center mb-3">
+                                <div className={`p-2 rounded-lg ${stat.bg} ${stat.color}`}>
+                                  {React.cloneElement(stat.icon as React.ReactElement, { size: 18 })}
+                                </div>
+                              </div>
+                              <div>
+                                <h4 className="text-2xl font-bold text-black dark:text-white mb-1">
+                                  {stat.value}
+                                </h4>
+                                <p className="text-[10px] font-bold text-gray-400 tracking-wider">
+                                  {stat.title}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                         {/* Process Info */}
                         <div className="dark:bg-gray-800 rounded-lg border-l-4 border-blue-500 bg-white p-4 shadow-md">
@@ -2022,24 +2029,25 @@ const ViewPlanSchedule = () => {
                       <div className="mt-6 flex gap-10">
                         <div className="w-full">
                           {/* Header */}
-                          <div className="mb-6 flex items-center justify-between">
-                            <h3 className="text-gray-900 text-2xl font-bold dark:text-white">
+                          <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <h3 className="text-gray-900 text-2xl font-bold dark:text-white flex items-center gap-2">
+                              {/* Option: could add an icon here like <FiLayers /> */}
                               Room Overview
                             </h3>
-                            <div className="flex items-center gap-2">
-                              <button className="flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-danger">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 border border-red-200 dark:bg-red-900/20 dark:border-red-900/40 dark:text-red-400">
                                 Consumed: {totalConsumedKits}
-                              </button>
-                              <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                              </span>
+                              <span className="flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 border border-green-200 dark:bg-green-900/20 dark:border-green-900/40 dark:text-green-400">
                                 Active: {occupancyStats.active}
                               </span>
-                              <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700">
+                              <span className="flex items-center gap-1.5 rounded-full bg-yellow-50 px-3 py-1.5 text-xs font-semibold text-yellow-700 border border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-900/40 dark:text-yellow-400">
                                 Downtime: {occupancyStats.downtime}
                               </span>
-                              <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                              <span className="flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:border-blue-900/40 dark:text-blue-400">
                                 Completed: {occupancyStats.completed}
                               </span>
-                              <span className="rounded-full bg-gray-200 px-3 py-1 text-xs font-semibold text-gray-700">
+                              <span className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 border border-gray-200 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300">
                                 Reserved: {occupancyStats.reserved}
                               </span>
                             </div>
@@ -2047,23 +2055,22 @@ const ViewPlanSchedule = () => {
 
                           {/* Tabs */}
                           <Tabs>
-                            <TabList className="flex space-x-3">
-                              {["Floor View", "Table View"].map((tab) => (
+                            <div className="bg-white dark:bg-boxdark p-2 rounded-xl border border-stroke dark:border-strokedark mb-4">
+                              <TabList className="flex gap-2">
                                 <Tab
-                                  key={tab}
-                                  className={({ selected }) =>
-                                    `inline-flex items-center justify-center rounded-lg px-6 py-2 text-sm font-semibold transition-all duration-200
-                              focus:outline-none focus:ring-2 focus:ring-offset-1
-                              ${selected
-                                      ? "bg-blue-600 text-white shadow-md hover:bg-blue-700 focus:ring-blue-600"
-                                      : "bg-gray-200 text-gray-800 hover:bg-gray-300 border-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:border-gray-600 border"
-                                    }`
-                                  }
+                                  className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-meta-4 outline-none"
+                                  selectedClassName="bg-primary text-white shadow-md !text-white"
                                 >
-                                  {tab}
+                                  <FiGrid /> Floor Layout
                                 </Tab>
-                              ))}
-                            </TabList>
+                                <Tab
+                                  className="flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-meta-4 outline-none"
+                                  selectedClassName="bg-primary text-white shadow-md !text-white"
+                                >
+                                  <FiList /> Assigned Stages Table
+                                </Tab>
+                              </TabList>
+                            </div>
 
                             {/* Floor View */}
                             <TabPanel>
@@ -2445,44 +2452,49 @@ const ViewPlanSchedule = () => {
                   </div>
                   {planData?.processStatus === "active" && (
                     <>
-                      <div className="p-4">
-                        <p className="pb-3">
-                          <strong>Stage Wise</strong>
-                        </p>
-                        <table className="min-w-full table-auto text-center text-sm">
-                          <thead className="bg-gray-100 font-semibold">
-                            <tr>
-                              <th className="border p-2">UPH Stage Wise</th>
-                              {stages.map((stage, idx) => (
-                                <th key={idx} className="border p-2">
-                                  {stage.stageName}
-                                </th>
-                              ))}
-                            </tr>
+                      <div className="p-4 rounded-xl shadow-sm border border-stroke dark:border-strokedark bg-white dark:bg-boxdark mt-6 overflow-x-auto">
+                        <div className="mb-4 flex gap-2 items-center">
+                          <FiActivity className="text-primary" size={18} />
+                          <h4 className="font-bold text-gray-800 dark:text-gray-100 text-lg">
+                            Hourly Tracking (Stage Wise)
+                          </h4>
+                        </div>
+                        <table className="min-w-full text-sm rounded-lg overflow-hidden border-collapse">
+                          <thead className="bg-[#f0f4f8] dark:bg-meta-4 text-left font-semibold text-gray-600 dark:text-gray-200">
+                            {(() => {
+                              const firstDataRow = overAllUPHA?.find(r => r?.values?.length > 0 && r.hour !== "Total Count" && r.hour !== "Avg UPH");
+                              const stageNames = firstDataRow?.values?.map((v: any) => v.stage) || [];
+                              return (
+                                <tr>
+                                  <th className="py-3 px-4 font-bold min-w-[120px]">Time / Stage</th>
+                                  {stageNames.map((stageName: string, idx: number) => (
+                                    <th key={idx} className="py-3 px-4">{stageName}</th>
+                                  ))}
+                                </tr>
+                              );
+                            })()}
                           </thead>
-                          <tbody>
+                          <tbody className="divide-y divide-gray-200 dark:divide-strokedark">
                             {overAllUPHA?.map((row, rowIndex) => {
-                              let bgColorClass = "";
-                              if (row.status === "current") {
-                                bgColorClass = "bg-yellow-100";
-                              } else if (row.status === "past") {
-                                bgColorClass = "bg-green-50";
-                              } else if (row.status === "future") {
-                                bgColorClass = "bg-gray-100";
-                              }
+                              let rowStyle = "bg-white dark:bg-boxdark hover:bg-gray-50 dark:hover:bg-meta-4 transition-colors";
+                              if (row.status === "current") rowStyle = "bg-blue-50 dark:bg-blue-900/10 border-l-4 border-blue-500";
+                              else if (row.status === "past") rowStyle = "bg-green-50/30 dark:bg-green-900/5";
 
                               return (
                                 <tr
                                   key={rowIndex}
-                                  className={`${bgColorClass} border-b`}
+                                  className={rowStyle}
                                 >
-                                  <td className="border p-2 font-semibold">
-                                    {row.hour}
+                                  <td className="py-3 px-4 font-bold text-gray-800 dark:text-gray-200 align-top">
+                                    <div className="flex items-center gap-2">
+                                      <div className={`w-2 h-2 rounded-full ${row.status === 'current' ? 'bg-blue-500 animate-pulse' : row.status === 'past' ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                      {row.hour}
+                                    </div>
                                   </td>
                                   {row.isBreak ? (
                                     <td
-                                      colSpan={stages.length}
-                                      className="border bg-gray-50/50 p-4 font-medium italic text-gray-400"
+                                      colSpan={row.values?.length || 1}
+                                      className="py-6 px-4 font-medium italic text-gray-400 text-center bg-gray-50/50 dark:bg-gray-900/50 rounded-xl m-2"
                                     >
                                       <div className="flex items-center justify-center gap-2">
                                         <FiClock className="animate-pulse text-gray-400" />
@@ -2492,65 +2504,52 @@ const ViewPlanSchedule = () => {
                                   ) : (
                                     row.hour !== "Total Count" &&
                                       row.hour !== "Avg UPH"
-                                      ? row?.values?.map((val, i) => (
-                                        <td key={i} className="border p-2">
-                                          <div className="text-xs">
-                                            <p className="text-left">
-                                              <strong>Pass:</strong> {val?.Pass},
-                                            </p>
-                                            <p className="text-left">
-                                              <strong>NG:</strong> {val?.NG},
-                                            </p>
-                                            <p className="text-left">
-                                              <strong>Target UPH:</strong>{" "}
-                                              {val?.targetUPH}
-                                            </p>
-                                            <p
-                                              className={`text-left ${val?.Pass + val?.NG <= val?.targetUPH && row?.status !== "future" ? "text-danger" : "text-grey"}`}
-                                            >
-                                              <strong>UPH:</strong>{" "}
-                                              {val?.Pass + val?.NG}
-                                            </p>
-                                            <div className="mt-1 h-2 w-full rounded bg-gray-200">
-                                              <div
-                                                className="h-2 rounded bg-blue-500"
-                                                style={{
-                                                  width: `${Math.min(
-                                                    100,
-                                                    Math.round(
-                                                      (((val?.Pass || 0) + (val?.NG || 0)) /
-                                                        (val?.targetUPH || 1)) * 100,
-                                                    ),
-                                                  )}%`,
-                                                }}
-                                              ></div>
+                                      ? row?.values?.map((val, i) => {
+                                        const total = (val?.Pass || 0) + (val?.NG || 0);
+                                        const progress = Math.min(100, Math.round((total / Math.max(1, val?.targetUPH)) * 100));
+                                        const isLow = total <= val?.targetUPH && row?.status !== "future";
+
+                                        return (
+                                          <td key={i} className="py-3 px-4 align-top">
+                                            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-gray-100 dark:border-gray-700">
+                                              <div className="flex justify-between items-center mb-2">
+                                                <span className="text-xs font-semibold text-gray-500">Target: {val?.targetUPH}</span>
+                                                <span className={`text-xs font-bold ${isLow ? "text-red-500" : "text-green-600"}`}>
+                                                  UPH: {total}
+                                                </span>
+                                              </div>
+
+                                              {/* Progress Bar */}
+                                              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mb-2 overflow-hidden">
+                                                <div
+                                                  className={`h-1.5 rounded-full ${isLow ? 'bg-orange-500' : 'bg-primary'}`}
+                                                  style={{ width: `${progress}%` }}
+                                                ></div>
+                                              </div>
+
+                                              <div className="flex justify-between text-[11px] mt-1">
+                                                <div className="flex items-center gap-1 text-green-600">
+                                                  <FiCheckCircle size={10} /> {val?.Pass}
+                                                </div>
+                                                <div className="flex items-center gap-1 text-red-500">
+                                                  <FiXCircle size={10} /> {val?.NG}
+                                                </div>
+                                              </div>
                                             </div>
-                                            <p className="text-[10px] text-gray-500">
-                                              {Math.min(
-                                                100,
-                                                Math.round(
-                                                  (((val?.Pass || 0) + (val?.NG || 0)) /
-                                                    (val?.targetUPH || 1)) * 100,
-                                                ),
-                                              )}
-                                              % of target
-                                            </p>
-                                          </div>
-                                        </td>
-                                      ))
+                                          </td>
+                                        );
+                                      })
                                       : row?.values?.map((val, i) => (
-                                        <td key={i} className="border p-2">
-                                          <div className="text-xs">
-                                            <p className="text-left">
-                                              <strong>Pass:</strong> {val?.Pass},
-                                            </p>
-                                            <p className="text-left">
-                                              <strong>NG:</strong> {val?.NG},
-                                            </p>
-                                            <p className="text-left">
-                                              <strong>UPH:</strong>{" "}
-                                              {val?.Pass + val?.NG}
-                                            </p>
+                                        <td key={i} className="py-3 px-4 align-top">
+                                          <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3 border border-purple-100 dark:border-purple-800">
+                                            <div className="flex justify-between mb-1">
+                                              <span className="text-xs font-medium text-purple-700">Total UPH</span>
+                                              <span className="text-sm font-bold text-purple-800">{val?.Pass + val?.NG}</span>
+                                            </div>
+                                            <div className="flex justify-between text-[10px] text-gray-500">
+                                              <span>Pass: {val?.Pass}</span>
+                                              <span>NG: {val?.NG}</span>
+                                            </div>
                                           </div>
                                         </td>
                                       ))
@@ -2561,48 +2560,54 @@ const ViewPlanSchedule = () => {
                           </tbody>
                         </table>
                       </div>
-                      <div className="p-4">
-                        <p className="pb-3">
-                          <strong>Overall</strong>
-                        </p>
-                        <table className="mt-4 w-full table-auto border text-center">
-                          <thead>
-                            <tr className="bg-gray-200">
-                              <th className="border px-4 py-2">Overall UPH</th>
-                              <th className="border px-4 py-2">Complete Device</th>
+                      <div className="p-4 rounded-xl shadow-sm border border-stroke dark:border-strokedark bg-white dark:bg-boxdark mt-6 overflow-x-auto">
+                        <div className="mb-4 flex gap-2 items-center">
+                          <FiCheckCircle className="text-green-500" size={18} />
+                          <h4 className="font-bold text-gray-800 dark:text-gray-100 text-lg">
+                            Overall Completion
+                          </h4>
+                        </div>
+                        <table className="w-full text-sm rounded-lg overflow-hidden border-collapse text-left">
+                          <thead className="bg-[#f0f4f8] dark:bg-meta-4 text-gray-600 dark:text-gray-200">
+                            <tr>
+                              <th className="py-3 px-4 font-bold">Time Interval</th>
+                              <th className="py-3 px-4 font-bold text-right">Completed Devices (Last Stage)</th>
                             </tr>
                           </thead>
-                          <tbody>
+                          <tbody className="divide-y divide-gray-200 dark:divide-strokedark">
                             {completedKitsUPH?.map((row, idx) => {
-                              let rowColor = "";
+                              let rowColor = "bg-white dark:bg-boxdark hover:bg-gray-50 dark:hover:bg-meta-4 transition-colors";
 
-                              if (row.status === "past") {
-                                rowColor = "bg-green-50";
-                              } else if (row.status === "current") {
-                                rowColor = "bg-yellow-100";
-                              } else if (row.status === "future") {
-                                rowColor = "bg-gray-100";
-                              }
+                              if (row.status === "past") rowColor = "bg-green-50/30 dark:bg-green-900/5";
+                              else if (row.status === "current") rowColor = "bg-blue-50 dark:bg-blue-900/10 border-l-4 border-blue-500";
+                              else if (row.status === "future") rowColor = "bg-gray-50 dark:bg-gray-800/50 text-gray-400";
 
                               return (
                                 <tr key={idx} className={`${rowColor}`}>
-                                  <td className="border px-4 py-2">{row?.hour}</td>
-                                  <td className="border px-4 py-2">
+                                  <td className="py-3 px-4 font-medium">
+                                    <div className="flex items-center gap-2">
+                                      <div className={`w-2 h-2 rounded-full ${row.status === 'current' ? 'bg-blue-500 animate-pulse' : row.status === 'past' ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                      {row?.hour}
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-4 text-right">
                                     {row.isBreak ? (
-                                      <span className="italic text-gray-400">
-                                        Break
+                                      <span className="italic text-gray-400 font-medium bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full text-xs">
+                                        Break Time
                                       </span>
                                     ) : (
-                                      row?.Pass + row?.NG
+                                      <span className="font-bold text-gray-700 dark:text-gray-200">
+                                        {row?.Pass + row?.NG}
+                                      </span>
                                     )}
                                   </td>
                                 </tr>
                               );
                             })}
 
-                            <tr className="bg-purple-100 font-semibold">
-                              <td className="border px-4 py-2">Avg UPH</td>
-                              <td className="border px-4 py-2">
+                            <tr className="bg-purple-50 dark:bg-purple-900/20 font-semibold border-t-2 border-purple-200 dark:border-purple-800">
+                              <td className="py-4 px-4 text-purple-700 dark:text-purple-300">Average UPH:</td>
+                              <td className="py-4 px-4 text-right text-lg font-bold text-purple-700 dark:text-purple-300">
                                 {lastStageOverallSummary}
                               </td>
                             </tr>

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
     Play,
     Plus,
@@ -63,8 +63,22 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
     const [isStickerPrinted, setIsStickerPrinted] = useState(false);
     const [isVerifiedSticker, setIsVerifiedSticker] = useState(false);
 
+    const sanitizedStages = useMemo(() => {
+        return (stages || []).map((stage: any) => ({
+            ...stage,
+            subSteps: (stage?.subSteps || []).filter((step: any) => !step?.disabled),
+        }));
+    }, [stages]);
+
     const activeDevice = dummyDevices.find((d) => d.id === selectedDevice);
-    const activeStage = stages[selectedStageIndex];
+    const activeStage = sanitizedStages[selectedStageIndex];
+
+    useEffect(() => {
+        if (!activeStage) return;
+        if (currentStepIndex >= activeStage.subSteps.length) {
+            setCurrentStepIndex(0);
+        }
+    }, [activeStage, currentStepIndex]);
 
     // Clear timeout if test stops or step changes
     useEffect(() => {
@@ -606,7 +620,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                             }}
                             disabled={!allowStageSelect}
                         >
-                            {stages.map((s, idx) => (
+                            {sanitizedStages.map((s, idx) => (
                                 <option key={s.dragId || idx} value={idx}>
                                     {idx + 1}. {s.stageName || "Unnamed Stage"}
                                 </option>
@@ -839,3 +853,6 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
         </div>
     );
 }
+
+
+
