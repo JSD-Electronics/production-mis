@@ -322,7 +322,7 @@ export default function DeviceTestComponent({
           ? processAssignUserStage[0]
           : processAssignUserStage;
         const hasPrinter = stageData?.subSteps?.some(
-          (s: any) => s.isPrinterEnable,
+          (s: any) => s.isPrinterEnable && !s?.disabled,
         );
         if (setIsPassNGButtonShow) {
           setIsPassNGButtonShow(!hasPrinter);
@@ -356,10 +356,12 @@ export default function DeviceTestComponent({
     return (
       processAssignUserStage?.subSteps?.filter(
         (s: any) =>
-          s.stepType === "jig" ||
-          s.stepType === "manual" ||
-          s.isPrinterEnable ||
-          s.isPackagingStatus,
+          !s?.disabled && (
+            s.stepType === "jig" ||
+            s.stepType === "manual" ||
+            s.isPrinterEnable ||
+            s.isPackagingStatus
+          ),
       ) || []
     );
   }, [subStepsString]);
@@ -1219,7 +1221,7 @@ export default function DeviceTestComponent({
 
           <div className="flex items-center gap-2">
             {processAssignUserStage?.subSteps?.some(
-              (s: any) => s.isPackagingStatus,
+              (s: any) => s.isPackagingStatus && !s?.disabled,
             ) && (
                 <button
                   onClick={() => setIsCartonPopupOpen(true)}
@@ -1695,7 +1697,7 @@ export default function DeviceTestComponent({
                         setIsStickerPrinted={setIsStickerPrinted}
                         setIsVerifiedSticker={setIsVerifiedSticker}
                         checkIsPrintEnable={processAssignUserStage?.subSteps?.some(
-                          (s: any) => s.isPrinterEnable,
+                          (s: any) => s.isPrinterEnable && !s?.disabled,
                         )}
                         setIsDevicePassed={setIsDevicePassed}
                       />
@@ -3153,8 +3155,8 @@ export default function DeviceTestComponent({
 
                           {/* Carton Details (Moved from Recent Activity) */}
                           {processAssignUserStage?.subSteps?.some(
-                            (s: any) => s.isPackagingStatus,
-                          ) && (
+              (s: any) => s.isPackagingStatus && !s?.disabled,
+            ) && (
                               <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                                 <div className="border-b border-gray-100 bg-gray-50/50 px-4 py-3">
                                   <h4 className="flex items-center gap-2 text-sm font-bold text-gray-800">
@@ -3578,3 +3580,4 @@ export default function DeviceTestComponent({
     </>
   );
 }
+

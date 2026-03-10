@@ -344,13 +344,13 @@ export default function NGDeviceDetails({
         if (firstStageName) {
           const fd = new FormData();
           fd.append("currentStage", firstStageName);
-          fd.append("status", "Resolved");
+          fd.append("status", "QC Resolved");
           await updateStageByDeviceId(String(targetDeviceId), fd);
         }
 
         setDeviceData((prev: any) => ({
           ...prev,
-          status: "Resolved",
+          status: "QC Resolved",
           stageName: firstStageName || prev?.stageName,
           currentStage: firstStageName || prev?.currentStage,
         }));

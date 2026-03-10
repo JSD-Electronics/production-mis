@@ -52,6 +52,7 @@ interface SubStep {
   isPrinterEnable?: boolean;
   isCheckboxNGStatus?: boolean;
   isPackagingStatus?: boolean;
+  disabled?: boolean;
   ngTimeout?: number;
   stepType: "jig" | "manual";
   printerFields?: any[];
@@ -2023,7 +2024,7 @@ const EditProduct = () => {
                                                 stepDraggableProvided.innerRef
                                               }
                                               {...stepDraggableProvided.draggableProps}
-                                              className="rounded-lg border border-gray-200 bg-white p-2 p-5 dark:border-form-strokedark dark:border-strokedark dark:bg-boxdark"
+                                              className={`rounded-lg border bg-white p-2 p-5 dark:border-form-strokedark dark:border-strokedark dark:bg-boxdark ${subStep.disabled ? "border-red-500" : "border-gray-200"}`}
                                             >
                                               <div className="grid grid-cols-3 items-center gap-3 sm:grid-cols-2">
                                                 <div className="flex items-center gap-3">
@@ -2042,6 +2043,7 @@ const EditProduct = () => {
                                                       {" "}
                                                       {subStep?.stepName}{" "}
                                                     </span>
+                                                    {subStep.disabled && <span className="ml-2 rounded-full bg-red-500 px-2 py-1 text-xs text-white">Disabled</span>}
                                                   </h5>
                                                 </div>
 
@@ -3031,6 +3033,21 @@ const EditProduct = () => {
                                                   <div className="col-span-12 flex justify-end gap-3">
                                                     <button
                                                       type="button"
+                                                      className="mt-4 flex items-center text-yellow-500"
+                                                      onClick={() => {
+                                                        const newStages = [...stages];
+                                                        newStages[index].subSteps[subIndex].disabled = !newStages[index].subSteps[subIndex].disabled; pushToHistory();
+                                                        setStages(newStages);
+                                                      }}
+                                                    >
+                                                      <FontAwesomeIcon
+                                                        icon={subStep.disabled ? faPlus : faMinus}
+                                                        className="mr-2"
+                                                      />
+                                                      {subStep.disabled ? "Enable" : "Disable"}
+                                                    </button>
+                                                    <button
+                                                      type="button"
                                                       className="mt-4 flex items-center text-blue-500"
                                                       onClick={() =>
                                                         handleAddJig(
@@ -3321,3 +3338,4 @@ const EditProduct = () => {
 };
 
 export default EditProduct;
+
