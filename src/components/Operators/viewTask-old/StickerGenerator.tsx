@@ -59,7 +59,32 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
         }
       }
       return undefined;
-    };
+    }
+
+    const findLoose = (obj: any, targetSlug: string, targetCamel: string): any => {
+      if (!obj || typeof obj !== "object") return undefined;
+      const keys = Object.keys(obj);
+      const normTarget = normalize(targetSlug);
+      const foundKey = keys.find((k) => {
+        const normKey = normalize(k);
+        return (
+          k === targetSlug ||
+          k === targetCamel ||
+          normKey === normTarget ||
+          normKey.startsWith(normTarget)
+        );
+      });
+      if (foundKey && typeof obj[foundKey] !== "object") {
+        return obj[foundKey];
+      }
+      for (const k of keys) {
+        if (typeof obj[k] === "object" && obj[k] !== null) {
+          const deepVal = findLoose(obj[k], targetSlug, targetCamel);
+          if (deepVal !== undefined) return deepVal;
+        }
+      }
+      return undefined;
+    };;
 
     // Slug replacement logic for any field type (allows dynamic barcodes/qr/text)
     if (typeof baseValue === "string" && baseValue.includes("{")) {
@@ -73,7 +98,7 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
           device[slug] !== undefined ? device[slug] : undefined;
 
         if (val === undefined && customFieldsObj) {
-          val = findDeep(customFieldsObj, slug, camelSlug);
+          val = findLoose(customFieldsObj, slug, camelSlug);
         }
 
         baseValue = baseValue.replace(slugBox, val !== undefined ? String(val) : "");
@@ -83,14 +108,17 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
 
     const formattedKey = field.slug ? toCamelCase(field.slug) : "";
     let fieldValue = (formattedKey && device) ? device[formattedKey] : undefined;
+    if (fieldValue === undefined && device && field.slug) {
+      fieldValue = findLoose(device, field.slug, formattedKey);
+    }
 
     // Individual Field Slug Lookup (Fallback)
     if (field.slug !== "serial_no" && !fieldValue && customFieldsObj) {
-      fieldValue = findDeep(customFieldsObj, field.slug || "", formattedKey);
+      fieldValue = findLoose(customFieldsObj, field.slug || "", formattedKey);
 
       // Also try normalize(field.name) if slug fails
       if (fieldValue === undefined && field.name) {
-        fieldValue = findDeep(customFieldsObj, field.name, toCamelCase(field.name));
+        fieldValue = findLoose(customFieldsObj, field.name, toCamelCase(field.name));
       }
     }
     return fieldValue !== undefined ? String(fieldValue) : baseValue || "";
