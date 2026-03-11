@@ -117,6 +117,8 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
       {stickerData?.fields?.map((field: any) => {
         const device = (deviceData && deviceData.length > 0) ? deviceData[0] : null;
         const fieldValue = resolveValue(field, device);
+        const barcodeValue = String(fieldValue || field.value || field.slug || "");
+        const safeBarcodeValue = barcodeValue.trim() ? barcodeValue : "N/A";
 
         const align = field.styles?.textAlign || "center";
         const fontSize = parseInt(String(field.styles?.fontSize || 14), 10);
@@ -139,7 +141,7 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
             {field.type === "barcode" ? (
               <div className="flex w-full h-full items-center justify-center">
                 <Barcode
-                  value={String(fieldValue || "000000000000")}
+                  value={safeBarcodeValue}
                   renderer="svg"
                   width={field.barWidth || 1}
                   height={(field.height || 40) - 15}
