@@ -66,7 +66,9 @@ export default function QrScanner({slug, slugVal, setScanResult}) {
   return (
     <div style={{ textAlign: 'center', padding: 20 }}>
       <div id='reader' style={{ width: '100%', maxWidth: 500, margin: 'auto' }}></div>
-      <p><strong>Result:</strong> {result || 'Waiting for scan...'}</p>
+      <p style={{ fontSize: "18px", marginTop: 12 }}>
+        <strong>Result:</strong> {result || 'Waiting for scan...'}
+      </p>
     </div>
   );
 }

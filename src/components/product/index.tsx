@@ -85,6 +85,7 @@ const AddProduct = () => {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitDisabled, setSubmitDisabled] = useState(false);
+  const [isDraftSubmitting, setIsDraftSubmitting] = useState(false);
   const [errors, setErrors] = useState<any>({ name: false, stages: [] });
   const [stageData, setStageData] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -418,30 +419,41 @@ const AddProduct = () => {
       },
     ]);
   };
-  const submitStageForm = async () => {
-    if (validateForm()) {
-      setSubmitDisabled(true);
-      const formData = new FormData();
-      formData.append("name", name);
-      formData.append("Products", JSON.stringify(stages));
-      formData.append("commonStages", JSON.stringify(commonStages));
+  const submitStageForm = async (asDraft = false) => {
+    if (!asDraft) {
+      if (!validateForm()) return;
+    } else if (!name) {
+      toast.error("Name is required.");
+      setErrors((prev: any) => ({ ...prev, name: true }));
+      return;
+    }
 
-      try {
-        const result = await createProduct(formData);
+    setSubmitDisabled(true);
+    setIsDraftSubmitting(asDraft);
+    const formData = new FormData();
+    formData.append("name", name);
+    formData.append("Products", JSON.stringify(stages));
+    formData.append("commonStages", JSON.stringify(commonStages));
+    formData.append("isDraft", String(asDraft));
+    formData.append("status", asDraft ? "draft" : "active");
 
-        if (result && result.status === 200) {
-          toast.success("Product created successfully!!");
-          setSubmitDisabled(false);
-        } else {
-          throw new Error(result.message || "Failed to create stage");
-        }
-      } catch (error) {
-        console.error("error: ", error);
-        toast.error(
-          (error as any)?.message || "An error occurred while creating the stage.",
-        );
+    try {
+      const result = await createProduct(formData);
+
+      if (result && result.status === 200) {
+        toast.success(asDraft ? "Draft saved successfully!!" : "Product created successfully!!");
         setSubmitDisabled(false);
+        setIsDraftSubmitting(false);
+      } else {
+        throw new Error(result.message || "Failed to create stage");
       }
+    } catch (error) {
+      console.error("error: ", error);
+      toast.error(
+        (error as any)?.message || "An error occurred while creating the stage.",
+      );
+      setSubmitDisabled(false);
+      setIsDraftSubmitting(false);
     }
   };
   const handleStageChange = (
@@ -2548,6 +2560,21 @@ const AddProduct = () => {
       <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-white/90 backdrop-blur">
         <div className="mx-auto max-w-screen-xl px-6 py-3">
           <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-white ${submitDisabled ? "cursor-not-allowed bg-slate-400/70" : "bg-slate-500"}`}
+              onClick={() => submitStageForm(true)}
+              disabled={submitDisabled}
+            >
+              {submitDisabled && isDraftSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving Draft...
+                </>
+              ) : (
+                <>Save Draft</>
+              )}
+            </button>
             {history.length > 0 && (
               <button
                 type="button"
@@ -2561,10 +2588,10 @@ const AddProduct = () => {
             <button
               type="button"
               className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-white ${submitDisabled ? "cursor-not-allowed bg-[#34D399]/70" : "bg-[#34D399]"}`}
-              onClick={submitStageForm}
+              onClick={() => submitStageForm(false)}
               disabled={submitDisabled}
             >
-              {submitDisabled ? (
+              {submitDisabled && !isDraftSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Submitting...

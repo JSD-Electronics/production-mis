@@ -110,6 +110,17 @@ const StickerDesigner = ({
   const [zoomLevel, setZoomLevel] = useState(1);
   const [dimWidthInput, setDimWidthInput] = useState<string>("150"); // Initialize as mm
   const [dimHeightInput, setDimHeightInput] = useState<string>("80"); // Initialize as mm
+  const currentPrinterField =
+    stages[index]?.subSteps?.[subIndex1]?.printerFields?.[fieldIndex];
+  const selectedField =
+    focusedFieldIndex !== null
+      ? currentPrinterField?.fields?.[focusedFieldIndex]
+      : null;
+  const canvasWidthPx = currentPrinterField?.dimensions?.width || 0;
+  const canvasHeightPx = currentPrinterField?.dimensions?.height || 0;
+  const displayWidthPx = selectedField?.width || canvasWidthPx;
+  const displayHeightPx = selectedField?.height || canvasHeightPx;
+  const displaySizeLabel = selectedField ? "Selection" : "Canvas";
 
   useEffect(() => {
     if (focusedFieldIndex !== null) {
@@ -201,6 +212,115 @@ const StickerDesigner = ({
       );
     }
   }, [index, subIndex1, fieldIndex, stages, setStages]);
+
+
+  useEffect(() => {
+    if (!currentPrinterField) return;
+    if (currentPrinterField.autoFitted) return;
+    if (!Array.isArray(currentPrinterField.fields) || currentPrinterField.fields.length === 0) return;
+    if (!canvasWidthPx || !canvasHeightPx) return;
+
+    const numericFields = currentPrinterField.fields
+      .map((field) => {
+        const w = Number(field.width);
+        const h = Number(field.height);
+        const x = Number(field.x);
+        const y = Number(field.y);
+        if ([w, h, x, y].some((v) => Number.isNaN(v))) return null;
+        return { ...field, width: w, height: h, x, y };
+      })
+      .filter(Boolean);
+
+    if (numericFields.length === 0) return;
+
+    const minX = Math.min(...numericFields.map((f) => f.x));
+    const minY = Math.min(...numericFields.map((f) => f.y));
+    const maxX = Math.max(...numericFields.map((f) => f.x + f.width));
+    const maxY = Math.max(...numericFields.map((f) => f.y + f.height));
+    const bboxW = Math.max(1, maxX - minX);
+    const bboxH = Math.max(1, maxY - minY);
+
+    const margin = Math.round(Math.min(canvasWidthPx, canvasHeightPx) * 0.05);
+    const scale = Math.min(
+      (canvasWidthPx - margin * 2) / bboxW,
+      (canvasHeightPx - margin * 2) / bboxH,
+    );
+
+    if (!Number.isFinite(scale) || scale <= 0) return;
+
+    setStages((prevStages) =>
+      prevStages.map((stage, sIndex) =>
+        sIndex === index
+          ? {
+            ...stage,
+            subSteps: stage.subSteps.map((subStep, sSubIndex) =>
+              sSubIndex === subIndex1
+                ? {
+                  ...subStep,
+                  printerFields: subStep.printerFields.map(
+                    (printerField, pFieldIndex) =>
+                      pFieldIndex === fieldIndex
+                        ? {
+                          ...printerField,
+                          autoFitted: true,
+                          fields: printerField.fields.map((field) => {
+                            const w = Number(field.width);
+                            const h = Number(field.height);
+                            const x = Number(field.x);
+                            const y = Number(field.y);
+                            if ([w, h, x, y].some((v) => Number.isNaN(v))) {
+                              return field;
+                            }
+                            const nextWidth = Math.round(w * scale);
+                            const nextHeight = Math.round(h * scale);
+                            const nextX = Math.round((x - minX) * scale + margin);
+                            const nextY = Math.round((y - minY) * scale + margin);
+
+                            const nextFontSize = field.fontSize
+                              ? Math.max(8, Math.round(Number(field.fontSize) * scale))
+                              : undefined;
+                            const styleFontSize = field.styles?.fontSize
+                              ? `${Math.max(8, Math.round(parseFloat(String(field.styles.fontSize)) * scale))}px`
+                              : undefined;
+
+                            return {
+                              ...field,
+                              width: nextWidth,
+                              height: nextHeight,
+                              x: nextX,
+                              y: nextY,
+                              barWidth: field.barWidth
+                                ? Math.max(1, Math.round(Number(field.barWidth) * scale))
+                                : field.barWidth,
+                              barHeight: field.barHeight
+                                ? Math.max(1, Math.round(Number(field.barHeight) * scale))
+                                : field.barHeight,
+                              fontSize: nextFontSize ?? field.fontSize,
+                              styles: {
+                                ...field.styles,
+                                fontSize: styleFontSize ?? field.styles?.fontSize,
+                              },
+                            };
+                          }),
+                        }
+                        : printerField,
+                  ),
+                }
+                : subStep,
+            ),
+          }
+          : stage,
+      ),
+    );
+  }, [
+    canvasHeightPx,
+    canvasWidthPx,
+    currentPrinterField,
+    fieldIndex,
+    index,
+    setStages,
+    subIndex1,
+  ]);
 
   useEffect(() => {
     const w =
@@ -970,16 +1090,9 @@ const StickerDesigner = ({
           <div className="absolute left-6 top-4 z-10 flex items-center gap-4 rounded-full border border-gray-100 bg-white/80 px-4 py-2 text-xs font-semibold text-gray-400 shadow-sm backdrop-blur-md dark:border-strokedark dark:bg-boxdark/80">
             <span className="flex items-center gap-1.5">
               <div className="h-2 w-2 rounded-full bg-blue-500" />
-              Canvas:{" "}
-              {pxToMm(
-                stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]
-                  ?.dimensions?.width,
-              )}{" "}
+              {displaySizeLabel}: {pxToMm(displayWidthPx)}{" "}
               x{" "}
-              {pxToMm(
-                stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]
-                  ?.dimensions?.height,
-              )}{" "}
+              {pxToMm(displayHeightPx)}{" "}
               mm
             </span>
             <span className="h-3 w-px bg-gray-300" />
@@ -1037,8 +1150,8 @@ const StickerDesigner = ({
                 ref={stickerRef}
                 className="relative overflow-hidden bg-white text-black shadow-2xl transition-all duration-300 dark:bg-white print:border-none print:shadow-none"
                 style={{
-                  width: `${stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]?.dimensions?.width}px`,
-                  height: `${stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]?.dimensions?.height}px`,
+                  width: `${canvasWidthPx}px`,
+                  height: `${canvasHeightPx}px`,
                   fontSize: `${fontSettings.size}px`,
                   fontWeight: fontSettings.weight,
                   color: "black",
@@ -1078,8 +1191,8 @@ const StickerDesigner = ({
                     >
                       {field?.type === "barcode" ? (
                         <div className="flex h-full w-full items-center justify-center overflow-hidden">
-                          <Barcode
-                            value={(function () {
+                          {(() => {
+                            const barcodeValue = (function () {
                               const fallback =
                                 field.slug || field.value || "N/A";
 
@@ -1106,17 +1219,32 @@ const StickerDesigner = ({
                                 }
                               }
                               return String(fallback);
-                            })()}
-                            renderer="svg"
-                            width={field.barWidth || 1}
-                            height={field.barHeight || field.height - 15}
-                            displayValue={field.displayValue ?? true}
-                            format={field.format || "CODE128"}
-                            lineColor={field.lineColor || "#000000"}
-                            background={field.background || "transparent"}
-                            margin={field.margin ?? 0}
-                            fontSize={field.fontSize || 10}
-                          />
+                            })();
+
+                            const estimatedModules =
+                              barcodeValue.length * 11 + 35;
+                            const computedBarWidth = field.barLength
+                              ? Math.max(
+                                  1,
+                                  Math.floor(field.barLength / estimatedModules),
+                                )
+                              : field.barWidth || 1;
+
+                            return (
+                              <Barcode
+                                value={barcodeValue}
+                                renderer="svg"
+                                width={computedBarWidth}
+                                height={field.barHeight || field.height - 15}
+                                displayValue={field.displayValue ?? true}
+                                format={field.format || "CODE128"}
+                                lineColor={field.lineColor || "#000000"}
+                                background={field.background || "transparent"}
+                                margin={field.margin ?? 0}
+                                fontSize={field.fontSize || 10}
+                              />
+                            );
+                          })()}
                         </div>
                       ) : field?.type === "qrcode" ? (
                         <div className="flex h-full w-full items-center justify-center p-0">
@@ -1797,6 +1925,34 @@ const StickerDesigner = ({
                                     <option value="CODE39">CODE39</option>
                                     <option value="EAN13">EAN13</option>
                                   </select>
+                                </div>
+                                <div className="col-span-2">
+                                  <label className="mb-1 block text-[10px] font-medium text-gray-400">
+                                    Length (mm)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min={10}
+                                    value={pxToMm(
+                                      stages[index]?.subSteps[subIndex1]?.printerFields[
+                                        fieldIndex
+                                      ].fields[focusedFieldIndex].barLength ||
+                                        stages[index]?.subSteps[subIndex1]?.printerFields[
+                                          fieldIndex
+                                        ].fields[focusedFieldIndex].width ||
+                                        0,
+                                    )}
+                                    onChange={(e) => {
+                                      const mmVal = Number(e.target.value);
+                                      if (Number.isNaN(mmVal)) return;
+                                      const pxVal = mmToPx(Math.max(10, mmVal));
+                                      handleFieldChange(focusedFieldIndex, {
+                                        barLength: pxVal,
+                                        width: pxVal,
+                                      });
+                                    }}
+                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-strokedark dark:bg-form-input"
+                                  />
                                 </div>
                                 <div className="col-span-2 flex items-center gap-2">
                                   <input
