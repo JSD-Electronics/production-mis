@@ -19,6 +19,15 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
 
   const resolveValue = (field: any, device: any) => {
     let baseValue = field.value || "";
+
+    const isDynamic =
+      field.type === "barcode" ||
+      field.type === "qrcode" ||
+      field.type === "dynamic_url" ||
+      !!field.slug ||
+      (typeof baseValue === "string" && baseValue.includes("{"));
+    if (!isDynamic) return baseValue;
+
     if (!device) return baseValue;
 
     // Custom Fields Lookup Preparation
@@ -87,7 +96,7 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
         }
       }
       return undefined;
-    };;
+    };
 
     // Slug replacement logic for any field type (allows dynamic barcodes/qr/text)
     if (typeof baseValue === "string" && baseValue.includes("{")) {
@@ -96,15 +105,28 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
         const slug = slugBox.slice(1, -1);
         const camelSlug = toCamelCase(slug);
 
-        // Priority lookup: direct device property -> camelCase device property -> custom fields
+        // Priority lookup: direct device property -> camelCase device property
         let val = device[camelSlug] !== undefined ? device[camelSlug] :
           device[slug] !== undefined ? device[slug] : undefined;
 
-        if (val === undefined && customFieldsObj) {
-          val = findLoose(customFieldsObj, slug, camelSlug);
+        if ((val === undefined || val === "") && customFieldsObj) {
+          const deepV = findDeep(customFieldsObj, slug, camelSlug);
+          if (deepV !== undefined && deepV !== "") val = deepV;
+        }
+        if ((val === undefined || val === "") && device) {
+          const deepV = findDeep(device, slug, camelSlug);
+          if (deepV !== undefined && deepV !== "") val = deepV;
+        }
+        if ((val === undefined || val === "") && customFieldsObj) {
+          const looseV = findLoose(customFieldsObj, slug, camelSlug);
+          if (looseV !== undefined && looseV !== "") val = looseV;
+        }
+        if ((val === undefined || val === "") && device) {
+          const looseV = findLoose(device, slug, camelSlug);
+          if (looseV !== undefined && looseV !== "") val = looseV;
         }
 
-        baseValue = baseValue.replace(slugBox, val !== undefined ? String(val) : "");
+        baseValue = baseValue.replace(slugBox, (val !== undefined && val !== "") ? String(val) : "");
       });
       if (field.type === "dynamic_url") return baseValue;
     }
@@ -112,19 +134,36 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
     const lookupSlug = field.slug || (typeof field.value === "string" ? field.value.trim() : "");
     const formattedKey = lookupSlug ? toCamelCase(lookupSlug) : "";
     let fieldValue = (formattedKey && device) ? device[formattedKey] : undefined;
-    if (fieldValue === undefined && device && lookupSlug) {
-      fieldValue = findLoose(device, lookupSlug, formattedKey);
+
+    // Prioritize deep exact matches first
+    if ((fieldValue === undefined || fieldValue === "") && lookupSlug !== "serial_no" && customFieldsObj) {
+      const v = findDeep(customFieldsObj, lookupSlug || "", formattedKey);
+      if (v !== undefined && v !== "") fieldValue = v;
+    }
+    if ((fieldValue === undefined || fieldValue === "") && device && lookupSlug) {
+      const v = findDeep(device, lookupSlug, formattedKey);
+      if (v !== undefined && v !== "") fieldValue = v;
     }
 
-    // Individual Field Slug Lookup (Fallback)
-    if (lookupSlug !== "serial_no" && !fieldValue && customFieldsObj) {
-      fieldValue = findLoose(customFieldsObj, lookupSlug || "", formattedKey);
+    // Fallbacks to loose matching
+    if (lookupSlug !== "serial_no" && (fieldValue === undefined || fieldValue === "") && customFieldsObj) {
+      const v = findLoose(customFieldsObj, lookupSlug || "", formattedKey);
+      if (v !== undefined && v !== "") fieldValue = v;
+    }
+    if ((fieldValue === undefined || fieldValue === "") && device && lookupSlug) {
+      const v = findLoose(device, lookupSlug, formattedKey);
+      if (v !== undefined && v !== "") fieldValue = v;
+    }
 
-      // Also try normalize(field.name) if slug fails
-      if (fieldValue === undefined && field.name) {
-        fieldValue = findLoose(customFieldsObj, field.name, toCamelCase(field.name));
+    // Also try normalize(field.name) if slug fails
+    if ((fieldValue === undefined || fieldValue === "") && field.name && customFieldsObj) {
+      let v = findDeep(customFieldsObj, field.name, toCamelCase(field.name));
+      if (v === undefined || v === "") {
+        v = findLoose(customFieldsObj, field.name, toCamelCase(field.name));
       }
+      if (v !== undefined && v !== "") fieldValue = v;
     }
+
     if (fieldValue === undefined && lookupSlug && baseValue === lookupSlug) {
       return "";
     }
@@ -174,26 +213,46 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
             }}
           >
             {field.type === "barcode" ? (
-              <div className="flex w-full h-full items-center justify-center">
-                <Barcode
-                  value={safeBarcodeValue}
-                  renderer="svg"
-                  width={field.barWidth || 1}
-                  height={(field.height || 40) - 15}
-                  displayValue={true}
-                  fontSize={fontSize - 4 > 8 ? fontSize - 4 : 8}
-                  background="transparent"
-                  margin={0}
-                />
+              <div
+                className="flex w-full h-full items-center justify-center"
+                style={{ background: "transparent", padding: "0", boxSizing: "border-box" }}
+              >
+                {(() => {
+                  const estimatedModules = safeBarcodeValue.length * 11 + 35;
+                  const computedBarWidth = field.barLength
+                    ? Math.max(1, Math.floor(field.barLength / estimatedModules))
+                    : field.barWidth || 1;
+
+                  return (
+                    <Barcode
+                      value={safeBarcodeValue}
+                      renderer="svg"
+                      width={computedBarWidth}
+                      height={field.barHeight || (field.height || 50) - 15}
+                      displayValue={field.displayValue ?? true}
+                      format={field.format || "CODE128"}
+                      lineColor={field.lineColor || "#000000"}
+                      background={field.background || "transparent"}
+                      margin={field.margin ?? 0}
+                      fontSize={field.fontSize || Math.max(fontSize - 2, 8)}
+                      textMargin={field.textMargin ?? 2}
+                    />
+                  );
+                })()}
               </div>
             ) : field.type === "qrcode" ? (
-              <div className="flex w-full h-full items-center justify-center">
+              <div
+                className="flex w-full h-full items-center justify-center"
+                style={{ background: "transparent", padding: "0", boxSizing: "border-box" }}
+              >
                 <QRCodeCanvas
                   value={String(fieldValue || "N/A")}
-                  size={Math.min(field.width || 80, field.height || 80)}
+                  size={512}
+                  style={{ width: "100%", height: "100%" }}
                   bgColor="transparent"
-                  fgColor={field.styles?.color || "#000000"}
-                  level="H"
+                  fgColor={field.lineColor || "#000000"}
+                  level="M"
+                  marginSize={2}
                 />
               </div>
             ) : field.type === "image" ? (
@@ -224,7 +283,8 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
                   fontWeight: field.styles?.fontWeight || "normal",
                   color: field.styles?.color || "black",
                   textAlign: align as any,
-                  lineHeight: "1.4",
+                  lineHeight: field.styles?.lineHeight || "1.4",
+                  letterSpacing: field.styles?.letterSpacing || undefined,
                   display: "block",
                   background: "transparent"
                 }}
