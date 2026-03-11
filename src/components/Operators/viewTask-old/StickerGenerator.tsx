@@ -71,7 +71,10 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
           k === targetSlug ||
           k === targetCamel ||
           normKey === normTarget ||
-          normKey.startsWith(normTarget)
+          normKey.startsWith(normTarget) ||
+          normTarget.startsWith(normKey) ||
+          normKey.includes(normTarget) ||
+          normTarget.includes(normKey)
         );
       });
       if (foundKey && typeof obj[foundKey] !== "object") {
@@ -106,20 +109,24 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
       if (field.type === "dynamic_url") return baseValue;
     }
 
-    const formattedKey = field.slug ? toCamelCase(field.slug) : "";
+    const lookupSlug = field.slug || (typeof field.value === "string" ? field.value.trim() : "");
+    const formattedKey = lookupSlug ? toCamelCase(lookupSlug) : "";
     let fieldValue = (formattedKey && device) ? device[formattedKey] : undefined;
-    if (fieldValue === undefined && device && field.slug) {
-      fieldValue = findLoose(device, field.slug, formattedKey);
+    if (fieldValue === undefined && device && lookupSlug) {
+      fieldValue = findLoose(device, lookupSlug, formattedKey);
     }
 
     // Individual Field Slug Lookup (Fallback)
-    if (field.slug !== "serial_no" && !fieldValue && customFieldsObj) {
-      fieldValue = findLoose(customFieldsObj, field.slug || "", formattedKey);
+    if (lookupSlug !== "serial_no" && !fieldValue && customFieldsObj) {
+      fieldValue = findLoose(customFieldsObj, lookupSlug || "", formattedKey);
 
       // Also try normalize(field.name) if slug fails
       if (fieldValue === undefined && field.name) {
         fieldValue = findLoose(customFieldsObj, field.name, toCamelCase(field.name));
       }
+    }
+    if (fieldValue === undefined && lookupSlug && baseValue === lookupSlug) {
+      return "";
     }
     return fieldValue !== undefined ? String(fieldValue) : baseValue || "";
   };
@@ -145,7 +152,7 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
       {stickerData?.fields?.map((field: any) => {
         const device = (deviceData && deviceData.length > 0) ? deviceData[0] : null;
         const fieldValue = resolveValue(field, device);
-        const barcodeValue = String(fieldValue || field.value || field.slug || "");
+        const barcodeValue = String(fieldValue || "");
         const safeBarcodeValue = barcodeValue.trim() ? barcodeValue : "N/A";
 
         const align = field.styles?.textAlign || "center";
