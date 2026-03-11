@@ -1396,7 +1396,10 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       explicitType = presentTypes[0]!;
     }
 
-    const matchInCustomFields = (d: any): string | null => {
+    const getCustomFieldValuesByType = (
+      d: any,
+      type: "serial" | "imei" | "ccid",
+    ): string[] => {
       const cf = d?.customFields || d?.custom_fields || d?.customfields;
       let obj = cf;
       if (typeof obj === "string") {
@@ -1406,23 +1409,21 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           obj = null;
         }
       }
-      if (!obj || typeof obj !== "object") return null;
+      if (!obj || typeof obj !== "object") return [];
       const vals: string[] = [];
+      const typeKey = type === "serial" ? "serial" : type;
       const collect = (o: any) => {
         Object.keys(o).forEach((k) => {
           const val = o[k];
           if (val && typeof val !== "object") {
-            if (String(k).toLowerCase().includes("ccid")) vals.push(lc(val));
-            if (String(k).toLowerCase().includes("imei")) vals.push(lc(val));
-            if (String(k).toLowerCase().includes("serial")) vals.push(lc(val));
+            if (String(k).toLowerCase().includes(typeKey)) vals.push(lc(val));
           } else if (val && typeof val === "object") {
             collect(val);
           }
         });
       };
       collect(obj);
-      const hit = vals.find((v) => candidates.includes(v));
-      return hit || null;
+      return vals;
     };
 
     const matchesExplicit = (d: any): boolean => {
@@ -1430,23 +1431,24 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       const serialVals = [d?.serialNo, d?.serial_no, d?.deviceInfo?.serialNo].map(lc).filter(Boolean);
       const imeiVals = [d?.imeiNo, d?.imei, d?.imei_no, d?.deviceInfo?.imei].map(lc).filter(Boolean);
       const ccidVals = [d?.ccid].map(lc).filter(Boolean);
-      const cfMatch = matchInCustomFields(d); // may hold any of serial/imei/ccid found in customFields
+      const cfSerial = getCustomFieldValuesByType(d, "serial");
+      const cfImei = getCustomFieldValuesByType(d, "imei");
+      const cfCcid = getCustomFieldValuesByType(d, "ccid");
       if (explicitType === "serial") {
-        return serialCandidates.map(lc).some((c) => serialVals.includes(c) || cfMatch === c);
+        return serialCandidates.map(lc).some((c) => serialVals.includes(c) || cfSerial.includes(c));
       }
       if (explicitType === "imei") {
-        return imeiCandidates.map(lc).some((c) => imeiVals.includes(c) || cfMatch === c);
+        return imeiCandidates.map(lc).some((c) => imeiVals.includes(c) || cfImei.includes(c));
       }
       if (explicitType === "ccid") {
-        // Also look into custom fields for CCID if not present at top-level
-        return ccidCandidates.map(lc).some((c) => ccidVals.includes(c) || cfMatch === c);
+        return ccidCandidates.map(lc).some((c) => ccidVals.includes(c) || cfCcid.includes(c));
       }
       return false;
     };
 
-    // If we are in multi-scan mode, enforce required type order
+    // Enforce slug-specific verification even for single barcode
     const inMultiMode = expectedScanTypes.length > 1;
-    const requiredType: "serial" | "imei" | "ccid" | "any" | null = inMultiMode
+    const requiredType: "serial" | "imei" | "ccid" | "any" | null = expectedScanTypes.length > 0
       ? (expectedScanTypes[currentScanStep] as any || "any")
       : null;
 
@@ -1465,22 +1467,22 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       const serialCands = serialCandidates.length > 0 ? serialCandidates.map(lc) : [raw];
       const imeiCands = imeiCandidates.length > 0 ? imeiCandidates.map(lc) : [raw];
       const ccidCands = ccidCandidates.length > 0 ? ccidCandidates.map(lc) : [raw];
-      const cfMatch = matchInCustomFields(d);
+      const cfVals = getCustomFieldValuesByType(d, requiredType as any);
       if (requiredType === "serial") {
-        return serialCands.some((c) => sn.includes(c) || cfMatch === c);
+        return serialCands.some((c) => sn.includes(c) || cfVals.includes(c));
       }
       if (requiredType === "imei") {
-        return imeiCands.some((c) => imei.includes(c) || cfMatch === c);
+        return imeiCands.some((c) => imei.includes(c) || cfVals.includes(c));
       }
       if (requiredType === "ccid") {
-        return ccidCands.some((c) => ccid.includes(c) || cfMatch === c);
+        return ccidCands.some((c) => ccid.includes(c) || cfVals.includes(c));
       }
       return false;
     };
 
     const found = deviceList.find((d: any) => {
-      // Multi-scan step enforcement
-      if (inMultiMode && requiredType && requiredType !== "any") {
+      // Enforce required type if provided by sticker config
+      if (requiredType && requiredType !== "any") {
         return matchesRequiredOnly(d);
       }
 
@@ -1497,8 +1499,12 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         imei.some((v) => candidates.includes(v)) ||
         ccid.some((v) => candidates.includes(v));
       if (anyDirect) return true;
-      const fromCF = matchInCustomFields(d);
-      return !!fromCF;
+      const fromCFAny = [
+        ...getCustomFieldValuesByType(d, "serial"),
+        ...getCustomFieldValuesByType(d, "imei"),
+        ...getCustomFieldValuesByType(d, "ccid"),
+      ];
+      return fromCFAny.some((v) => candidates.includes(v));
     });
 
     if (found) {
