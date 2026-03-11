@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import DataTable, { TableColumn } from "react-data-table-component";
-import { useRouter } from "next/navigation";
+import {useRouter } from "next/navigation";
 import {
   Edit3,
   Trash2,
@@ -11,13 +11,14 @@ import {
   Package,
   Layers,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  CheckCircle
 } from "lucide-react";
 import { BallTriangle } from "react-loader-spinner";
 import { ToastContainer, toast } from "react-toastify";
 
 import ConfirmationPopup from "@/components/Confirmation/page";
-import { viewProduct, deleteProduct, deleteMultipleProduct } from "@/lib/api";
+import { viewProduct, deleteProduct, deleteMultipleProduct, activateProduct } from "@/lib/api";
 import { Stages } from "@/types/stage";
 
 import "react-toastify/dist/ReactToastify.css";
@@ -30,6 +31,8 @@ const ViewProductList = () => {
   const [stageData, setStageData] = useState<Stages[]>([]);
   const [selectedRows, setSelectedRows] = useState<Stages[]>([]);
   const [showPopup, setShowPopup] = useState(false);
+  const [showActivatePopup, setShowActivatePopup] = useState(false);
+  const [activateProductId, setActivateProductId] = useState("");
   const [productId, setProductId] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -78,6 +81,25 @@ const ViewProductList = () => {
     }
   };
 
+  /** Activate Draft */
+  const handleActivate = async (id: string) => {
+    try {
+      await activateProduct(id);
+      toast.success("Product activated successfully!");
+      getStages();
+    } catch (error) {
+      console.error("Error activating product:", error);
+      toast.error("Failed to activate product.");
+    }
+  };
+
+  const handleActivateConfirm = async () => {
+    if (!activateProductId) return;
+    await handleActivate(activateProductId);
+    setShowActivatePopup(false);
+    setActivateProductId("");
+  };
+
   // Filtered Data
   const filteredData = useMemo(() => {
     return stageData.filter(item =>
@@ -110,6 +132,25 @@ const ViewProductList = () => {
           </div>
         </div>
       ),
+    },
+    {
+      name: "Status",
+      sortable: true,
+      cell: (row: any) => {
+        const status = String(row.status || "active").toLowerCase();
+        const isDraft = status === "draft";
+        return (
+          <span
+            className={
+              isDraft
+                ? "rounded-full bg-yellow-100 px-2.5 py-1 text-[10px] font-bold uppercase text-yellow-700"
+                : "rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold uppercase text-emerald-700"
+            }
+          >
+            {isDraft ? "Draft" : "Active"}
+          </span>
+        );
+      },
     },
     {
       name: "No of Stages",
@@ -155,6 +196,15 @@ const ViewProductList = () => {
           >
             <Trash2 size={16} />
           </button>
+          {String(row.status || "active").toLowerCase() === "draft" && (
+            <button
+              onClick={() => { setActivateProductId(row._id); setShowActivatePopup(true); }}
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 transition-all hover:bg-emerald-500 hover:text-white shadow-sm"
+              title="Activate Product"
+            >
+              <CheckCircle size={16} />
+            </button>
+          )}
         </div>
       ),
     },
@@ -279,7 +329,7 @@ const ViewProductList = () => {
 
       <ToastContainer position="top-right" autoClose={3000} />
 
-      {/* Confirmation Popup */}
+            {/* Confirmation Popup */}
       {showPopup && (
         <ConfirmationPopup
           message="Are you sure you want to delete this product?"
@@ -287,7 +337,15 @@ const ViewProductList = () => {
           onCancel={() => setShowPopup(false)}
         />
       )}
-    </div>
+
+      {showActivatePopup && (
+        <ConfirmationPopup
+          message="Are you sure you want to activate this product?"
+          onConfirm={handleActivateConfirm}
+          onCancel={() => { setShowActivatePopup(false); setActivateProductId(""); }}
+        />
+      )}
+</div>
   );
 };
 

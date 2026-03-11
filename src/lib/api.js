@@ -121,6 +121,15 @@ export const updateProduct = async (formData, id) => {
     throw error.response?.data || { message: "Error Updating Stage" };
   }
 };
+export const activateProduct = async (id) => {
+  try {
+    const response = await api.put(`/product/activate/${id}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error Activating Product:`, error);
+    throw error.response?.data || { message: "Error Activating Product" };
+  }
+};
 export const viewProduct = async () => {
   try {
     const response = await api.get("/product/view");
