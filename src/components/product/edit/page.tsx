@@ -29,6 +29,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import Loader from "@/components/common/Loader";
+import ConfirmationPopup from "@/components/Confirmation/page";
 
 import PrintTableComponent from "../printTableComponents";
 import {
@@ -128,6 +129,11 @@ const EditProduct = () => {
     height: 100,
   });
   const [simulatorInitialStage, setSimulatorInitialStage] = useState(0);
+  const [confirmRemoval, setConfirmRemoval] = useState<null | {
+    type: "stage" | "step";
+    stageIndex: number;
+    subStepIndex?: number;
+  }>(null);
 
   const [stages, setStages] = useState<Stage[]>([
     {
@@ -1107,6 +1113,27 @@ const EditProduct = () => {
       (_, i) => i !== subStepIndex,
     );
     setStages(newStages);
+  };
+  const requestRemoveStage = (index: number) => {
+    setConfirmRemoval({ type: "stage", stageIndex: index });
+  };
+  const requestRemoveSubStep = (stageIndex: number, subStepIndex: number) => {
+    setConfirmRemoval({ type: "step", stageIndex, subStepIndex });
+  };
+  const handleConfirmRemoval = () => {
+    if (!confirmRemoval) return;
+    if (confirmRemoval.type === "stage") {
+      handleRemoveStage(confirmRemoval.stageIndex);
+    } else {
+      handleRemoveSubStep(
+        confirmRemoval.stageIndex,
+        confirmRemoval.subStepIndex ?? 0,
+      );
+    }
+    setConfirmRemoval(null);
+  };
+  const handleCancelRemoval = () => {
+    setConfirmRemoval(null);
   };
   const toggleStageExpand = (index: any) => {
     const newStages = [...stages];
@@ -3084,12 +3111,7 @@ const EditProduct = () => {
                                                     <button
                                                       type="button"
                                                       className="mt-4 flex items-center text-danger"
-                                                      onClick={() =>
-                                                        handleRemoveSubStep(
-                                                          index,
-                                                          subIndex,
-                                                        )
-                                                      }
+                                                      onClick={() => requestRemoveSubStep(index, subIndex)}
                                                     >
                                                       <FontAwesomeIcon
                                                         icon={faTrash}
@@ -3154,7 +3176,7 @@ const EditProduct = () => {
                             <button
                               type="button"
                               className="mt-4 flex items-center text-danger"
-                              onClick={() => handleRemoveStage(index)}
+                              onClick={() => requestRemoveStage(index)}
                             >
                               <FontAwesomeIcon
                                 icon={faTrash}
@@ -3332,7 +3354,19 @@ const EditProduct = () => {
             </button>
           </div>
         </div>
+
       </div>
+      {confirmRemoval && (
+        <ConfirmationPopup
+          message={
+            confirmRemoval.type === "stage"
+              ? "Are you sure you want to remove this stage?"
+              : "Are you sure you want to remove this step?"
+          }
+          onConfirm={handleConfirmRemoval}
+          onCancel={handleCancelRemoval}
+        />
+      )}
     </>
   );
 };

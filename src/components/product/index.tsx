@@ -11,6 +11,7 @@ import {
   getProductById,
 } from "../../lib/api";
 import Modal from "@/components/Modal/page";
+import ConfirmationPopup from "@/components/Confirmation/page";
 import { ToastContainer, toast } from "react-toastify";
 import {
   User,
@@ -89,6 +90,11 @@ const AddProduct = () => {
   const [errors, setErrors] = useState<any>({ name: false, stages: [] });
   const [stageData, setStageData] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [confirmRemoval, setConfirmRemoval] = useState<null | {
+    type: "stage" | "step";
+    stageIndex: number;
+    subStepIndex?: number;
+  }>(null);
   const [stepType, setStepType] = useState("");
   const [stickerFields, setStickerFields] = useState<any[]>([]);
   const [stickerData, setStickerData] = useState<any[]>([{
@@ -878,6 +884,27 @@ const AddProduct = () => {
       (_, i) => i !== subStepIndex,
     );
     setStages(newStages);
+  };
+  const requestRemoveStage = (index: number) => {
+    setConfirmRemoval({ type: "stage", stageIndex: index });
+  };
+  const requestRemoveSubStep = (stageIndex: number, subStepIndex: number) => {
+    setConfirmRemoval({ type: "step", stageIndex, subStepIndex });
+  };
+  const handleConfirmRemoval = () => {
+    if (!confirmRemoval) return;
+    if (confirmRemoval.type === "stage") {
+      handleRemoveStage(confirmRemoval.stageIndex);
+    } else {
+      handleRemoveSubStep(
+        confirmRemoval.stageIndex,
+        confirmRemoval.subStepIndex ?? 0,
+      );
+    }
+    setConfirmRemoval(null);
+  };
+  const handleCancelRemoval = () => {
+    setConfirmRemoval(null);
   };
   const toggleStageExpand = (index: number) => {
     const newStages = [...stages];
@@ -2377,9 +2404,7 @@ const AddProduct = () => {
                                                           <button
                                                             type="button"
                                                             className="mt-4 flex items-center text-danger"
-                                                            onClick={() =>
-                                                              handleRemoveSubStep(index, subIndex)
-                                                            }
+                                                            onClick={() => requestRemoveSubStep(index, subIndex)}
                                                           >
                                                             <FontAwesomeIcon
                                                               icon={faTrash}
@@ -2441,7 +2466,7 @@ const AddProduct = () => {
                                   <button
                                     type="button"
                                     className="mt-4 flex items-center text-danger"
-                                    onClick={() => handleRemoveStage(index)}
+                                    onClick={() => requestRemoveStage(index)}
                                   >
                                     <FontAwesomeIcon icon={faTrash} className="mr-2" />
                                     Remove Stage
@@ -2637,8 +2662,25 @@ const AddProduct = () => {
           </select>
         </div>
       </Modal>
+      {confirmRemoval && (
+        <ConfirmationPopup
+          message={
+            confirmRemoval.type === "stage"
+              ? "Are you sure you want to remove this stage?"
+              : "Are you sure you want to remove this step?"
+          }
+          onConfirm={handleConfirmRemoval}
+          onCancel={handleCancelRemoval}
+        />
+      )}
     </>
   );
 };
 
 export default AddProduct;
+
+
+
+
+
+
