@@ -48,6 +48,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
     const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
     const [selectedStageIndex, setSelectedStageIndex] = useState<number>(0);
     const [isTestRunning, setIsTestRunning] = useState(false);
+    const [isTestCompleted, setIsTestCompleted] = useState(false);
     const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
     // Results for the CURRENT running test session
@@ -171,6 +172,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
     const startTest = () => {
         if (!selectedDevice || !activeStage) return;
         setIsTestRunning(true);
+        setIsTestCompleted(false);
         setCurrentStepIndex(0);
         setStepResults({});
         setLogs([]);
@@ -283,6 +285,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                     setTotalStageTime(totalTime);
                     addLog(`All steps passed! Stage Verified. Total Time: ${totalTime.toFixed(2)}s`);
                     setIsTestRunning(false);
+                    setIsTestCompleted(true);
                     if (activeDevice) {
                         updateDeviceStatus(activeDevice.id, "Pass");
                     }
@@ -381,6 +384,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
             setTotalStageTime(totalTime);
             addLog(`All steps passed! Stage Verified. Total Time: ${totalTime.toFixed(2)}s`);
             setIsTestRunning(false);
+            setIsTestCompleted(true);
             if (activeDevice) {
                 updateDeviceStatus(activeDevice.id, "Pass");
             }
@@ -437,6 +441,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                             isLastStep={currentStepIndex === activeStage.subSteps.length - 1}
                             // Auto-connect if we're not on the first step (i.e., returning to jig after manual step)
                             autoConnect={currentStepIndex > 0}
+                            keepConnectedOnComplete
                         />
                     </div>
                 )}
@@ -469,6 +474,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                             <div className="flex gap-4 mt-6">
                                 <button
                                     onClick={() => handleStepDecision("Pass")}
+                                    disabled={isTestCompleted}
                                     className="flex-1 group relative overflow-hidden rounded-xl bg-gradient-to-br from-green-500 to-green-600 px-6 py-4 font-bold text-white shadow-lg transition-all hover:from-green-600 hover:to-green-700 hover:shadow-green-500/30 active:scale-95"
                                 >
                                     <div className="flex flex-col items-center gap-1 relative z-10">
@@ -481,6 +487,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
 
                                 <button
                                     onClick={() => handleStepDecision("NG", "Manual Rejection")}
+                                    disabled={isTestCompleted}
                                     className="flex-1 group relative overflow-hidden rounded-xl bg-gradient-to-br from-danger to-danger px-6 py-4 font-bold text-white shadow-lg transition-all hover:from-red-600 hover:to-danger hover:shadow-red-500/30 active:scale-95"
                                 >
                                     <div className="flex flex-col items-center gap-1 relative z-10">
@@ -696,7 +703,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                             <Search className="mb-2 h-10 w-10 opacity-20" />
                             <p>Select a dummy device from the left to start testing.</p>
                         </div>
-                    ) : !isTestRunning ? (
+                    ) : (!isTestRunning && !isTestCompleted) ? (
                         <div className="flex h-full flex-col items-center justify-center">
                             <div className="mb-6 rounded-full bg-indigo-50 p-6 dark:bg-indigo-900/20">
                                 <Play className="h-10 w-10 text-indigo-600 ml-1" />
@@ -720,16 +727,28 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                                     <h2 className="text-lg font-bold text-gray-900 dark:text-white">{activeStage.stageName}</h2>
                                     <p className="text-xs text-gray-500">Step {currentStepIndex + 1} of {activeStage.subSteps.length}</p>
                                 </div>
-                                <button onClick={stopTest} className="text-xs text-red-500 hover:underline">
-                                    Abort Test
-                                </button>
+                                {isTestRunning ? (
+                                    <button onClick={stopTest} className="text-xs text-red-500 hover:underline">
+                                        Abort Test
+                                    </button>
+                                ) : isTestCompleted ? (
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xs font-semibold text-green-600">Test Completed</span>
+                                        <button
+                                            onClick={startTest}
+                                            className="text-xs font-semibold text-indigo-600 hover:underline"
+                                        >
+                                            Retry Test
+                                        </button>
+                                    </div>
+                                ) : null}
                             </div>
 
                             {/* Progress Bar */}
                             <div className="mb-6 h-1 w-full rounded-full bg-gray-100 overflow-hidden">
                                 <div
                                     className="h-full bg-indigo-500 transition-all duration-300"
-                                    style={{ width: `${((currentStepIndex) / activeStage.subSteps.length) * 100}%` }}
+                                    style={{ width: `${((isTestCompleted ? activeStage.subSteps.length : currentStepIndex) / activeStage.subSteps.length) * 100}%` }}
                                 />
                             </div>
 
