@@ -20,6 +20,7 @@ interface JigSectionProps {
   generatedCommand?: string;
   setGeneratedCommand?: (cmd: string) => void;
   autoConnect?: boolean; // New prop for auto-connection
+  keepConnectedOnComplete?: boolean;
 }
 
 interface LogEntry {
@@ -116,7 +117,7 @@ const parseJigOutput = (text: string) => {
   return [result];
 };
 
-const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisconnect, onConnectionChange, searchQuery, finalResult, finalReason, onStatusUpdate, generatedCommand, setGeneratedCommand, autoConnect }: JigSectionProps) => {
+const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisconnect, onConnectionChange, searchQuery, finalResult, finalReason, onStatusUpdate, generatedCommand, setGeneratedCommand, autoConnect, keepConnectedOnComplete }: JigSectionProps) => {
   const [isConnected, setIsConnected] = useState(false);
   const [connectedPortInfo, setConnectedPortInfo] = useState<any>(null);
   const [availablePorts, setAvailablePorts] = useState<any[]>([]);
@@ -144,9 +145,14 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
   const isCommandBusyRef = useRef(false);
   const persistentLogsRef = useRef<LogEntry[]>([]);
   const setGeneratedCommandRef = useRef(setGeneratedCommand);
+  const keepConnectedOnCompleteRef = useRef(keepConnectedOnComplete);
   useEffect(() => {
     setGeneratedCommandRef.current = setGeneratedCommand;
   }, [setGeneratedCommand]);
+
+  useEffect(() => {
+    keepConnectedOnCompleteRef.current = keepConnectedOnComplete;
+  }, [keepConnectedOnComplete]);
 
   const stepStartTime = useRef<number>(Date.now());
 
@@ -808,7 +814,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
           // Pass is immediate, NG waits for timeout
           onDecisionRef.current(status, reasonStr, dataWithLogs, status === "Pass");
 
-          if (allPassed && isLastStepRef.current) {
+          if (allPassed && isLastStepRef.current && !keepConnectedOnCompleteRef.current) {
             disconnectJig();
           }
           accumulatedDataRef.current = "";
