@@ -316,8 +316,6 @@ const AddProduct = () => {
         const loadedStages = result.product.stages || [];
         const stagesWithIds = loadedStages.map((stage: any, sIdx: number) => ({
           ...stage,
-          managedBy: "", // Clear operator assignment on clone
-          jigId: "", // Clear jig assignment on clone
           cycleTime: stage.cycleTime || "",
           videoLinks: Array.isArray(stage.videoLinks)
             ? stage.videoLinks
@@ -354,11 +352,7 @@ const AddProduct = () => {
 
         // Also clone Common Stages if they exist
         if (result.product.commonStages && result.product.commonStages.length > 0) {
-          const cleanedCommonStages = result.product.commonStages.map((cs: any) => ({
-            ...cs,
-            managedBy: "" // Clear assignment
-          }));
-          setCommonStages(cleanedCommonStages);
+          setCommonStages(result.product.commonStages);
         }
 
         closeModal();
