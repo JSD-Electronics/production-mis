@@ -49,6 +49,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
     const [selectedStageIndex, setSelectedStageIndex] = useState<number>(0);
     const [isTestRunning, setIsTestRunning] = useState(false);
     const [isTestCompleted, setIsTestCompleted] = useState(false);
+    const [jigDownloadLogsFn, setJigDownloadLogsFn] = useState<null | (() => void)>(null);
     const [currentStepIndex, setCurrentStepIndex] = useState(0);
 
     // Results for the CURRENT running test session
@@ -183,6 +184,61 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
         setIsStickerPrinted(false); // Reset sticker state on new test start
         setIsVerifiedSticker(false); // Reset sticker state on new test start
         addLog(`Starting test for ${activeDevice?.serialNo} on stage: ${activeStage.stageName}`);
+    };
+
+    const handleDownloadResults = () => {
+        if (!activeStage) return;
+        const excelData: any[] = activeStage.subSteps.map((step: any, idx: number) => {
+            const result = stepResults[idx];
+            const isJigStep = step.stepType === 'jig';
+            const ngTimeout = Number(step.ngTimeout || 0);
+            let actionText: string = result?.status || 'Pending';
+            if (isJigStep && ngTimeout > 0 && (result?.status === 'Pass' || result?.status === 'NG')) {
+                actionText = result.status;
+            }
+            return {
+                'Stage': activeStage.stageName,
+                'Step Name': step.stepName,
+                'Time Execution (s)': result?.executionTime?.toFixed(2) || 'N/A',
+                'NG Timeout (s)': ngTimeout,
+                'Action': actionText,
+                'Reason': result?.status === 'NG' ? (result?.reason || 'Unknown') : '',
+                'Buffer Time': ngTimeout - (result?.executionTime || 0),
+            };
+        });
+        const totalExecutionTime = activeStage.subSteps.reduce((sum: number, step: any, idx: number) => {
+            const result = stepResults[idx];
+            return sum + (result?.executionTime || 0);
+        }, 0);
+        const totalNGTimeout = activeStage.subSteps.reduce((sum: number, step: any) => sum + (step.ngTimeout || 0), 0);
+        excelData.push({
+            'Stage': '',
+            'Step Name': 'TOTAL',
+            'Time Execution (s)': totalExecutionTime.toFixed(2),
+            'NG Timeout (s)': totalNGTimeout.toFixed(2),
+            'Action': '',
+            'Reason': '',
+            'Buffer Time': Number(totalNGTimeout.toFixed(2)) - Number(totalExecutionTime.toFixed(2))
+        });
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Test Results');
+        if (excelData.length > 0) {
+            worksheet.columns = Object.keys(excelData[0]).map(key => ({
+                header: key,
+                key,
+                width: 22,
+            }));
+            excelData.forEach(row => worksheet.addRow(row));
+        }
+        workbook.xlsx.writeBuffer().then((buffer) => {
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${activeStage.stageName}_${activeDevice?.serialNo}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
     };
 
     const stopTest = () => {
@@ -442,6 +498,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                             // Auto-connect if we're not on the first step (i.e., returning to jig after manual step)
                             autoConnect={currentStepIndex > 0}
                             keepConnectedOnComplete
+                            onDownloadLogs={(fn) => setJigDownloadLogsFn(() => fn)}
                         />
                     </div>
                 )}
@@ -769,74 +826,22 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                         </div>
                         {Object.keys(stepResults).length > 0 && (
                             <button
-                                onClick={() => {
-                                    // Download Excel file
-                                    const excelData: any[] = activeStage.subSteps.map((step: any, idx: number) => {
-                                        const result = stepResults[idx];
-                                        const isJigStep = step.stepType === 'jig';
-                                        const ngTimeout = Number(step.ngTimeout || 0);
-
-                                        // Build Action column with NG timeout for jig steps
-                                        let actionText: string = result?.status || 'Pending';
-                                        if (isJigStep && ngTimeout > 0 && (result?.status === 'Pass' || result?.status === 'NG')) {
-                                            actionText = result.status;
-                                        }
-
-                                        return {
-                                            'Stage': activeStage.stageName,
-                                            'Step Name': step.stepName,
-                                            'Time Execution (s)': result?.executionTime?.toFixed(2) || 'N/A',
-                                            'NG Timeout (s)': ngTimeout,
-                                            'Action': actionText,
-                                            'Reason': result?.status === 'NG' ? (result?.reason || 'Unknown') : '',
-                                            'Buffer Time': ngTimeout - (result?.executionTime || 0),
-                                        };
-                                    });
-
-                                    // Calculate total execution time
-                                    const totalExecutionTime = activeStage.subSteps.reduce((sum: number, step: any, idx: number) => {
-                                        const result = stepResults[idx];
-                                        return sum + (result?.executionTime || 0);
-                                    }, 0);
-                                    const totalNGTimeout = activeStage.subSteps.reduce((sum: number, step: any, idx: number) => {
-                                        return sum + (step.ngTimeout || 0);
-                                    }, 0);
-                                    // Add total row
-                                    excelData.push({
-                                        'Stage': '',
-                                        'Step Name': 'TOTAL',
-                                        'Time Execution (s)': totalExecutionTime.toFixed(2),
-                                        'NG Timeout (s)': totalNGTimeout.toFixed(2),
-                                        'Action': '',
-                                        'Reason': '',
-                                        'Buffer Time': Number(totalNGTimeout.toFixed(2)) - Number(totalExecutionTime.toFixed(2))
-                                    });
-
-                                    const workbook = new ExcelJS.Workbook();
-                                    const worksheet = workbook.addWorksheet('Test Results');
-                                    if (excelData.length > 0) {
-                                        worksheet.columns = Object.keys(excelData[0]).map(key => ({
-                                            header: key,
-                                            key,
-                                            width: 22,
-                                        }));
-                                        excelData.forEach(row => worksheet.addRow(row));
-                                    }
-                                    workbook.xlsx.writeBuffer().then((buffer) => {
-                                        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                                        const url = URL.createObjectURL(blob);
-                                        const a = document.createElement('a');
-                                        a.href = url;
-                                        a.download = `${activeStage.stageName}_${activeDevice?.serialNo}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-                                        a.click();
-                                        URL.revokeObjectURL(url);
-                                    });
-                                }}
+                                onClick={handleDownloadResults}
                                 className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
                                 title="Download Test Results"
                             >
                                 <Download className="h-3 w-3" />
                                 Download
+                            </button>
+                        )}
+                        {isTestCompleted && jigDownloadLogsFn && (
+                            <button
+                                onClick={() => jigDownloadLogsFn()}
+                                className="flex items-center gap-1 px-2 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 transition-colors"
+                                title="Download Jig Logs"
+                            >
+                                <Download className="h-3 w-3" />
+                                Jig Logs
                             </button>
                         )}
                     </div>

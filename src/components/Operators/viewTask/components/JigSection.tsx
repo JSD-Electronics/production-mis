@@ -11,6 +11,7 @@ interface JigSectionProps {
   onDecision?: (status: "Pass" | "NG", reason?: string, data?: any, isImmediate?: boolean) => void;
   isLastStep?: boolean;
   onDisconnect?: (fn: () => void) => void;
+  onDownloadLogs?: (fn: () => void) => void;
   onConnectionChange?: (connected: boolean) => void;
   searchQuery: any;
   finalResult?: "Pass" | "NG" | null;
@@ -117,7 +118,7 @@ const parseJigOutput = (text: string) => {
   return [result];
 };
 
-const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisconnect, onConnectionChange, searchQuery, finalResult, finalReason, onStatusUpdate, generatedCommand, setGeneratedCommand, autoConnect, keepConnectedOnComplete }: JigSectionProps) => {
+const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisconnect, onDownloadLogs, onConnectionChange, searchQuery, finalResult, finalReason, onStatusUpdate, generatedCommand, setGeneratedCommand, autoConnect, keepConnectedOnComplete }: JigSectionProps) => {
   const [isConnected, setIsConnected] = useState(false);
   const [connectedPortInfo, setConnectedPortInfo] = useState<any>(null);
   const [availablePorts, setAvailablePorts] = useState<any[]>([]);
@@ -1115,6 +1116,13 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
     const blob = new Blob([content], { type: 'text/plain' });
     triggerDownload(blob);
   }, [logs]);
+  // Supply download logs function to parent
+  useEffect(() => {
+    if (onDownloadLogs) {
+      onDownloadLogs(() => downloadLogs());
+    }
+  }, [onDownloadLogs, downloadLogs]);
+
 
   const triggerDownload = (blob: Blob) => {
     const url = URL.createObjectURL(blob);
