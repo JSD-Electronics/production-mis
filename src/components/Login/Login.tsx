@@ -48,10 +48,10 @@ const SignIn = () => {
   };
 
   return (
-    <div className="h-screen" style={{ overflow: "hidden" }}>
-      <div className="mx-auto grid md:grid-cols-2">
-        <div className="h-screen bg-blue-50 p-8 shadow-xl backdrop-blur-sm dark:bg-blue-50">
-          <div className="mt-15 mx-auto w-100">
+    <div className="h-screen w-full overflow-hidden bg-white">
+      <div className="h-full w-full md:grid md:grid-cols-2">
+        <div className="flex h-full items-center bg-blue-50 p-6 shadow-xl backdrop-blur-sm dark:bg-blue-50 md:p-8">
+          <div className="mx-auto w-full max-w-md py-6">
             <div className="mb-6 mt-7">
               <h1 className="text-gray-900 text-center text-2xl font-semibold">
                 Sign in
@@ -141,11 +141,11 @@ const SignIn = () => {
               </button>
             </form>
             <div className="text-gray-400 mt-6 text-center text-xs">
-              Â© {new Date().getFullYear()} Production Portal
+              © {new Date().getFullYear()} Production Portal
             </div>
           </div>
         </div>
-        <div className="relative bg-gradient-to-br from-black to-indigo-700 p-8 text-white shadow-lg">
+        <div className="relative hidden h-full overflow-hidden bg-gradient-to-br from-black to-indigo-700 p-8 text-white shadow-lg md:block">
           <div className="flex items-center gap-3">
             <Image
               src="/images/icon/production-icon-dark.svg"
@@ -166,7 +166,7 @@ const SignIn = () => {
             <p className="text-sm opacity-90">
               Streamline testing, packaging, and scheduling in one place.
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="flex items-center gap-3 rounded-xl bg-white/10 px-4 py-3">
                 <ShieldCheck className="h-5 w-5 text-emerald-300" />
                 <span className="text-sm">Secure access</span>
@@ -215,7 +215,7 @@ const SignIn = () => {
             className="absolute inset-0 bg-black/40"
             onClick={() => setShowForgot(false)}
           />
-          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl max-h-[90vh] overflow-auto">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-900">Reset Password</h3>
               <button
@@ -279,3 +279,5 @@ const SignIn = () => {
 };
 
 export default SignIn;
+
+

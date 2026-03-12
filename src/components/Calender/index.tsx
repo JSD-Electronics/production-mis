@@ -13,12 +13,14 @@ interface ScheduleEvent {
   shift: string;
   status: string;
   color?: string; // Optional for UI logic
+  planingId?: string;
 }
 
 const Calendar = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedEvent, setSelectedEvent] = useState<ScheduleEvent | null>(null);
 
   // Helper to format Date object into YYYY-MM-DD local string
   const formatDateKey = (date: Date) => {
@@ -36,15 +38,26 @@ const Calendar = () => {
     try {
       setLoading(true);
       const data = await viewPlaning();
-      // Assuming 'data.planing' contains the array of planning items based on API naming conventions.
-      // Adjust property access if the structure is different (e.g. data.planningAndScheduling)
+      const sourcePlans =
+        data?.plans || data?.Planing || data?.planing || [];
 
-      const mappedEvents: ScheduleEvent[] = (data.planing || []).map((item: any) => ({
+      const mappedEvents: ScheduleEvent[] = sourcePlans.map((item: any) => ({
         id: item._id,
-        processName: item.processID?.name || "Unknown Process",
-        startDate: item.startDate,
-        endDate: item.expectedEndDate,
-        shift: item.shiftID?.name || "N/A",
+        planingId: item._id,
+        processName:
+          item.processName ||
+          item.processID?.name ||
+          item.process?.name ||
+          "Unknown Process",
+        startDate: item.startDate || item.shiftChangedFromDate || item.createdAt,
+        endDate:
+          item.estimatedEndDate ||
+          item.expectedEndDate ||
+          item.endDate ||
+          item.startDate ||
+          item.shiftChangedFromDate ||
+          item.createdAt,
+        shift: item.shiftID?.name || item.shiftName || "N/A",
         status: item.approvalStatus || "Pending",
         color: getColorForStatus(item.approvalStatus)
       }));
@@ -111,6 +124,24 @@ const Calendar = () => {
 
   const calendarDays = generateCalendarDays();
 
+  const startOfDay = (d: Date) => {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+  };
+
+  const isSameDay = (a: Date, b: Date) => {
+    return (
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate()
+    );
+  };
+
+  const weeks = Array.from({ length: Math.ceil(calendarDays.length / 7) }, (_, i) =>
+    calendarDays.slice(i * 7, i * 7 + 7),
+  );
+
 
   const monthNames = [
     "January", "February", "March", "April", "May", "June",
@@ -122,9 +153,9 @@ const Calendar = () => {
       <Breadcrumb pageName="Production Calendar" parentName="Dashboard" />
 
       {/* Calendar Header */}
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-bold text-black dark:text-white">
+          <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">
             {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
           </h2>
           <div className="flex items-center rounded-lg border border-stroke bg-white shadow-sm dark:border-strokedark dark:bg-boxdark">
@@ -145,7 +176,7 @@ const Calendar = () => {
         </div>
 
         {/* Legend */}
-        <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-gray-500">
+        <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-500">
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-green-500"></span> Approved
           </div>
@@ -163,73 +194,116 @@ const Calendar = () => {
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-solid border-primary border-t-transparent"></div>
         </div>
       ) : (
-        <div className="w-full max-w-full rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
-          <table className="w-full">
-            <thead>
-              <tr className="grid grid-cols-7 rounded-t-sm bg-primary text-white">
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, idx) => (
-                  <th key={idx} className="flex h-12 items-center justify-center p-1 text-xs font-semibold sm:text-base xl:p-4 bg-primary text-white border-l border-primary-dark first:border-l-0">
-                    <span className="hidden lg:block">{day}day</span>
-                    <span className="block lg:hidden">{day}</span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="grid grid-cols-7">
-                {calendarDays.map((dayObj, index) => {
-                  const dateKey = formatDateKey(dayObj.date);
-                  const dayEvents = events.filter(event => {
-                    const start = new Date(event.startDate);
-                    const end = new Date(event.endDate);
-                    const current = new Date(dateKey);
-                    start.setHours(0, 0, 0, 0);
-                    end.setHours(0, 0, 0, 0);
-                    current.setHours(0, 0, 0, 0);
-                    return current >= start && current <= end;
-                  });
+        <div className="w-full max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-strokedark dark:bg-boxdark">
+          <div className="grid grid-cols-7 bg-slate-50 text-slate-600">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, idx) => (
+              <div
+                key={idx}
+                className="flex h-12 items-center justify-center p-1 text-xs font-semibold uppercase tracking-wide sm:text-sm xl:p-3 border-l border-slate-200 first:border-l-0"
+              >
+                <span className="hidden lg:block">{day}</span>
+                <span className="block lg:hidden">{day}</span>
+              </div>
+            ))}
+          </div>
 
-                  return (
-                    <td
+          <div className="divide-y divide-slate-200">
+            {weeks.map((week, weekIdx) => {
+              const weekStart = startOfDay(week[0].date);
+              const weekEnd = startOfDay(week[6].date);
+              const weekEvents = events.filter((event) => {
+                const start = startOfDay(new Date(event.startDate));
+                const end = startOfDay(new Date(event.endDate));
+                return end >= weekStart && start <= weekEnd;
+              });
+
+              return (
+                <div key={weekIdx} className="relative grid grid-cols-7">
+                  {week.map((dayObj, index) => (
+                    <div
                       key={index}
-                      className={`ease relative h-28 cursor-pointer border border-stroke p-2 transition duration-500 hover:bg-gray dark:border-strokedark dark:hover:bg-meta-4 md:h-32 md:p-2 xl:h-40 ${!dayObj.currentMonth ? "bg-gray-50 dark:bg-boxdark-2 text-gray-400" : ""
-                        }`}
+                      className={`relative h-28 border-l border-slate-200 p-2 align-top transition hover:bg-slate-50/70 dark:border-strokedark md:h-32 md:p-2 xl:h-40 ${!dayObj.currentMonth ? "bg-slate-50/60 text-slate-400 dark:bg-boxdark-2" : ""}`}
                     >
-                      <span className={`font-medium ${dayObj.currentMonth ? "text-black dark:text-white" : "text-gray-400 dark:text-gray-600"}`}>
+                      <span className={`inline-flex h-6 min-w-[1.5rem] items-center justify-center rounded-full text-xs font-semibold ${dayObj.currentMonth ? "text-slate-700 dark:text-white" : "text-slate-400 dark:text-gray-600"}`}>
                         {dayObj.day}
                       </span>
+                    </div>
+                  ))}
 
-                      <div className="mt-1 flex flex-col gap-1 overflow-y-auto max-h-[80%] custom-scrollbar">
-                        {dayEvents.map((event, idx) => (
-                          <div
-                            key={idx}
-                            className={`group relative rounded border px-2 py-1 text-xs font-semibold ${event.color} transition-all hover:opacity-100`}
-                          >
-                            <span className="block truncate">{event.processName}</span>
-                            <div className="invisible absolute left-0 top-full z-50 mt-1 w-48 flex-col gap-1 rounded-md bg-white p-3 shadow-xl ring-1 ring-black/5 dark:bg-boxdark dark:ring-white/10 opacity-0 transition-opacity group-hover:visible group-hover:opacity-100">
-                              <p className="font-bold text-black dark:text-white mb-1">{event.processName}</p>
-                              <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-300">
-                                <Layers size={12} />
-                                <span>{event.status}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-300">
-                                <Clock size={12} />
-                                <span>{event.shift}</span>
-                              </div>
-                              <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-300">
-                                <CalendarIcon size={12} />
-                                <span>{new Date(event.startDate).toLocaleDateString()} - {new Date(event.endDate).toLocaleDateString()}</span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
-            </tbody>
-          </table>
+                  <div className="pointer-events-none absolute inset-x-0 top-8 grid grid-cols-7 gap-1 px-2">
+                    {weekEvents.map((event, idx) => {
+                      const start = startOfDay(new Date(event.startDate));
+                      const end = startOfDay(new Date(event.endDate));
+                      const clampedStart = start < weekStart ? weekStart : start;
+                      const clampedEnd = end > weekEnd ? weekEnd : end;
+                      const startIndex = week.findIndex((d) => isSameDay(d.date, clampedStart));
+                      const endIndex = week.findIndex((d) => isSameDay(d.date, clampedEnd));
+                      if (startIndex === -1 || endIndex === -1) return null;
+                      return (
+                        <button
+                          key={`${event.id}-${idx}`}
+                          type="button"
+                          className={`pointer-events-auto truncate rounded-md border px-2 py-1 text-[11px] font-semibold ${event.color} shadow-[inset_0_0_0_1px_rgba(255,255,255,0.25)] transition`}
+                          style={{ gridColumn: `${startIndex + 1} / ${endIndex + 2}` }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedEvent(event);
+                          }}
+                        >
+                          {event.processName}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {selectedEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setSelectedEvent(null)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900">Process Details</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedEvent(null)}
+                className="rounded p-1 text-slate-600 hover:text-slate-800"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-2 text-sm text-slate-700">
+              <div><span className="font-semibold">Process:</span> {selectedEvent.processName}</div>
+              <div><span className="font-semibold">Status:</span> {selectedEvent.status}</div>
+              <div><span className="font-semibold">Shift:</span> {selectedEvent.shift}</div>
+              <div><span className="font-semibold">Start:</span> {new Date(selectedEvent.startDate).toLocaleString()}</div>
+              <div><span className="font-semibold">End:</span> {new Date(selectedEvent.endDate).toLocaleString()}</div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              {selectedEvent.planingId && (
+                <a
+                  href={`/planing-scheduling/viewPlaning/${selectedEvent.planingId}`}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  View Planing
+                </a>
+              )}
+              <button
+                type="button"
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                onClick={() => setSelectedEvent(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -237,3 +311,5 @@ const Calendar = () => {
 };
 
 export default Calendar;
+
+
