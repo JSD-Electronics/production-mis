@@ -6,7 +6,9 @@
         "dev": "next dev",
         "build": "next build",
         "start": "next start",
-        "lint": "next lint"
+        "lint": "next lint",
+        "build:legacy": "next build",
+        "build:fast": "set NEXT_TELEMETRY_DISABLED=1&& set NODE_OPTIONS=--max-old-space-size=4096&& next build"
     },
     "dependencies": {
         "@fortawesome/fontawesome-svg-core": "^6.6.0",
