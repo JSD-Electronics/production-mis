@@ -67,6 +67,7 @@ const DraggableGridItem = ({
   selectedProcess,
   seatStatusFilter,
   onViewDevices,
+  readOnly,
 }: {
   item: any;
   rowIndex: any;
@@ -89,7 +90,9 @@ const DraggableGridItem = ({
   selectedProcess: any;
   seatStatusFilter: any;
   onViewDevices: (seat: string, stageName: string) => void;
+  readOnly?: boolean;
 }) => {
+  const isReadOnly = Boolean(readOnly);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const closeModal = () => setIsModalOpen(false);
@@ -97,6 +100,7 @@ const DraggableGridItem = ({
   const [jigs, setJigs] = useState([]);
   const [noOfKits, setNoOfKits] = useState(0);
   const openModal = (stages: any) => {
+    if (isReadOnly) return;
     const requiredSkills = stages.map((stage) =>
       stage.name.toLowerCase().trim(),
     );
@@ -115,6 +119,7 @@ const DraggableGridItem = ({
   const [{ isDragging }, drag] = useDrag({
     type: "Test",
     item: { coordinates },
+    canDrag: !isReadOnly,
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
@@ -123,6 +128,7 @@ const DraggableGridItem = ({
     accept: "Test",
     hover: () => { },
     drop: (draggedItem) => {
+      if (isReadOnly) return;
       if (draggedItem.coordinates !== coordinates) {
         moveItem(draggedItem.coordinates, coordinates);
       }
@@ -255,7 +261,9 @@ const DraggableGridItem = ({
   );
 };
 
-const ViewPlanSchedule = () => {
+const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string; readOnly?: boolean; }) => {
+  const isReadOnly = Boolean(readOnly);
+  const [resolvedPlaningId, setResolvedPlaningId] = useState("");
   const [shiftTime, setShiftTime] = useState(0);
   const [selectedShift, setSelectedShift] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -279,6 +287,16 @@ const ViewPlanSchedule = () => {
   const [selectedReason, setSelectedReason] = useState("");
   const [id, setID] = useState("");
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (planingId) {
+      setResolvedPlaningId(planingId);
+      return;
+    }
+    const pathname = window.location.pathname;
+    const id = pathname.split("/").pop() || "";
+    setResolvedPlaningId(id);
+  }, [planingId]);
   const [downTimeFrom, setDownTimeFrom] = useState("");
   const [downTimeTo, setDownTimeTo] = useState("");
   const [isDownTimeModalOpen, setIsDownTimeModalOpen] = useState(false);
@@ -485,8 +503,8 @@ const ViewPlanSchedule = () => {
   useEffect(() => {
     getOperators();
     fetchJigCategories();
-    const pathname = window.location.pathname;
-    const id = pathname.split("/").pop();
+    const id = resolvedPlaningId;
+    if (!id) return;
     setID(id);
     getPlaningById(id);
     fetchDowntimeReasons();
@@ -499,7 +517,7 @@ const ViewPlanSchedule = () => {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [resolvedPlaningId]);
 
   const fetchDowntimeReasons = async () => {
     try {
@@ -512,8 +530,8 @@ const ViewPlanSchedule = () => {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    const pathname = window.location.pathname;
-    const id = pathname.split("/").pop();
+    const id = resolvedPlaningId;
+    if (!id) return;
     await getPlaningById(id);
     setLastRefreshed(new Date().toLocaleTimeString());
     toast.success("Data Refreshed Successfully");
@@ -521,6 +539,7 @@ const ViewPlanSchedule = () => {
   };
 
   const handleManualResume = async () => {
+    if (isReadOnly) return;
     try {
       setLoading(true);
       await updateProcessStatus(id, {
@@ -538,6 +557,7 @@ const ViewPlanSchedule = () => {
   };
 
   const handleSubmitDowntime = async () => {
+    if (isReadOnly) return;
     if (!downTimeFrom || !downTimeTo || !selectedReason) {
       toast.error("Please fill all downtime fields");
       return;
@@ -1335,8 +1355,7 @@ const ViewPlanSchedule = () => {
     return newAssignedStages;
   };
   const handleEditPlaning = () => {
-    const pathname = window.location.pathname;
-    const id = pathname.split("/").pop();
+    const id = resolvedPlaningId;
     window.open(`/planing-scheduling/edit/${id}`, "_blank");
   };
 
@@ -1677,15 +1696,34 @@ const ViewPlanSchedule = () => {
     setOverallUPHA(tableData);
   };
   const handleDeviceSerialNo = async () => {
-    const pathname = window.location.pathname;
-    const id = pathname.split("/").pop();
+    const id = resolvedPlaningId;
     window.open(
       `/device/generate-serials/${selectedProduct?.product?._id}/${selectedProcess?._id}`,
       "_blank",
     );
   };
   return (
-    <DndProvider backend={HTML5Backend}>
+    <div className={isReadOnly ? "view-planing-readonly" : ""}>
+      {isReadOnly && (
+        <style jsx global>{`
+          .view-planing-readonly button,
+          .view-planing-readonly a,
+          .view-planing-readonly input,
+          .view-planing-readonly select,
+          .view-planing-readonly textarea,
+          .view-planing-readonly [role="button"] {
+            pointer-events: none !important;
+          }
+          .view-planing-readonly button,
+          .view-planing-readonly a,
+          .view-planing-readonly input,
+          .view-planing-readonly select,
+          .view-planing-readonly textarea {
+            cursor: not-allowed !important;
+          }
+        `}</style>
+      )}
+      <DndProvider backend={HTML5Backend}>
       <>
         <Breadcrumb
           parentName="Planning & Scheduling Management"
@@ -2232,6 +2270,7 @@ const ViewPlanSchedule = () => {
                                                 selectedProcess={selectedProcess}
                                                 seatStatusFilter={seatStatusFilter}
                                                 onViewDevices={handleViewDevices}
+                                                readOnly={isReadOnly}
                                               />
                                             ))}
                                         </div>
@@ -2842,6 +2881,7 @@ const ViewPlanSchedule = () => {
         )}
       </>
     </DndProvider>
+    </div>
   );
 };
 

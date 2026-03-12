@@ -82,8 +82,8 @@ const Sidebar = ({
     <ClickOutside onClick={() => setSidebarOpen(false)}>
       <aside
         className={`
-          fixed left-0 top-0 z-9999 flex h-screen flex-col
-          overflow-x-visible
+          fixed left-0 top-0 z-9999 flex h-screen flex-col no-scrollbar
+          overflow-x-hidden
           bg-gradient-to-b from-[#0f2a3d] to-[#0b1d2b]
           shadow-xl ring-1 ring-white/5
           transition-[width,transform] duration-300 ease-in-out
@@ -95,6 +95,28 @@ const Sidebar = ({
       >
         {/* ── HEADER ── */}
         <div className={`relative flex items-center justify-center ${effectiveCollapsed ? "h-28 flex-col" : "h-20"}`}>
+          {/* Mobile close button */}
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 lg:hidden"
+            aria-label="Close menu"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M18 6L6 18" />
+              <path d="M6 6l12 12" />
+            </svg>
+          </button>
           <Link
             href="/"
             className={`flex items-center gap-2 font-semibold text-white transition-all ${effectiveCollapsed ? "text-transparent truncate mt-4" : "text-xl px-4"
@@ -121,7 +143,7 @@ const Sidebar = ({
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className={`hidden lg:flex items-center justify-center w-6 h-6 rounded-full transition-transform hover:scale-110 z-50 ${effectiveCollapsed
                 ? "mt-4 text-white/50 hover:text-white"
-                : "absolute right-[-12px] top-7 bg-white text-gray-800 shadow-md ring-1 ring-gray-200"
+                : "absolute top-12 mt-2 text-white shadow-md"
               }`}
             title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
@@ -145,7 +167,7 @@ const Sidebar = ({
 
         {/* ── NAV ── */}
         <div
-          className={`no-scrollbar flex flex-1 flex-col duration-300 ease-linear ${effectiveCollapsed ? "overflow-visible" : "overflow-y-auto"
+          className={`no-scrollbar flex flex-1 min-w-0 flex-col duration-300 ease-linear ${effectiveCollapsed ? "overflow-visible" : "overflow-y-auto"
             }`}
         >
           <nav
