@@ -1236,12 +1236,12 @@ const StickerDesigner = ({
                                 renderer="svg"
                                 width={computedBarWidth}
                                 height={field.barHeight || field.height - 15}
-                                displayValue={field.displayValue ?? true}
+                                displayValue={false}
                                 format={field.format || "CODE128"}
                                 lineColor={field.lineColor || "#000000"}
                                 background={field.background || "transparent"}
                                 margin={field.margin ?? 0}
-                                fontSize={field.fontSize || 10}
+                                fontSize={field.fontSize || 14}
                               />
                             );
                           })()}
