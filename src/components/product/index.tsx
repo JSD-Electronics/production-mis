@@ -1,5 +1,6 @@
 "use client";
 import React, { use, useState } from "react";
+import dynamic from "next/dynamic";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -30,12 +31,14 @@ import { faMinus, faTrash, faChevronUp, faChevronDown, faPlus, faPuzzlePiece, fa
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import PrintTableComponent from "./printTableComponents";
 
+const ReactQuill = dynamic(() => import("react-quill"), { ssr: false });
 
 
 
 interface SubStep {
   dragId: string;
   stepName: string;
+  description?: string;
   isSubExpand: boolean;
   isPrinterEnable?: boolean;
   isCheckboxNGStatus?: boolean;
@@ -132,6 +135,7 @@ const AddProduct = () => {
         {
           dragId: `step-${Date.now()}`,
           stepName: "",
+          description: "",
           isPrinterEnable: false,
           isCheckboxNGStatus: false,
           isPackagingStatus: false,
@@ -157,6 +161,52 @@ const AddProduct = () => {
       ],
     },
   ]);
+
+  const handleSubStepDescriptionChange = (
+    stageIndex: number,
+    subStepIndex: number,
+    value: string,
+  ) => {
+    const newStages = [...stages];
+    newStages[stageIndex].subSteps[subStepIndex].description = value;
+    setStages(newStages);
+  };
+
+  const stepDescriptionModules = {
+    toolbar: [
+      [{ header: [1, 2, 3, false] }],
+      [{ font: [] }, { size: ["small", false, "large", "huge"] }],
+      ["bold", "italic", "underline", "strike"],
+      [{ color: [] }, { background: [] }],
+      [{ script: "sub" }, { script: "super" }],
+      [{ list: "ordered" }, { list: "bullet" }],
+      [{ indent: "-1" }, { indent: "+1" }],
+      [{ align: [] }],
+      ["blockquote", "code-block"],
+      ["link"],
+      ["clean"],
+    ],
+  };
+
+  const stepDescriptionFormats = [
+    "header",
+    "font",
+    "size",
+    "bold",
+    "italic",
+    "underline",
+    "strike",
+    "color",
+    "background",
+    "script",
+    "list",
+    "bullet",
+    "indent",
+    "align",
+    "blockquote",
+    "code-block",
+    "link",
+  ];
   /* Undo History Logic */
   const [history, setHistory] = useState<any[]>([]);
 
@@ -616,6 +666,7 @@ const AddProduct = () => {
     newStages[stageIndex].subSteps.push({
       dragId: `step-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       stepName: "",
+      description: "",
       isPrinterEnable: false,
       isCheckboxNGStatus: false,
       isPackagingStatus: false,
@@ -1632,6 +1683,27 @@ const AddProduct = () => {
                                                                 <option value="jig">Jig</option>
                                                                 <option value="manual">Manual</option>
                                                               </select>
+                                                            </div>
+
+                                                            <div className="sm:col-span-2">
+                                                              <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                                                Description
+                                                              </label>
+                                                              <div className="rounded-lg border border-gray-300 bg-white dark:border-form-strokedark dark:bg-form-input">
+                                                                <ReactQuill
+                                                                  theme="snow"
+                                                                  value={subStep.description || ""}
+                                                                  onChange={(value) =>
+                                                                    handleSubStepDescriptionChange(
+                                                                      index,
+                                                                      subIndex,
+                                                                      value,
+                                                                    )
+                                                                  }
+                                                                  modules={stepDescriptionModules}
+                                                                  formats={stepDescriptionFormats}
+                                                                />
+                                                              </div>
                                                             </div>
 
                                                             {/* NG Timeout */}

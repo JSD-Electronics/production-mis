@@ -2001,6 +2001,14 @@ export default function DeviceTestComponent({
                                                   Required
                                                 </span>
                                               </div>
+                                              {currentSubStep?.description && (
+                                                <div
+                                                  className="prose prose-sm max-w-none text-gray-700 mt-3"
+                                                  dangerouslySetInnerHTML={{
+                                                    __html: currentSubStep.description,
+                                                  }}
+                                                />
+                                              )}
                                               <p className="mt-1 text-sm leading-relaxed text-gray-600">
                                                 Please physically inspect the
                                                 device and verify correctly.
