@@ -819,7 +819,7 @@ const StickerDesigner = ({
   const [barLineColor, setBarLineColor] = useState("#000000");
   const [barBackground, setBarBackground] = useState("#ffffff");
   const [barMargin, setBarMargin] = useState<number | "">(10);
-  const [barTextSize, setBarTextSize] = useState<number | "">(14);
+  const [barTextSize, setBarTextSize] = useState<number | "">(12);
   const [barTextMargin, setBarTextMargin] = useState<number | "">(2);
   const [barCodeError, setBarCodeError] = useState<string>("");
   const handleBarCodeValue = () => {
@@ -1163,6 +1163,7 @@ const StickerDesigner = ({
                   <Rnd
                     key={i}
                     bounds="parent"
+                    scale={zoomLevel}
                     size={{ width: field.width, height: field.height }}
                     position={{ x: field.x, y: field.y }}
                     onDragStop={(e, d) =>
@@ -1223,25 +1224,38 @@ const StickerDesigner = ({
 
                             const estimatedModules =
                               barcodeValue.length * 11 + 35;
-                            const computedBarWidth = field.barLength
+                            const targetWidth = field.barLength ?? field.width;
+                            const computedBarWidth = targetWidth
                               ? Math.max(
                                   1,
-                                  Math.floor(field.barLength / estimatedModules),
+                                  Math.floor(targetWidth / estimatedModules),
                                 )
                               : field.barWidth || 1;
+
+                            const showValue = field.displayValue !== false;
+                            const valueFontSize = field.fontSize ?? 12;
+                            const valueTextMargin = field.textMargin ?? 2;
+                            const valueSpace = showValue
+                              ? valueFontSize + valueTextMargin
+                              : 0;
+                            const computedBarHeight = Math.max(
+                              1,
+                              (field.barHeight ?? field.height) - valueSpace,
+                            );
 
                             return (
                               <Barcode
                                 value={barcodeValue}
                                 renderer="svg"
                                 width={computedBarWidth}
-                                height={field.barHeight || field.height - 15}
-                                displayValue={false}
+                                height={computedBarHeight}
+                                displayValue={showValue}
                                 format={field.format || "CODE128"}
                                 lineColor={field.lineColor || "#000000"}
                                 background={field.background || "transparent"}
-                                margin={field.margin ?? 0}
-                                fontSize={field.fontSize || 14}
+                                margin={0}
+                                fontSize={valueFontSize}
+                                textMargin={valueTextMargin}
                               />
                             );
                           })()}
@@ -1972,6 +1986,28 @@ const StickerDesigner = ({
                                   <label className="text-[10px] font-bold uppercase text-gray-500">
                                     Show Value
                                   </label>
+                                </div>
+                                <div className="col-span-2">
+                                  <label className="mb-1 block text-[10px] font-medium text-gray-400">
+                                    Value Font Size (px)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min={6}
+                                    value={
+                                      stages[index]?.subSteps[subIndex1]?.printerFields[
+                                        fieldIndex
+                                      ].fields[focusedFieldIndex].fontSize ?? 12
+                                    }
+                                    onChange={(e) => {
+                                      const val = Number(e.target.value);
+                                      if (Number.isNaN(val)) return;
+                                      handleFieldChange(focusedFieldIndex, {
+                                        fontSize: val,
+                                      });
+                                    }}
+                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-strokedark dark:bg-form-input"
+                                  />
                                 </div>
                               </div>
                             )}
