@@ -1224,7 +1224,7 @@ const StickerDesigner = ({
 
                             const estimatedModules =
                               barcodeValue.length * 11 + 35;
-                            const targetWidth = field.barLength ?? field.width;
+                            const targetWidth = field.width;
                             const computedBarWidth = targetWidth
                               ? Math.max(
                                   1,
@@ -1235,12 +1235,15 @@ const StickerDesigner = ({
                             const showValue = field.displayValue !== false;
                             const valueFontSize = field.fontSize ?? 12;
                             const valueTextMargin = field.textMargin ?? 2;
+                            const valueFontOptions =
+                              field.valueFontBold ? "bold" : undefined;
                             const valueSpace = showValue
                               ? valueFontSize + valueTextMargin
                               : 0;
+                            const baseHeight = field.height;
                             const computedBarHeight = Math.max(
                               1,
-                              (field.barHeight ?? field.height) - valueSpace,
+                              (baseHeight || 0) - valueSpace,
                             );
 
                             return (
@@ -1256,6 +1259,7 @@ const StickerDesigner = ({
                                 margin={0}
                                 fontSize={valueFontSize}
                                 textMargin={valueTextMargin}
+                                fontOptions={valueFontOptions}
                               />
                             );
                           })()}
@@ -2008,6 +2012,25 @@ const StickerDesigner = ({
                                     }}
                                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-strokedark dark:bg-form-input"
                                   />
+                                </div>
+                                <div className="col-span-2 flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={
+                                      !!stages[index]?.subSteps[subIndex1]?.printerFields[
+                                        fieldIndex
+                                      ].fields[focusedFieldIndex].valueFontBold
+                                    }
+                                    onChange={(e) =>
+                                      handleFieldChange(focusedFieldIndex, {
+                                        valueFontBold: e.target.checked,
+                                      })
+                                    }
+                                    className="h-3 w-3 rounded text-primary focus:ring-primary"
+                                  />
+                                  <label className="text-[10px] font-bold uppercase text-gray-500">
+                                    Bold Value
+                                  </label>
                                 </div>
                               </div>
                             )}

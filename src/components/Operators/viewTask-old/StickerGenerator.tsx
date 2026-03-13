@@ -219,7 +219,7 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
               >
                 {(() => {
                   const estimatedModules = safeBarcodeValue.length * 11 + 35;
-                  const targetWidth = field.barLength ?? field.width;
+                  const targetWidth = field.width;
                   const computedBarWidth = targetWidth
                     ? Math.max(1, Math.floor(targetWidth / estimatedModules))
                     : field.barWidth || 1;
@@ -227,10 +227,12 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
                   const showValue = field.displayValue !== false;
                   const valueFontSize = field.fontSize ?? 12;
                   const valueTextMargin = field.textMargin ?? 2;
+                  const valueFontOptions = field.valueFontBold ? "bold" : undefined;
                   const valueSpace = showValue ? valueFontSize + valueTextMargin : 0;
+                  const baseHeight = field.height;
                   const computedBarHeight = Math.max(
                     1,
-                    (field.barHeight ?? field.height) - valueSpace,
+                    (baseHeight || 0) - valueSpace,
                   );
 
                   return (
@@ -246,6 +248,7 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
                       margin={0}
                       fontSize={valueFontSize}
                       textMargin={valueTextMargin}
+                      fontOptions={valueFontOptions}
                     />
                   );
                 })()}
