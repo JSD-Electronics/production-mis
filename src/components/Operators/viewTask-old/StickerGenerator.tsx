@@ -219,23 +219,33 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
               >
                 {(() => {
                   const estimatedModules = safeBarcodeValue.length * 11 + 35;
-                  const computedBarWidth = field.barLength
-                    ? Math.max(1, Math.floor(field.barLength / estimatedModules))
+                  const targetWidth = field.barLength ?? field.width;
+                  const computedBarWidth = targetWidth
+                    ? Math.max(1, Math.floor(targetWidth / estimatedModules))
                     : field.barWidth || 1;
+
+                  const showValue = field.displayValue !== false;
+                  const valueFontSize = field.fontSize ?? 12;
+                  const valueTextMargin = field.textMargin ?? 2;
+                  const valueSpace = showValue ? valueFontSize + valueTextMargin : 0;
+                  const computedBarHeight = Math.max(
+                    1,
+                    (field.barHeight ?? field.height) - valueSpace,
+                  );
 
                   return (
                     <Barcode
                       value={safeBarcodeValue}
                       renderer="svg"
                       width={computedBarWidth}
-                      height={field.barHeight || (field.height || 50) - 15}
-                      displayValue={field.displayValue ?? true}
+                      height={computedBarHeight}
+                      displayValue={showValue}
                       format={field.format || "CODE128"}
                       lineColor={field.lineColor || "#000000"}
                       background={field.background || "transparent"}
-                      margin={field.margin ?? 0}
-                      fontSize={field.fontSize || Math.max(fontSize - 2, 8)}
-                      textMargin={field.textMargin ?? 2}
+                      margin={0}
+                      fontSize={valueFontSize}
+                      textMargin={valueTextMargin}
                     />
                   );
                 })()}
