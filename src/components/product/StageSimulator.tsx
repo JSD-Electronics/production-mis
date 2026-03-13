@@ -507,6 +507,12 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                 {isManual && (
                     <div className="space-y-4">
                         <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-900/50">
+                            {currentSubStep?.description && (
+                                <div
+                                    className="prose prose-sm max-w-none text-gray-700 dark:prose-invert dark:text-gray-200 mb-4"
+                                    dangerouslySetInnerHTML={{ __html: currentSubStep.description }}
+                                />
+                            )}
                             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                                 Perform the manual checks defined for this step.
                             </p>

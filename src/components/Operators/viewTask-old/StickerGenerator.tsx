@@ -221,7 +221,7 @@ const StickerGenerator = ({ stickerData, deviceData }: { stickerData: any; devic
                   const estimatedModules = safeBarcodeValue.length * 11 + 35;
                   const targetWidth = field.width;
                   const computedBarWidth = targetWidth
-                    ? Math.max(1, Math.floor(targetWidth / estimatedModules))
+                    ? Math.max(0.5, targetWidth / estimatedModules)
                     : field.barWidth || 1;
 
                   const showValue = field.displayValue !== false;

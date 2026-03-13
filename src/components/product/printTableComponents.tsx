@@ -1226,10 +1226,7 @@ const StickerDesigner = ({
                               barcodeValue.length * 11 + 35;
                             const targetWidth = field.width;
                             const computedBarWidth = targetWidth
-                              ? Math.max(
-                                  1,
-                                  Math.floor(targetWidth / estimatedModules),
-                                )
+                              ? Math.max(0.5, targetWidth / estimatedModules)
                               : field.barWidth || 1;
 
                             const showValue = field.displayValue !== false;
