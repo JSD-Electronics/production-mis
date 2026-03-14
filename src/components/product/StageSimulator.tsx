@@ -509,7 +509,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                         <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-900/50">
                             {currentSubStep?.description && (
                                 <div
-                                    className="prose prose-sm max-w-none text-gray-700 dark:prose-invert dark:text-gray-200 mb-4"
+                                    className="prose prose-sm max-w-none text-gray-700 dark:prose-invert dark:text-gray-200 mb-4 [&_ol]:list-decimal [&_ul]:list-disc [&_ol]:pl-6 [&_ul]:pl-6 [&_li]:my-1"
                                     dangerouslySetInnerHTML={{ __html: currentSubStep.description }}
                                 />
                             )}

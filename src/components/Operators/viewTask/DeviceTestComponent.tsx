@@ -2003,7 +2003,7 @@ export default function DeviceTestComponent({
                                               </div>
                                               {currentSubStep?.description && (
                                                 <div
-                                                  className="prose prose-sm max-w-none text-gray-700 mt-3"
+                                                  className="prose prose-sm max-w-none text-gray-700 mt-3 [&_ol]:list-decimal [&_ul]:list-disc [&_ol]:pl-6 [&_ul]:pl-6 [&_li]:my-1"
                                                   dangerouslySetInnerHTML={{
                                                     __html: currentSubStep.description,
                                                   }}
