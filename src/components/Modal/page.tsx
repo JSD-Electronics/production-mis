@@ -11,6 +11,7 @@ const Modal = ({
   submitText = "Confirm",
   closeOption = true,
   maxWidth = "max-w-180",
+  extraActions,
   children,
 }: {
   isOpen: boolean;
@@ -22,6 +23,7 @@ const Modal = ({
   submitText?: string;
   closeOption?: boolean;
   maxWidth?: string;
+  extraActions?: React.ReactNode;
   children: React.ReactNode;
 }) => {
   const [mounted, setMounted] = useState(false);
@@ -58,6 +60,7 @@ const Modal = ({
 
         {/* Modal Footer */}
         <div className="border-gray-100 flex justify-end gap-3 border-t bg-gray-50/30 px-6 py-4">
+          {extraActions}
           {closeOption && (
             <button
               type="button"

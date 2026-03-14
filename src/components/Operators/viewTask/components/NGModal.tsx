@@ -43,7 +43,7 @@ export default function NGModal({
   if (!showNGModal) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[1000000] flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="w-[450px] rounded-xl bg-white p-6 shadow-lg dark:bg-gray-800">
         <h2 className="mb-4 text-center text-lg font-semibold text-gray-900 dark:text-white">
           Device Failed (NG)

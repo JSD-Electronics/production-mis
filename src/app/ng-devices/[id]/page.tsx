@@ -8,6 +8,7 @@ import {
   getOverallDeviceTestEntry,
   getProcessByID,
   getUserDetail,
+  createDeviceTestEntry,
   markDeviceAsResolved,
   updateStageByDeviceId,
 } from "@/lib/api";
@@ -44,9 +45,13 @@ export default function NGDeviceDetails({
   const [userNames, setUserNames] = useState<Record<string, string>>({});
   const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
+  const [isAssigningTRC, setIsAssigningTRC] = useState(false);
+  const [isAssignTRCModalOpen, setIsAssignTRCModalOpen] = useState(false);
   const [firstStageName, setFirstStageName] = useState<string>("");
   const [userType, setUserType] = useState<string>("");
   const [isTRCFormOpen, setIsTRCFormOpen] = useState(false);
+  const [trcNextStage, setTrcNextStage] = useState<string>("");
+  const [qcNextStage, setQcNextStage] = useState<string>("");
   const [trcFormData, setTrcFormData] = useState({
     modelName: "",
     troubleshootedBy: "",
@@ -294,6 +299,11 @@ export default function NGDeviceDetails({
         deviceData?.serialNo || deviceData?.deviceInfo?.serialNo || "";
 
       if (mode === "TRC") {
+        if (!trcNextStage) {
+          alert("Please select the next stage for this device.");
+          setIsResolving(false);
+          return;
+        }
         const trcRemarkData = {
           modelName: trcFormData.modelName,
           troubleshootedBy: trcFormData.troubleshootedBy,
@@ -315,15 +325,16 @@ export default function NGDeviceDetails({
         formData.append("deviceId", String(targetDeviceId));
         formData.append("serialNumber", serialNumber);
         formData.append("status", "TRC Resolved");
+        formData.append("currentStage", trcNextStage);
         formData.append("trcRemarks", JSON.stringify(trcRemarkData));
         if (trcFormData.photo) {
           formData.append("photo", trcFormData.photo);
         }
         await markDeviceAsResolved(formData);
 
-        if (firstStageName) {
+        if (trcNextStage) {
           const fd = new FormData();
-          fd.append("currentStage", firstStageName);
+          fd.append("currentStage", trcNextStage);
           fd.append("status", "TRC Resolved");
           await updateStageByDeviceId(String(targetDeviceId), fd);
         }
@@ -331,19 +342,26 @@ export default function NGDeviceDetails({
         setDeviceData((prev: any) => ({
           ...prev,
           status: "TRC Resolved",
-          stageName: firstStageName || prev?.stageName,
-          currentStage: firstStageName || prev?.currentStage,
+          stageName: trcNextStage || prev?.stageName,
+          currentStage: trcNextStage || prev?.currentStage,
         }));
         setIsTRCFormOpen(false);
+        setTrcNextStage("");
       } else {
+        if (!qcNextStage) {
+          alert("Please select the next stage for this device.");
+          setIsResolving(false);
+          return;
+        }
         await markDeviceAsResolved({
           deviceId: String(targetDeviceId),
           serialNumber,
+          currentStage: qcNextStage,
         });
 
-        if (firstStageName) {
+        if (qcNextStage) {
           const fd = new FormData();
-          fd.append("currentStage", firstStageName);
+          fd.append("currentStage", qcNextStage);
           fd.append("status", "QC Resolved");
           await updateStageByDeviceId(String(targetDeviceId), fd);
         }
@@ -351,10 +369,11 @@ export default function NGDeviceDetails({
         setDeviceData((prev: any) => ({
           ...prev,
           status: "QC Resolved",
-          stageName: firstStageName || prev?.stageName,
-          currentStage: firstStageName || prev?.currentStage,
+          stageName: qcNextStage || prev?.stageName,
+          currentStage: qcNextStage || prev?.currentStage,
         }));
         setIsResolveModalOpen(false);
+        setQcNextStage("");
       }
     } catch (e) {
       console.error("Error resolving device:", e);
@@ -363,6 +382,82 @@ export default function NGDeviceDetails({
       setIsTRCFormOpen(false);
     } finally {
       setIsResolving(false);
+    }
+  };
+
+  const assignToTRC = async () => {
+    try {
+      setIsAssigningTRC(true);
+      const targetDeviceId =
+        deviceData?.deviceId?._id || deviceData?.deviceId || params.id;
+      const serialNumber =
+        deviceData?.serialNo || deviceData?.deviceInfo?.serialNo || "";
+
+      const fd = new FormData();
+      fd.append("assignedDeviceTo", "TRC");
+      fd.append("status", "NG");
+      await updateStageByDeviceId(String(targetDeviceId), fd);
+
+      try {
+        const userDetails = JSON.parse(
+          localStorage.getItem("userDetails") || "{}",
+        );
+        const processId =
+          deviceData?.processId?._id ||
+          deviceData?.processId ||
+          deviceData?.processID ||
+          "";
+        const planId =
+          deviceData?.planId?._id ||
+          deviceData?.planId ||
+          deviceData?.planingId ||
+          "";
+        const productId =
+          deviceData?.productId?._id ||
+          deviceData?.productId ||
+          deviceData?.deviceInfo?.productId?._id ||
+          deviceData?.deviceInfo?.productId ||
+          "";
+
+        const entryData = new FormData();
+        entryData.append("deviceId", String(targetDeviceId));
+        if (processId) entryData.append("processId", String(processId));
+        if (planId) entryData.append("planId", String(planId));
+        if (productId) entryData.append("productId", String(productId));
+        if (userDetails?._id) {
+          entryData.append("operatorId", String(userDetails._id));
+        }
+        if (serialNumber) entryData.append("serialNo", serialNumber);
+        entryData.append(
+          "stageName",
+          deviceData?.stageName || deviceData?.currentStage || "",
+        );
+        entryData.append("status", "NG");
+        entryData.append("assignedDeviceTo", "TRC");
+        entryData.append(
+          "timeConsumed",
+          deviceData?.timeConsumed || deviceData?.timeTaken || "00:00:00",
+        );
+        entryData.append("startTime", new Date().toISOString());
+        entryData.append("endTime", new Date().toISOString());
+        entryData.append("reason", "Assigned to TRC");
+
+        await createDeviceTestEntry(entryData);
+      } catch (e) {
+        console.warn("Failed to create TRC assignment record:", e);
+      }
+
+      setDeviceData((prev: any) => ({
+        ...prev,
+        assignedDeviceTo: "TRC",
+        status: prev?.status || "NG",
+      }));
+      await fetchDeviceDetails();
+    } catch (e) {
+      console.error("Error assigning device to TRC:", e);
+      alert("Failed to assign device to TRC. Please try again.");
+    } finally {
+      setIsAssigningTRC(false);
     }
   };
   useEffect(() => {
@@ -562,15 +657,50 @@ export default function NGDeviceDetails({
     return result;
   }, [history, deviceData]);
 
-  const hasQCResolvedHistory = React.useMemo(() => {
-    return (
-      Array.isArray(history) &&
-      history.some((h: any) => {
-        const s = String(h?.status || "").toLowerCase();
-        return s.includes("qc resolved");
-      })
-    );
-  }, [history]);
+  const trcStageOptions = React.useMemo(() => {
+    const hist = Array.isArray(history) ? history : [];
+    const combined = [...hist, ...(deviceData ? [deviceData] : [])].filter(Boolean);
+    const toStageName = (item: any) =>
+      String(item?.stageName || item?.stepName || item?.currentStage || "").trim();
+
+    // Prefer process definition ordering for "previous stages"
+    const processStages =
+      Array.isArray(deviceData?.process?.stages) ? deviceData.process.stages :
+        Array.isArray(deviceData?.processId?.stages) ? deviceData.processId.stages :
+          Array.isArray(deviceData?.processId?.stages) ? deviceData.processId.stages :
+            [];
+    const stageOrder = processStages
+      .map((s: any) => s?.stageName || s?.name)
+      .filter(Boolean)
+      .map((s: string) => String(s).trim());
+
+    const currentNgStage = String(
+      deviceData?.stageName || deviceData?.currentStage || "",
+    ).trim();
+
+    const currentIdx = stageOrder.indexOf(currentNgStage);
+    if (currentIdx !== -1) {
+      return Array.from(new Set(stageOrder.slice(0, currentIdx + 1)));
+    }
+
+    // Fallback: use history ordering if process stages are unavailable
+    const sorted = [...combined].sort((a: any, b: any) => {
+      const aTime = new Date(a?.createdAt || a?.updatedAt || 0).getTime();
+      const bTime = new Date(b?.createdAt || b?.updatedAt || 0).getTime();
+      return aTime - bTime;
+    });
+
+    const lastNgIndex = [...sorted]
+      .map((item) => String(item?.status || "").toUpperCase() === "NG")
+      .lastIndexOf(true);
+
+    if (lastNgIndex === -1) {
+      return Array.from(new Set(sorted.map(toStageName).filter(Boolean)));
+    }
+
+    const priorStages = sorted.slice(0, lastNgIndex + 1).map(toStageName).filter(Boolean);
+    return Array.from(new Set(priorStages));
+  }, [history, deviceData]);
 
   if (loading) {
     return (
@@ -764,7 +894,7 @@ export default function NGDeviceDetails({
                     </div>
                   </div>
                 )}
-                <div className="mt-4 flex w-100 items-end justify-center pr-10">
+                <div className="mt-4 flex w-full items-end justify-start">
                   {(() => {
                     const statusText = String(
                       deviceData?.status || "",
@@ -773,32 +903,50 @@ export default function NGDeviceDetails({
                     const isAlreadyResolved = statusText === "resolved";
                     const isTRCResolved = statusText === "trc resolved";
                     const canMarkResolved =
-                      !(
-                        isQCResolved ||
-                        isAlreadyResolved ||
-                        isTRCResolved ||
-                        hasQCResolvedHistory
-                      ) && !isResolving;
+                      !(isQCResolved || isAlreadyResolved || isTRCResolved) &&
+                      !isResolving;
+                    const isQC =
+                      userType?.toLowerCase() === "qc" ||
+                      userType?.toLowerCase() === "quality control";
+                    const assignedToUpper = String(
+                      deviceData?.assignedDeviceTo || "",
+                    ).toUpperCase();
+                    const canAssignToTRC =
+                      isQC &&
+                      !isTRCResolved &&
+                      assignedToUpper !== "TRC" &&
+                      !isAssigningTRC;
                     return (
-                      <button
-                        onClick={() => {
-                          const isQC =
-                            userType?.toLowerCase() === "qc" ||
-                            userType?.toLowerCase() === "quality control";
-                          if (isQC) {
-                            setIsResolveModalOpen(true);
-                          } else {
-                            setIsTRCFormOpen(true);
-                          }
-                        }}
-                        className={`inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold focus:outline-none focus:ring-2 ${canMarkResolved
-                          ? "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-400"
-                          : "bg-gray-300 text-gray-600 cursor-not-allowed"
-                          }`}
-                        disabled={!canMarkResolved}
-                      >
-                        Mark as Resolved
-                      </button>
+                      <div className="flex w-full flex-wrap items-center gap-2">
+                        {isQC && (
+                          <button
+                            onClick={() => setIsAssignTRCModalOpen(true)}
+                            className={`inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold focus:outline-none focus:ring-2 ${canAssignToTRC
+                              ? "bg-orange-500 text-white hover:bg-orange-600 focus:ring-orange-300"
+                              : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                              }`}
+                            disabled={!canAssignToTRC}
+                          >
+                            Assign to TRC
+                          </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            if (isQC) {
+                              setIsResolveModalOpen(true);
+                            } else {
+                              setIsTRCFormOpen(true);
+                            }
+                          }}
+                          className={`inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold focus:outline-none focus:ring-2 ${canMarkResolved
+                            ? "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-400"
+                            : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                            }`}
+                          disabled={!canMarkResolved}
+                        >
+                          Mark as Resolved
+                        </button>
+                      </div>
                     );
                   })()}
                 </div>
@@ -1100,6 +1248,27 @@ export default function NGDeviceDetails({
               This will mark the device as Resolved and send it back to the
               first stage{firstStageName ? ` (${firstStageName})` : ""}.
             </p>
+            <div className="mb-4">
+              <label className="mb-2 block text-sm font-semibold text-gray-700">
+                Move Device To Stage <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={qcNextStage}
+                onChange={(e) => setQcNextStage(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/40"
+                required
+              >
+                <option value="">Select stage</option>
+                {trcStageOptions.map((stage) => (
+                  <option key={stage} value={stage}>
+                    {stage}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Only previous stage and NG stages are shown.
+              </p>
+            </div>
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setIsResolveModalOpen(false)}
@@ -1114,6 +1283,38 @@ export default function NGDeviceDetails({
                 }}
                 className="inline-flex items-center rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-400"
                 disabled={isResolving}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAssignTRCModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h4 className="text-gray-900 mb-2 text-lg font-bold">
+              Confirm Assign to TRC
+            </h4>
+            <p className="text-gray-600 mb-4 text-sm">
+              This will assign the device to TRC for troubleshooting.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setIsAssignTRCModalOpen(false)}
+                className="border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg border px-4 py-2 text-sm font-semibold"
+                disabled={isAssigningTRC}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await assignToTRC();
+                  setIsAssignTRCModalOpen(false);
+                }}
+                className="inline-flex items-center rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-300"
+                disabled={isAssigningTRC}
               >
                 Confirm
               </button>
@@ -1150,6 +1351,27 @@ export default function NGDeviceDetails({
               }}
             >
               <div className="custom-scrollbar max-h-[60vh] overflow-y-auto pr-2">
+                <div className="mb-4">
+                  <label className="mb-2 block text-sm font-semibold text-gray-700">
+                    Move Device To Stage <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={trcNextStage}
+                    onChange={(e) => setTrcNextStage(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/40"
+                    required
+                  >
+                    <option value="">Select stage</option>
+                    {trcStageOptions.map((stage) => (
+                      <option key={stage} value={stage}>
+                        {stage}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Only previous stage and NG stages are shown.
+                  </p>
+                </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {/* Model Name */}
                   <div>
