@@ -292,6 +292,11 @@ export default function DeviceTestComponent({
     Record<string, string | null>
   >({});
   const [isManualValuesModalOpen, setIsManualValuesModalOpen] = useState(false);
+
+  const hasActiveDevice = React.useMemo(() => {
+    if (!searchResult || !Array.isArray(deviceList)) return false;
+    return deviceList.some((device: any) => device.serialNo === searchResult);
+  }, [deviceList, searchResult]);
   const [hasManualValues, setHasManualValues] = useState(false);
   const [generatedCommand, setGeneratedCommand] = useState<string>("");
   const [isJigSearching, setIsJigSearching] = useState(false);
@@ -475,6 +480,10 @@ export default function DeviceTestComponent({
   };
 
   const handleManualNG = async () => {
+    if (!hasActiveDevice) {
+      alert("Please scan/select a device before marking NG.");
+      return;
+    }
     const currentSubStep = testSteps[currentJigStepIndex];
     const fields =
       currentSubStep?.jigFields && currentSubStep.jigFields.length > 0
@@ -495,7 +504,38 @@ export default function DeviceTestComponent({
       });
       await updateCustomFieldsDataIntoDB(collected);
     }
-    handleStepDecision("NG");
+    setNgReason("Manual failure / Timeout");
+    setShowNGModal(true);
+  };
+
+  const handleManualNGFromModal = async () => {
+    if (!hasActiveDevice) {
+      alert("Please scan/select a device before marking NG.");
+      return;
+    }
+    const currentSubStep = testSteps[currentJigStepIndex];
+    const fields =
+      currentSubStep?.jigFields && currentSubStep.jigFields.length > 0
+        ? currentSubStep.jigFields
+        : currentSubStep?.customFields;
+
+    if (
+      currentSubStep?.stepType === "manual" &&
+      Array.isArray(fields) &&
+      fields.length > 0
+    ) {
+      const collected: Record<string, string> = {};
+      fields.forEach((cf: any) => {
+        const name = cf?.fieldName || cf?.jigName;
+        if (name) {
+          collected[name] = manualFieldValues[name] ?? "";
+        }
+      });
+      await updateCustomFieldsDataIntoDB(collected);
+    }
+
+    setIsManualValuesModalOpen(false);
+    setTimeout(() => setShowNGModal(true), 0);
   };
   const handleSubmitManualValues = () => {
     const currentSubStep = testSteps[currentJigStepIndex];
@@ -975,7 +1015,23 @@ export default function DeviceTestComponent({
   };
 
   const handleNG = () => {
-    handleUpdateStatus("NG", selectAssignDeviceDepartment, jigResults);
+    const timeTaken = Math.round(
+      (Date.now() - stepStartTimeRef.current) / 1000,
+    );
+    const reasonText =
+      ngReason || pendingJigErrorState || "Manual failure / Timeout";
+    const finalResults = {
+      ...jigResults,
+      [currentJigStepIndex]: {
+        ...(jigResults[currentJigStepIndex] || {}),
+        status: "NG",
+        reason: reasonText,
+        timeTaken,
+      },
+    };
+    setJigResults(finalResults);
+    setJigDecision("NG");
+    handleUpdateStatus("NG", selectAssignDeviceDepartment, finalResults);
     setShowNGModal(false);
   };
 
@@ -2121,6 +2177,21 @@ export default function DeviceTestComponent({
                                       }
                                       onSubmit={handleSubmitManualValues}
                                       title="Add Custom Values"
+                                      extraActions={
+                                        <button
+                                          type="button"
+                                          onClick={async () => {
+                                            await handleManualNGFromModal();
+                                          }}
+                                          disabled={!!jigDecision || !hasActiveDevice}
+                                          className={`rounded-xl px-4 py-2 text-sm font-semibold text-white shadow-lg transition-all duration-200 focus:outline-none active:scale-95 ${jigDecision
+                                            ? "bg-gray-300 cursor-not-allowed shadow-none"
+                                            : "bg-danger hover:bg-red-600 shadow-red-500/30"
+                                            }`}
+                                        >
+                                          Mark NG
+                                        </button>
+                                      }
                                     >
                                       <div className="space-y-4">
                                         {/* Modal Header inside content for full control if standard modal header is hidden or simple */}
