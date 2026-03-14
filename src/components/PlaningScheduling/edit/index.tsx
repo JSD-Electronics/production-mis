@@ -92,6 +92,16 @@ const EditPlanSchedule = () => {
   const [stages, setStages] = useState([]);
   const [commonStages, setCommonStages] = useState([]);
   const [isFullLayoutModalOpen, setIsFullLayoutModalOpen] = useState(false);
+  const [planingData, setPlaningData] = useState<any>(null);
+
+  const safeParse = (val: any, fallback: any) => {
+    if (!val) return fallback;
+    try {
+      return typeof val === "string" ? JSON.parse(val) : val;
+    } catch {
+      return fallback;
+    }
+  };
   useEffect(() => {
     getAllProcess();
     getAllRoomPlan();
@@ -153,80 +163,95 @@ const EditPlanSchedule = () => {
 
     }
   };
+  const applyPlaningData = async (result: any) => {
+    const singleProcess = process.find(
+      (value) => value?._id === result.selectedProcess,
+    );
+    if (!singleProcess) return;
+    setStages(singleProcess.stages);
+    setCommonStages(singleProcess.commonStages);
+    setProcessStatus(singleProcess?.status);
+    setRawSelectedProcessId(result.selectedProcess);
+    const room = roomPlan.find(
+      (value) => value?._id === result?.selectedRoom,
+    );
+    setSelectedRoom(room);
+    const Shift = shifts.find(
+      (value) => value?._id === result?.selectedShift,
+    );
+    setProcessName(result?.processName);
+    setSelectedShift(Shift);
+    calculateTimeDifference(Shift);
+    setRepeatCount(result?.repeatCount);
+    setStartDate(formatDate(result?.startDate));
+    setAssignedStages(safeParse(result?.assignedStages, {}));
+    setAssignedOperators(safeParse(result?.assignedOperators, {}));
+    setAssignedJigs(safeParse(result?.assignedJigs, {}));
+    setAssignedCustomOperators(safeParse(result?.assignedCustomStagesOp, []));
+    setEstimatedEndDate(formatDate(result?.estimatedEndDate));
+    setTotalTimeEstimation(result?.totalTimeEstimation);
+    const downTimeArr = result.downTime;
+    setDownTimeFrom(downTimeArr?.downTimeFrom);
+    setDownTimeTo(downTimeArr?.downTimeTo);
+    setDownTimeDescription(downTimeArr?.downTimeDesc);
+    setDownTimeVal(downTimeArr);
+    setTotalUPHA(result?.totalUPHA);
+    if (result?.ProcessShiftMappings) {
+      setShiftChangedFromDate(
+        result?.ProcessShiftMappings?.formattedShiftDate,
+      );
+      setEndTime(result?.ProcessShiftMappings?.endTime);
+      setStartTime(result?.ProcessShiftMappings?.startTime);
+    }
+    setTotalConsumedkits(result?.consumedKit);
+    let reservedSeats = await checkSeatAvailability(
+      room,
+      Shift,
+      formatDate(result?.startDate),
+      formatDate(result?.estimatedEndDate),
+    );
+    await getProductById(singleProcess?.selectedProduct);
+    const assignedStages = allocateStagesToSeats(
+      singleProcess.stages,
+      room,
+      result?.repeatCount,
+      reservedSeats,
+      safeParse(result?.assignedStages, {}),
+      singleProcess,
+    );
+    const uniqueAssignedStages = new Set();
+    const seatCountPerStage = {};
+
+    for (let key in assignedStages) {
+      assignedStages[key].forEach((stage) => {
+        uniqueAssignedStages.add(stage?.name);
+        seatCountPerStage[stage?.name] =
+          (seatCountPerStage[stage?.name] || 0) + 1;
+      });
+    }
+    handleCalculation();
+  };
+
   const getPlaningById = async (id: any) => {
     try {
       let result = await getPlaningAndSchedulingById(id);
-      const singleProcess = process.find(
-        (value) => value?._id === result.selectedProcess,
-      );
-      setStages(singleProcess.stages);
-      setCommonStages(singleProcess.commonStages);
-      setProcessStatus(singleProcess?.status);
-      setRawSelectedProcessId(result.selectedProcess);
-      const room = roomPlan.find(
-        (value) => value?._id === result?.selectedRoom,
-      );
-      setSelectedRoom(room);
-      const Shift = shifts.find(
-        (value) => value?._id === result?.selectedShift,
-      );
-      setProcessName(result?.processName);
-      setSelectedShift(Shift);
-      calculateTimeDifference(Shift);
-      setRepeatCount(result?.repeatCount);
-      setStartDate(formatDate(result?.startDate));
-      setAssignedStages(JSON.parse(result?.assignedStages));
-      setAssignedOperators(JSON.parse(result?.assignedOperators));
-      setAssignedJigs(JSON.parse(result?.assignedJigs));
-      setAssignedCustomOperators(JSON.parse(result?.assignedCustomStagesOp));
-      setEstimatedEndDate(formatDate(result?.estimatedEndDate));
-      setTotalTimeEstimation(result?.totalTimeEstimation);
-      const downTimeArr = result.downTime;
-      setDownTimeFrom(downTimeArr?.downTimeFrom);
-      setDownTimeTo(downTimeArr?.downTimeTo);
-      setDownTimeDescription(downTimeArr.downTimeDesc);
-      setDownTimeVal(downTimeArr);
-      setTotalUPHA(result?.totalUPHA);
-      if (result?.ProcessShiftMappings) {
-        setShiftChangedFromDate(
-          result?.ProcessShiftMappings?.formattedShiftDate,
-        );
-        setEndTime(result?.ProcessShiftMappings?.endTime);
-        setStartTime(result?.ProcessShiftMappings?.startTime);
+      setPlaningData(result);
+      // Apply only when prerequisite lists are loaded
+      if (process.length > 0 && roomPlan.length > 0 && shifts.length > 0) {
+        await applyPlaningData(result);
       }
-      setTotalConsumedkits(result?.consumedKit);
-      let reservedSeats = await checkSeatAvailability(
-        room,
-        Shift,
-        formatDate(result?.startDate),
-        formatDate(result?.estimatedEndDate),
-      );
-      let result1 = await getProductById(singleProcess?.selectedProduct);
-      const assignedStages = allocateStagesToSeats(
-        singleProcess.stages,
-        room,
-        result?.repeatCount,
-        reservedSeats,
-        JSON.parse(result?.assignedStages),
-        singleProcess,
-      );
-      const uniqueAssignedStages = new Set();
-      const seatCountPerStage = {};
-
-      for (let key in assignedStages) {
-        assignedStages[key].forEach((stage) => {
-          uniqueAssignedStages.add(stage?.name);
-          seatCountPerStage[stage?.name] =
-            (seatCountPerStage[stage?.name] || 0) + 1;
-        });
-      }
-      handleCalculation();
       setLoading(false);
     } catch (error) {
       setLoading(false);
       return {};
     }
   };
+
+  useEffect(() => {
+    if (planingData && process.length > 0 && roomPlan.length > 0 && shifts.length > 0) {
+      applyPlaningData(planingData);
+    }
+  }, [planingData, process, roomPlan, shifts]);
   const checkSeatAvailability = async (
     selectedRoom: any,
     selectedShift: any,
