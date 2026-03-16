@@ -41,25 +41,25 @@ const Modal = ({
   if (!isOpen || !mounted) return null;
 
   const modalContent = (
-    <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300">
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300 p-3 sm:p-6">
       <div
-        className={`w-full ${maxWidth} max-h-[90vh] flex flex-col scale-100 transform overflow-hidden rounded-2xl bg-white p-0 shadow-2xl transition-all duration-300 animate-in fade-in zoom-in-95 duration-200`}
+        className={`w-full ${maxWidth} max-h-[85vh] sm:max-h-[90vh] flex flex-col scale-100 transform overflow-hidden rounded-2xl bg-white p-0 shadow-2xl transition-all duration-300 animate-in fade-in zoom-in-95 duration-200`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="border-gray-100 bg-gray-50/50 border-b px-6 py-4">
+        <div className="border-gray-100 bg-gray-50/50 border-b px-4 py-3 sm:px-6 sm:py-4">
           <h2 className="text-gray-800 text-lg font-bold tracking-tight">
             {title}
           </h2>
         </div>
 
         {/* Modal Body */}
-        <div className="px-6 py-5 overflow-y-auto flex-1">
+        <div className="px-4 py-4 sm:px-6 sm:py-5 overflow-y-auto flex-1">
           {children}
         </div>
 
         {/* Modal Footer */}
-        <div className="border-gray-100 flex justify-end gap-3 border-t bg-gray-50/30 px-6 py-4">
+        <div className="border-gray-100 flex flex-wrap justify-end gap-3 border-t bg-gray-50/30 px-4 py-3 sm:px-6 sm:py-4">
           {extraActions}
           {closeOption && (
             <button

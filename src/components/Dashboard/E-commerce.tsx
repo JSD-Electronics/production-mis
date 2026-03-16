@@ -69,12 +69,16 @@ const ECommerce: React.FC = () => {
   const hold = processes.filter((r) => r?.status === "down_time_hold").length;
 
   const statusOptions: ApexOptions = {
-    chart: { type: "donut", fontFamily: "Satoshi, sans-serif" },
+    chart: { type: "donut", fontFamily: "Satoshi, sans-serif", height: 320 },
     labels: ["Active", "Waiting", "Completed", "Hold"],
     colors: ["#f59e0b", "#fb923c", "#22c55e", "#ef4444"],
     legend: { show: true, position: "bottom" },
     dataLabels: { enabled: false },
     plotOptions: { pie: { donut: { size: "70%" } } },
+    responsive: [
+      { breakpoint: 1024, options: { chart: { height: 280 } } },
+      { breakpoint: 640, options: { chart: { height: 240 } } },
+    ],
   };
   const statusSeries = [active, waiting, completed, hold];
   const kitPassed = kitRecords.filter((r) => String(r?.status) === "Pass").length;
@@ -113,13 +117,15 @@ const ECommerce: React.FC = () => {
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-black dark:text-white">Status Distribution</h3>
           </div>
-          <ReactApexChart options={statusOptions} series={statusSeries} type="donut" height={300} />
+          <div className="h-[240px] sm:h-[280px] lg:h-[320px]">
+            <ReactApexChart options={statusOptions} series={statusSeries} type="donut" height="100%" />
+          </div>
         </div>
         <div className="rounded-lg border border-stroke bg-white p-5 shadow-default dark:border-strokedark dark:bg-boxdark xl:col-span-2">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-black dark:text-white">Recent Processes</h3>
         </div>
-        <div className="overflow-x-auto">
+        <div className="table-responsive">
           <table className="min-w-full text-sm">
             <thead>
               <tr className="bg-gray-50 text-left text-xs font-semibold text-gray-700">

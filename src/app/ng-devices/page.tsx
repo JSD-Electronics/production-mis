@@ -224,7 +224,7 @@ export default function NGDevicesPage() {
 
   return (
     <DefaultLayout>
-      <div className="min-h-screen bg-gray-50/50 p-4 md:p-6 bg-white lg:p-8 font-sans text-gray-800">
+      <div className="min-h-screen bg-gray-50/50 p-3 sm:p-4 md:p-6 lg:p-8 font-sans text-gray-800">
 
         {/* Header & Stats */}
         <div className="mb-8 space-y-6">
@@ -243,9 +243,9 @@ export default function NGDevicesPage() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {/* Card 1 — Total NG (role-scoped) */}
-            <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
+            <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-4 sm:p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
               <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 translate-y-[-30%] rounded-full bg-red-50/50 blur-2xl"></div>
               <div className="flex items-center justify-between">
                 <div>
@@ -265,7 +265,7 @@ export default function NGDevicesPage() {
             </div>
 
             {/* Card 2 — Active Processes */}
-            <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
+            <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-4 sm:p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
               <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 translate-y-[-30%] rounded-full bg-blue-50/50 blur-2xl"></div>
               <div className="flex items-center justify-between">
                 <div>
@@ -283,7 +283,7 @@ export default function NGDevicesPage() {
             </div>
 
             {/* Card 3 — Counterpart role count (QC sees TRC count, TRC sees QC count, admin sees TRC) */}
-            <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
+            <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-4 sm:p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
               <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 translate-y-[-30%] rounded-full bg-amber-50/50 blur-2xl"></div>
               <div className="flex items-center justify-between">
                 <div>
@@ -388,7 +388,7 @@ export default function NGDevicesPage() {
                   </span>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="table-responsive">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-gray-50/50 text-xs uppercase tracking-wider text-gray-500 font-semibold">
                       <tr>
@@ -428,7 +428,7 @@ export default function NGDevicesPage() {
                           <td className="px-6 py-4 text-right">
                             <Link
                               href={`/ng-devices/${row.deviceId?._id || row.deviceId || row._id}`}
-                              className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-600 transition-colors hover:bg-blue-100 group-hover:shadow-sm"
+                              className="inline-flex w-full sm:w-auto items-center justify-center gap-1 rounded-lg bg-blue-50 px-4 py-2 text-xs sm:text-sm font-bold text-blue-600 transition-colors hover:bg-blue-100 group-hover:shadow-sm"
                             >
                               View Details
                               <ArrowRight className="h-3 w-3" />

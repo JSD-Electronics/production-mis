@@ -6,6 +6,7 @@ import DefaultLayout from "@/components/Layouts/DefaultLayout";
 import { viewEsimMasters, createEsimMaster, updateEsimMaster, deleteEsimMaster, viewEsimMakes, viewEsimProfiles, bulkDeleteEsimMaster, viewEsimApns, getAPNByMakeAndProfile } from "@/lib/api";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import Loader from "@/components/common/Loader";
 
 const formatDate = (value: any) => {
   if (!value) return "";
@@ -189,6 +190,7 @@ export default function EsimMasterListPage() {
 
   return (
     <DefaultLayout>
+      {loading && <Loader />}
       <div className="mx-auto max-w-270">
         <Breadcrumb pageName="ESIM Masters" parentName="" />
         <ToastContainer />

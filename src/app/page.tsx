@@ -1,7 +1,7 @@
-﻿"use client";  // Necessary for state management and client-side logic
+"use client";
 import { useEffect, useState } from "react";
 import ECommerce from "@/components/Login/Login";
-import Dashboard from "@/components/Dashboard/E-commerce";
+import DashboardSwitcher from "@/components/Dashboard/DashboardSwitcher";
 import DefaultLayout from "@/components/Layouts/DefaultLayout";
 const jwt = require('jsonwebtoken');
 import { useRouter } from 'next/navigation';
@@ -39,7 +39,7 @@ export default function Home() {
     <>
       {isLoggedIn ? (
         <DefaultLayout>
-            <Dashboard />
+            <DashboardSwitcher />
         </DefaultLayout>
       ) : (
         <ECommerce />

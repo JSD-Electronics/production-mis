@@ -10,6 +10,7 @@ const SidebarItem = ({
   permission,
   userType,
   collapsed,
+  onNavigate,
 }: any) => {
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -19,6 +20,7 @@ const SidebarItem = ({
     const updatedPageName =
       pageName !== item.label.toLowerCase() ? item.label.toLowerCase() : "";
     setPageName(updatedPageName);
+    if (typeof onNavigate === "function") onNavigate();
   };
 
   const transformedLabel = item.label.replace(/\s+/g, "_").toLowerCase();
@@ -135,7 +137,10 @@ const SidebarItem = ({
                             <li key={idx}>
                               <Link
                                 href={child.route}
-                                onClick={() => setPageName("")}
+                                onClick={() => {
+                                  setPageName("");
+                                  if (typeof onNavigate === "function") onNavigate();
+                                }}
                                 className={`flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors duration-100 ${pathname === child.route
                                   ? "bg-blue-500/10 text-blue-400 font-medium"
                                   : "text-white/70 hover:bg-white/5 hover:text-white"
@@ -218,6 +223,7 @@ const SidebarItem = ({
                 item={item.children}
                 permission={permission}
                 userType={userType}
+                onNavigate={onNavigate}
               />
             </div>
           )}
