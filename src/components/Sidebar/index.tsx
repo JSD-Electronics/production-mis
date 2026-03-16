@@ -57,10 +57,51 @@ const Sidebar = ({
   const getMenus = async (user: any) => {
     try {
       const result = await getAllMenus();
+      const reportsMenu = {
+        icon: `<svg class="fill-current" width="18" height="19" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 5h18v2H3V5zm0 6h18v2H3v-2zm0 6h12v2H3v-2z" fill="#ffffff"/></svg>`,
+        label: "Reports",
+        route: "#",
+        children: [
+          { label: "NG Devices Report", route: "/reports/ng-devices" },
+        ],
+      };
+
+      const fetchedMenus = Array.isArray(result?.getMenu?.[0]?.menus)
+        ? result.getMenu[0].menus
+        : [];
+
+      const menusWithReports = (() => {
+        const menus = [...fetchedMenus];
+        const reportsIndex = menus.findIndex(
+          (m) => String(m?.label || "").toLowerCase() === "reports",
+        );
+
+        if (reportsIndex === -1) {
+          menus.push(reportsMenu);
+          return menus;
+        }
+
+        const existingReports = menus[reportsIndex];
+        const children = Array.isArray(existingReports.children)
+          ? existingReports.children
+          : [];
+        const hasNgReport = children.some(
+          (c) => String(c?.route || "") === "/reports/ng-devices",
+        );
+        if (!hasNgReport) {
+          existingReports.children = [
+            ...children,
+            { label: "NG Devices Report", route: "/reports/ng-devices" },
+          ];
+          menus[reportsIndex] = existingReports;
+        }
+        return menus;
+      })();
+
       setMenuGroups((prev) =>
         prev.map((group) =>
           group.name === "MENU"
-            ? { ...group, menuItems: [...result.getMenu[0].menus] }
+            ? { ...group, menuItems: [...menusWithReports] }
             : group,
         ),
       );

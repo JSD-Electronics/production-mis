@@ -148,6 +148,7 @@ const AddProduct = () => {
             packagingType: "",
             cartonWidth: 0,
             cartonHeight: 0,
+            cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
           },
@@ -392,6 +393,7 @@ const AddProduct = () => {
               packagingType: "",
               cartonWidth: 0,
               cartonHeight: 0,
+            cartonDepth: 0,
               maxCapacity: 0,
               cartonWeight: 0,
             },
@@ -455,6 +457,7 @@ const AddProduct = () => {
               packagingType: "",
               cartonWidth: 0,
               cartonHeight: 0,
+            cartonDepth: 0,
               maxCapacity: 0,
               cartonWeight: 0,
             },
@@ -678,6 +681,7 @@ const AddProduct = () => {
         packagingType: "",
         cartonWidth: 0,
         cartonHeight: 0,
+            cartonDepth: 0,
         maxCapacity: 0,
         cartonWeight: 0,
       },
@@ -773,6 +777,7 @@ const AddProduct = () => {
             packagingType: "",
             cartonWidth: 0,
             cartonHeight: 0,
+            cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
           },
@@ -809,6 +814,7 @@ const AddProduct = () => {
             packagingType: "",
             cartonWidth: 0,
             cartonHeight: 0,
+            cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
           },
@@ -842,6 +848,7 @@ const AddProduct = () => {
             packagingType: "",
             cartonWidth: 0,
             cartonHeight: 0,
+            cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
           },
@@ -2055,6 +2062,30 @@ const AddProduct = () => {
                                                                       )
                                                                     }
                                                                     placeholder="Enter height"
+                                                                    className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                                                  />
+                                                                </div>
+
+                                                                {/* Carton Depth */}
+                                                                <div>
+                                                                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                                                    Carton Depth (mm)
+                                                                  </label>
+                                                                  <input
+                                                                    type="number"
+                                                                    value={
+                                                                      subStep?.packagingData
+                                                                        ?.cartonDepth || ""
+                                                                    }
+                                                                    onChange={(e) =>
+                                                                      handleCartonInputs(
+                                                                        index,
+                                                                        subIndex,
+                                                                        e.target.value,
+                                                                        "cartonDepth",
+                                                                      )
+                                                                    }
+                                                                    placeholder="Enter depth"
                                                                     className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
                                                                   />
                                                                 </div>

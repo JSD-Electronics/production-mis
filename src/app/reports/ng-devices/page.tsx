@@ -1,30 +1,27 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
-import { fetchNGDevicesByProcess, getOverallDeviceTestEntry, getUseTypeByType, viewProcess } from "@/lib/api";
 import DefaultLayout from "@/components/Layouts/DefaultLayout";
 import {
+  fetchNGDevicesByProcess,
+  getOverallDeviceTestEntry,
+  getUseTypeByType,
+  viewProcess,
+} from "@/lib/api";
+import {
   AlertTriangle,
-  Calendar,
-  Clock,
   Filter,
   Layers,
   LayoutGrid,
   RefreshCcw,
   Search,
-  User,
-  Wrench,
-  X,
-  ChevronRight,
-  Terminal,
-  FileText,
   Activity,
-  ArrowRight
+  Wrench,
+  User,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-export default function NGDevicesPage() {
+export default function NGDevicesReportPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [entries, setEntries] = useState<any[]>([]);
@@ -79,7 +76,7 @@ export default function NGDevicesPage() {
       const result = await getUseTypeByType();
       const permissions = result.userType[0].roles;
       const normalizedUserType = String(userType).toLowerCase().replace(/\s+/g, "_");
-      const permitted = permissions["ng_devices"]?.[normalizedUserType];
+      const permitted = permissions["ng_devices_report"]?.[normalizedUserType];
 
       if (!permitted) {
         setHasPermission(false);
@@ -130,27 +127,21 @@ export default function NGDevicesPage() {
   const filteredEntries = useMemo(() => {
     const q = (searchQuery || "").trim().toLowerCase();
     return entries.filter((e) => {
-      if (currentUserType && ["QC", "TRC"].includes(String(currentUserType).toUpperCase())) {
-        const assigned = (e.assignedDeviceTo || e.operatorId || "").toString().toUpperCase();
-        if (assigned !== String(currentUserType).toUpperCase()) return false;
-      }
       // Filter by selected process
       if (selectedProcess) {
         const pid = typeof e.processId === "object" ? e.processId?._id : (e.processId || e.process?._id || "");
         if (String(pid) !== selectedProcess) return false;
       }
-      // Filter by search query
       if (q) {
         const serial = (e.serialNo || e.deviceInfo?.serialNo || "").toString().toLowerCase();
         const model = (e.deviceInfo?.modelName || e.device?.model || "").toString().toLowerCase();
         const stage = (e.stageName || e.currentStage || "").toString().toLowerCase();
         const assigned = (e.assignedDeviceTo || e.operatorId || "").toString().toLowerCase();
-
         return serial.includes(q) || model.includes(q) || stage.includes(q) || assigned.includes(q);
       }
       return true;
     });
-  }, [entries, selectedProcess, searchQuery, currentUserType]);
+  }, [entries, selectedProcess, searchQuery]);
 
   const processes = useMemo(() => {
     const map = new Map<string, string>();
@@ -158,9 +149,6 @@ export default function NGDevicesPage() {
       const pidObj = typeof e.processId === "object" ? e.processId : null;
       const pid = pidObj?._id || e.processId || e.process?._id || "unknown";
 
-      // Try to get process name from various possible fields
-      // 1. From the populated processId object (pidObj)
-      // 2. From e.process?.name or e.processName
       let pname = pidObj?.processName || pidObj?.name || e.process?.name || e.processName;
 
       if (!pname && allProcesses.length > 0) {
@@ -168,8 +156,7 @@ export default function NGDevicesPage() {
         if (matchingProcess) pname = matchingProcess.name || matchingProcess.processName;
       }
 
-      if (!pname) pname = String(pid); // Fallback to ID string if still not found
-
+      if (!pname) pname = String(pid);
       if (!map.has(String(pid))) map.set(String(pid), String(pname));
     });
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
@@ -186,30 +173,24 @@ export default function NGDevicesPage() {
     return g;
   }, [filteredEntries]);
 
-
   const userRoleUpper = String(currentUserType || "").toUpperCase();
   const isQC = userRoleUpper === "QC";
   const isTRC = userRoleUpper === "TRC";
   const isRoleFiltered = isQC || isTRC;
-
-  // Role-scoped counts: if QC/TRC, count only their own devices; otherwise full set
   const roleEntries = isRoleFiltered
     ? entries.filter((e) => (e.assignedDeviceTo || "").toString().toUpperCase() === userRoleUpper)
     : entries;
 
   const totalNg = isRoleFiltered ? roleEntries.length : entries.length;
   const totalProcesses = Object.keys(grouped).length;
-
-  // 3rd card: for QC show QC count, for TRC show TRC count, for admin show TRC count
   const card3Role = isQC ? "QC" : isTRC ? "TRC" : "TRC";
-  const counterpartRole = card3Role; // kept as counterpartRole for template compatibility
+  const counterpartRole = card3Role;
   const counterpartCount = entries.filter(
     (e) => (e.assignedDeviceTo || "").toString().toUpperCase() === card3Role,
   ).length;
 
   const visibleProcesses = Object.keys(grouped);
 
-  // Helper for cleaner dates
   const formatDate = (dateString: string) => {
     if (!dateString) return "-";
     return new Date(dateString).toLocaleString("en-US", {
@@ -217,24 +198,20 @@ export default function NGDevicesPage() {
     });
   };
 
-
-
   if (hasPermission === null) return null;
   if (hasPermission === false) return null;
 
   return (
     <DefaultLayout>
       <div className="min-h-screen bg-gray-50/50 p-4 md:p-6 bg-white lg:p-8 font-sans text-gray-800">
-
-        {/* Header & Stats */}
         <div className="mb-8 space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <Breadcrumb pageName="NG Devices" parentName="Reports" />
-              <p className="mt-1 text-sm text-gray-500">Overview of all devices marked as NG across production lines.</p>
+              <Breadcrumb pageName="NG Devices (Report)" parentName="Reports" />
+              <p className="mt-1 text-sm text-gray-500">Read-only report of devices marked as NG.</p>
             </div>
             <button
-              onClick={fetchData}
+              onClick={() => fetchData(selectedProcess)}
               disabled={loading}
               className="group flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 transition-all hover:bg-gray-50 hover:text-blue-600 disabled:opacity-50"
             >
@@ -244,7 +221,6 @@ export default function NGDevicesPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {/* Card 1 — Total NG (role-scoped) */}
             <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
               <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 translate-y-[-30%] rounded-full bg-red-50/50 blur-2xl"></div>
               <div className="flex items-center justify-between">
@@ -264,7 +240,6 @@ export default function NGDevicesPage() {
               </div>
             </div>
 
-            {/* Card 2 — Active Processes */}
             <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
               <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 translate-y-[-30%] rounded-full bg-blue-50/50 blur-2xl"></div>
               <div className="flex items-center justify-between">
@@ -282,7 +257,6 @@ export default function NGDevicesPage() {
               </div>
             </div>
 
-            {/* Card 3 — Counterpart role count (QC sees TRC count, TRC sees QC count, admin sees TRC) */}
             <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
               <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 translate-y-[-30%] rounded-full bg-amber-50/50 blur-2xl"></div>
               <div className="flex items-center justify-between">
@@ -302,7 +276,6 @@ export default function NGDevicesPage() {
           </div>
         </div>
 
-        {/* Filters */}
         <div className="mb-8 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <div className="relative min-w-[200px] flex-1">
@@ -343,7 +316,6 @@ export default function NGDevicesPage() {
           </div>
         </div>
 
-        {/* Content */}
         <div className="space-y-6">
           {loading ? (
             <div className="space-y-4">
@@ -396,7 +368,6 @@ export default function NGDevicesPage() {
                         <th className="px-6 py-4">Stage</th>
                         <th className="px-6 py-4">Assigned To</th>
                         <th className="px-6 py-4">Reported At</th>
-                        <th className="px-6 py-4 text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -425,15 +396,6 @@ export default function NGDevicesPage() {
                           <td className="px-6 py-4 text-gray-500 font-mono text-xs">
                             {formatDate(row.createdAt || row.updatedAt)}
                           </td>
-                          <td className="px-6 py-4 text-right">
-                            <Link
-                              href={`/ng-devices/${row.deviceId?._id || row.deviceId || row._id}`}
-                              className="inline-flex items-center gap-1 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-600 transition-colors hover:bg-blue-100 group-hover:shadow-sm"
-                            >
-                              View Details
-                              <ArrowRight className="h-3 w-3" />
-                            </Link>
-                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -443,7 +405,6 @@ export default function NGDevicesPage() {
             ))
           )}
         </div>
-
       </div>
     </DefaultLayout>
   );
