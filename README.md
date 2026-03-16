@@ -1,146 +1,202 @@
-# TailAdmin Next.js - Free Next.js Tailwind Admin Dashboard Template
+Production MES (Manufacturing Execution System)
+Overview
 
-TailAdmin is a free and open-source admin dashboard template built on **Next.js and Tailwind CSS** providing developers with everything they need to create a feature-rich and data-driven: back-end, dashboard, or admin panel solution for any sort of web project.
+The Production MES (Manufacturing Execution System) is designed to digitally manage and track the complete production workflow of devices across different manufacturing stages. The system helps ensure transparency, traceability, and real-time monitoring of production activities.
 
-[![tailwind nextjs admin template](https://github.com/TailAdmin/free-nextjs-admin-dashboard/blob/main/tailadmin-nextjs.jpg)](https://nextjs-demo.tailadmin.com/)
+This system allows operators, supervisors, and TRC teams to track device movement, manage production stages, and maintain complete stage history from start to finish.
 
-With TailAdmin Next.js, you get access to all the necessary dashboard UI components, elements, and pages required to build a high-quality and complete dashboard or admin panel. Whether you're building a dashboard or admin panel for a complex web application or a simple website. 
+Key Features
+1. Production Workflow Management
 
-TailAdmin utilizes the powerful features of **Next.js 14** and common features of Next.js such as server-side rendering (SSR), static site generation (SSG), and seamless API route integration. Combined with the advancements of **React 18** and the robustness of **TypeScript**, TailAdmin is the perfect solution to help get your project up and running quickly.
+Define and manage production stages for each product.
 
-### [✨ Visit Website](https://tailadmin.com/)
-### [🚀 PRO Demo](https://nextjs-demo.tailadmin.com/)
-### [🚀 FREE Demo](https://nextjs-free-demo.tailadmin.com/)
+Track device movement across different manufacturing stages.
 
-### TailAdmin Next.js PRO vs TailAdmin Next.js FREE Comparison 📊
+Maintain a complete history of all stages processed for each device.
 
-#### [TailAdmin Next.js PRO](https://nextjs-demo.tailadmin.com/)
-- 5 Unique Dashboards: Analytics, Ecommerce, Marketing, and CRM (More will be added)
-- 150+ Dashboard UI Components
-- 200+ Total UI Elements
-- 45+ HTML Files
-- All Essential Elements and Files
-- Full Figma Design Source - As Shown on Demo
-___
+2. Device Tracking
 
-#### [TailAdmin Next.js FREE](https://free-nextjs-demo.tailadmin.com/)
-- 1 Unique Dashboard
-- 30+ Dashboard UI Components
-- 50+ Total UI Elements 
-- 10+ HTML Files
-- TypeScript Support
-- Basic UI Kit Elements and Files
-- Figma Design Source - Free Sample
-___
+Each device is tracked using barcode / serial number scanning.
 
-### [⬇️ Download Now](https://tailadmin.com/download)
+Operators can scan and update device status at every stage.
 
-### [⚡ Get PRO Version](https://tailadmin.com/pricing)
+Ensures full traceability of production progress.
 
-### [📄 Documentation/Installation](https://tailadmin.com/docs)
+3. Stage History Tracking
 
-### [🖌️ TailAdmin Figma Free Sample](https://www.figma.com/community/file/1214477970819985778)
+Maintains a complete stage history for every device.
 
-### [👉 TailAdmin HTML Version](https://github.com/TailAdmin/tailadmin-free-tailwind-dashboard-template)
+Previous stage records remain visible even when a device moves to the next stage.
 
+Enables easy auditing and production tracking.
 
-## Installation
-Here are the steps you need to follow to install the dependencies.
+4. Operator Portal
 
-1. Download and extract the template from Next.js Templates.
+Operators can:
 
-2. After that **cd** into the template directory then run this command to install all the dependencies
+Scan devices
 
-```
+Update stage progress
+
+Process cartons and partial cartons
+
+View stage status
+
+5. TRC Portal
+
+TRC users can:
+
+Assign devices to stages
+
+Monitor production progress
+
+Validate device processing
+
+Track complete device lifecycle
+
+6. Carton Management
+
+Manage device packaging in cartons.
+
+Handle full carton and partial carton scenarios.
+
+Track carton status during the production process.
+
+7. Product Management
+
+Create and configure products with multiple stages.
+
+Enable/disable stages.
+
+Save products as draft before publishing.
+
+8. Sticker Designer & Printing
+
+Design custom stickers for products.
+
+Barcode and product information printing.
+
+Print preview for production stickers.
+
+System Modules
+
+Authentication & Login
+
+Dashboard
+
+Product Management
+
+Production Planning
+
+Operator Portal
+
+TRC Portal
+
+Carton Management
+
+Sticker Designer
+
+Printing Module
+
+Technology Stack
+
+Frontend
+
+Next.js
+
+React.js
+
+Tailwind CSS
+
+Backend
+
+Node.js
+
+API Services
+
+Database
+
+MongoDB
+
+Other Tools
+
+Barcode generation
+
+Sticker designer
+
+Printing modules
+
+Installation
+
+Clone the repository:
+
+git clone <repository-url>
+
+Navigate to the project folder:
+
+cd production-mes
+
+Install dependencies:
+
 npm install
-```
-or
 
-```
-yarn install
-```
+Run the development server:
 
-3. Now run this command to start the developement server
-
-```
 npm run dev
-```
 
-or 
+Build the project:
 
-```
-yarn dev
-```
+npm run build
 
+Start production server:
 
-## Free Admin Dashboard Template for Next.js Built-with Tailwind CSS, React 18 and TypeScript
-TailAdmin Next.js is a free dashboard template, which uses Tailwind CSS, is a great starting point for dashboard UI. This template uses the Next.js JavaScript framework and the easy-to-use Tailwind CSS framework. The Tailwind CSS and Next.js Dashboard Template comes with ready-made components like navigation menus, charts, tables, and forms. These components can be easily adjusted and added to any Next.js web application.
+npm start
+Environment Configuration
 
-TailAdmin for Next.js provides all essential Next.js + Tailwind CSS UI components that can be copied and pasted directly into your dashboard projects. The range of components includes charts, graphs, navbars, tabs, buttons, cards, tables, profiles, forms, modals, app pages, calendars, web app example templates, and more, all coded for Next.js React and styled using Tailwind CSS.
+Create a .env file in the root directory and configure the required environment variables.
 
-If you're on the hunt for a top-quality Next.js-Tailwind Dashboard, Admin Panel Template, or UI Kit, TailAdmin is the perfect choice for you!
+Example:
 
-### 📄 License
-TailAdmin Next.js Free is 100% free and open-source; feel free to use it with your personal and commercial projects.
+MONGO_URI=
+NEXT_PUBLIC_API_URL=
+JWT_SECRET=
+Production Workflow (High Level)
 
-### 💜 Support
-If you like the template, please star this repository to inspire the team to create more stuff like this and reach more users like you!
+Product is created with defined production stages.
 
+Production planning is done for devices.
 
-## Update Logs
+Devices are assigned to cartons.
 
-### Version 1.3.5 - [March 06, 2026]
+Operators scan devices at each production stage.
 
-#### Issues
-- **Issue 01:** Fixed ERESOLVE dependency conflict between `apexcharts` and `react-apexcharts`.
-- **Issue 02:** Resolved high-severity `glob` command injection vulnerability in sub-dependencies via `overrides`.
-- **Issue 03:** Fixed `No space left on device` deployment errors by adding automated cleanup to `deploy.yml`.
+System records stage history for each device.
 
-#### Enhancements
-- **Enhancement 01:** Tracked `package-lock.json` in Git for consistent builds across all environments.
-- **Enhancement 02:** Upgraded Core dependencies including `next`, `eslint`, and `typescript` to stable versions.
+TRC team monitors and validates the process.
 
-### Version 1.3.4 - [July 01, 2024]
+Final stage completes the production lifecycle.
 
+Testing & Validation
 
-#### Issues
+Before production rollout:
 
-- **Issues 01:** JSvectormap rendering issue resolved.
+MES workflow testing must be performed.
 
-### Version 1.3.3 - [June 20, 2024]
+Real production scenarios should be validated.
 
-#### Issues
+Feedback should be collected from all departments.
 
-- **Issues 01:** Fixed Not building when Loader component removed
+A dedicated resource from production is recommended to validate system behavior during initial deployment.
 
-### Version 1.3.2 - [June 19, 2024]
+Future Improvements
 
-#### Enhancements
+Production analytics and reporting
 
-- **Enhancement 01:** Add ClickOutside Component for reduce repeated functionality in Header Message, Notification and User Dropdowns
-- **Enhancement 02:** Remove Repeated code from Sidebar Menu and Refactor Sidebar Components
-- **Enhancement 03:** Update Jsvectormap Package and it's imports for latest changes
+Real-time production dashboard
 
-### Version 1.3.1 - [Feb 12, 2024]
+Department-wise performance tracking
 
-#### Issues
+Advanced device traceability reports
 
-- **Issues 01:** Fix Misspelling issue [Default Layout/Layouts].
-
-#### Enhancements
-- **Enhancement 01:** Update style.css
-
-### Version 1.3.0 - [Feb 05, 2024]
-
-#### Enhancements
-
-- **Enhancement 01:** Update Next.js into version 14
-- **Enhancement 02:** Integrate flatpickr in [Date Picker/Form Elements]
-- **Enhancement 03:** Change color after select an option [Select Element/Form Elements].
-- **Enhancement 04:** Make it functional [Multiselect Dropdown/Form Elements].
-- **Enhancement 05:** Make best value editable [Pricing Table One/Pricing Table].
-- **Enhancement 06:** Add Default Layout Component and make App/Layout more clean and use it in every pages.
-
-### Version 0.1.0 - Initial Release - [Aug 3, 2023]
-
-- Initial release of TailAdmin Next.
+Author
+JSD Electronics india pvt ltd
