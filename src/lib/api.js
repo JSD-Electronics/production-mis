@@ -976,6 +976,14 @@ export const getOverallDeviceTestEntry = async (id) => {
     );
   }
 };
+export const fetchNGDevicesByProcess = async (processId) => {
+  try {
+    const response = await api.get(`/ng-devices/process/${processId}`);
+    return response.data;
+  } catch (error) {
+    throw error?.response?.data || { message: "Error Fetching NG Devices" };
+  }
+};
 export const getDeviceTestEntryByOperatorId = async (id, date) => {
   try {
     let url = `/getDeviceTestEntryByOperatorId/${id}`;
@@ -1472,6 +1480,14 @@ export const fetchCartonByProcessID = async (processID) => {
 
   }
 };
+export const fetchOpenCartonsByProcessID = async (processID) => {
+  try {
+    const response = await api.get(`/cartons/${processID}/open`);
+    return response.data;
+  } catch (error) {
+    throw error?.response?.data || { message: "Error fetching open cartons" };
+  }
+};
 export const fetchCartons = async (processID) => {
   try {
     let response = await api.get(`/cartons/${processID}`);
@@ -1850,3 +1866,13 @@ export const getStorePortalCartons = async () => {
 };
 
 export default api;
+export const closeLooseCarton = async (cartonSerial) => {
+  try {
+    const response = await api.put("/carton/close-loose", {
+      cartonSerial,
+    });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error closing loose carton" };
+  }
+};

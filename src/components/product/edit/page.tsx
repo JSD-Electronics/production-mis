@@ -167,6 +167,7 @@ const EditProduct = () => {
             packagingType: "",
             cartonWidth: 0,
             cartonHeight: 0,
+            cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
           },
@@ -447,6 +448,7 @@ const EditProduct = () => {
               packagingType: "",
               cartonWidth: 0,
               cartonHeight: 0,
+            cartonDepth: 0,
               maxCapacity: 0,
               cartonWeight: 0,
             },
@@ -614,6 +616,7 @@ const EditProduct = () => {
         packagingType: "",
         cartonWidth: 0,
         cartonHeight: 0,
+            cartonDepth: 0,
         maxCapacity: 0,
         cartonWeight: 0,
       },
@@ -771,6 +774,7 @@ const EditProduct = () => {
             packagingType: "",
             cartonWidth: 0,
             cartonHeight: 0,
+            cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
           },
@@ -861,6 +865,7 @@ const EditProduct = () => {
             packagingType: "",
             cartonWidth: 0,
             cartonHeight: 0,
+            cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
           },
@@ -921,6 +926,7 @@ const EditProduct = () => {
             packagingType: "",
             cartonWidth: 0,
             cartonHeight: 0,
+            cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
           },
@@ -2700,6 +2706,30 @@ const EditProduct = () => {
                                                                     e.target
                                                                       .value,
                                                                     "cartonHeight",
+                                                                  )
+                                                                }
+                                                                className="w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-3 text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                                              />
+                                                            </div>
+                                                            <div>
+                                                              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                                Carton Depth
+                                                              </label>
+                                                              <input
+                                                                type="number"
+                                                                placeholder="Carton Depth"
+                                                                value={
+                                                                  subStep
+                                                                    ?.packagingData
+                                                                    ?.cartonDepth
+                                                                }
+                                                                onChange={(e) =>
+                                                                  handleCartonInputs(
+                                                                    index,
+                                                                    subIndex,
+                                                                    e.target
+                                                                      .value,
+                                                                    "cartonDepth",
                                                                   )
                                                                 }
                                                                 className="w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-3 text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"

@@ -67,7 +67,8 @@ export default function PackagingSection({
               <Package className="h-5 w-5 text-blue-500" />
               <span className="font-medium">Dimensions:</span>{" "}
               {subStep?.packagingData?.cartonWidth} x{" "}
-              {subStep?.packagingData?.cartonHeight}
+              {subStep?.packagingData?.cartonHeight} x{" "}
+              {subStep?.packagingData?.cartonDepth}
             </p>
             <p className="flex items-center gap-2">
               <Weight className="h-5 w-5 text-green-500" />

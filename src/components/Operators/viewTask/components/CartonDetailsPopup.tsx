@@ -14,7 +14,7 @@ import {
   QrCode
 } from "lucide-react";
 import { toast } from "react-toastify";
-import { verifyCartonSticker, shiftToPDI, saveCartonWeight, updateCartonPrintingStatus } from "@/lib/api";
+import { verifyCartonSticker, shiftToPDI, saveCartonWeight, updateCartonPrintingStatus, fetchOpenCartonsByProcessID, closeLooseCarton } from "@/lib/api";
 
 interface Carton {
   cartonSerial: string;
@@ -24,8 +24,8 @@ interface Carton {
   createdAt?: string | Date;
   productName?: string;
   weightCarton?: string | number;
-  isStickerVerified?: boolean;
   isStickerPrinted?: boolean;
+  isLooseCarton?: boolean;
   [key: string]: any;
 }
 
@@ -56,6 +56,9 @@ const CartonDetailsPopup = ({
   const [localCartonStatuses, setLocalCartonStatuses] = useState<Record<string, string>>({});
   const [cartonWeights, setCartonWeights] = useState<Record<string, string>>({});
   const [isSavingWeight, setIsSavingWeight] = useState<string | null>(null);
+  const [openCartons, setOpenCartons] = useState<Carton[]>([]);
+  const [isLoadingOpen, setIsLoadingOpen] = useState(false);
+  const [closingCarton, setClosingCarton] = useState<string | null>(null);
 
   const fullCartons = cartons.filter(c =>
     (c.status || "").toLowerCase() === "full" ||
@@ -85,6 +88,37 @@ const CartonDetailsPopup = ({
     }
   }, [cartons]);
 
+  useEffect(() => {
+    const loadOpenCartons = async () => {
+      if (!isOpen || !processData?._id) return;
+      setIsLoadingOpen(true);
+      try {
+        const result = await fetchOpenCartonsByProcessID(processData._id);
+        const list = Array.isArray(result) ? result : (result?.cartonDetails || []);
+        setOpenCartons(list || []);
+      } catch (e) {
+        setOpenCartons([]);
+      } finally {
+        setIsLoadingOpen(false);
+      }
+    };
+    loadOpenCartons();
+  }, [isOpen, processData?._id]);
+
+  const handleCloseLooseCarton = async (cartonSerial: string) => {
+    try {
+      setClosingCarton(cartonSerial);
+      await closeLooseCarton(cartonSerial);
+      toast.success("Loose carton closed successfully!");
+      setOpenCartons((prev) => prev.filter((c) => c.cartonSerial !== cartonSerial));
+      onUpdate();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to close loose carton");
+    } finally {
+      setClosingCarton(null);
+    }
+  };
+
   const handlePrint = async (carton: Carton) => {
     const weight = cartonWeights[carton.cartonSerial];
     if (!weight || parseFloat(weight) <= 0) {
@@ -92,12 +126,28 @@ const CartonDetailsPopup = ({
       return;
     }
 
+    const packagingSubStep = assignUserStage?.subSteps?.find((s: any) => s.isPackagingStatus);
+    const packagingData = packagingSubStep?.packagingData || {};
+    const recordedWeight = parseFloat(weight);
+    const expectedWeight = parseFloat(packagingData.cartonWeight || "0");
+    const toleranceKg = 0.5;
+
+    if (expectedWeight > 0) {
+      const variance = Math.abs(recordedWeight - expectedWeight);
+      if (variance > toleranceKg) {
+        toast.error(
+          `Weight mismatch! Expected ${expectedWeight} KG, got ${recordedWeight} KG.`,
+        );
+        return;
+      }
+    }
+
     setIsSavingWeight(carton.cartonSerial);
     try {
       // 1. Save weight
       await saveCartonWeight({
         cartonSerial: carton.cartonSerial,
-        weight: parseFloat(weight)
+        weight: recordedWeight
       });
 
       // 2. Update printing status in backend
@@ -105,10 +155,7 @@ const CartonDetailsPopup = ({
 
       const printWindow = window.open("", "_blank", "width=800,height=600");
       if (printWindow) {
-        const packagingSubStep = assignUserStage?.subSteps?.find((s: any) => s.isPackagingStatus);
-        const packagingData = packagingSubStep?.packagingData || {};
-
-        const boxSize = `${packagingData.cartonWidth || carton.cartonSize?.width || 0}*${packagingData.cartonHeight || carton.cartonSize?.height || 0}*${packagingData.cartonDepth || 0}cm`.toUpperCase();
+        const boxSize = `${packagingData.cartonWidth || carton.cartonSize?.width || 0}*${packagingData.cartonHeight || carton.cartonSize?.height || 0}*${packagingData.cartonDepth || carton.cartonSize?.depth || 0}cm`.toUpperCase();
 
         const processName = (product?.name || "Production Order").toUpperCase();
         const modelName = (product?.selectedProduct?.name || product?.name || "N/A").toUpperCase();
@@ -346,6 +393,42 @@ const CartonDetailsPopup = ({
       maxWidth="max-w-5xl"
     >
       <div className="flex flex-col gap-6">
+        {/* Open/Loose Cartons Quick Access */}
+        {isLoadingOpen ? (
+          <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="text-xs font-black text-gray-400 uppercase tracking-widest">
+              Loading open cartons...
+            </div>
+          </div>
+        ) : openCartons.length > 0 ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+            <div className="mb-3 text-xs font-black uppercase tracking-widest text-amber-700">
+              Open / Loose Cartons
+            </div>
+            <div className="space-y-3">
+              {openCartons.map((c) => (
+                <div key={c.cartonSerial} className="flex flex-col gap-2 rounded-xl bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <Box className="h-4 w-4 text-amber-600" />
+                    <div>
+                      <div className="text-sm font-black text-gray-900">{c.cartonSerial}</div>
+                      <div className="text-[10px] font-bold text-gray-400">
+                        {c.devices?.length || 0} devices • {c.status || "partial"}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleCloseLooseCarton(c.cartonSerial)}
+                    disabled={closingCarton === c.cartonSerial}
+                    className="rounded-lg bg-amber-600 px-4 py-2 text-xs font-black text-white hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    {closingCarton === c.cartonSerial ? "CLOSING..." : "CLOSE AS LOOSE"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {/* Verification Scanner Input */}
         {isVerifying && (
           <div className="rounded-xl border-2 border-blue-600 bg-blue-50 p-5 animate-in fade-in slide-in-from-top-4">
@@ -415,7 +498,10 @@ const CartonDetailsPopup = ({
 
                   const packagingSubStep = assignUserStage?.subSteps?.find((s: any) => s.isPackagingStatus);
                   const pkg = packagingSubStep?.packagingData || {};
-                  const dim = `${pkg.cartonWidth || 0}x${pkg.cartonHeight || 0}x${pkg.cartonDepth || 0}`;
+                  const sizeWidth = carton?.cartonSize?.width || carton?.packagingData?.cartonWidth || pkg.cartonWidth || 0;
+                  const sizeHeight = carton?.cartonSize?.height || carton?.packagingData?.cartonHeight || pkg.cartonHeight || 0;
+                  const sizeDepth = carton?.cartonSize?.depth || carton?.packagingData?.cartonDepth || pkg.cartonDepth || 0;
+                  const dim = `${sizeWidth}x${sizeHeight}x${sizeDepth}`;
 
                   return (
                     <tr key={carton.cartonSerial} className="group hover:bg-blue-50/30 transition-all duration-300">
@@ -424,7 +510,14 @@ const CartonDetailsPopup = ({
                           <div className={`p-2 rounded-lg ${isVerified ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400 opacity-60'}`}>
                             <Box className="h-4 w-4" />
                           </div>
-                          {carton.cartonSerial}
+                          <div className="flex flex-col">
+                            <span>{carton.cartonSerial}</span>
+                            {carton.isLooseCarton && (
+                              <span className="text-[9px] font-black text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded mt-0.5 w-fit">
+                                LOOSE CARTON
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-5 text-center font-black text-blue-700">

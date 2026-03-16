@@ -15,6 +15,7 @@ import {
   keepCartonInStore,
   updateStageBySerialNo,
   searchByJigFields,
+  closeLooseCarton,
 } from "@/lib/api";
 import {
   FileText,
@@ -65,10 +66,11 @@ interface Cart {
   cartonSerial: string;
   processId: string;
   devices: any[];
-  cartonSize: { width: number; height: number };
+  cartonSize: { width: number; height: number; depth?: number };
   maxCapacity: number;
   weightCarton: number;
   status: "empty" | "partial" | "full";
+  isLooseCarton?: boolean;
 }
 interface DeviceTestComponentProps {
   product: any;
@@ -751,6 +753,28 @@ export default function DeviceTestComponent({
       printWindow.document.close();
     }
   };
+
+  const handleCloseLooseCarton = async (cartonSerial: string) => {
+    try {
+      const confirmed = window.confirm("Are you sure you want to close this partial carton?");
+      if (!confirmed) return;
+      await closeLooseCarton(cartonSerial);
+      toast.success("Loose carton closed successfully!");
+      setCartons((prev: any[]) => {
+        const copy = [...prev];
+        const last = copy[copy.length - 1];
+        if (last && last.cartonSerial === cartonSerial) {
+          last.status = "full";
+          last.isLooseCarton = true;
+        }
+        return copy;
+      });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to close loose carton");
+      console.error(e);
+    }
+  };
+
   const handleCommonGenerateQRCode = async (carton: any) => {
     try {
       if (!carton) {
@@ -884,7 +908,10 @@ export default function DeviceTestComponent({
       let updatedCarts = [...prevCarts];
       let targetCart = updatedCarts.find(
         (c) =>
-          c.processId === processData._id && c.devices.length < c.maxCapacity,
+          c.processId === processData._id &&
+          c.devices.length < c.maxCapacity &&
+          !c.isLooseCarton &&
+          c.status !== "full",
       );
 
       if (!targetCart) {
@@ -895,6 +922,7 @@ export default function DeviceTestComponent({
           cartonSize: {
             width: packagingData.packagingData.cartonWidth,
             height: packagingData.packagingData.cartonHeight,
+            depth: packagingData.packagingData.cartonDepth,
           },
           maxCapacity: packagingData.packagingData.maxCapacity,
           weightCarton: packagingData.packagingData.cartonWeight,
@@ -926,9 +954,10 @@ export default function DeviceTestComponent({
         processId: processData._id,
         devices: [selectedDevice._id],
         packagingData: {
-          width: packagingData.packagingData.cartonWidth,
-          height: packagingData.packagingData.cartonHeight,
-          weight: packagingData.packagingData.cartonWeight,
+          cartonWidth: packagingData.packagingData.cartonWidth,
+          cartonHeight: packagingData.packagingData.cartonHeight,
+          cartonDepth: packagingData.packagingData.cartonDepth,
+          cartonWeight: packagingData.packagingData.cartonWeight,
           maxCapacity: packagingData.packagingData.maxCapacity,
         },
       });
@@ -2624,6 +2653,12 @@ export default function DeviceTestComponent({
                                                           ?.packagingData
                                                           ?.cartonHeight
                                                       }
+                                                      {" "}x{" "}
+                                                      {
+                                                        currentSubStep
+                                                          ?.packagingData
+                                                          ?.cartonDepth
+                                                      }
                                                     </p>
                                                     <p className="flex items-center gap-2">
                                                       <Weight className="h-5 w-5 text-green-500" />{" "}
@@ -2672,8 +2707,9 @@ export default function DeviceTestComponent({
                                                       0;
                                                     const isFull =
                                                       activeCarton &&
-                                                      activeCarton.devices
-                                                        ?.length >= capacity;
+                                                      (activeCarton.devices?.length >= capacity ||
+                                                        activeCarton.isLooseCarton ||
+                                                        activeCarton.status === "full");
 
                                                     if (isFull) {
                                                       const cartonDeviceData =
@@ -2757,6 +2793,25 @@ export default function DeviceTestComponent({
                                                             {capacity}/
                                                             {capacity})
                                                           </p>
+                                                        </div>
+                                                      );
+                                                    } else if (activeCarton && activeCarton.devices?.length > 0) {
+                                                      return (
+                                                        <div className="mt-4 flex flex-col sm:flex-row items-center justify-between rounded-lg border border-orange-200 bg-orange-50 p-4">
+                                                          <div>
+                                                            <p className="font-bold text-orange-800 flex items-center gap-2">
+                                                              <AlertTriangle className="h-4 w-4" />
+                                                              Partial Carton ({activeCarton.devices.length}/{capacity})
+                                                            </p>
+                                                            <p className="text-xs text-orange-600 mt-1">This carton is not full. You can choose to close it early.</p>
+                                                          </div>
+                                                          <button
+                                                            className="mt-3 sm:mt-0 flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-orange-700 transition-colors"
+                                                            onClick={() => handleCloseLooseCarton(activeCarton.cartonSerial)}
+                                                          >
+                                                            <Package className="h-4 w-4" />
+                                                            Close Loose Carton
+                                                          </button>
                                                         </div>
                                                       );
                                                     }

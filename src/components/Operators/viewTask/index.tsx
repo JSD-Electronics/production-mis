@@ -1589,6 +1589,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           JSON.stringify({
             width: packageData.width,
             height: packageData.height,
+            depth: packageData.depth || packageData.cartonDepth,
           }),
         );
         formData.append("maxCapacity", String(packageData.maxCapacity));
@@ -1602,6 +1603,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           cartonSize: {
             width: packageData.width,
             height: packageData.height,
+            depth: packageData.depth || packageData.cartonDepth,
           },
           weight: packageData.cartonWeight,
           status: "partial",
