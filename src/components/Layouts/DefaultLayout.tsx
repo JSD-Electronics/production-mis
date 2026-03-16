@@ -12,7 +12,7 @@ export default function DefaultLayout({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 flex h-screen overflow-hidden">
+    <div className="bg-gray-50 dark:bg-gray-900 flex min-h-screen overflow-hidden">
       {/* Sidebar */}
       <Sidebar
         sidebarOpen={sidebarOpen}
@@ -30,8 +30,8 @@ export default function DefaultLayout({
         <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
         {/* Main Content */}
-        <main className="flex-1 min-h-0 overflow-auto px-4 py-4 sm:px-4 lg:px-6">
-          <div className="mx-auto w-full max-w-7xl">{children}</div>
+        <main className="flex-1 min-h-0 overflow-auto overflow-x-hidden px-3 py-3 sm:px-4 sm:py-4 lg:px-6 lg:py-6">
+          <div className="mx-auto w-full max-w-7xl min-w-0">{children}</div>
         </main>
       </div>
     </div>

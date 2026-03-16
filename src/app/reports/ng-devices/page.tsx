@@ -176,12 +176,8 @@ export default function NGDevicesReportPage() {
   const userRoleUpper = String(currentUserType || "").toUpperCase();
   const isQC = userRoleUpper === "QC";
   const isTRC = userRoleUpper === "TRC";
-  const isRoleFiltered = isQC || isTRC;
-  const roleEntries = isRoleFiltered
-    ? entries.filter((e) => (e.assignedDeviceTo || "").toString().toUpperCase() === userRoleUpper)
-    : entries;
 
-  const totalNg = isRoleFiltered ? roleEntries.length : entries.length;
+  const totalNg = entries.length;
   const totalProcesses = Object.keys(grouped).length;
   const card3Role = isQC ? "QC" : isTRC ? "TRC" : "TRC";
   const counterpartRole = card3Role;
@@ -203,7 +199,7 @@ export default function NGDevicesReportPage() {
 
   return (
     <DefaultLayout>
-      <div className="min-h-screen bg-gray-50/50 p-4 md:p-6 bg-white lg:p-8 font-sans text-gray-800">
+      <div className="min-h-screen bg-gray-50/50 p-3 sm:p-4 md:p-6 lg:p-8 font-sans text-gray-800">
         <div className="mb-8 space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -220,13 +216,13 @@ export default function NGDevicesReportPage() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
+          <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-4 sm:p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
               <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 translate-y-[-30%] rounded-full bg-red-50/50 blur-2xl"></div>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-500">
-                    {isRoleFiltered ? `My NG Devices (${userRoleUpper})` : "Total NG Devices"}
+                    Total NG Devices
                   </p>
                   <h3 className="mt-2 text-3xl font-bold text-gray-900">{loading ? "..." : totalNg}</h3>
                 </div>
@@ -236,11 +232,11 @@ export default function NGDevicesReportPage() {
               </div>
               <div className="mt-4 flex items-center gap-2 text-xs font-medium text-red-600 bg-red-50 w-fit px-2 py-1 rounded-lg">
                 <Activity className="h-3.5 w-3.5" />
-                <span>{isRoleFiltered ? "Assigned to you" : "Requires Attention"}</span>
+                <span>Requires Attention</span>
               </div>
             </div>
 
-            <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
+            <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-4 sm:p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
               <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 translate-y-[-30%] rounded-full bg-blue-50/50 blur-2xl"></div>
               <div className="flex items-center justify-between">
                 <div>
@@ -257,7 +253,7 @@ export default function NGDevicesReportPage() {
               </div>
             </div>
 
-            <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
+            <div className="relative overflow-hidden rounded-2xl bg-blue-50 p-4 sm:p-6 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] transition-all hover:-translate-y-1 hover:shadow-lg">
               <div className="absolute right-0 top-0 h-24 w-24 translate-x-8 translate-y-[-30%] rounded-full bg-amber-50/50 blur-2xl"></div>
               <div className="flex items-center justify-between">
                 <div>
@@ -360,7 +356,7 @@ export default function NGDevicesReportPage() {
                   </span>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="table-responsive">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-gray-50/50 text-xs uppercase tracking-wider text-gray-500 font-semibold">
                       <tr>

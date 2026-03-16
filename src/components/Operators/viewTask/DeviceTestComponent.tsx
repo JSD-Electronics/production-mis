@@ -1279,10 +1279,10 @@ export default function DeviceTestComponent({
       </div>
 
       {/* Devices Section */}
-      <div className="mt-4 rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+      <div className="mt-4 rounded-xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-gray-100 pb-4">
+          <div className="flex items-center gap-3 sm:gap-4">
             <div className="rounded-xl bg-indigo-50 p-2 text-indigo-600">
               <Cpu className="h-5 w-5" />
             </div>
@@ -1290,7 +1290,7 @@ export default function DeviceTestComponent({
               <h3 className="text-base font-bold leading-tight text-gray-800">
                 Device Testing
               </h3>
-              <div className="mt-1 flex items-center gap-3">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <div className="flex items-center gap-1.5 rounded border border-gray-100 bg-gray-50 px-2 py-0.5 text-[10px] font-bold text-gray-500">
                   <Timer className="h-3 w-3" />
                   ELAPSED: <span className="text-gray-900">{timerDisplay}</span>
@@ -1304,13 +1304,13 @@ export default function DeviceTestComponent({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             {processAssignUserStage?.subSteps?.some(
               (s: any) => s.isPackagingStatus && !s?.disabled,
             ) && (
                 <button
                   onClick={() => setIsCartonPopupOpen(true)}
-                  className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow transition-all hover:bg-emerald-700 active:scale-95"
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow transition-all hover:bg-emerald-700 active:scale-95"
                 >
                   <ScanLine className="h-4 w-4" />
                   Verify & Move Cartons
@@ -1319,14 +1319,14 @@ export default function DeviceTestComponent({
             <button
               onClick={handleRefreshSession}
               title="Refresh – clear current device and restart all operations"
-              className="flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-4 py-2 text-xs font-bold text-orange-600 transition-all hover:border-orange-300 hover:bg-orange-100 active:scale-95"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-4 py-2 text-xs font-bold text-orange-600 transition-all hover:border-orange-300 hover:bg-orange-100 active:scale-95"
             >
               <RotateCcw className="h-4 w-4" />
               Refresh
             </button>
             <button
               onClick={() => setIsHistoryOpen(true)}
-              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow transition-all hover:bg-indigo-700 active:scale-95"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white shadow transition-all hover:bg-indigo-700 active:scale-95"
             >
               <History className="h-4 w-4" />
               History
@@ -1344,8 +1344,8 @@ export default function DeviceTestComponent({
             {isCommon ? (
               <div className="flex flex-col space-y-8">
                 {/* 1. Dashboard Overview Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-6 text-white shadow-lg shadow-blue-200/50 transform transition-all hover:scale-[1.02]">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
+                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-4 sm:p-6 text-white shadow-lg shadow-blue-200/50 transform transition-all hover:scale-[1.02]">
                     <div className="flex items-center justify-between mb-2">
                       <Box className="h-6 w-6 opacity-80" />
                       <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Total Cartons</span>
@@ -1354,7 +1354,7 @@ export default function DeviceTestComponent({
                     <div className="text-[10px] font-medium opacity-80">Pending in stage</div>
                   </div>
 
-                  <div className="bg-gradient-to-br from-emerald-500 to-green-600 rounded-2xl p-6 text-white shadow-lg shadow-green-200/50 transform transition-all hover:scale-[1.02]">
+                  <div className="bg-gradient-to-br from-emerald-500 to-green-600 rounded-2xl p-4 sm:p-6 text-white shadow-lg shadow-green-200/50 transform transition-all hover:scale-[1.02]">
                     <div className="flex items-center justify-between mb-2">
                       <Cpu className="h-6 w-6 opacity-80" />
                       <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Single Units</span>
@@ -1363,7 +1363,7 @@ export default function DeviceTestComponent({
                     <div className="text-[10px] font-medium opacity-80">Not in cartons</div>
                   </div>
 
-                  <div className="bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl p-6 text-white shadow-lg shadow-purple-200/50 transform transition-all hover:scale-[1.02]">
+                  <div className="bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl p-4 sm:p-6 text-white shadow-lg shadow-purple-200/50 transform transition-all hover:scale-[1.02]">
                     <div className="flex items-center justify-between mb-2">
                       <ClipboardCheck className="h-6 w-6 opacity-80" />
                       <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Verified Assets</span>
@@ -1377,7 +1377,7 @@ export default function DeviceTestComponent({
                     <div className="text-[10px] font-medium opacity-80">Ready for next stage</div>
                   </div>
 
-                  <div className="bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl p-6 text-white shadow-lg shadow-orange-200/50 transform transition-all hover:scale-[1.02]">
+                  <div className="bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl p-4 sm:p-6 text-white shadow-lg shadow-orange-200/50 transform transition-all hover:scale-[1.02]">
                     <div className="flex items-center justify-between mb-2">
                       <Zap className="h-6 w-6 opacity-80" />
                       <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Today's Output</span>
@@ -1388,8 +1388,8 @@ export default function DeviceTestComponent({
                 </div>
 
                 {/* 2. Unified Search Area */}
-                <div className="bg-white rounded-3xl border-2 border-slate-100 p-8 shadow-xl shadow-slate-200/50">
-                  <div className="flex flex-col md:flex-row items-center gap-6">
+                <div className="bg-white rounded-3xl border-2 border-slate-100 p-4 sm:p-6 lg:p-8 shadow-xl shadow-slate-200/50">
+                  <div className="flex flex-col md:flex-row items-center gap-4 sm:gap-6">
                     <div className="flex-1 w-full space-y-2">
                       <label className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400 ml-4">
                         <Search className="h-4 w-4" />
@@ -1399,7 +1399,7 @@ export default function DeviceTestComponent({
                         <input
                           type="text"
                           placeholder="SCAN OR TYPE SERIAL..."
-                          className="w-full h-16 pl-14 pr-8 rounded-2xl bg-slate-50 border-2 border-slate-100 text-xl font-black tracking-tight text-slate-800 placeholder:text-slate-300 transition-all focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none"
+                          className="w-full h-12 sm:h-14 lg:h-16 pl-12 sm:pl-14 pr-6 sm:pr-8 rounded-2xl bg-slate-50 border-2 border-slate-100 text-base sm:text-lg lg:text-xl font-black tracking-tight text-slate-800 placeholder:text-slate-300 transition-all focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none"
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               const val = e.currentTarget.value.trim();
@@ -1424,11 +1424,11 @@ export default function DeviceTestComponent({
                             }
                           }}
                         />
-                        <Barcode className="absolute left-5 top-1/2 -translate-y-1/2 h-6 w-6 text-slate-300 group-focus-within:text-indigo-500 transition-colors" />
+                        <Barcode className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 h-5 w-5 sm:h-6 sm:w-6 text-slate-300 group-focus-within:text-indigo-500 transition-colors" />
                       </div>
                     </div>
-                    <div className="w-full md:w-auto h-16 flex items-center gap-2 rounded-2xl bg-slate-50 border-2 border-slate-100 p-2">
-                      <button className="flex-1 h-full px-6 flex items-center gap-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all active:scale-95">
+                    <div className="w-full md:w-auto h-12 sm:h-14 lg:h-16 flex items-center gap-2 rounded-2xl bg-slate-50 border-2 border-slate-100 p-2">
+                      <button className="flex-1 h-full px-4 sm:px-6 flex items-center justify-center gap-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all active:scale-95">
                         <ScanLine className="h-4 w-4" />
                         Auto-Scan
                       </button>
@@ -1454,22 +1454,22 @@ export default function DeviceTestComponent({
                 <div className="relative">
                   {/* IF CARTON SELECTED */}
                   {selectedCarton && (
-                    <div className="animate-in fade-in zoom-in-95 duration-500 grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    <div className="animate-in fade-in zoom-in-95 duration-500 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
                       {/* Left: Carton Identity Card */}
                       <div className="lg:col-span-4 space-y-6">
-                        <div className="group bg-white rounded-3xl border border-slate-100 p-8 shadow-2xl shadow-indigo-100 overflow-hidden relative">
+                        <div className="group bg-white rounded-3xl border border-slate-100 p-5 sm:p-7 lg:p-8 shadow-2xl shadow-indigo-100 overflow-hidden relative">
                           <div className="absolute top-0 right-0 p-8 opacity-[0.05] group-hover:scale-110 transition-transform duration-700">
                             <Package className="h-48 w-48 text-indigo-600" />
                           </div>
 
                           <div className="relative z-10">
-                            <div className="flex items-center gap-3 mb-6">
+                            <div className="flex items-center gap-3 mb-5 sm:mb-6">
                               <span className="p-3 rounded-2xl bg-indigo-50 text-indigo-600">
                                 <Box className="h-6 w-6" />
                               </span>
                               <div>
                                 <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Carton Identity</h4>
-                                <h2 className="text-2xl font-black text-slate-800 break-all">{selectedCarton}</h2>
+                                <h2 className="text-xl sm:text-2xl font-black text-slate-800 break-all">{selectedCarton}</h2>
                               </div>
                             </div>
 
@@ -1508,16 +1508,16 @@ export default function DeviceTestComponent({
                                       }}
                                     />
                                   </div>
-                                  <div className="grid grid-cols-2 gap-3">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <button
                                       onClick={handlePrint}
-                                      className="py-4 rounded-2xl bg-slate-800 text-white font-bold text-xs uppercase tracking-widest hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
+                                      className="py-3 sm:py-4 rounded-2xl bg-slate-800 text-white font-bold text-xs uppercase tracking-widest hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
                                     >
                                       <Printer className="h-4 w-4" /> Print
                                     </button>
                                     <button
                                       onClick={() => setIsVerifyCartonModal(true)}
-                                      className="py-4 rounded-2xl bg-purple-600 text-white font-bold text-xs uppercase tracking-widest hover:bg-purple-700 transition-all flex items-center justify-center gap-2"
+                                      className="py-3 sm:py-4 rounded-2xl bg-purple-600 text-white font-bold text-xs uppercase tracking-widest hover:bg-purple-700 transition-all flex items-center justify-center gap-2"
                                     >
                                       <ClipboardCheck className="h-4 w-4" /> Verify
                                     </button>
@@ -1532,7 +1532,7 @@ export default function DeviceTestComponent({
                       {/* Right: Device Content Table */}
                       <div className="lg:col-span-8 flex flex-col h-full">
                         <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl shadow-slate-200/50 overflow-hidden flex flex-col flex-1">
-                          <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+                          <div className="px-5 sm:px-8 py-5 sm:py-6 border-b border-slate-100 flex items-center justify-between">
                             <h3 className="text-lg font-black text-slate-800 flex items-center gap-3">
                               <List className="h-6 w-6 text-indigo-500" />
                               Carton Contents
@@ -1542,31 +1542,31 @@ export default function DeviceTestComponent({
                             </div>
                           </div>
 
-                          <div className="flex-1 overflow-x-auto">
+                          <div className="flex-1 table-responsive">
                             <table className="w-full text-left">
                               <thead>
                                 <tr className="bg-slate-50/50 text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
-                                  <th className="px-8 py-4">Serial No</th>
-                                  <th className="px-6 py-4">Identity (Model/IMEI)</th>
-                                  <th className="px-6 py-4">Stage Status</th>
-                                  <th className="px-6 py-4 text-center">History</th>
+                                  <th className="px-5 sm:px-8 py-4">Serial No</th>
+                                  <th className="px-4 sm:px-6 py-4">Identity (Model/IMEI)</th>
+                                  <th className="px-4 sm:px-6 py-4">Stage Status</th>
+                                  <th className="px-4 sm:px-6 py-4 text-center">History</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-50">
                                 {cartonDevices.map((device: any) => (
                                   <tr key={device._id} className="hover:bg-slate-50/50 group transition-colors">
-                                    <td className="px-8 py-4">
+                                    <td className="px-5 sm:px-8 py-4">
                                       <span className="text-sm font-black text-slate-800 group-hover:text-indigo-600 transition-colors">
                                         {device.serialNo}
                                       </span>
                                     </td>
-                                    <td className="px-6 py-4">
+                                    <td className="px-4 sm:px-6 py-4">
                                       <div className="flex flex-col">
                                         <span className="text-xs font-bold text-slate-700">{device.modelName || 'N/A'}</span>
                                         <span className="text-[10px] font-mono text-slate-400 tracking-tighter">{device.imeiNo || 'N/A'}</span>
                                       </div>
                                     </td>
-                                    <td className="px-6 py-4">
+                                    <td className="px-4 sm:px-6 py-4">
                                       <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${device.status === 'Pass' ? 'bg-emerald-100 text-emerald-700' :
                                         device.status === 'NG' ? 'bg-rose-100 text-rose-700' :
                                           'bg-slate-100 text-slate-500'
@@ -1574,7 +1574,7 @@ export default function DeviceTestComponent({
                                         {device.status || 'Pending'}
                                       </span>
                                     </td>
-                                    <td className="px-6 py-4 text-center">
+                                    <td className="px-4 sm:px-6 py-4 text-center">
                                       <button className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-slate-200 transition-all">
                                         <History className="h-4 w-4 text-slate-400" />
                                       </button>
@@ -1585,18 +1585,18 @@ export default function DeviceTestComponent({
                             </table>
                           </div>
 
-                          <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-3">
+                          <div className="p-4 sm:p-6 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-end gap-3">
                             {assignUserStage?.stage === "FG to Store" && (
                               <button
                                 onClick={() => handleKeepInStore(selectedCarton)}
-                                className="px-8 py-4 rounded-2xl bg-emerald-600 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-200 hover:bg-emerald-700 hover:-translate-y-0.5 transition-all flex items-center gap-2"
+                                className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 rounded-2xl bg-emerald-600 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-200 hover:bg-emerald-700 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
                               >
                                 <Box className="h-4 w-4" /> Keep In Store
                               </button>
                             )}
                             <button
                               onClick={() => handleShiftToNextStage(selectedCarton)}
-                              className="px-8 py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all flex items-center gap-2"
+                              className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
                             >
                               <ArrowRightCircle className="h-4 w-4" /> Shift to Next Stage
                             </button>
@@ -1610,14 +1610,14 @@ export default function DeviceTestComponent({
                   {searchResult && !selectedCarton && (
                     <div className="animate-in slide-in-from-bottom-6 duration-500 max-w-4xl mx-auto">
                       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-2xl overflow-hidden">
-                        <div className="bg-gradient-to-r from-slate-900 to-indigo-900 px-10 py-8 text-white flex justify-between items-center">
+                        <div className="bg-gradient-to-r from-slate-900 to-indigo-900 px-6 sm:px-10 py-6 sm:py-8 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                           <div className="flex items-center gap-5">
                             <div className="h-16 w-16 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center">
                               <Cpu className="h-8 w-8 text-indigo-300" />
                             </div>
                             <div>
                               <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-indigo-300">Target Device</h4>
-                              <h2 className="text-3xl font-black">{searchResult}</h2>
+                              <h2 className="text-2xl sm:text-3xl font-black break-all">{searchResult}</h2>
                             </div>
                           </div>
                           <div className="flex flex-col items-end">
@@ -1628,7 +1628,7 @@ export default function DeviceTestComponent({
                           </div>
                         </div>
 
-                        <div className="p-10 grid grid-cols-1 md:grid-cols-2 gap-10">
+                        <div className="p-6 sm:p-10 grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10">
                           <div className="space-y-8">
                             <div>
                               <h5 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-4">Core Specifications</h5>
@@ -1648,16 +1648,16 @@ export default function DeviceTestComponent({
                               </div>
                             </div>
 
-                            <div className="flex gap-4">
+                            <div className="flex flex-col sm:flex-row gap-4">
                               <button
                                 onClick={() => handleUpdateStatus("Pass")}
-                                className="flex-1 py-5 rounded-2xl bg-emerald-600 text-white font-black text-sm uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-95 flex items-center justify-center gap-2"
+                                className="flex-1 py-4 sm:py-5 rounded-2xl bg-emerald-600 text-white font-black text-sm uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-95 flex items-center justify-center gap-2"
                               >
                                 <CheckCircle className="h-5 w-5" /> Pass & Verify
                               </button>
                               <button
                                 onClick={() => setShowNGModal(true)}
-                                className="flex-1 py-5 rounded-2xl bg-white border-2 border-slate-200 text-slate-800 font-black text-sm uppercase tracking-widest hover:border-rose-500 hover:text-rose-500 transition-all active:scale-95 flex items-center justify-center gap-2"
+                                className="flex-1 py-4 sm:py-5 rounded-2xl bg-white border-2 border-slate-200 text-slate-800 font-black text-sm uppercase tracking-widest hover:border-rose-500 hover:text-rose-500 transition-all active:scale-95 flex items-center justify-center gap-2"
                               >
                                 <XCircle className="h-5 w-5" /> Reject NG
                               </button>
@@ -1673,7 +1673,7 @@ export default function DeviceTestComponent({
                           </div>
                         </div>
 
-                        <div className="p-10 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+                        <div className="p-6 sm:p-10 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                           <button
                             className="text-xs font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600 transition-all flex items-center gap-2"
                             onClick={handleRefreshSession}
@@ -1681,7 +1681,7 @@ export default function DeviceTestComponent({
                             <RotateCcw className="h-4 w-4" /> Reset Asset
                           </button>
                           <button
-                            className="px-10 py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2"
+                            className="w-full sm:w-auto px-8 sm:px-10 py-3 sm:py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
                             onClick={() => updateStageBySerialNo(searchResult, assignedTaskDetails?.processId)}
                           >
                             <ArrowRightCircle className="h-4 w-4" /> Move to Next Stage
@@ -1694,7 +1694,7 @@ export default function DeviceTestComponent({
                   {/* NO ITEM SELECTED - DASHBOARD VIEW */}
                   {!selectedCarton && !searchResult && (
                     <div className="animate-in fade-in duration-700">
-                      <div className="bg-white rounded-3xl border border-dashed border-slate-200 p-20 flex flex-col items-center justify-center text-center">
+                      <div className="bg-white rounded-3xl border border-dashed border-slate-200 p-6 sm:p-10 lg:p-20 flex flex-col items-center justify-center text-center">
                         <div className="h-24 w-24 rounded-full bg-slate-50 flex items-center justify-center mb-6 animate-pulse">
                           <ScanLine className="h-12 w-12 text-slate-300" />
                         </div>

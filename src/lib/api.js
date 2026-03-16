@@ -1,4 +1,4 @@
-import axios from "axios";
+﻿import axios from "axios";
 import { CONFIG } from "../config";
 
 const api = axios.create({
@@ -1768,9 +1768,9 @@ export const deleteMultipleOrderConfirmationNumbers = async (ids) => {
   }
 };
 
-// ───────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Operator work tracking (sessions + breaks + event logs)
-// ───────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const startOperatorWorkSession = async (data) => {
   try {
@@ -1865,7 +1865,6 @@ export const getStorePortalCartons = async () => {
   }
 };
 
-export default api;
 export const closeLooseCarton = async (cartonSerial) => {
   try {
     const response = await api.put("/carton/close-loose", {
@@ -1876,3 +1875,84 @@ export const closeLooseCarton = async (cartonSerial) => {
     throw error.response?.data || { message: "Error closing loose carton" };
   }
 };
+export const inventoryDashboard = async () => {
+  try {
+    const response = await api.get("/inventory/dashboard");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching inventory dashboard:", error);
+    throw error;
+  }
+};
+
+export const getDeviceTestHistoryByOperatorId = async (id) => {
+  try {
+    const response = await api.get(`/getDeviceTestHistoryByOperatorId/${id}`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching operator test history:", error);
+    throw error;
+  }
+};
+export const getNGDevicesByProcessId = async (processId) => {
+  try {
+    const response = await api.get(`/ng-devices/process/${processId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching NG devices:", error);
+    throw error;
+  }
+};
+
+export const getUserRegistrationTrends = async (params = {}) => {
+  try {
+    const response = await api.get("/analytics/users/registration-trends", { params });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching user registration trends:", error);
+    throw error;
+  }
+};
+
+export const getDeviceTestTrends = async (params = {}) => {
+  try {
+    const response = await api.get("/analytics/device-test/trends", { params });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching device test trends:", error);
+    throw error;
+  }
+};
+
+export const getNGReasonDistribution = async (params = {}) => {
+  try {
+    const response = await api.get("/analytics/device-test/ng-reasons", { params });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching NG reason distribution:", error);
+    throw error;
+  }
+};
+
+export const getInventoryTrends = async (params = {}) => {
+  try {
+    const response = await api.get("/analytics/inventory/stock-trends", { params });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching inventory trends:", error);
+    throw error;
+  }
+};
+
+export const getProcessCompletionAnalytics = async (params = {}) => {
+  try {
+    const response = await api.get("/analytics/production/completion-trends", { params });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching process completion analytics:", error);
+    throw error;
+  }
+};
+
+export default api;
+

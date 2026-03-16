@@ -2,7 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const SidebarDropdown = ({ item, permission, userType }: any) => {
+const SidebarDropdown = ({ item, permission, userType, onNavigate }: any) => {
   const pathname = usePathname();
 
   return (
@@ -24,6 +24,9 @@ const SidebarDropdown = ({ item, permission, userType }: any) => {
               <li key={index}>
                 <Link
                   href={item.route}
+                  onClick={() => {
+                    if (typeof onNavigate === "function") onNavigate();
+                  }}
                   className={`group relative flex items-center gap-2.5 rounded-md px-4 font-medium text-bodydark2 duration-300 ease-in-out hover:text-white ${
                     pathname === item.route ? "text-white" : ""
                   }`}

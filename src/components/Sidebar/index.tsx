@@ -40,6 +40,9 @@ const Sidebar = ({
    * and is controlled purely by sidebarOpen (slide in/out).
    */
   const effectiveCollapsed = isDesktop && sidebarCollapsed;
+  const handleNavigate = () => {
+    if (!isDesktop) setSidebarOpen(false);
+  };
 
   const [menuGroups, setMenuGroups] = useState<{ name: string; menuItems: any[] }[]>([{ name: "MENU", menuItems: [] }]);
   const [userType, setUserType] = useState("");
@@ -98,10 +101,17 @@ const Sidebar = ({
         return menus;
       })();
 
+      const sortedMenus = [...menusWithReports].sort((a, b) => {
+        const aHasChildren = Array.isArray(a?.children) && a.children.length > 0;
+        const bHasChildren = Array.isArray(b?.children) && b.children.length > 0;
+        if (aHasChildren === bHasChildren) return 0;
+        return aHasChildren ? 1 : -1;
+      });
+
       setMenuGroups((prev) =>
         prev.map((group) =>
           group.name === "MENU"
-            ? { ...group, menuItems: [...menusWithReports] }
+            ? { ...group, menuItems: sortedMenus }
             : group,
         ),
       );
@@ -127,15 +137,15 @@ const Sidebar = ({
           overflow-x-hidden
           bg-gradient-to-b from-[#0f2a3d] to-[#0b1d2b]
           shadow-xl ring-1 ring-white/5
-          transition-[width,transform] duration-300 ease-in-out
+          transition-[width,transform] duration-300 ease-in-out will-change-transform
           dark:from-[#0f2a3d] dark:to-[#0b1d2b]
           lg:translate-x-0
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-          w-full lg:w-72 ${effectiveCollapsed ? "lg:!w-16 overflow-visible" : "overflow-hidden"}
+          w-[88%] sm:w-72 lg:w-72 ${effectiveCollapsed ? "lg:!w-16 overflow-visible" : "overflow-hidden"}
         `}
       >
         {/* ── HEADER ── */}
-        <div className={`relative flex items-center justify-center ${effectiveCollapsed ? "h-28 flex-col" : "h-20"}`}>
+        <div className={`relative flex items-center justify-center ${effectiveCollapsed ? "h-28 flex-col" : "h-16 sm:h-20"}`}>
           {/* Mobile close button */}
           <button
             type="button"
@@ -160,13 +170,13 @@ const Sidebar = ({
           </button>
           <Link
             href="/"
-            className={`flex items-center gap-2 font-semibold text-white transition-all ${effectiveCollapsed ? "text-transparent truncate mt-4" : "text-xl px-4"
+            className={`flex items-center gap-2 font-semibold text-white transition-all ${effectiveCollapsed ? "text-transparent truncate mt-4" : "text-base sm:text-xl px-4"
               }`}
             title="Production MIS"
           >
             <Image
-              width={28}
-              height={28}
+              width={24}
+              height={24}
               src="/images/icon/production-icon.svg"
               alt="Logo"
               className="flex-shrink-0"
@@ -247,6 +257,7 @@ const Sidebar = ({
                           userType={userType}
                           setPageName={setPageName}
                           collapsed={effectiveCollapsed}
+                          onNavigate={handleNavigate}
                         />
                       )
                     );

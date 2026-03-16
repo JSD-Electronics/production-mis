@@ -1,10 +1,14 @@
-﻿import Link from "next/link";
+"use client";
+import Link from "next/link";
 import Image from "next/image";
+import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import DarkModeSwitcher from "./DarkModeSwitcher";
-import DropdownMessage from "./DropdownMessage";
-import DropdownNotification from "./DropdownNotification";
+// import DropdownMessage from "./DropdownMessage";
+// import DropdownNotification from "./DropdownNotification";
 import DropdownUser from "./DropdownUser";
 import { CONFIG } from "@/config";
+import { getAllMenus, getUseTypeByType } from "@/lib/api";
 
 const Header = ({
   sidebarOpen,
@@ -13,11 +17,84 @@ const Header = ({
   sidebarOpen: boolean | string | undefined;
   setSidebarOpen: (arg0: boolean) => void;
 }) => {
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [menuItems, setMenuItems] = useState<{ label: string; route: string }[]>([]);
+  const [permission, setPermission] = useState<any[]>([]);
+  const [userType, setUserType] = useState("");
+
+  useEffect(() => {
+    const raw = localStorage.getItem("userDetails");
+    if (!raw) return;
+    try {
+      const userDetails = JSON.parse(raw);
+      setUserType(userDetails?.userType || "");
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const result = await getAllMenus();
+        const menus = Array.isArray(result?.getMenu?.[0]?.menus)
+          ? result.getMenu[0].menus
+          : [];
+        const flat: { label: string; route: string }[] = [];
+        const walk = (items: any[]) => {
+          items.forEach((item) => {
+            if (item?.children?.length) {
+              walk(item.children);
+            } else if (item?.route && item.route !== "#") {
+              flat.push({ label: item.label, route: item.route });
+            }
+          });
+        };
+        walk(menus);
+        setMenuItems(flat);
+      } catch {
+        setMenuItems([]);
+      }
+    };
+    load();
+  }, []);
+
+  useEffect(() => {
+    const loadPermissions = async () => {
+      try {
+        const result = await getUseTypeByType();
+        setPermission(result.userType[0].roles || []);
+      } catch {}
+    };
+    loadPermissions();
+  }, []);
+
+  const filteredMenuItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    const normalizedUserType = (userType || "").toLowerCase().replace(/\s+/g, "_");
+    return menuItems.filter((item) => {
+      const key = item.label.replace(/\s+/g, "_").toLowerCase();
+      const hasPermission =
+        permission[key]?.[normalizedUserType] ?? normalizedUserType === "admin";
+      return hasPermission && item.label.toLowerCase().includes(q);
+    });
+  }, [menuItems, permission, searchQuery, userType]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    const first = filteredMenuItems[0];
+    if (first?.route) {
+      router.push(first.route);
+      setSearchQuery("");
+    }
+  };
+
   return (
     <header className="sticky top-0 z-50 flex w-full items-center bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 shadow-sm ring-1 ring-black/5 dark:bg-boxdark/80">
-      <div className="flex flex-grow items-center justify-between px-4 py-2 md:px-6 lg:px-8">
+      <div className="flex flex-grow items-center justify-between px-3 py-2 sm:px-4 md:px-6 lg:px-8">
         {/* Left Section */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* Environment Indicator */}
           {CONFIG.ENVIRONMENT !== "production" && (
             <div className="hidden xsm:block">
@@ -30,7 +107,7 @@ const Header = ({
           <button
             aria-controls="sidebar"
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="border-gray-300 text-gray-700 hover:bg-gray-100 flex h-10 w-10 items-center justify-center rounded-md border bg-white/90 shadow-sm transition dark:border-strokedark dark:bg-boxdark dark:text-white lg:hidden"
+            className="border-gray-300 text-gray-700 hover:bg-gray-100 flex h-9 w-9 items-center justify-center rounded-md border bg-white/90 shadow-sm transition dark:border-strokedark dark:bg-boxdark dark:text-white lg:hidden"
           >
             <span className="sr-only">Toggle sidebar</span>
             <svg
@@ -59,8 +136,8 @@ const Header = ({
           {/* Logo (Mobile only) */}
           <Link href="/" className="block flex-shrink-0">
             <Image
-              width={32}
-              height={32}
+              width={28}
+              height={28}
               src="/images/logo/logo-icon.svg"
               alt="Logo"
             />
@@ -68,12 +145,14 @@ const Header = ({
         </div>
 
         {/* Search Bar (hidden on mobile) */}
-        <div className="hidden max-w-md flex-grow px-4 md:block">
-          <form action="#" method="POST">
+        <div className="hidden max-w-md flex-grow px-4 lg:block">
+          <form onSubmit={handleSearchSubmit}>
             <div className="relative">
               <input
                 type="text"
                 placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="border-gray-300 bg-gray-50 w-full rounded-lg border py-2.5 pl-10 pr-4 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:border-strokedark dark:bg-boxdark dark:text-white"
               />
               <span className="text-gray-400 dark:text-gray-500 absolute left-3 top-1/2 -translate-y-1/2">
@@ -91,15 +170,35 @@ const Header = ({
                   />
                 </svg>
               </span>
+              {filteredMenuItems.length > 0 && (
+                <div className="absolute left-0 right-0 top-[110%] z-50 rounded-lg border border-gray-200 bg-white shadow-lg">
+                  <ul className="max-h-64 overflow-y-auto py-1 text-sm">
+                    {filteredMenuItems.slice(0, 8).map((item) => (
+                      <li key={item.route}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            router.push(item.route);
+                            setSearchQuery("");
+                          }}
+                          className="w-full px-4 py-2 text-left text-gray-700 hover:bg-gray-50"
+                        >
+                          {item.label}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </form>
         </div>
 
         {/* Right Section */}
-        <div className="flex items-center gap-4 list-none">
+        <div className="flex items-center gap-2 sm:gap-4 list-none">
           {/* <DarkModeSwitcher /> */}
-          <DropdownNotification />
-          <DropdownMessage />
+          {/* <DropdownNotification /> */}
+          {/* <DropdownMessage /> */}
           <DropdownUser />
         </div>
       </div>
