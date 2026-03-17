@@ -16,11 +16,11 @@ import {
   updateStageBySerialNo,
   searchByJigFields,
   closeLooseCarton,
+  getDeviceTestRecordsByProcessId,
+  updateMarkAsComplete,
+  createProcessLogs,
 } from "@/lib/api";
 import {
-  FileText,
-  Cpu,
-  Timer,
   Zap,
   Search,
   BookOpenCheck,
@@ -53,7 +53,11 @@ import {
   RotateCcw,
   Terminal,
   Cable,
+  FileText,
+  Cpu,
+  Timer,
 } from "lucide-react";
+
 import Image from "next/image";
 import React, { useEffect, useState } from "react";
 import StickerGenerator from "../viewTask-old/StickerGenerator";
@@ -242,6 +246,7 @@ export default function DeviceTestComponent({
   const [todaySummary, setTodaySummary] = useState<any>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSopOpen, setIsSopOpen] = useState(true);
+  const [historySerialQuery, setHistorySerialQuery] = useState("");
 
   // Reset verification inputs whenever modal opens
   useEffect(() => {
@@ -1109,6 +1114,49 @@ export default function DeviceTestComponent({
     totalProcessStartTimeRef.current = Date.now();
   };
 
+  const checkProcessCompletion = async () => {
+    try {
+      if (!processData?._id || !processData?.quantity) return;
+
+      const recordResult = await getDeviceTestRecordsByProcessId(processData._id);
+      const allRecords = recordResult.deviceTestRecords || [];
+
+      const uniqueCompletedDevices = new Set();
+      allRecords.forEach((r: any) => {
+        const rStage = (r.name || r.stageName || "").toLowerCase();
+        if (
+          (rStage.includes("store") ||
+            rStage.includes("fg") ||
+            rStage.includes("finish")) &&
+          (r.status === "Pass" || r.status === "Completed")
+        ) {
+          uniqueCompletedDevices.add(r.serialNo);
+        }
+      });
+
+      if (uniqueCompletedDevices.size >= processData.quantity) {
+        const formData = new FormData();
+        formData.append("status", "completed");
+        await updateMarkAsComplete(formData, processData._id);
+
+        const userDetailsStr = localStorage.getItem("userDetails");
+        const userDetails = userDetailsStr ? JSON.parse(userDetailsStr) : {};
+        const logData = new FormData();
+        logData.append("action", "PROCESS_COMPLETED");
+        logData.append("processId", processData._id);
+        logData.append("userId", userDetails?._id || "");
+        logData.append("description", `${processData?.name || "Process"
+          } was automatically marked as completed.`);
+
+        await createProcessLogs(logData);
+        toast.success("Process automatically completed!");
+      }
+    } catch (error) {
+      console.error("Error checking process completion:", error);
+    }
+  };
+
+
   const handleShiftToNextStage = async (cartonSerial: any) => {
     if (!cartonSerial) {
       alert("No carton selected.");
@@ -1130,6 +1178,7 @@ export default function DeviceTestComponent({
         setIsPassNGButtonShow(false);
         setIsVerifiedSticker(false);
         setIsStickerPrinted(false);
+        await checkProcessCompletion();
         return false;
       } else {
         console.error("Failed to shift cartons:", result.statusText);
@@ -1161,6 +1210,7 @@ export default function DeviceTestComponent({
         setIsPassNGButtonShow(false);
         setIsVerifiedSticker(false);
         setIsStickerPrinted(false);
+        await checkProcessCompletion();
         return false;
       } else {
         console.error("Failed to keep carton in store:", result.statusText);
@@ -3289,8 +3339,8 @@ export default function DeviceTestComponent({
 
                           {/* Carton Details (Moved from Recent Activity) */}
                           {processAssignUserStage?.subSteps?.some(
-              (s: any) => s.isPackagingStatus && !s?.disabled,
-            ) && (
+                            (s: any) => s.isPackagingStatus && !s?.disabled,
+                          ) && (
                               <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                                 <div className="border-b border-gray-100 bg-gray-50/50 px-4 py-3">
                                   <h4 className="flex items-center gap-2 text-sm font-bold text-gray-800">
@@ -3500,6 +3550,15 @@ export default function DeviceTestComponent({
 
           {/* Drawer Content */}
           <div className="h-[calc(100vh-64px)] space-y-6 overflow-y-auto">
+            <div className="px-4 pt-4">
+              <input
+                type="text"
+                value={historySerialQuery}
+                onChange={(e) => setHistorySerialQuery(e.target.value)}
+                placeholder="Search serial number"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 shadow-sm outline-none transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
             {/* Tested History List */}
             <div className="overflow-hidden rounded-xl bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50/50 px-4 py-3">
@@ -3522,7 +3581,13 @@ export default function DeviceTestComponent({
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {checkedDevice.length > 0 ? (
-                      checkedDevice.map((row, rowIndex) => (
+                      checkedDevice
+                        .filter((row) => {
+                          if (!historySerialQuery.trim()) return true;
+                          const serial = String(row?.deviceInfo?.serialNo || "").toLowerCase();
+                          return serial.includes(historySerialQuery.trim().toLowerCase());
+                        })
+                        .map((row, rowIndex) => (
                         <tr
                           key={rowIndex}
                           className="transition-colors hover:bg-gray-50/50"
