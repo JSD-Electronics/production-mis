@@ -117,10 +117,14 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
                       ? mmToPx(Number(field.barWidthMm))
                       : field?.barWidth;
 
-                  const computedBarWidth = explicitBarWidth
-                    ? Math.max(0.5, Number(explicitBarWidth))
-                    : targetWidth
-                      ? Math.max(0.5, targetWidth / estimatedModules)
+                  // Keep overall barcode size fixed to the element width.
+                  // If we use a fixed "x-dimension" (barWidthMm) as module width,
+                  // the total barcode width changes with character count.
+                  // So when a target element width exists, always "fit-to-box".
+                  const computedBarWidth = targetWidth
+                    ? Math.max(0.5, targetWidth / estimatedModules)
+                    : explicitBarWidth
+                      ? Math.max(0.5, Number(explicitBarWidth))
                       : 1;
 
                   const showValue = field?.displayValue !== false;
@@ -223,4 +227,3 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
     </div>
   );
 }
-

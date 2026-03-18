@@ -1297,18 +1297,20 @@ const StickerDesigner = ({
                               return String(fallback);
                             })();
 
-                            const estimatedModules =
-                              barcodeValue.length * 11 + 35;
-                            const targetWidth = field.width;
-                            const explicitBarWidth =
-                              field.barWidthMm != null
-                                ? mmToPx(Number(field.barWidthMm))
-                                : field.barWidth;
-                            const computedBarWidth = explicitBarWidth
-                              ? Math.max(0.5, Number(explicitBarWidth))
-                              : targetWidth
-                                ? Math.max(0.5, targetWidth / estimatedModules)
-                                : 1;
+                             const estimatedModules =
+                               barcodeValue.length * 11 + 35;
+                             const targetWidth = field.width;
+                             const explicitBarWidth =
+                               field.barWidthMm != null
+                                 ? mmToPx(Number(field.barWidthMm))
+                                 : field.barWidth;
+                             // Fit-to-box: keep the barcode's overall width constant (element width),
+                             // so it doesn't grow/shrink with the number of characters.
+                             const computedBarWidth = targetWidth
+                               ? Math.max(0.5, targetWidth / estimatedModules)
+                               : explicitBarWidth
+                                 ? Math.max(0.5, Number(explicitBarWidth))
+                                 : 1;
 
                             const showValue = field.displayValue !== false;
                             const valueFontSize = field.fontSize ?? 12;
