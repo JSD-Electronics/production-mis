@@ -2,7 +2,7 @@
 import { Rnd } from "react-rnd";
 import Barcode from "react-barcode";
 import { QRCodeCanvas } from "qrcode.react";
-import html2canvas from "html2canvas";
+import { printStickerElements } from "@/lib/sticker/printSticker";
 import Modal from "../Modal/page";
 import { useDropzone } from "react-dropzone";
 import Cropper from "react-easy-crop";
@@ -22,7 +22,9 @@ import {
   Minimize2,
   Info,
   GripVertical,
-  Layers
+  Layers,
+  Lock,
+  Unlock
 } from "lucide-react";
 import { Tooltip } from "react-tooltip";
 
@@ -73,6 +75,7 @@ const StickerDesigner = ({
   const [isModalBarCodeValue, setIsModalBarCodeValue] = useState(false);
   const [isBarCodeDropDown, setBarCodeDropDown] = useState(false);
   const [isImageUploadModal, setImageUploadMoal] = useState(false);
+  const [isExportingSticker, setIsExportingSticker] = useState(false);
 
   const [fontSettings, setFontSettings] = useState({ size: 16, weight: 400 });
   const [selectedBarCodeValue, setSelectedBarCodeValue] = useState("");
@@ -749,53 +752,37 @@ const StickerDesigner = ({
 
     // Clear focus before capturing to avoid showing the selection ring in the print
     setFocusedFieldIndex(null);
+    // Hide editor-only UI (like lock badges) during capture.
+    setIsExportingSticker(true);
 
     // Give React a moment to clear the focus ring and reset zoom before capture
     setTimeout(() => {
-      html2canvas(stickerElement, {
-        scale: 4, // Higher scale for high-quality print
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-      }).then((canvas) => {
-        const imageData = canvas.toDataURL("image/png");
+      const widthPx = typeof width === "string" ? parseInt(width, 10) : Number(width);
+      const heightPx = typeof height === "string" ? parseInt(height, 10) : Number(height);
 
-        const widthPx = typeof width === 'string' ? parseInt(width) : width;
-        const heightPx = typeof height === 'string' ? parseInt(height) : height;
+      // Provide explicit px dimensions for consistent @page sizing.
+      if (!Number.isNaN(widthPx) && widthPx > 0) {
+        stickerElement.setAttribute("data-sticker-width", String(widthPx));
+      }
+      if (!Number.isNaN(heightPx) && heightPx > 0) {
+        stickerElement.setAttribute("data-sticker-height", String(heightPx));
+      }
 
-        const stickerWidthMM = pxToMm(widthPx);
-        const stickerHeightMM = pxToMm(heightPx);
-
-        const printWindow = window.open("", "_blank");
-        if (!printWindow) {
-          alert("Please allow pop-ups to preview the sticker.");
-          setZoomLevel(originalZoom); // Restore zoom
-          return;
-        }
-
-        printWindow.document.write(`
-          <html>
-            <head>
-              <title>Print Sticker</title>
-              <style>
-                @page { size: ${stickerWidthMM}mm ${stickerHeightMM}mm; margin: 0; }
-                body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; background-color: white; }
-                img { width: ${stickerWidthMM}mm; height: ${stickerHeightMM}mm; display: block; }
-              </style>
-            </head>
-            <body>
-              <img src="${imageData}" alt="Sticker" />
-              <script>
-                window.onload = function() {
-                  setTimeout(() => { window.print(); window.close(); }, 300);
-                };
-              </script>
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-        setZoomLevel(originalZoom); // Restore zoom
-      });
+      printStickerElements({
+        root: stickerElement as HTMLElement,
+        scale: 4,
+        title: "Print Sticker",
+        selector: ".actual-sticker-container", // none in editor; will fall back to root
+      })
+        .then((res) => {
+          if (!res.ok && res.reason === "popup-blocked") {
+            alert("Please allow pop-ups to preview the sticker.");
+          }
+        })
+        .finally(() => {
+          setZoomLevel(originalZoom);
+          setIsExportingSticker(false);
+        });
     }, 200);
   };
   const generateScanCode = (type = "barcode") => {
@@ -907,10 +894,16 @@ const StickerDesigner = ({
                                     barWidth === ""
                                       ? undefined
                                       : Number(barWidth),
+                                  barWidthMm:
+                                    field.barWidthMm ?? 0.25,
                                   barHeight:
                                     barHeight === ""
                                       ? undefined
                                       : Number(barHeight),
+                                  barHeightMm:
+                                    field.barHeightMm ?? 3.3,
+                                  barDensity:
+                                    field.barDensity ?? 0.636,
                                   styles: {
                                     ...field.styles,
                                     x: 50,
@@ -922,6 +915,13 @@ const StickerDesigner = ({
                                     height: 50,
                                   },
                                   format: barFormat,
+                                  codeSet: field.codeSet || "Auto",
+                                  textEncoding:
+                                    field.textEncoding || "US-ASCII",
+                                  includeCheckDigit:
+                                    field.includeCheckDigit || false,
+                                  hibc: field.hibc || false,
+                                  gs1_128: field.gs1_128 || false,
                                   lineColor: barLineColor,
                                   background: barBackground,
                                   margin:
@@ -951,11 +951,19 @@ const StickerDesigner = ({
                                   barWidth === ""
                                     ? undefined
                                     : Number(barWidth),
+                                barWidthMm: 0.25,
                                 barHeight:
                                   barHeight === ""
                                     ? undefined
                                     : Number(barHeight),
+                                barHeightMm: 3.3,
+                                barDensity: 0.636,
                                 format: barFormat,
+                                codeSet: "Auto",
+                                textEncoding: "US-ASCII",
+                                includeCheckDigit: false,
+                                hibc: false,
+                                gs1_128: false,
                                 lineColor: barLineColor,
                                 background: barBackground,
                                 margin:
@@ -1216,16 +1224,22 @@ const StickerDesigner = ({
                 {stages[index]?.subSteps[subIndex1]?.printerFields[
                   fieldIndex
                 ].fields?.map((field, i) => (
+                  // When a field is locked, block any position/size adjustments until unlocked.
                   <Rnd
                     key={i}
                     bounds="parent"
                     scale={zoomLevel}
                     size={{ width: field.width, height: field.height }}
                     position={{ x: field.x, y: field.y }}
+                    disableDragging={Boolean(field?.locked)}
+                    enableResizing={!Boolean(field?.locked)}
                     onDragStop={(e, d) =>
-                      handleFieldChange(i, { x: d.x, y: d.y })
+                      field?.locked
+                        ? null
+                        : handleFieldChange(i, { x: d.x, y: d.y })
                     }
                     onResizeStop={(e, direction, ref, delta, position) => {
+                      if (field?.locked) return;
                       handleFieldChange(i, {
                         width: parseInt(ref.style.width, 10),
                         height: parseInt(ref.style.height, 10),
@@ -1246,6 +1260,11 @@ const StickerDesigner = ({
                         : "hover:ring-1 hover:ring-primary/30"
                         }`}
                     >
+                      {field?.locked && !isExportingSticker && (
+                        <div className="pointer-events-none absolute right-0.5 top-0.5 z-10 rounded bg-white/80 p-0.5 text-gray-700 shadow-sm">
+                          <Lock size={10} />
+                        </div>
+                      )}
                       {field?.type === "barcode" ? (
                         <div className="flex h-full w-full items-center justify-center overflow-hidden">
                           {(() => {
@@ -1467,28 +1486,38 @@ const StickerDesigner = ({
 
           {/* Canvas Floating Tools (Alignment) */}
           {focusedFieldIndex !== null && (
+            (() => {
+              const focusedField =
+                stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]
+                  ?.fields?.[focusedFieldIndex];
+              const isLocked = Boolean(focusedField?.locked);
+              return (
             <div className="animate-in fade-in slide-in-from-bottom-4 mb-20 flex items-center gap-2 rounded-2xl border border-gray-100 bg-white p-2 shadow-xl transition-transform dark:border-strokedark dark:bg-boxdark">
               <button
                 type="button"
+                disabled={isLocked}
                 onClick={() => {
                   const f =
                     stages[index]?.subSteps[subIndex1]?.printerFields[
                       fieldIndex
                     ].fields[focusedFieldIndex];
+                  if (f?.locked) return;
                   handleFieldChange(focusedFieldIndex, { y: 0 });
                 }}
-                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-meta-4"
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-meta-4"
                 title="Align Top"
               >
                 <ArrowUp size={16} />
               </button>
               <button
                 type="button"
+                disabled={isLocked}
                 onClick={() => {
                   const f =
                     stages[index]?.subSteps[subIndex1]?.printerFields[
                       fieldIndex
                     ].fields[focusedFieldIndex];
+                  if (f?.locked) return;
                   const canvasH =
                     stages[index]?.subSteps[subIndex1]?.printerFields[
                       fieldIndex
@@ -1497,18 +1526,20 @@ const StickerDesigner = ({
                     y: (canvasH - f.height) / 2,
                   });
                 }}
-                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-meta-4"
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-meta-4"
                 title="Align Middle"
               >
                 <div className="h-0.5 w-4 bg-current" />
               </button>
               <button
                 type="button"
+                disabled={isLocked}
                 onClick={() => {
                   const f =
                     stages[index]?.subSteps[subIndex1]?.printerFields[
                       fieldIndex
                     ].fields[focusedFieldIndex];
+                  if (f?.locked) return;
                   const canvasH =
                     stages[index]?.subSteps[subIndex1]?.printerFields[
                       fieldIndex
@@ -1517,7 +1548,7 @@ const StickerDesigner = ({
                     y: canvasH - f.height,
                   });
                 }}
-                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-meta-4"
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-meta-4"
                 title="Align Bottom"
               >
                 <ArrowDown size={16} />
@@ -1525,25 +1556,29 @@ const StickerDesigner = ({
               <div className="mx-1 h-6 w-px bg-gray-200" />
               <button
                 type="button"
+                disabled={isLocked}
                 onClick={() => {
                   const f =
                     stages[index]?.subSteps[subIndex1]?.printerFields[
                       fieldIndex
                     ].fields[focusedFieldIndex];
+                  if (f?.locked) return;
                   handleFieldChange(focusedFieldIndex, { x: 0 });
                 }}
-                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-meta-4"
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-meta-4"
                 title="Align Left"
               >
                 <ArrowUp className="-rotate-90" size={16} />
               </button>
               <button
                 type="button"
+                disabled={isLocked}
                 onClick={() => {
                   const f =
                     stages[index]?.subSteps[subIndex1]?.printerFields[
                       fieldIndex
                     ].fields[focusedFieldIndex];
+                  if (f?.locked) return;
                   const canvasW =
                     stages[index]?.subSteps[subIndex1]?.printerFields[
                       fieldIndex
@@ -1552,18 +1587,20 @@ const StickerDesigner = ({
                     x: (canvasW - f.width) / 2,
                   });
                 }}
-                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-meta-4"
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-meta-4"
                 title="Align Center"
               >
                 <div className="mx-auto h-4 w-0.5 bg-current" />
               </button>
               <button
                 type="button"
+                disabled={isLocked}
                 onClick={() => {
                   const f =
                     stages[index]?.subSteps[subIndex1]?.printerFields[
                       fieldIndex
                     ].fields[focusedFieldIndex];
+                  if (f?.locked) return;
                   const canvasW =
                     stages[index]?.subSteps[subIndex1]?.printerFields[
                       fieldIndex
@@ -1572,12 +1609,14 @@ const StickerDesigner = ({
                     x: canvasW - f.width,
                   });
                 }}
-                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-meta-4"
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-meta-4"
                 title="Align Right"
               >
                 <ArrowDown className="-rotate-90" size={16} />
               </button>
             </div>
+              );
+            })()
           )}
         </div>
 
@@ -1953,6 +1992,49 @@ const StickerDesigner = ({
                           <option value="qrcode">QR Code</option>
                           <option value="image">Image</option>
                         </select>
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-strokedark dark:bg-form-input">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                            Lock Position
+                          </span>
+                          <span className="text-[11px] font-medium text-gray-500">
+                            Prevent move/resize
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const current =
+                              stages[index]?.subSteps[subIndex1]?.printerFields[
+                                fieldIndex
+                              ].fields[focusedFieldIndex]?.locked;
+                            handleFieldChange(focusedFieldIndex, {
+                              locked: !Boolean(current),
+                            });
+                          }}
+                          className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                            stages[index]?.subSteps[subIndex1]?.printerFields[
+                              fieldIndex
+                            ].fields[focusedFieldIndex]?.locked
+                              ? "bg-gray-900 text-white hover:bg-gray-800"
+                              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          }`}
+                          title="Lock/unlock this element"
+                        >
+                          {stages[index]?.subSteps[subIndex1]?.printerFields[
+                            fieldIndex
+                          ].fields[focusedFieldIndex]?.locked ? (
+                            <Lock size={14} />
+                          ) : (
+                            <Unlock size={14} />
+                          )}
+                          {stages[index]?.subSteps[subIndex1]?.printerFields[
+                            fieldIndex
+                          ].fields[focusedFieldIndex]?.locked
+                            ? "Locked"
+                            : "Unlocked"}
+                        </button>
                       </div>
                       {(stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex].fields[focusedFieldIndex].type === "" ||
                         stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex].fields[focusedFieldIndex].type === "text") && (
