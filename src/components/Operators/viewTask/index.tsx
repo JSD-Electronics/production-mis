@@ -18,6 +18,7 @@ import {
   getOverallDeviceTestEntry,
   getDeviceTestEntryByOperatorId,
   getDeviceTestRecordsByProcessId,
+  getLatestDeviceTestsByPlanId,
   getDeviceTestByDeviceId,
   updateStageByDeviceId,
   updateStageBySerialNo,
@@ -365,9 +366,18 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       const processId = getPlaningAndScheduling.selectedProcess;
       if (!processId) return;
 
-      // 1. Fetch all records for this process instance globally
-      const recordResult = await getDeviceTestRecordsByProcessId(processId);
-      const allRecords = recordResult.deviceTestRecords || [];
+      // 1. Fetch latest records per device/stage for this plan
+      let allRecords: any[] = [];
+      try {
+        const recordResult = await getLatestDeviceTestsByPlanId(id, processId);
+        allRecords = recordResult?.deviceTestRecords || [];
+      } catch (e) {
+        const recordResult = await getDeviceTestRecordsByProcessId(processId);
+        const rawRecords = recordResult?.deviceTestRecords || [];
+        allRecords = rawRecords.filter(
+          (record: any) => String(record?.planId) === String(id),
+        );
+      }
 
       // 2. Identify current stages assigned to this seat
       const isCommon = assignedTaskDetails?.stageType === "common";
@@ -397,6 +407,19 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         }
       });
 
+      const cap = parseInt(processData?.quantity, 10) || 0;
+      if (cap > 0) {
+        const total = globalPass + globalNg;
+        if (total > cap) {
+          const cappedPass = Math.min(globalPass, cap);
+          const remaining = Math.max(cap - cappedPass, 0);
+          const cappedNg = Math.min(globalNg, remaining);
+          globalPass = cappedPass;
+          globalNg = cappedNg;
+          globalTested = Math.min(globalTested, cap);
+        }
+      }
+
       setOverallTotalCompleted(globalPass);
       setOverallTotalNg(globalNg);
       setOverallTotalAttempts(globalTested);
@@ -406,18 +429,23 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       const currentStageName = Array.from(targetStageNames)[0] as string;
       const currentStageIdx = stages.indexOf(currentStageName);
 
-      // Calculate total WIP based on totalUPHA for the assigned stages
-      let totalWipFromUPHA = 0;
-      Object.values(assignedStages).forEach((seatS: any) => {
-        const arr = Array.isArray(seatS) ? seatS : [seatS];
-        arr.forEach((s: any) => {
-          if (targetStageNames.has((s.name || s.stageName)?.trim())) {
-            totalWipFromUPHA += (s.totalUPHA || 0);
-          }
+      const issuedKits = parseInt(getPlaningAndScheduling?.assignedIssuedKits || "0", 10) || 0;
+      if (issuedKits > 0) {
+        const totalDone = globalPass + globalNg;
+        setWipKits(Math.max(issuedKits - totalDone, 0));
+      } else {
+        // Fallback: calculate total WIP based on totalUPHA for the assigned stages
+        let totalWipFromUPHA = 0;
+        Object.values(assignedStages).forEach((seatS: any) => {
+          const arr = Array.isArray(seatS) ? seatS : [seatS];
+          arr.forEach((s: any) => {
+            if (targetStageNames.has((s.name || s.stageName)?.trim())) {
+              totalWipFromUPHA += (s.totalUPHA || 0);
+            }
+          });
         });
-      });
-
-      setWipKits(totalWipFromUPHA);
+        setWipKits(totalWipFromUPHA);
+      }
       setOverallTotalCompleted(globalPass);
       setOverallTotalNg(globalNg);
       setOverallTotalAttempts(globalTested);

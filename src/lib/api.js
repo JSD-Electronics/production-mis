@@ -1361,6 +1361,20 @@ export const getDeviceTestRecordsByProcessId = async (id) => {
     );
   }
 };
+export const getLatestDeviceTestsByPlanId = async (planId, processId) => {
+  try {
+    let response = await api.get(
+      `/process/getLatestDeviceTestsByPlanId/${planId}`,
+      { params: processId ? { processId } : {} },
+    );
+    return response.data;
+  } catch (error) {
+    console.error(
+      "Error Fetching Latest Device Test Records By Plan Id :",
+      error.message,
+    );
+  }
+};
 export const getOrderConfirmationNumers = async () => {
   try {
     let reponse = await api.get("/process/orderConfirmation/get");

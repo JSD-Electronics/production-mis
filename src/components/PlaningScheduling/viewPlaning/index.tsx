@@ -13,6 +13,7 @@ import {
   fetchHolidays,
   viewJigCategory,
   getDeviceTestRecordsByProcessId,
+  getLatestDeviceTestsByPlanId,
   getDeviceByProductId,
   getDowntimeReasons,
   updateDownTimeProcess,
@@ -94,6 +95,16 @@ const DraggableGridItem = ({
 }) => {
   const isReadOnly = Boolean(readOnly);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const capCounts = (pass: number, ng: number) => {
+    const cap = parseInt(selectedProcess?.quantity, 10) || 0;
+    if (!cap || cap <= 0) return { pass, ng };
+    const total = pass + ng;
+    if (total <= cap) return { pass, ng };
+    const cappedPass = Math.min(pass, cap);
+    const remaining = Math.max(cap - cappedPass, 0);
+    const cappedNg = Math.min(ng, remaining);
+    return { pass: cappedPass, ng: cappedNg };
+  };
 
   const closeModal = () => setIsModalOpen(false);
   const [isAssignJigModalOpen, setAssignJigModelOpen] = useState(false);
@@ -201,8 +212,15 @@ const DraggableGridItem = ({
                           {stage?.totalUPHA != null && (
                             <p>WIP : {String(stage?.totalUPHA)}</p>
                           )}
-                          <p>Pass : {stage.passedDevice || 0}</p>
-                          <p>NG : {stage.ngDevice || 0}</p>
+                          {(() => {
+                            const capped = capCounts(stage.passedDevice || 0, stage.ngDevice || 0);
+                            return (
+                              <>
+                                <p>Pass : {capped.pass}</p>
+                                <p>NG : {capped.ng}</p>
+                              </>
+                            );
+                          })()}
                           <p>
                             Status :{" "}
                             <span
@@ -329,6 +347,16 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   const [modalFilterDateStart, setModalFilterDateStart] = useState("");
   const [modalFilterDateEnd, setModalFilterDateEnd] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const capStageCounts = (pass: number, ng: number) => {
+    const cap = parseInt(selectedProcess?.quantity, 10) || 0;
+    if (!cap || cap <= 0) return { pass, ng };
+    const total = pass + ng;
+    if (total <= cap) return { pass, ng };
+    const cappedPass = Math.min(pass, cap);
+    const remaining = Math.max(cap - cappedPass, 0);
+    const cappedNg = Math.min(ng, remaining);
+    return { pass: cappedPass, ng: cappedNg };
+  };
   const filteredDeviceTests = React.useMemo(() => {
     const start =
       modalFilterDateStart
@@ -726,6 +754,15 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       );
       let deviceTests = deviceTestEntry?.deviceTestRecords || [];
       setAllDeviceTests(deviceTests);
+      let latestTests = [];
+      try {
+        const latestEntry = await getLatestDeviceTestsByPlanId(result?._id, result.selectedProcess);
+        latestTests = latestEntry?.deviceTestRecords || [];
+      } catch (e) {
+        latestTests = deviceTests.filter(
+          (record) => String(record?.planId) === String(result?._id),
+        );
+      }
 
       if (singleProcess?.selectedProduct) {
         processData = await getProductById(singleProcess?.selectedProduct);
@@ -925,7 +962,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         JSON.parse(result?.assignedStages),
         singleProcess,
         result?.assignedIssuedKits,
-        deviceTests,
+        latestTests,
       );
       setAssignedStages(assignedStages);
       const uniqueAssignedStages = new Set();
@@ -2394,12 +2431,19 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                                                         <p className="text-xs">
                                                           WIP: {stage?.totalUPHA ?? "N/A"}
                                                         </p>
-                                                        <p className="text-xs text-green-600">
-                                                          Pass: {stage.passedDevice || 0}
-                                                        </p>
-                                                        <p className="text-red-600 text-xs">
-                                                          NG: {stage.ngDevice || 0}
-                                                        </p>
+                                                        {(() => {
+                                                          const capped = capStageCounts(stage.passedDevice || 0, stage.ngDevice || 0);
+                                                          return (
+                                                            <>
+                                                              <p className="text-xs text-green-600">
+                                                                Pass: {capped.pass}
+                                                              </p>
+                                                              <p className="text-red-600 text-xs">
+                                                                NG: {capped.ng}
+                                                              </p>
+                                                            </>
+                                                          );
+                                                        })()}
                                                         <p className="text-xs">
                                                           <strong>Status:</strong>{" "}
                                                           <span
