@@ -1266,7 +1266,7 @@ const StickerDesigner = ({
                         </div>
                       )}
                       {field?.type === "barcode" ? (
-                        <div className="flex h-full w-full items-center justify-center overflow-hidden">
+                        <div className="flex h-full w-full items-center justify-center">
                           {(() => {
                             const barcodeValue = (function () {
                               const fallback =
@@ -1339,7 +1339,8 @@ const StickerDesigner = ({
                                 format={field.format || "CODE128"}
                                 lineColor={field.lineColor || "#000000"}
                                 background={field.background || "transparent"}
-                                margin={0}
+                                // Default quiet-zone for scan reliability (can be overridden per field)
+                                margin={field.margin ?? 4}
                                 fontSize={valueFontSize}
                                 textMargin={valueTextMargin}
                                 fontOptions={valueFontOptions}
