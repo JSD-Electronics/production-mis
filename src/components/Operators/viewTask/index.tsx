@@ -1234,7 +1234,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       }
       setIsVerifiedSticker(false);
 
-      printStickerElements({ root: stickerRoot, scale: 4, title: "Print Sticker" })
+      printStickerElements({ root: stickerRoot, scale: 6, title: "Print Sticker" })
         .then((res) => {
           if (!res.ok) {
             toast.error(
