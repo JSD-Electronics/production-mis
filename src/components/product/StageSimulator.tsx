@@ -384,7 +384,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
             toast.error("Sticker preview not found");
             return;
         }
-        printStickerElements({ root: stickerRoot, scale: 4, title: "Print Sticker" })
+        printStickerElements({ root: stickerRoot, scale: 6, title: "Print Sticker" })
             .then((res) => {
                 if (!res.ok) {
                     toast.error(

@@ -122,7 +122,7 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
                   // the total barcode width changes with character count.
                   // So when a target element width exists, always "fit-to-box".
                   const computedBarWidth = targetWidth
-                    ? Math.max(0.5, targetWidth / estimatedModules)
+                    ? Math.max(1, targetWidth / estimatedModules)
                     : explicitBarWidth
                       ? Math.max(0.5, Number(explicitBarWidth))
                       : 1;

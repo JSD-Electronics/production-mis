@@ -19,7 +19,7 @@ const getStickerDimsPx = (el: HTMLElement) => {
 
 export const printStickerElements = async ({
   root,
-  scale = 4,
+  scale = 6,
   title = "Print Sticker",
   selector = ".actual-sticker-container",
 }: PrintStickerOptions) => {
@@ -73,6 +73,7 @@ export const printStickerElements = async ({
           html, body { margin: 0; padding: 0; }
           body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .page { width: ${pageWmm}mm; height: ${pageHmm}mm; display: flex; justify-content: center; align-items: center; }
+          img { image-rendering: crisp-edges; image-rendering: pixelated; }
         </style>
       </head>
       <body>
@@ -89,4 +90,3 @@ export const printStickerElements = async ({
 
   return { ok: true as const };
 };
-
