@@ -17,6 +17,7 @@ interface DeviceSearchSectionProps {
   onNoResults: (query: string) => void;
   setSearchResult: (result: any) => void;
   getDeviceById: (id: string) => void;
+  onDeviceSelected?: (device: any) => void;
   setIsPassNGButtonShow: (show: boolean) => void;
   setIsStickerPrinted: (printed: boolean) => void;
   setIsDevicePassed: (val: boolean) => void;
@@ -42,6 +43,7 @@ export default function DeviceSearchSection({
   onNoResults,
   setSearchResult,
   getDeviceById,
+  onDeviceSelected,
   setIsPassNGButtonShow,
   setIsStickerPrinted,
   setIsDevicePassed,
@@ -87,6 +89,7 @@ export default function DeviceSearchSection({
             onNoResults={onNoResults}
             setSearchResult={setSearchResult}
             getDeviceById={getDeviceById}
+            onDeviceSelected={onDeviceSelected}
             setIsPassNGButtonShow={setIsPassNGButtonShow}
             setIsStickerPrinted={setIsStickerPrinted}
             checkIsPrintEnable={checkIsPrintEnable}

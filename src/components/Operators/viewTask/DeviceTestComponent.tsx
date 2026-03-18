@@ -19,6 +19,7 @@ import {
   getDeviceTestRecordsByProcessId,
   updateMarkAsComplete,
   createProcessLogs,
+  registerDeviceAttempt,
 } from "@/lib/api";
 import {
   Zap,
@@ -247,6 +248,23 @@ export default function DeviceTestComponent({
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSopOpen, setIsSopOpen] = useState(true);
   const [historySerialQuery, setHistorySerialQuery] = useState("");
+  const [attemptCounts, setAttemptCounts] = useState<Record<string, number>>({});
+
+  const formatHistoryTime = (row: any) => {
+    const createdAt = row?.deviceInfo?.createdAt || row?.createdAt;
+    if (createdAt) {
+      try {
+        return new Date(createdAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+      } catch {
+        // fall through
+      }
+    }
+    return row?.timeTaken || "-";
+  };
 
   // Reset verification inputs whenever modal opens
   useEffect(() => {
@@ -309,6 +327,51 @@ export default function DeviceTestComponent({
   const [isJigSearching, setIsJigSearching] = useState(false);
   const [jigSearchError, setJigSearchError] = useState<string | null>(null);
 
+  const getPlanIdFromUrl = () => {
+    if (typeof window === "undefined") return "";
+    const parts = window.location.pathname.split("/");
+    return parts[parts.length - 1] || "";
+  };
+  const getCurrentUserId = () => {
+    try {
+      const raw = localStorage.getItem("userDetails");
+      const parsed = raw ? JSON.parse(raw) : null;
+      return parsed?._id || "";
+    } catch {
+      return "";
+    }
+  };
+  const registerAttempt = async (serialNo: string, deviceId?: string) => {
+    const planId = getPlanIdFromUrl();
+    const processId = processData?._id || assignedTaskDetails?.processId || "";
+    if (!planId || !processId || (!serialNo && !deviceId)) return;
+    try {
+      const response = await registerDeviceAttempt({
+        serialNo,
+        deviceId,
+        planId,
+        processId,
+        operatorId: getCurrentUserId(),
+      });
+      if (response?.attemptCount != null) {
+        const key = serialNo || deviceId;
+        setAttemptCounts((prev) => ({ ...prev, [key]: response.attemptCount }));
+      }
+    } catch (error) {
+      console.error("Failed to register attempt", error);
+    }
+  };
+
+  useEffect(() => {
+    if (!searchResult) return;
+    const key = String(searchResult || "");
+    const count = attemptCounts[key] || 0;
+    if (count >= 3 && !showNGModal) {
+      setNgReason("Auto NG after 3 attempts");
+      setShowNGModal(true);
+    }
+  }, [attemptCounts, searchResult, showNGModal]);
+
   const handleJigIdentification = async (capturedFields: any) => {
     setIsJigSearching(true);
     setJigSearchError(null);
@@ -324,6 +387,7 @@ export default function DeviceTestComponent({
         await getDeviceById(device._id);
         setSearchResult(serial);
         setSearchQuery(serial);
+        registerAttempt(String(serial || ""), String(device._id || ""));
 
         // Match manual search reset behavior
         if (setIsStickerPrinted) setIsStickerPrinted(false);
@@ -1466,7 +1530,13 @@ export default function DeviceTestComponent({
                               if (matchedDevice) {
                                 setSearchResult(matchedDevice.serialNo);
                                 setSelectedCarton(null); // Clear carton
-                                getDeviceById(matchedDevice._id);
+                                if (matchedDevice?._id) {
+                                  getDeviceById(matchedDevice._id);
+                                }
+                                registerAttempt(
+                                  String(matchedDevice?.serialNo || ""),
+                                  String(matchedDevice?._id || "")
+                                );
                                 e.currentTarget.value = "";
                                 return;
                               }
@@ -1675,6 +1745,9 @@ export default function DeviceTestComponent({
                               <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
                               <span className="text-[10px] font-black uppercase tracking-widest">Active Asset</span>
                             </div>
+                            <div className="mt-2 rounded-full bg-indigo-500/20 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-indigo-100">
+                              Attempts: {attemptCounts[String(searchResult || "")] ?? 0}
+                            </div>
                           </div>
                         </div>
 
@@ -1828,6 +1901,12 @@ export default function DeviceTestComponent({
                         onNoResults={handleNoResults}
                         setSearchResult={setSearchResult}
                         getDeviceById={getDeviceById}
+                        onDeviceSelected={(device: any) =>
+                          registerAttempt(
+                            String(device?.serialNo || ""),
+                            String(device?._id || "")
+                          )
+                        }
                         setIsPassNGButtonShow={setIsPassNGButtonShow}
                         setIsStickerPrinted={setIsStickerPrinted}
                         setIsVerifiedSticker={setIsVerifiedSticker}
@@ -1836,6 +1915,11 @@ export default function DeviceTestComponent({
                         )}
                         setIsDevicePassed={setIsDevicePassed}
                       />
+                      {searchResult && (
+                        <div className="mt-2 text-xs font-semibold text-indigo-600">
+                          Attempts: {attemptCounts[String(searchResult || "")] ?? 0}
+                        </div>
+                      )}
                     </>
                   );
                 })()}
@@ -3611,7 +3695,7 @@ export default function DeviceTestComponent({
                             </span>
                           </td>
                           <td className="font-mono px-4 py-3 text-right italic text-gray-500">
-                            {row?.timeTaken}
+                            {formatHistoryTime(row)}
                           </td>
                         </tr>
                       ))
