@@ -7,6 +7,7 @@ import {
     viewProcess,
     getProductById,
     getDeviceTestRecordsByProcessId,
+    getLatestDeviceTestsByPlanId,
     getDeviceByProductId,
     checkPlanningAndScheduling
 } from "@/lib/api";
@@ -161,6 +162,7 @@ export const usePlaningData = (id: string | string[]) => {
     const [overallUPHA, setOverallUPHA] = useState<any[]>([]);
     const [totalConsumedKits, setTotalConsumedKits] = useState(0);
     const [allDeviceTests, setAllDeviceTests] = useState<any[]>([]);
+    const [latestDeviceTests, setLatestDeviceTests] = useState<any[]>([]);
     const [assignedStages, setAssignedStages] = useState<any>({});
 
     const kpiStats = useMemo(() => {
@@ -178,7 +180,7 @@ export const usePlaningData = (id: string | string[]) => {
 
         let passTotal = 0;
         let ngTotal = 0;
-        allDeviceTests.forEach(test => {
+        latestDeviceTests.forEach(test => {
             if (test.status === "Pass") passTotal++;
             else if (test.status === "NG") ngTotal++;
         });
@@ -190,7 +192,7 @@ export const usePlaningData = (id: string | string[]) => {
             delayed: ngTotal,
             utilization: Math.round((completed / (totalPlanned || 1)) * 100)
         };
-    }, [planData, selectedProcess, allDeviceTests]);
+    }, [planData, selectedProcess, latestDeviceTests]);
 
     const fetchData = useCallback(async () => {
         if (!id) return;
@@ -225,6 +227,17 @@ export const usePlaningData = (id: string | string[]) => {
             const deviceTests = deviceTestEntry?.deviceTestRecords || [];
             setAllDeviceTests(deviceTests);
 
+            let latestTests: any[] = [];
+            try {
+                const latestEntry = await getLatestDeviceTestsByPlanId(planIdString, result.selectedProcess);
+                latestTests = latestEntry?.deviceTestRecords || [];
+            } catch (e) {
+                latestTests = deviceTests.filter(
+                    (record: any) => String(record?.planId) === String(planIdString),
+                );
+            }
+            setLatestDeviceTests(latestTests);
+
             // Assigned Stages & Flooring logic
             if (room && shift) {
                 const reservedSeats = await checkSeatAvailability(
@@ -247,7 +260,7 @@ export const usePlaningData = (id: string | string[]) => {
                     reservedSeats,
                     parsedInitialStages,
                     result?.assignedIssuedKits || 0,
-                    deviceTests
+                    latestTests
                 );
                 setAssignedStages(calculatedAssignedStages);
             }
