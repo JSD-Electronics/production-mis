@@ -80,8 +80,10 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
         return (
           <div
             key={key}
-            className="absolute flex items-center"
             style={{
+              position: "absolute",
+              display: "flex",
+              alignItems: "center",
               top: `${field?.y ?? 0}px`,
               left: `${field?.x ?? 0}px`,
               width: `${field?.width || 100}px`,
@@ -99,13 +101,17 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
           >
             {field?.type === "barcode" ? (
               <div
-                className="flex h-full w-full items-center justify-center"
                 style={{
+                  display: "flex",
+                  width: "100%",
+                  height: "100%",
+                  alignItems: "center",
+                  justifyContent: "center",
                   background: "transparent",
                   padding: "0",
                   boxSizing: "border-box",
                   // Don't clip the barcode quiet-zone; scanners need margin on both sides.
-                  overflow: "visible",
+                  overflow: "hidden",
                 }}
               >
                 {(() => {
@@ -118,13 +124,24 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
                       ? mmToPx(Number(field.barWidthMm))
                       : field?.barWidth;
 
-                  // Keep overall barcode size fixed to the element width.
-                  // If we use a fixed "x-dimension" (barWidthMm) as module width,
-                  // the total barcode width changes with character count.
-                  // So when a target element width exists, always "fit-to-box".
-                  const computedBarWidth = targetWidth
-                    ? Math.max(1, targetWidth / estimatedModules)
-                    : explicitBarWidth
+                  const marginPx = Number(field?.margin ?? 4) || 0;
+                  const usableWidth = targetWidth
+                    ? Math.max(1, Number(targetWidth) - marginPx * 2)
+                    : undefined;
+
+                  // Exact box sizing:
+                  // Prefer explicit x-dimension only if it still fits inside the box (including quiet-zone).
+                  // Otherwise compute bar width to fit within the box width.
+                  const explicitTotalWidth =
+                    explicitBarWidth != null
+                      ? Number(explicitBarWidth) * estimatedModules + marginPx * 2
+                      : null;
+
+                  const computedBarWidth = usableWidth
+                    ? explicitBarWidth != null && explicitTotalWidth != null && explicitTotalWidth <= Number(targetWidth)
+                      ? Math.max(0.5, Number(explicitBarWidth))
+                      : Math.max(0.5, usableWidth / estimatedModules)
+                    : explicitBarWidth != null
                       ? Math.max(0.5, Number(explicitBarWidth))
                       : 1;
 
@@ -134,8 +151,14 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
                   const valueFontOptions = field?.valueFontBold ? "bold" : undefined;
                   const valueSpace = showValue ? valueFontSize + valueTextMargin : 0;
 
-                  const baseHeight = field?.height;
-                  const computedBarHeight = Math.max(1, (baseHeight || 0) - valueSpace);
+                  // Predefined bar height:
+                  // If barHeightMm is set (designer "Height (mm)"), use it as bar height.
+                  // Otherwise, fill the available element height.
+                  const explicitBarHeight =
+                    field?.barHeightMm != null ? mmToPx(Number(field.barHeightMm)) : undefined;
+                  const fallbackBarHeight =
+                    field?.height != null ? Math.max(1, Number(field.height) - marginPx * 2) : 1;
+                  const computedBarHeight = Math.max(1, Number(explicitBarHeight ?? fallbackBarHeight));
 
                   return (
                     <Barcode
@@ -148,7 +171,7 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
                       lineColor={field?.lineColor || "#000000"}
                       background={field?.background || "transparent"}
                       // Default quiet-zone for scan reliability (can be overridden per field)
-                      margin={field?.margin ?? 4}
+                      margin={marginPx}
                       fontSize={valueFontSize}
                       textMargin={valueTextMargin}
                       fontOptions={valueFontOptions}
@@ -158,8 +181,16 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
               </div>
             ) : field?.type === "qrcode" ? (
               <div
-                className="flex h-full w-full items-center justify-center"
-                style={{ background: "transparent", padding: "0", boxSizing: "border-box" }}
+                style={{
+                  display: "flex",
+                  width: "100%",
+                  height: "100%",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "transparent",
+                  padding: "0",
+                  boxSizing: "border-box",
+                }}
               >
                 <QRCodeCanvas
                   value={String(fieldValue || "N/A")}
@@ -208,8 +239,16 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
               </table>
             ) : (
               <div
-                className="flex h-full min-h-0 w-full items-center whitespace-pre-wrap break-words p-0 leading-normal"
                 style={{
+                  display: "flex",
+                  width: "100%",
+                  height: "100%",
+                  alignItems: "center",
+                  minHeight: 0,
+                  padding: 0,
+                  whiteSpace: "pre-wrap",
+                  overflowWrap: "break-word",
+                  lineHeight: (field?.styles?.lineHeight as any) || "1.4",
                   ...field?.styles,
                   fontSize: `${fontSize}px`,
                   justifyContent:

@@ -41,10 +41,15 @@ export const printStickerElements = async ({
   // depend on the app's Tailwind CSS existing in the print window.
   const bodyHtml = targets
     .map((el, idx) => {
+      const dims = getStickerDimsPx(el);
+      const wmm = Math.max(10, pxToMm(dims.widthPx));
+      const hmm = Math.max(10, pxToMm(dims.heightPx));
       const pageBreak = idx < targets.length - 1 ? "page-break-after: always;" : "";
       return `
-        <div class="page" style="${pageBreak}">
-          ${el.outerHTML}
+        <div class="page" style="width:${wmm}mm;height:${hmm}mm;${pageBreak}">
+          <div class="sticker-wrap" style="width:${wmm}mm;height:${hmm}mm;">
+            ${el.outerHTML}
+          </div>
         </div>
       `;
     })
@@ -58,7 +63,10 @@ export const printStickerElements = async ({
           @page { size: ${pageWmm}mm ${pageHmm}mm; margin: 0; }
           html, body { margin: 0; padding: 0; }
           body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .page { width: ${pageWmm}mm; height: ${pageHmm}mm; display: flex; justify-content: center; align-items: center; }
+          .page { display: flex; justify-content: center; align-items: center; overflow: hidden; }
+          .sticker-wrap { display: block; overflow: hidden; }
+          /* Force sticker to print at the exact designer size (mm), not the inline px size. */
+          .sticker-wrap > .actual-sticker-container { width: 100% !important; height: 100% !important; }
           svg { shape-rendering: crispEdges; }
           .actual-sticker-container { background: #fff; }
         </style>
