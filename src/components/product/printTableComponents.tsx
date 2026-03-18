@@ -691,6 +691,32 @@ const StickerDesigner = ({
       ),
     );
   };
+
+  const ensureBarcodeBoxFits = (field: any, patch: any) => {
+    const merged = { ...(field || {}), ...(patch || {}) };
+    if (merged?.type !== "barcode") return patch;
+
+    const showValue = merged.displayValue !== false;
+    const valueFontSize = merged.fontSize ?? 12;
+    const valueTextMargin = merged.textMargin ?? 2;
+    const valueSpace = showValue ? valueFontSize + valueTextMargin : 0;
+
+    const marginPx = Number(merged.margin ?? 4) || 0;
+    const barHeightPx =
+      merged.barHeightMm != null
+        ? mmToPx(Number(merged.barHeightMm))
+        : Number(merged.height ?? 0);
+
+    const neededHeight = Math.max(1, Number(barHeightPx || 0) + valueSpace + marginPx * 2);
+
+    const nextHeight = Math.max(Number(merged.height ?? 0) || 0, neededHeight);
+
+    // Only grow; don't shrink automatically to avoid surprising jumps.
+    if (nextHeight > (Number(merged.height ?? 0) || 0)) {
+      return { ...patch, height: nextHeight };
+    }
+    return patch;
+  };
   const handleRemoveField = (subFieldIndex: number) => {
     let removedField: any = null;
 
@@ -1219,6 +1245,8 @@ const StickerDesigner = ({
                   fontSize: `${fontSettings.size}px`,
                   fontWeight: fontSettings.weight,
                   color: "black",
+                  // Print window doesn't load Tailwind, so ensure positioned ancestor exists.
+                  position: "relative",
                 }}
               >
                 {stages[index]?.subSteps[subIndex1]?.printerFields[
@@ -1266,7 +1294,7 @@ const StickerDesigner = ({
                         </div>
                       )}
                       {field?.type === "barcode" ? (
-                        <div className="flex h-full w-full items-center justify-center">
+                        <div className="flex h-full w-full items-center justify-center overflow-hidden">
                           {(() => {
                             const barcodeValue = (function () {
                               const fallback =
@@ -1304,30 +1332,44 @@ const StickerDesigner = ({
                                field.barWidthMm != null
                                  ? mmToPx(Number(field.barWidthMm))
                                  : field.barWidth;
-                             // Fit-to-box: keep the barcode's overall width constant (element width),
-                             // so it doesn't grow/shrink with the number of characters.
-                             const computedBarWidth = targetWidth
-                               ? Math.max(1, targetWidth / estimatedModules)
-                               : explicitBarWidth
-                                 ? Math.max(0.5, Number(explicitBarWidth))
-                                 : 1;
+                              const marginPx = Number(field.margin ?? 4) || 0;
+                              const usableWidth = targetWidth
+                                ? Math.max(1, Number(targetWidth) - marginPx * 2)
+                                : undefined;
 
-                            const showValue = field.displayValue !== false;
-                            const valueFontSize = field.fontSize ?? 12;
-                            const valueTextMargin = field.textMargin ?? 2;
-                            const valueFontOptions =
-                              field.valueFontBold ? "bold" : undefined;
-                            const valueSpace = showValue
-                              ? valueFontSize + valueTextMargin
-                              : 0;
-                            const baseHeight =
-                              field.barHeightMm != null
-                                ? mmToPx(Number(field.barHeightMm))
-                                : field.height;
-                            const computedBarHeight = Math.max(
-                              1,
-                              (baseHeight || 0) - valueSpace,
-                            );
+                              // Exact box sizing with quiet-zone inside the box.
+                              const explicitTotalWidth =
+                                explicitBarWidth != null
+                                  ? Number(explicitBarWidth) * estimatedModules + marginPx * 2
+                                  : null;
+
+                              const computedBarWidth = usableWidth
+                                ? explicitBarWidth != null && explicitTotalWidth != null && explicitTotalWidth <= Number(targetWidth)
+                                  ? Math.max(0.5, Number(explicitBarWidth))
+                                  : Math.max(0.5, usableWidth / estimatedModules)
+                                : explicitBarWidth != null
+                                  ? Math.max(0.5, Number(explicitBarWidth))
+                                  : 1;
+
+                             const showValue = field.displayValue !== false;
+                             const valueFontSize = field.fontSize ?? 12;
+                             const valueTextMargin = field.textMargin ?? 2;
+                             const valueFontOptions =
+                               field.valueFontBold ? "bold" : undefined;
+                             const valueSpace = showValue
+                               ? valueFontSize + valueTextMargin
+                               : 0;
+                             // Predefined bar height:
+                             // If barHeightMm is set (designer "Height (mm)"), use it as bar height.
+                             // Otherwise, fill the available element height.
+                             const computedBarHeight = Math.max(
+                               1,
+                               Number(
+                                 field.barHeightMm != null
+                                   ? mmToPx(Number(field.barHeightMm))
+                                   : (Number(field.height) || 0) - marginPx * 2,
+                               ),
+                             );
 
                             return (
                               <Barcode
@@ -1340,7 +1382,7 @@ const StickerDesigner = ({
                                 lineColor={field.lineColor || "#000000"}
                                 background={field.background || "transparent"}
                                 // Default quiet-zone for scan reliability (can be overridden per field)
-                                margin={field.margin ?? 4}
+                                margin={marginPx}
                                 fontSize={valueFontSize}
                                 textMargin={valueTextMargin}
                                 fontOptions={valueFontOptions}
@@ -2111,10 +2153,17 @@ const StickerDesigner = ({
                                       const mmVal = Number(e.target.value);
                                       if (Number.isNaN(mmVal)) return;
                                       const pxVal = mmToPx(Math.max(10, mmVal));
-                                      handleFieldChange(focusedFieldIndex, {
+                                      const current =
+                                        stages[index]?.subSteps[subIndex1]?.printerFields[
+                                          fieldIndex
+                                        ].fields[focusedFieldIndex];
+                                      handleFieldChange(
+                                        focusedFieldIndex,
+                                        ensureBarcodeBoxFits(current, {
                                         barLength: pxVal,
                                         width: pxVal,
-                                      });
+                                      }),
+                                      );
                                     }}
                                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-strokedark dark:bg-form-input"
                                   />
@@ -2127,11 +2176,18 @@ const StickerDesigner = ({
                                         fieldIndex
                                       ].fields[focusedFieldIndex].displayValue !== false
                                     }
-                                    onChange={(e) =>
-                                      handleFieldChange(focusedFieldIndex, {
-                                        displayValue: e.target.checked,
-                                      })
-                                    }
+                                    onChange={(e) => {
+                                      const current =
+                                        stages[index]?.subSteps[subIndex1]?.printerFields[
+                                          fieldIndex
+                                        ].fields[focusedFieldIndex];
+                                      handleFieldChange(
+                                        focusedFieldIndex,
+                                        ensureBarcodeBoxFits(current, {
+                                          displayValue: e.target.checked,
+                                        }),
+                                      );
+                                    }}
                                     className="h-3 w-3 rounded text-primary focus:ring-primary"
                                   />
                                   <label className="text-[10px] font-bold uppercase text-gray-500">
@@ -2153,9 +2209,16 @@ const StickerDesigner = ({
                                     onChange={(e) => {
                                       const val = Number(e.target.value);
                                       if (Number.isNaN(val)) return;
-                                      handleFieldChange(focusedFieldIndex, {
-                                        fontSize: val,
-                                      });
+                                      const current =
+                                        stages[index]?.subSteps[subIndex1]?.printerFields[
+                                          fieldIndex
+                                        ].fields[focusedFieldIndex];
+                                      handleFieldChange(
+                                        focusedFieldIndex,
+                                        ensureBarcodeBoxFits(current, {
+                                          fontSize: val,
+                                        }),
+                                      );
                                     }}
                                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-strokedark dark:bg-form-input"
                                   />
@@ -2176,10 +2239,17 @@ const StickerDesigner = ({
                                     onChange={(e) => {
                                       const mmVal = Number(e.target.value);
                                       if (Number.isNaN(mmVal)) return;
-                                      handleFieldChange(focusedFieldIndex, {
-                                        barWidthMm: mmVal,
-                                        barWidth: mmToPx(mmVal),
-                                      });
+                                      const current =
+                                        stages[index]?.subSteps[subIndex1]?.printerFields[
+                                          fieldIndex
+                                        ].fields[focusedFieldIndex];
+                                      handleFieldChange(
+                                        focusedFieldIndex,
+                                        ensureBarcodeBoxFits(current, {
+                                          barWidthMm: mmVal,
+                                          barWidth: mmToPx(mmVal),
+                                        }),
+                                      );
                                     }}
                                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-strokedark dark:bg-form-input"
                                   />
@@ -2200,10 +2270,18 @@ const StickerDesigner = ({
                                     onChange={(e) => {
                                       const mmVal = Number(e.target.value);
                                       if (Number.isNaN(mmVal)) return;
-                                      handleFieldChange(focusedFieldIndex, {
-                                        barHeightMm: mmVal,
-                                        height: mmToPx(mmVal),
-                                      });
+                                      const current =
+                                        stages[index]?.subSteps[subIndex1]?.printerFields[
+                                          fieldIndex
+                                        ].fields[focusedFieldIndex];
+                                      handleFieldChange(
+                                        focusedFieldIndex,
+                                        ensureBarcodeBoxFits(current, {
+                                          barHeightMm: mmVal,
+                                          // Container height will be expanded by ensureBarcodeBoxFits if needed.
+                                          height: mmToPx(mmVal),
+                                        }),
+                                      );
                                     }}
                                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-strokedark dark:bg-form-input"
                                   />
