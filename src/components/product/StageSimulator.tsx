@@ -23,7 +23,7 @@ import ExcelJS from 'exceljs';
 
 import StickerGenerator from "../Operators/viewTask-old/StickerGenerator";
 import { toast } from "react-toastify";
-import html2canvas from "html2canvas";
+import { printStickerElements } from "@/lib/sticker/printSticker";
 
 interface StageSimulatorProps {
     stages: any[];
@@ -384,48 +384,20 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
             toast.error("Sticker preview not found");
             return;
         }
-
-        const stickerElement = (stickerRoot.querySelector('.actual-sticker-container') || stickerRoot) as HTMLElement;
-        const widthPx = parseInt(stickerElement.getAttribute('data-sticker-width') || '300');
-        const heightPx = parseInt(stickerElement.getAttribute('data-sticker-height') || '150');
-        const stickerWidthMM = Math.round(widthPx * 0.264583);
-        const stickerHeightMM = Math.round(heightPx * 0.264583);
-
-        html2canvas(stickerElement, {
-            scale: 3,
-            useCORS: true,
-            backgroundColor: "#ffffff",
-            logging: false,
-        }).then((canvas) => {
-            const imageData = canvas.toDataURL("image/png");
-            const printWindow = window.open("", "_blank");
-            if (!printWindow) {
-                toast.error("Please allow popups to print stickers");
-                return;
-            }
-            printWindow.document.write(`
-            <html>
-              <head>
-                <style>
-                  @page { size: ${stickerWidthMM}mm ${stickerHeightMM}mm; margin: 0; }
-                  body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; }
-                  img { width: ${stickerWidthMM}mm; height: ${stickerHeightMM}mm; display: block; }
-                </style>
-              </head>
-              <body>
-                <img src="${imageData}">
-                <script>
-                  window.onload = function() {
-                    setTimeout(() => { window.print(); window.close(); }, 300);
-                  };
-                </script>
-              </body>
-            </html>
-          `);
-            printWindow.document.close();
-            setIsStickerPrinted(true);
-            addLog("Label Printed successfully.");
-        });
+        printStickerElements({ root: stickerRoot, scale: 4, title: "Print Sticker" })
+            .then((res) => {
+                if (!res.ok) {
+                    toast.error(
+                        res.reason === "popup-blocked"
+                            ? "Please allow popups to print stickers"
+                            : "Sticker preview not found",
+                    );
+                    return;
+                }
+                setIsStickerPrinted(true);
+                addLog("Label Printed successfully.");
+            })
+            .catch(() => toast.error("Failed to print sticker"));
     };
 
     const handleVerifySticker = () => {

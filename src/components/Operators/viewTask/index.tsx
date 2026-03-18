@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useQRCode } from "next-qrcode";
 import Barcode from "react-barcode";
 import html2canvas from "html2canvas";
+import { printStickerElements } from "@/lib/sticker/printSticker";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
@@ -1233,49 +1234,19 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       }
       setIsVerifiedSticker(false);
 
-      const stickerElement = (stickerRoot.querySelector('.actual-sticker-container') || stickerRoot) as HTMLElement;
-      const widthPx = parseInt(stickerElement.getAttribute('data-sticker-width') || '300');
-      const heightPx = parseInt(stickerElement.getAttribute('data-sticker-height') || '150');
-      const stickerWidthMM = Math.round(widthPx * 0.264583);
-      const stickerHeightMM = Math.round(heightPx * 0.264583);
-
-      html2canvas(stickerElement, {
-        scale: 3,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        logging: false,
-      }).then((canvas) => {
-        const imageData = canvas.toDataURL("image/png");
-        const printWindow = window.open("", "_blank");
-        if (!printWindow) {
-          toast.error("Please allow popups to print stickers");
-          return;
-        }
-        try {
-          const sec = document.getElementById("printing-stack-section");
-          sec?.scrollIntoView({ behavior: "smooth", block: "center" });
-        } catch { }
-        printWindow.document.write(`
-          <html>
-            <head>
-              <style>
-                @page { size: ${stickerWidthMM}mm ${stickerHeightMM}mm; margin: 0; }
-                body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; }
-                img { width: ${stickerWidthMM}mm; height: ${stickerHeightMM}mm; display: block; }
-              </style>
-            </head>
-            <body>
-              <img src="${imageData}">
-              <script>
-                window.onload = function() {
-                  setTimeout(() => { window.print(); window.close(); }, 300);
-                };
-              </script>
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-      });
+      printStickerElements({ root: stickerRoot, scale: 4, title: "Print Sticker" })
+        .then((res) => {
+          if (!res.ok) {
+            toast.error(
+              res.reason === "popup-blocked"
+                ? "Please allow popups to print stickers"
+                : "Sticker preview not found",
+            );
+          }
+        })
+        .catch(() => {
+          toast.error("Failed to print sticker");
+        });
       setIsPassNGButtonShow(false);
       setIsStickerPrinted(!isStickerPrinted);
     };
