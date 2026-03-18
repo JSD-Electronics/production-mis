@@ -1,4 +1,3 @@
-import html2canvas from "html2canvas";
 import { pxToMm } from "@/lib/sticker/units";
 
 type PrintStickerOptions = {
@@ -19,6 +18,8 @@ const getStickerDimsPx = (el: HTMLElement) => {
 
 export const printStickerElements = async ({
   root,
+  // Scale is kept for backward compatibility; DOM/SVG printing doesn't need it.
+  // If we later add a raster fallback, this value will apply there.
   scale = 6,
   title = "Print Sticker",
   selector = ".actual-sticker-container",
@@ -32,33 +33,18 @@ export const printStickerElements = async ({
   const pageWmm = Math.max(10, pxToMm(firstDims.widthPx));
   const pageHmm = Math.max(10, pxToMm(firstDims.heightPx));
 
-  const images: { dataUrl: string; wmm: number; hmm: number }[] = [];
-
-  for (const el of targets) {
-    // eslint-disable-next-line no-await-in-loop
-    const canvas = await html2canvas(el, {
-      scale,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-      logging: false,
-    });
-    const dims = getStickerDimsPx(el);
-    images.push({
-      dataUrl: canvas.toDataURL("image/png"),
-      wmm: Math.max(10, pxToMm(dims.widthPx)),
-      hmm: Math.max(10, pxToMm(dims.heightPx)),
-    });
-  }
-
   const printWindow = window.open("", "_blank");
   if (!printWindow) return { ok: false as const, reason: "popup-blocked" as const };
 
-  const bodyHtml = images
-    .map((img, idx) => {
-      const pageBreak = idx < images.length - 1 ? "page-break-after: always;" : "";
+  // Vector/DOM printing: keep SVG barcodes crisp and scan-friendly.
+  // All sticker elements are absolutely positioned with inline styles, so we do not
+  // depend on the app's Tailwind CSS existing in the print window.
+  const bodyHtml = targets
+    .map((el, idx) => {
+      const pageBreak = idx < targets.length - 1 ? "page-break-after: always;" : "";
       return `
         <div class="page" style="${pageBreak}">
-          <img src="${img.dataUrl}" alt="Sticker ${idx + 1}" style="width:${img.wmm}mm;height:${img.hmm}mm;display:block;" />
+          ${el.outerHTML}
         </div>
       `;
     })
@@ -73,14 +59,15 @@ export const printStickerElements = async ({
           html, body { margin: 0; padding: 0; }
           body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .page { width: ${pageWmm}mm; height: ${pageHmm}mm; display: flex; justify-content: center; align-items: center; }
-          img { image-rendering: crisp-edges; image-rendering: pixelated; }
+          svg { shape-rendering: crispEdges; }
+          .actual-sticker-container { background: #fff; }
         </style>
       </head>
       <body>
         ${bodyHtml}
         <script>
           window.onload = function() {
-            setTimeout(() => { window.print(); window.close(); }, 300);
+            setTimeout(() => { window.print(); window.close(); }, 500);
           };
         </script>
       </body>

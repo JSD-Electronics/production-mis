@@ -104,7 +104,8 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
                   background: "transparent",
                   padding: "0",
                   boxSizing: "border-box",
-                  overflow: "hidden",
+                  // Don't clip the barcode quiet-zone; scanners need margin on both sides.
+                  overflow: "visible",
                 }}
               >
                 {(() => {
@@ -146,7 +147,8 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
                       format={field?.format || "CODE128"}
                       lineColor={field?.lineColor || "#000000"}
                       background={field?.background || "transparent"}
-                      margin={0}
+                      // Default quiet-zone for scan reliability (can be overridden per field)
+                      margin={field?.margin ?? 4}
                       fontSize={valueFontSize}
                       textMargin={valueTextMargin}
                       fontOptions={valueFontOptions}
