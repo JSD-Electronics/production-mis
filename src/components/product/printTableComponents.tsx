@@ -359,6 +359,7 @@ const StickerDesigner = ({
   };
 
   const addFieldToStage = (newField: any) => {
+    pushHistory();
     setStages((prevStages) =>
       prevStages.map((stage, sIndex) => {
         if (sIndex === index) {
@@ -512,6 +513,7 @@ const StickerDesigner = ({
       setImageUploadMoal(false);
       return;
     }
+    pushHistory();
     setStages((prevStages) =>
       prevStages.map((stage, sIndex) => {
         if (sIndex === index) {
@@ -562,6 +564,7 @@ const StickerDesigner = ({
     setImageUploadMoal(true);
   };
   const handleFieldSelect = (field) => {
+    pushHistory();
     setStages((prevStages) =>
       prevStages.map((stage, sIndex) =>
         sIndex === index
@@ -603,6 +606,7 @@ const StickerDesigner = ({
     if (file) {
       setImage(file);
       setPreview(URL.createObjectURL(file)); // Show preview
+      pushHistory();
       setStages((prevStages) =>
         prevStages.map((stage, sIndex) =>
           sIndex === index // Match the target stage
@@ -649,6 +653,7 @@ const StickerDesigner = ({
     }
   };
   const handleFieldChange = (SubfieldIndex, updates) => {
+    pushHistory();
     setStages((prevStages) =>
       prevStages.map((stage, sIndex) =>
         sIndex === index
@@ -686,6 +691,7 @@ const StickerDesigner = ({
   const handleRemoveField = (subFieldIndex: number) => {
     let removedField: any = null;
 
+    pushHistory();
     setStages((prevStages) =>
       prevStages.map((stage, sIndex) =>
         sIndex === index
@@ -793,6 +799,7 @@ const StickerDesigner = ({
     }, 200);
   };
   const generateScanCode = (type = "barcode") => {
+    pushHistory();
     setStickerData((prev) => [
       ...prev,
       {
@@ -803,7 +810,21 @@ const StickerDesigner = ({
         x: 125,
         y: 75,
         width: 50,
-        height: 20,
+        height: type === "barcode" ? mmToPx(3.3) : 20,
+        ...(type === "barcode"
+          ? {
+            format: "CODE128",
+            barWidthMm: 0.25,
+            barWidth: mmToPx(0.25),
+            barHeightMm: 3.3,
+            barDensity: 0.636,
+            codeSet: "Auto",
+            textEncoding: "US-ASCII",
+            includeCheckDigit: false,
+            hibc: false,
+            gs1_128: false,
+          }
+          : {}),
       },
     ]);
   };
@@ -822,6 +843,26 @@ const StickerDesigner = ({
   const [barTextSize, setBarTextSize] = useState<number | "">(12);
   const [barTextMargin, setBarTextMargin] = useState<number | "">(2);
   const [barCodeError, setBarCodeError] = useState<string>("");
+  const historyRef = useRef<any[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+  const pushHistory = useCallback(() => {
+    try {
+      const snapshot = JSON.parse(JSON.stringify(stages));
+      historyRef.current.push(snapshot);
+      if (historyRef.current.length > 50) {
+        historyRef.current.shift();
+      }
+      setCanUndo(historyRef.current.length > 0);
+    } catch (e) {
+      console.warn("Failed to snapshot sticker history", e);
+    }
+  }, [stages]);
+  const handleUndo = () => {
+    const previous = historyRef.current.pop();
+    if (!previous) return;
+    setStages(previous);
+    setCanUndo(historyRef.current.length > 0);
+  };
   const handleBarCodeValue = () => {
     if (!fieldType) {
       setBarCodeError("Please select Barcode or QR Code.");
@@ -836,6 +877,7 @@ const StickerDesigner = ({
       return;
     }
     setBarCodeError("");
+    pushHistory();
     setStages((prevStages) =>
       prevStages.map((stage, sIndex) =>
         sIndex === index // Match the target stage
@@ -951,6 +993,7 @@ const StickerDesigner = ({
     setIsModalBarCodeValue(false);
   };
   const handleEditFieldValue = () => {
+    pushHistory();
     setStages((prevStages) =>
       prevStages.map((stage, sIndex) =>
         sIndex === index
@@ -991,6 +1034,7 @@ const StickerDesigner = ({
     setEditableFieldStyleValue(!isEditableFieldStyleValue);
   };
   const handleCalculation = () => {
+    pushHistory();
     setStages((prevStages) =>
       prevStages.map((stage, sIndex) =>
         sIndex === index
@@ -1062,6 +1106,18 @@ const StickerDesigner = ({
           </h4>
         </div>
         <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={handleUndo}
+            disabled={!canUndo}
+            className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-all active:scale-95 ${
+              canUndo
+                ? "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                : "border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed"
+            }`}
+          >
+            Undo
+          </button>
           <button
             type="button"
             className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-orange-600 active:scale-95"
@@ -1225,9 +1281,15 @@ const StickerDesigner = ({
                             const estimatedModules =
                               barcodeValue.length * 11 + 35;
                             const targetWidth = field.width;
-                            const computedBarWidth = targetWidth
-                              ? Math.max(0.5, targetWidth / estimatedModules)
-                              : field.barWidth || 1;
+                            const explicitBarWidth =
+                              field.barWidthMm != null
+                                ? mmToPx(Number(field.barWidthMm))
+                                : field.barWidth;
+                            const computedBarWidth = explicitBarWidth
+                              ? Math.max(0.5, Number(explicitBarWidth))
+                              : targetWidth
+                                ? Math.max(0.5, targetWidth / estimatedModules)
+                                : 1;
 
                             const showValue = field.displayValue !== false;
                             const valueFontSize = field.fontSize ?? 12;
@@ -1237,7 +1299,10 @@ const StickerDesigner = ({
                             const valueSpace = showValue
                               ? valueFontSize + valueTextMargin
                               : 0;
-                            const baseHeight = field.height;
+                            const baseHeight =
+                              field.barHeightMm != null
+                                ? mmToPx(Number(field.barHeightMm))
+                                : field.height;
                             const computedBarHeight = Math.max(
                               1,
                               (baseHeight || 0) - valueSpace,
@@ -2009,6 +2074,178 @@ const StickerDesigner = ({
                                     }}
                                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-strokedark dark:bg-form-input"
                                   />
+                                </div>
+                                <div className="col-span-2">
+                                  <label className="mb-1 block text-[10px] font-medium text-gray-400">
+                                    X Dimension (mm)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min={0.1}
+                                    value={
+                                      stages[index]?.subSteps[subIndex1]?.printerFields[
+                                        fieldIndex
+                                      ].fields[focusedFieldIndex].barWidthMm ?? ""
+                                    }
+                                    onChange={(e) => {
+                                      const mmVal = Number(e.target.value);
+                                      if (Number.isNaN(mmVal)) return;
+                                      handleFieldChange(focusedFieldIndex, {
+                                        barWidthMm: mmVal,
+                                        barWidth: mmToPx(mmVal),
+                                      });
+                                    }}
+                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-strokedark dark:bg-form-input"
+                                  />
+                                </div>
+                                <div className="col-span-2">
+                                  <label className="mb-1 block text-[10px] font-medium text-gray-400">
+                                    Height (mm)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="0.1"
+                                    min={1}
+                                    value={
+                                      stages[index]?.subSteps[subIndex1]?.printerFields[
+                                        fieldIndex
+                                      ].fields[focusedFieldIndex].barHeightMm ?? ""
+                                    }
+                                    onChange={(e) => {
+                                      const mmVal = Number(e.target.value);
+                                      if (Number.isNaN(mmVal)) return;
+                                      handleFieldChange(focusedFieldIndex, {
+                                        barHeightMm: mmVal,
+                                        height: mmToPx(mmVal),
+                                      });
+                                    }}
+                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-strokedark dark:bg-form-input"
+                                  />
+                                </div>
+                                <div className="col-span-2">
+                                  <label className="mb-1 block text-[10px] font-medium text-gray-400">
+                                    Density (chars/mm)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="0.001"
+                                    min={0.1}
+                                    value={
+                                      stages[index]?.subSteps[subIndex1]?.printerFields[
+                                        fieldIndex
+                                      ].fields[focusedFieldIndex].barDensity ?? ""
+                                    }
+                                    onChange={(e) => {
+                                      const val = Number(e.target.value);
+                                      if (Number.isNaN(val)) return;
+                                      handleFieldChange(focusedFieldIndex, {
+                                        barDensity: val,
+                                      });
+                                    }}
+                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-strokedark dark:bg-form-input"
+                                  />
+                                </div>
+                                <div className="col-span-2">
+                                  <label className="mb-1 block text-[10px] font-medium text-gray-400">
+                                    Code Set
+                                  </label>
+                                  <select
+                                    value={
+                                      stages[index]?.subSteps[subIndex1]?.printerFields[
+                                        fieldIndex
+                                      ].fields[focusedFieldIndex].codeSet || "Auto"
+                                    }
+                                    onChange={(e) =>
+                                      handleFieldChange(focusedFieldIndex, {
+                                        codeSet: e.target.value,
+                                      })
+                                    }
+                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-strokedark dark:bg-form-input"
+                                  >
+                                    <option value="Auto">Auto</option>
+                                    <option value="A">A</option>
+                                    <option value="B">B</option>
+                                    <option value="C">C</option>
+                                  </select>
+                                </div>
+                                <div className="col-span-2">
+                                  <label className="mb-1 block text-[10px] font-medium text-gray-400">
+                                    Text Encoding
+                                  </label>
+                                  <select
+                                    value={
+                                      stages[index]?.subSteps[subIndex1]?.printerFields[
+                                        fieldIndex
+                                      ].fields[focusedFieldIndex].textEncoding || "US-ASCII"
+                                    }
+                                    onChange={(e) =>
+                                      handleFieldChange(focusedFieldIndex, {
+                                        textEncoding: e.target.value,
+                                      })
+                                    }
+                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-strokedark dark:bg-form-input"
+                                  >
+                                    <option value="US-ASCII">US, Western Europe (7-bit ASCII)</option>
+                                    <option value="UTF-8">UTF-8</option>
+                                  </select>
+                                </div>
+                                <div className="col-span-2 flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={
+                                      !!stages[index]?.subSteps[subIndex1]?.printerFields[
+                                        fieldIndex
+                                      ].fields[focusedFieldIndex].includeCheckDigit
+                                    }
+                                    onChange={(e) =>
+                                      handleFieldChange(focusedFieldIndex, {
+                                        includeCheckDigit: e.target.checked,
+                                      })
+                                    }
+                                    className="h-3 w-3 rounded text-primary focus:ring-primary"
+                                  />
+                                  <label className="text-[10px] font-bold uppercase text-gray-500">
+                                    Check Digit
+                                  </label>
+                                </div>
+                                <div className="col-span-2 flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={
+                                      !!stages[index]?.subSteps[subIndex1]?.printerFields[
+                                        fieldIndex
+                                      ].fields[focusedFieldIndex].hibc
+                                    }
+                                    onChange={(e) =>
+                                      handleFieldChange(focusedFieldIndex, {
+                                        hibc: e.target.checked,
+                                      })
+                                    }
+                                    className="h-3 w-3 rounded text-primary focus:ring-primary"
+                                  />
+                                  <label className="text-[10px] font-bold uppercase text-gray-500">
+                                    HIBC
+                                  </label>
+                                </div>
+                                <div className="col-span-2 flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={
+                                      !!stages[index]?.subSteps[subIndex1]?.printerFields[
+                                        fieldIndex
+                                      ].fields[focusedFieldIndex].gs1_128
+                                    }
+                                    onChange={(e) =>
+                                      handleFieldChange(focusedFieldIndex, {
+                                        gs1_128: e.target.checked,
+                                      })
+                                    }
+                                    className="h-3 w-3 rounded text-primary focus:ring-primary"
+                                  />
+                                  <label className="text-[10px] font-bold uppercase text-gray-500">
+                                    GS1-128 (UCC/EAN-128)
+                                  </label>
                                 </div>
                                 <div className="col-span-2 flex items-center gap-2">
                                   <input
