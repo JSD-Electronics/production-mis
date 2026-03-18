@@ -10,6 +10,7 @@ interface SearchableInputProps {
   onNoResults: any;
   setSearchResult: any;
   getDeviceById: any;
+  onDeviceSelected?: (device: any) => void;
   setIsPassNGButtonShow: any;
   setIsStickerPrinted: any;
   setIsVerifiedSticker: any;
@@ -25,6 +26,7 @@ const SearchableInput = ({
   onNoResults,
   setSearchResult,
   getDeviceById,
+  onDeviceSelected,
   setIsPassNGButtonShow,
   setIsStickerPrinted,
   setIsVerifiedSticker,
@@ -38,9 +40,13 @@ const SearchableInput = ({
     if (!searchQuery || searchQuery.trim() === "") {
       return [];
     }
-    return options.filter((value) =>
-      value?.serialNo?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    return options.filter((value) => {
+      const serial = String(value?.serialNo || "").toLowerCase();
+      if (!serial.includes(searchQuery.toLowerCase())) return false;
+      const status = String(value?.status || value?.testStatus || "").trim().toLowerCase();
+      const isNg = status.includes("ng") || status.includes("fail") || status.includes("rework");
+      return !isNg;
+    });
   }, [options, searchQuery]);
 
   // Handle No Results side effect
@@ -62,9 +68,13 @@ const SearchableInput = ({
   };
 
   const handleSuggestionClick = (option: any) => {
-    getDeviceById(option._id);
-    setSearchQuery(option?.serialNo);
-    setSearchResult(option?.serialNo);
+    if (!option) return;
+    if (option?._id) {
+      getDeviceById(option._id);
+    }
+    setSearchQuery(option?.serialNo || "");
+    setSearchResult(option?.serialNo || "");
+    if (onDeviceSelected) onDeviceSelected(option);
     setIsStickerPrinted(false);
     setIsVerifiedSticker(false);
     setIsDevicePassed(false);
@@ -75,9 +85,13 @@ const SearchableInput = ({
     if (e.key === "Enter") {
       e.preventDefault();
       if (filteredOptions.length > 0) {
-        getDeviceById(filteredOptions[0]._id);
-        setSearchResult(filteredOptions[0].serialNo);
-        setSearchQuery(filteredOptions[0].serialNo);
+        const option = filteredOptions[0];
+        if (option?._id) {
+          getDeviceById(option._id);
+        }
+        setSearchResult(option?.serialNo || "");
+        setSearchQuery(option?.serialNo || "");
+        if (onDeviceSelected && option) onDeviceSelected(option);
 
       } else {
         setSearchResult("");

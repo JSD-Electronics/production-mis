@@ -614,11 +614,15 @@ const ViewProcessInventory = () => {
                   <span className="text-xs text-gray-500 uppercase tracking-wider font-bold">Kits Allocated</span>
                   <span className="font-medium text-blue-600 mt-0.5">{value.issuedKits} Total</span>
                 </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-gray-500 uppercase tracking-wider font-bold">WIP Kits</span>
+                  <span className="font-medium text-amber-600 mt-0.5">{value.data?.[0]?.wipKits ?? 0}</span>
+                </div>
               </div>
 
               <div>
                 <label className="mb-2 block text-xs font-bold uppercase text-gray-500">
-                  Kits to assign this line
+                  Total UPHA
                 </label>
                 <input
                   type="number"

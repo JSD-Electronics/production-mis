@@ -20,6 +20,7 @@ import {
   getDeviceTestRecordsByProcessId,
   getDeviceTestByDeviceId,
   updateStageByDeviceId,
+  updateStageBySerialNo,
   createReport,
   getOverallProgressByOperatorId,
   getOperatorTaskByUserID,
@@ -431,26 +432,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       // return;
       if (result && result.status == 200) {
         setDeviceHistory(result.data);
-        const hasQCResolved =
-          Array.isArray(result.data) &&
-          result.data.some((h: any) =>
-            String(h?.status || "").toLowerCase().includes("qc resolved"),
-          );
-
-        const alreadyReset = resetDeviceIds.includes(String(id));
-        const firstStageName =
-          processData?.stages?.[0]?.stageName || processData?.stages?.[0]?.name || "";
-        if (hasQCResolved && !alreadyReset && firstStageName) {
-          try {
-            const formData = new FormData();
-            formData.append("currentStage", firstStageName);
-            formData.append("status", "Resolved");
-            await updateStageByDeviceId(String(id), formData);
-            setResetDeviceIds((prev) => [...prev, String(id)]);
-          } catch (e) {
-
-          }
-        }
+        // QC/TRC resolution should not auto-reset currentStage here.
       } else {
         setDeviceHistory([]);
       }
@@ -512,6 +494,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       const filteredDeviceList = (result?.data || []).filter((device: any) => {
         const deviceStage = String(device?.currentStage || "").trim();
         const deviceProcessId = String(device?.processID || device?.processId || "");
+        const deviceStatus = String(device?.status || "").trim().toLowerCase();
+        if (deviceStatus === "ng") return false;
         return (
           deviceStage === targetStageName &&
           deviceProcessId === String(pId)
@@ -868,6 +852,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       //   ? processAssignUserStage[0]
       //   : processAssignUserStage;
       let deviceInfo = deviceList.filter((device: any) => device.serialNo === searchResult);
+      const deviceId = deviceInfo?.[0]?._id || "";
       // Find current stage index
       const stageData = Array.isArray(assignUserStage)
         ? assignUserStage[0]
@@ -906,7 +891,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           }
         }
         // Update device stage
-        await updateStageByDeviceId(deviceInfo[0]._id, formData1);
+        if (deviceId) {
+          await updateStageByDeviceId(deviceId, formData1);
+        } else if (searchResult) {
+          await updateStageBySerialNo(searchResult, formData1);
+        } else {
+          toast.error("Device not found. Please re-search the serial.");
+          isSubmitting.current = false;
+          return;
+        }
       }
       // Save device test entry
       const pathname = window.location.pathname;
@@ -996,7 +989,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
 
       // Build JSON payload
       const payload: any = {
-        deviceId: deviceInfo?.[0]?._id || "",
+        ...(deviceId ? { deviceId } : {}),
         processId: selectedProcess || "",
         planId: id || "",
         productId: selectedProduct?.product?._id || "",

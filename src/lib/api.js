@@ -1,4 +1,4 @@
-﻿import axios from "axios";
+import axios from "axios";
 import { CONFIG } from "../config";
 
 const api = axios.create({
@@ -450,6 +450,12 @@ export const getAllMenus = async () => {
       return label === "live dashboard" || route === "/live-dashboard";
     });
 
+    const alreadyHasFGStore = menus.some((m) => {
+      const label = (m?.label || "").toString().trim().toLowerCase();
+      const route = (m?.route || "").toString().trim().toLowerCase();
+      return label === "fg store management" || route === "/fg-to-store/view";
+    });
+
     const esimMasterMenu = {
       label: "ESIM Master",
       route: "/esim-master",
@@ -495,9 +501,17 @@ export const getAllMenus = async () => {
       children: [],
     };
 
+    const fgStoreMenu = {
+      label: "FG Store Management",
+      route: "/fg-to-store/view",
+      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><polyline points="9 22 9 12 15 12 15 22" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
+      children: [],
+    };
+
     let nextMenus = [...menus];
     if (!alreadyHasEsimMaster) nextMenus = [...nextMenus, esimMasterMenu];
     if (!alreadyHasLiveDashboard) nextMenus = [...nextMenus, liveDashboardMenu];
+    if (!alreadyHasFGStore) nextMenus = [...nextMenus, fgStoreMenu];
 
     const nextGetMenu = Array.isArray(data?.getMenu) ? [...data.getMenu] : [];
     if (nextGetMenu.length === 0) {
@@ -952,6 +966,14 @@ export const createDeviceTestEntry = async (data) => {
     throw (
       error?.response?.data || { message: `Error Creating Device Test Entry` }
     );
+  }
+};
+export const registerDeviceAttempt = async (data) => {
+  try {
+    const response = await api.post(`/device/attempts/register`, data);
+    return response.data;
+  } catch (error) {
+    throw error?.response?.data || { message: `Error Registering Device Attempt` };
   }
 };
 export const searchByJigFields = async (data) => {
@@ -1950,6 +1972,16 @@ export const getProcessCompletionAnalytics = async (params = {}) => {
     return response.data;
   } catch (error) {
     console.error("Error fetching process completion analytics:", error);
+    throw error;
+  }
+};
+
+export const getMesProductionDashboard = async (params = {}) => {
+  try {
+    const response = await api.get("/analytics/mes/production-dashboard", { params });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching MES production dashboard:", error);
     throw error;
   }
 };
