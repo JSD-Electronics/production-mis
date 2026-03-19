@@ -60,9 +60,10 @@ export const printStickerElements = async ({
       <head>
         <title>${title}</title>
         <style>
+          @import url("https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap");
           @page { size: ${pageWmm}mm ${pageHmm}mm; margin: 0; }
           html, body { margin: 0; padding: 0; }
-          body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-family: Inter, Roboto, Helvetica, Arial, sans-serif; }
           .page { display: flex; justify-content: center; align-items: center; overflow: hidden; }
           .sticker-wrap { display: block; overflow: hidden; }
           /* Force sticker to print at the exact designer size (mm), not the inline px size. */

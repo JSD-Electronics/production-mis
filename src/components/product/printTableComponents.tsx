@@ -3,6 +3,8 @@ import { Rnd } from "react-rnd";
 import Barcode from "react-barcode";
 import { QRCodeCanvas } from "qrcode.react";
 import { printStickerElements } from "@/lib/sticker/printSticker";
+import { resolveStickerValue } from "@/lib/sticker/resolveStickerValue";
+import StickerRenderer from "@/components/sticker/StickerRenderer";
 import Modal from "../Modal/page";
 import { useDropzone } from "react-dropzone";
 import Cropper from "react-easy-crop";
@@ -102,6 +104,7 @@ const StickerDesigner = ({
     transform: "",
   });
   const stickerRef = useRef<HTMLDivElement>(null);
+  const printRenderRootRef = useRef<HTMLDivElement>(null);
   const designerRef = useRef<HTMLDivElement>(null);
   const [customTextVal, setCustomTextVal] = useState("");
   const [dimensions, setDimensions] = useState({ width: 256, height: 256 });
@@ -696,6 +699,12 @@ const StickerDesigner = ({
     const merged = { ...(field || {}), ...(patch || {}) };
     if (merged?.type !== "barcode") return patch;
 
+    // If user explicitly changes the height, respect it and let the renderer
+    // auto-adjust show-value typography to fit instead of forcing the box to grow.
+    if (patch && (Object.prototype.hasOwnProperty.call(patch, "height") || Object.prototype.hasOwnProperty.call(patch, "barHeightMm"))) {
+      return patch;
+    }
+
     const showValue = merged.displayValue !== false;
     const valueFontSize = merged.fontSize ?? 12;
     const valueTextMargin = merged.textMargin ?? 2;
@@ -707,7 +716,12 @@ const StickerDesigner = ({
         ? mmToPx(Number(merged.barHeightMm))
         : Number(merged.height ?? 0);
 
-    const neededHeight = Math.max(1, Number(barHeightPx || 0) + valueSpace + marginPx * 2);
+    // Keep the design exact: the element height should be at least
+    // `barHeight + showValue space + margins`. Do not clamp barHeight to a minimum.
+    const neededHeight = Math.max(
+      1,
+      Number(barHeightPx || 0) + valueSpace + marginPx * 2,
+    );
 
     const nextHeight = Math.max(Number(merged.height ?? 0) || 0, neededHeight);
 
@@ -769,7 +783,11 @@ const StickerDesigner = ({
     setFocusedFieldIndex(null);
   };
   const exportSticker = (width: any, height: any) => {
-    const stickerElement = document.getElementById("sticker-preview");
+    // Prefer printing the canonical renderer (it uses inline styles and doesn't depend on Tailwind in the print window).
+    // Fallback to the interactive designer DOM only if needed.
+    const stickerElement =
+      (printRenderRootRef.current as unknown as HTMLElement | null) ??
+      (document.getElementById("sticker-preview") as HTMLElement | null);
     if (!stickerElement) return;
 
     // Reset zoom before capture to ensure pixel-perfect html2canvas capture
@@ -798,7 +816,7 @@ const StickerDesigner = ({
         root: stickerElement as HTMLElement,
         scale: 6,
         title: "Print Sticker",
-        selector: ".actual-sticker-container", // none in editor; will fall back to root
+        selector: ".actual-sticker-container",
       })
         .then((res) => {
           if (!res.ok && res.reason === "popup-blocked") {
@@ -850,7 +868,7 @@ const StickerDesigner = ({
   const [barHeight, setBarHeight] = useState<number | "">("");
   const [displayBarValue, setDisplayBarValue] = useState(true);
   const [barFormat, setBarFormat] = useState("CODE128");
-  const [barLineColor, setBarLineColor] = useState("#000000");
+  const [barLineColor, setBarLineColor] = useState("#222222");
   const [barBackground, setBarBackground] = useState("#ffffff");
   const [barMargin, setBarMargin] = useState<number | "">(10);
   const [barTextSize, setBarTextSize] = useState<number | "">(12);
@@ -1247,6 +1265,8 @@ const StickerDesigner = ({
                   color: "black",
                   // Print window doesn't load Tailwind, so ensure positioned ancestor exists.
                   position: "relative",
+                  // Keep a stable default font for both on-screen designer and print/export.
+                  fontFamily: "Inter, Roboto, Helvetica, Arial, sans-serif",
                 }}
               >
                 {stages[index]?.subSteps[subIndex1]?.printerFields[
@@ -1296,37 +1316,26 @@ const StickerDesigner = ({
                       {field?.type === "barcode" ? (
                         <div className="flex h-full w-full items-center justify-center overflow-hidden">
                           {(() => {
-                            const barcodeValue = (function () {
-                              const fallback =
-                                field.slug || field.value || "N/A";
+                            const getSample = (slugLike: any) => {
+                              const s = String(slugLike || "").toLowerCase();
+                              if (!s) return "N/A";
+                              if (s.includes("imei")) return "868329082416730";
+                              if (s.includes("ccid")) return "89911024059647563056F";
+                              if (s.includes("serial") || s === "sn" || s.includes("s/n"))
+                                return "SN-2024-0001";
+                              return "N/A";
+                            };
 
-                              // Handle stickerData if it's an array (take first element) or an object
-                              const src = Array.isArray(stickerData) ? stickerData[0] : stickerData;
+                            // In designer preview there is no real device, so resolve using any provided stickerData
+                            // and then fall back to stable sample values.
+                            const src = Array.isArray(stickerData)
+                              ? stickerData[0]
+                              : stickerData;
+                            const resolved = src ? String(resolveStickerValue(field, src) ?? "").trim() : "";
+                            const barcodeValue = resolved || getSample(field.slug || field.name);
 
-                              if (src && typeof src === "object") {
-                                const keyCamel = String(field.slug || "")
-                                  .toLowerCase()
-                                  .replace(/_([a-z])/g, (_, p1) =>
-                                    p1.toUpperCase(),
-                                  );
-                                const tryKeys = [field.slug, keyCamel].filter(
-                                  Boolean,
-                                ) as string[];
-                                for (const k of tryKeys) {
-                                  const v = (src as any)[k];
-                                  if (
-                                    v !== undefined &&
-                                    v !== null &&
-                                    v !== ""
-                                  )
-                                    return String(v);
-                                }
-                              }
-                              return String(fallback);
-                            })();
-
-                             const estimatedModules =
-                               barcodeValue.length * 11 + 35;
+                            const estimatedModules =
+                              barcodeValue.length * 11 + 35;
                              const targetWidth = field.width;
                              const explicitBarWidth =
                                field.barWidthMm != null
@@ -1337,39 +1346,71 @@ const StickerDesigner = ({
                                 ? Math.max(1, Number(targetWidth) - marginPx * 2)
                                 : undefined;
 
-                              // Exact box sizing with quiet-zone inside the box.
-                              const explicitTotalWidth =
+                              // IMPORTANT: If an explicit X dimension is configured (barWidthMm/barWidth),
+                              // always respect it so all barcodes render with the same bar thickness.
+                              // Auto-fit is only used when no explicit bar width is provided.
+                              const computedBarWidth =
                                 explicitBarWidth != null
-                                  ? Number(explicitBarWidth) * estimatedModules + marginPx * 2
-                                  : null;
-
-                              const computedBarWidth = usableWidth
-                                ? explicitBarWidth != null && explicitTotalWidth != null && explicitTotalWidth <= Number(targetWidth)
                                   ? Math.max(0.5, Number(explicitBarWidth))
-                                  : Math.max(0.5, usableWidth / estimatedModules)
-                                : explicitBarWidth != null
-                                  ? Math.max(0.5, Number(explicitBarWidth))
-                                  : 1;
+                                  : usableWidth
+                                    ? Math.max(0.5, usableWidth / estimatedModules)
+                                    : 1;
 
                              const showValue = field.displayValue !== false;
-                             const valueFontSize = field.fontSize ?? 12;
-                             const valueTextMargin = field.textMargin ?? 2;
+                             const desiredFontSize = Number(field.fontSize ?? 12);
+                             const desiredTextMargin = Number(field.textMargin ?? 2);
                              const valueFontOptions =
                                field.valueFontBold ? "bold" : undefined;
-                             const valueSpace = showValue
-                               ? valueFontSize + valueTextMargin
-                               : 0;
-                             // Predefined bar height:
-                             // If barHeightMm is set (designer "Height (mm)"), use it as bar height.
-                             // Otherwise, fill the available element height.
-                             const computedBarHeight = Math.max(
+                             const explicitBarHeight =
+                               field.barHeightMm != null
+                                 ? mmToPx(Number(field.barHeightMm))
+                                 : undefined;
+                             const usableHeight = Math.max(
                                1,
-                               Number(
-                                 field.barHeightMm != null
-                                   ? mmToPx(Number(field.barHeightMm))
-                                   : (Number(field.height) || 0) - marginPx * 2,
-                               ),
+                               (Number(field.height) || 0) - marginPx * 2,
                              );
+
+                             const minFontSize = 6;
+                             const minTextMargin = 0;
+
+                             let renderShowValue = Boolean(showValue);
+                             let valueFontSize = desiredFontSize;
+                             let valueTextMargin = desiredTextMargin;
+
+                             const desiredValueSpace = renderShowValue
+                               ? Math.max(0, valueFontSize + valueTextMargin)
+                               : 0;
+                             const maxBarHeightWithValue = Math.max(1, usableHeight - desiredValueSpace);
+
+                             // Shrink bars first so the value font stays as configured on resize.
+                             let computedBarHeight = Math.max(
+                               1,
+                               Math.min(Number(explicitBarHeight ?? maxBarHeightWithValue), maxBarHeightWithValue),
+                             );
+
+                             if (renderShowValue && usableHeight - computedBarHeight < minFontSize) {
+                               const availableForValue = Math.max(0, usableHeight - computedBarHeight);
+                               if (availableForValue < minFontSize) {
+                                 renderShowValue = false;
+                               } else {
+                                 valueTextMargin = Math.min(
+                                   valueTextMargin,
+                                   Math.max(minTextMargin, availableForValue - minFontSize),
+                                 );
+                                 valueFontSize = Math.min(
+                                   valueFontSize,
+                                   Math.max(minFontSize, availableForValue - valueTextMargin),
+                                 );
+                                 if (valueFontSize < minFontSize) renderShowValue = false;
+                               }
+
+                               if (!renderShowValue) {
+                                 computedBarHeight = Math.max(
+                                   1,
+                                   Math.min(Number(explicitBarHeight ?? usableHeight), usableHeight),
+                                 );
+                               }
+                             }
 
                             return (
                               <Barcode
@@ -1377,9 +1418,9 @@ const StickerDesigner = ({
                                 renderer="svg"
                                 width={computedBarWidth}
                                 height={computedBarHeight}
-                                displayValue={showValue}
+                                displayValue={renderShowValue}
                                 format={field.format || "CODE128"}
-                                lineColor={field.lineColor || "#000000"}
+                                lineColor={field.lineColor || "#222222"}
                                 background={field.background || "transparent"}
                                 // Default quiet-zone for scan reliability (can be overridden per field)
                                 margin={marginPx}
@@ -1525,6 +1566,27 @@ const StickerDesigner = ({
                     </div>
                   </Rnd>
                 ))}
+              </div>
+
+              {/* Print-only canonical renderer (offscreen): ensures export/print matches the saved template exactly
+                  without depending on Tailwind styles in the print window. */}
+              <div
+                ref={printRenderRootRef}
+                aria-hidden="true"
+                style={{
+                  position: "fixed",
+                  left: "-10000px",
+                  top: "0",
+                  width: "1px",
+                  height: "1px",
+                  overflow: "hidden",
+                  opacity: 0,
+                  pointerEvents: "none",
+                }}
+              >
+                {currentPrinterField ? (
+                  <StickerRenderer template={currentPrinterField} deviceData={stickerData} />
+                ) : null}
               </div>
             </div>
           </div>
