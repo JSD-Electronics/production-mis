@@ -66,7 +66,7 @@ export default function NGDeviceDetails({
     trcStatus: "",
     resolutionSteps: "",
     componentCategory: "",
-    faultCategory: "",
+    faultCategory: [] as string[],
     photo: null as File | null,
   });
 
@@ -196,7 +196,7 @@ export default function NGDeviceDetails({
           trcStatus: "",
           resolutionSteps: "",
           componentCategory: "",
-          faultCategory: "",
+          faultCategory: [] as string[],
           photo: null,
         });
       }
@@ -859,16 +859,29 @@ export default function NGDeviceDetails({
                 {/* Notes Area */}
                 <div className="pt-2">
                   <div className="text-gray-500 mb-2 text-xs font-semibold uppercase">
-                    NG Reason
+                    Failure Reason
                   </div>
                   <div className={`rounded-lg border p-3 text-sm font-medium ${deviceData.status === "NG" ? "bg-red-50 border-red-100 text-red-700" : "bg-gray-50 border-gray-100 text-gray-700"}`}>
                     {deviceData.reason ||
-                      deviceData.notes ||
                       deviceData.logData?.reason ||
                       // If top-level reason is missing, look for the first NG step in logs
                       (Array.isArray(deviceData?.logs) && deviceData.logs.find((l: any) => l.status === "NG")?.logData?.reason) ||
                       (Array.isArray(deviceData?.logs) && deviceData.logs.find((l: any) => l.status === "NG")?.reason) ||
                       "No specific reason provided."}
+                  </div>
+                </div>
+
+                {/* Operator-provided NG Description */}
+                <div className="pt-3">
+                  <div className="text-gray-500 mb-2 text-xs font-semibold uppercase">
+                    Reason for NG
+                  </div>
+                  <div className="rounded-lg border border-red-100 bg-red-50 p-3 text-sm font-medium text-red-700">
+                    {deviceData.ngDescription ||
+                      deviceData.notes ||
+                      deviceData.logData?.description ||
+                      (Array.isArray(deviceData?.logs) && deviceData.logs.find((l: any) => l.status === "NG")?.logData?.description) ||
+                      "No description provided."}
                   </div>
                 </div>
 
@@ -1347,6 +1360,10 @@ export default function NGDeviceDetails({
                   alert("Please select at least one Problem Category");
                   return;
                 }
+                if ((trcFormData.faultCategory || []).length === 0) {
+                  alert("Please select at least one Fault Category");
+                  return;
+                }
                 await resolveDevice("TRC");
               }}
             >
@@ -1599,19 +1616,33 @@ export default function NGDeviceDetails({
                     <label className="text-gray-700 mb-1 block text-sm font-semibold">
                       Fault Category <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      type="text"
-                      required
-                      value={trcFormData.faultCategory}
-                      onChange={(e) =>
-                        setTrcFormData({
-                          ...trcFormData,
-                          faultCategory: e.target.value,
-                        })
-                      }
-                      className="border-gray-300 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="Enter fault category"
-                    />
+                    <div className="rounded-xl border border-gray-200 p-4">
+                      {["F0", "F1", "F2", "F3", "F4"].map((cat) => (
+                        <label
+                          key={cat}
+                          className="mb-2 flex items-center gap-3 text-sm font-medium text-gray-800 last:mb-0"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={(trcFormData.faultCategory || []).includes(cat)}
+                            onChange={() => {
+                              const current = trcFormData.faultCategory || [];
+                              const next = current.includes(cat)
+                                ? current.filter((x) => x !== cat)
+                                : [...current, cat];
+                              setTrcFormData({ ...trcFormData, faultCategory: next });
+                            }}
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span>{cat}</span>
+                        </label>
+                      ))}
+                      {(trcFormData.faultCategory || []).length === 0 && (
+                        <p className="mt-2 text-xs font-medium text-red-600">
+                          Please select at least one fault category.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 

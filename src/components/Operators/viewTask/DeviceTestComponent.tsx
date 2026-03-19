@@ -286,6 +286,7 @@ export default function DeviceTestComponent({
   const [isCartonsLoading, setIsCartonsLoading] = useState(false);
   const [showNGModal, setShowNGModal] = useState(false);
   const [ngReason, setNgReason] = useState<string | null>(null);
+  const [ngDescription, setNgDescription] = useState<string>("");
   const [jigDecision, setJigDecision] = useState<"Pass" | "NG" | null>(null);
   const [currentJigStepIndex, setCurrentJigStepIndex] = useState(0);
   const [jigResults, setJigResults] = useState<
@@ -389,6 +390,7 @@ export default function DeviceTestComponent({
       if (showNGModal && ngReason === "Auto NG after 3 attempts") {
         setShowNGModal(false);
         setNgReason(null);
+        setNgDescription("");
       }
       return;
     }
@@ -398,6 +400,7 @@ export default function DeviceTestComponent({
       if (showNGModal && ngReason === "Auto NG after 3 attempts") {
         setShowNGModal(false);
         setNgReason(null);
+        setNgDescription("");
       }
       return;
     }
@@ -406,6 +409,7 @@ export default function DeviceTestComponent({
     const count = attemptCounts[key] || 0;
     if (count >= 3 && !showNGModal) {
       setNgReason("Auto NG after 3 attempts");
+      setNgDescription("");
       setShowNGModal(true);
     }
   }, [attemptCounts, searchResult, showNGModal, ngReason, processAssignUserStage]);
@@ -705,6 +709,7 @@ export default function DeviceTestComponent({
     if (status === "NG") {
       setJigDecision("NG");
       setNgReason(reason || "Manual failure / Timeout");
+      setNgDescription("");
       setShowNGModal(true);
       setStepTimeLeft(null);
       pendingJigErrorRef.current = null;
@@ -734,6 +739,7 @@ export default function DeviceTestComponent({
       if (finalStatus === "Pass") {
         handleUpdateStatus("Pass", "", { ...newResults, totalProcessTime });
       } else {
+        setNgDescription("");
         setShowNGModal(true);
       }
     }
@@ -759,6 +765,7 @@ export default function DeviceTestComponent({
       setJigDecision(null);
       setIsJigConnected(false);
       setStepTimeLeft(null);
+      setNgDescription("");
       timerStartedRef.current = null;
       timerDecisionTriggeredRef.current = null;
       stepStartTimeRef.current = Date.now();
@@ -771,6 +778,7 @@ export default function DeviceTestComponent({
       setJigResults({});
       setJigDecision(null);
       setStepTimeLeft(null);
+      setNgDescription("");
       timerStartedRef.current = null;
       timerDecisionTriggeredRef.current = null;
     }
@@ -1150,7 +1158,9 @@ export default function DeviceTestComponent({
     return options;
   };
 
-  const handleNG = () => {
+  const handleNG = (_dept: string | null, description: string) => {
+    const desc = String(description || "").trim();
+    if (!desc) return;
     const timeTaken = Math.round(
       (Date.now() - stepStartTimeRef.current) / 1000,
     );
@@ -1162,12 +1172,14 @@ export default function DeviceTestComponent({
         ...(jigResults[currentJigStepIndex] || {}),
         status: "NG",
         reason: reasonText,
+        description: desc,
         timeTaken,
       },
     };
     setJigResults(finalResults);
     setJigDecision("NG");
-    handleUpdateStatus("NG", selectAssignDeviceDepartment, finalResults);
+    handleUpdateStatus("NG", selectAssignDeviceDepartment, finalResults, desc);
+    setNgDescription("");
     setShowNGModal(false);
   };
 
@@ -1177,6 +1189,7 @@ export default function DeviceTestComponent({
     setJigResults({});
     setJigDecision(null);
     setNgReason(null);
+    setNgDescription("");
     setIsJigConnected(false);
     setStepTimeLeft(null);
     pendingJigErrorRef.current = null;
@@ -1205,6 +1218,7 @@ export default function DeviceTestComponent({
     setIsJigConnected(false);
     setStepTimeLeft(null);
     setShowNGModal(false);
+    setNgDescription("");
     pendingJigErrorRef.current = null;
     setPendingJigErrorState(null);
     setGeneratedCommand("");
@@ -1817,7 +1831,10 @@ export default function DeviceTestComponent({
                                 <CheckCircle className="h-5 w-5" /> Pass & Verify
                               </button>
                               <button
-                                onClick={() => setShowNGModal(true)}
+                                onClick={() => {
+                                  setNgDescription("");
+                                  setShowNGModal(true);
+                                }}
                                 className="flex-1 py-4 sm:py-5 rounded-2xl bg-white border-2 border-slate-200 text-slate-800 font-black text-sm uppercase tracking-widest hover:border-rose-500 hover:text-rose-500 transition-all active:scale-95 flex items-center justify-center gap-2"
                               >
                                 <XCircle className="h-5 w-5" /> Reject NG
@@ -3561,14 +3578,15 @@ export default function DeviceTestComponent({
                           >
                             STAGE COMPLETE: {jigDecision}
                           </h4>
-                          <button
-                            className="flex items-center gap-2 rounded-xl bg-blue-600 px-8 py-4 font-bold text-white shadow-xl transition-all hover:bg-blue-700 active:scale-95"
-                            onClick={() => {
-                              if (jigDecision === "NG") {
-                                // Open the assignment modal (same behavior as Report Issue NG)
-                                setShowNGModal(true);
-                                return;
-                              }
+          <button
+            className="flex items-center gap-2 rounded-xl bg-blue-600 px-8 py-4 font-bold text-white shadow-xl transition-all hover:bg-blue-700 active:scale-95"
+            onClick={() => {
+              if (jigDecision === "NG") {
+                // Open the assignment modal (same behavior as Report Issue NG)
+                setNgDescription("");
+                setShowNGModal(true);
+                return;
+              }
                               if (jigDisconnectRef.current)
                                 jigDisconnectRef.current();
                               if (searchResult && setDeviceList) {
@@ -3604,6 +3622,8 @@ export default function DeviceTestComponent({
                   reason={ngReason}
                   isJigStep={testSteps.some((s: any) => s.stepType === "jig")}
                   onRetry={handleRetry}
+                  ngDescription={ngDescription}
+                  setNgDescription={setNgDescription}
                 />
               </div>
             </div>
