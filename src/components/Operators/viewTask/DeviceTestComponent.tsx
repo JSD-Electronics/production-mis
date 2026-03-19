@@ -329,7 +329,8 @@ export default function DeviceTestComponent({
 
   const getPlanIdFromUrl = () => {
     if (typeof window === "undefined") return "";
-    const parts = window.location.pathname.split("/");
+    // Be robust to trailing slashes: always return the last non-empty segment.
+    const parts = window.location.pathname.split("/").filter(Boolean);
     return parts[parts.length - 1] || "";
   };
   const getCurrentUserId = () => {
@@ -364,13 +365,50 @@ export default function DeviceTestComponent({
 
   useEffect(() => {
     if (!searchResult) return;
+
+    const stageData = Array.isArray(processAssignUserStage)
+      ? processAssignUserStage[0]
+      : processAssignUserStage;
+    const isNgEnabledForStage = Boolean(
+      stageData?.subSteps?.some((s: any) => !s?.disabled && s?.isCheckboxNGStatus),
+    );
+
+    // Some tasks only want attempts to be tracked (stage-wise analytics) without forcing an NG modal.
+    // Keep the attempt counter, but disable the auto-NG popup for specific task ids.
+    const AUTO_NG_DISABLED_PLAN_IDS = new Set([
+      "6957502a10c5e95da96278a7",
+    ]);
+    const planId = getPlanIdFromUrl();
+    // Also guard by pathname to avoid any mismatch between "plan id" and route params.
+    const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+    if (
+      (planId && AUTO_NG_DISABLED_PLAN_IDS.has(planId)) ||
+      pathname.includes("/operators/task/6957502a10c5e95da96278a7")
+    ) {
+      // If the modal was opened by auto-NG earlier, close it on this task.
+      if (showNGModal && ngReason === "Auto NG after 3 attempts") {
+        setShowNGModal(false);
+        setNgReason(null);
+      }
+      return;
+    }
+
+    // Only auto-open NG when the current stage actually supports "Mark As NG".
+    if (!isNgEnabledForStage) {
+      if (showNGModal && ngReason === "Auto NG after 3 attempts") {
+        setShowNGModal(false);
+        setNgReason(null);
+      }
+      return;
+    }
+
     const key = String(searchResult || "");
     const count = attemptCounts[key] || 0;
     if (count >= 3 && !showNGModal) {
       setNgReason("Auto NG after 3 attempts");
       setShowNGModal(true);
     }
-  }, [attemptCounts, searchResult, showNGModal]);
+  }, [attemptCounts, searchResult, showNGModal, ngReason, processAssignUserStage]);
 
   const handleJigIdentification = async (capturedFields: any) => {
     setIsJigSearching(true);
