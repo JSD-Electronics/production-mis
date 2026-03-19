@@ -870,7 +870,12 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const handleChoosenDevice = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setChoosenDevice(event.target.value);
   };
-  const handleUpdateStatus = async (status: string, deviceDepartment: string, subStepResults?: any) => {
+  const handleUpdateStatus = async (
+    status: string,
+    deviceDepartment: string,
+    subStepResults?: any,
+    ngDescription?: string,
+  ) => {
     if (isSubmitting.current) {
 
       return;
@@ -1003,6 +1008,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
               parsedData: result.data?.parsedData,
               // Include other essential data
               reason: result.reason,
+              description: result.description,
               timeTaken: result.timeTaken,
             },
             status: result.status,
@@ -1035,6 +1041,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       };
 
       if (status === "NG") {
+        payload.ngDescription = String(ngDescription || "").trim();
         // Use the passed argument 'deviceDepartment' which contains the selected NG assignment (QC, TRC, Previous Stage)
         payload.assignedDeviceTo = deviceDepartment || selectAssignDeviceDepartment || "";
 
@@ -1046,6 +1053,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           // Also set logData for top-level if needed by detail page
           payload.logData = {
             reason: failingResult.reason,
+            description: failingResult.description || payload.ngDescription,
             terminalLogs: (logs.find(l => l.status === "NG")?.logData?.terminalLogs) || []
           };
         }

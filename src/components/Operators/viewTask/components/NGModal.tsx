@@ -8,10 +8,12 @@ interface NGModalProps {
   selectAssignDeviceDepartment: string;
   setAsssignDeviceDepartment: (dept: string) => void;
   getNGAssignOptions: () => { label: string; value: string }[];
-  handleNG: (dept: string | null) => void;
+  handleNG: (dept: string | null, ngDescription: string) => void;
   reason?: string | null;
   isJigStep?: boolean;
   onRetry?: () => void;
+  ngDescription: string;
+  setNgDescription: (val: string) => void;
 }
 
 export default function NGModal({
@@ -24,8 +26,11 @@ export default function NGModal({
   reason,
   isJigStep = false,
   onRetry,
+  ngDescription,
+  setNgDescription,
 }: NGModalProps) {
   // No longer using showAssignment state as we show everything immediately now
+  const descriptionMissing = !String(ngDescription || "").trim();
 
   const handleRetryClick = () => {
     if (onRetry) {
@@ -36,7 +41,9 @@ export default function NGModal({
 
 
   const handleConfirmAssignment = () => {
-    handleNG(selectAssignDeviceDepartment || null);
+    const desc = String(ngDescription || "").trim();
+    if (!desc) return;
+    handleNG(selectAssignDeviceDepartment || null, desc);
     setShowNGModal(false);
   };
 
@@ -68,6 +75,23 @@ export default function NGModal({
 
         {/* Always show assignment options for all types including Jig, to satisfy "assign device to ng model appear there" */}
         <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Reason for NG: <span className="text-danger">*</span>
+            </label>
+            <textarea
+              value={ngDescription}
+              onChange={(e) => setNgDescription(e.target.value)}
+              rows={3}
+              placeholder="Enter the reason/description for NG..."
+              className={`w-full resize-none rounded-lg border bg-transparent px-4 py-3 text-sm outline-none focus:border-blue-500 dark:bg-gray-700 dark:text-white ${descriptionMissing ? "border-danger" : "border-gray-300 dark:border-gray-600"}`}
+            />
+            {descriptionMissing && (
+              <p className="mt-1 text-xs font-medium text-danger">
+                Reason for NG is required.
+              </p>
+            )}
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Assign Device To:
@@ -108,7 +132,7 @@ export default function NGModal({
           <button
             onClick={handleConfirmAssignment}
             className="flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
-            disabled={!selectAssignDeviceDepartment}
+            disabled={!selectAssignDeviceDepartment || descriptionMissing}
           >
             Confirm NG
           </button>
