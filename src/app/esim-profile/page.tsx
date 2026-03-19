@@ -5,11 +5,14 @@ import DefaultLayout from "@/components/Layouts/DefaultLayout";
 import { viewEsimProfiles, createEsimProfile, updateEsimProfile, deleteEsimProfile } from "@/lib/api";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import Pagination from "@/components/common/Pagination";
 
 export default function EsimProfilePage() {
     const [rows, setRows] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [query, setQuery] = useState("");
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(25);
     const [showModal, setShowModal] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState({
@@ -45,6 +48,20 @@ export default function EsimProfilePage() {
             return profileId.includes(q) || names.some((n: string) => n.includes(q));
         });
     }, [query, rows]);
+
+    useEffect(() => {
+        setPage(1);
+    }, [query]);
+
+    const pageCount = useMemo(() => Math.max(1, Math.ceil(filtered.length / pageSize)), [filtered.length, pageSize]);
+    useEffect(() => {
+        if (page > pageCount) setPage(pageCount);
+    }, [page, pageCount]);
+
+    const paged = useMemo(() => {
+        const start = (page - 1) * pageSize;
+        return filtered.slice(start, start + pageSize);
+    }, [filtered, page, pageSize]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -143,7 +160,7 @@ export default function EsimProfilePage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filtered.map((row) => (
+                                    {paged.map((row) => (
                                         <tr key={row._id} className="border-b hover:bg-gray-50 dark:hover:bg-strokedark">
                                             <td className="p-2">{row.profileId}</td>
                                             <td className="p-2">
@@ -173,6 +190,17 @@ export default function EsimProfilePage() {
                                 </tbody>
                             </table>
                         </div>
+
+                        <Pagination
+                            page={page}
+                            pageSize={pageSize}
+                            total={filtered.length}
+                            onPageChange={setPage}
+                            onPageSizeChange={(n) => {
+                                setPageSize(n);
+                                setPage(1);
+                            }}
+                        />
                     </div>
                 </div>
             </div>

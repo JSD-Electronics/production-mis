@@ -6,6 +6,7 @@ import DefaultLayout from "@/components/Layouts/DefaultLayout";
 import { viewEsimApns, createEsimApn, updateEsimApn, deleteEsimApn, viewEsimMakes, viewEsimProfiles } from "@/lib/api";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import Pagination from "@/components/common/Pagination";
 
 const formatDate = (value: any) => {
     if (!value) return "";
@@ -20,6 +21,8 @@ export default function EsimApnPage() {
     const [profiles, setProfiles] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const [query, setQuery] = useState("");
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(25);
     const [showModal, setShowModal] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState({
@@ -62,6 +65,20 @@ export default function EsimApnPage() {
             return name.includes(q) || make.includes(q);
         });
     }, [query, rows]);
+
+    useEffect(() => {
+        setPage(1);
+    }, [query]);
+
+    const pageCount = useMemo(() => Math.max(1, Math.ceil(filtered.length / pageSize)), [filtered.length, pageSize]);
+    useEffect(() => {
+        if (page > pageCount) setPage(pageCount);
+    }, [page, pageCount]);
+
+    const paged = useMemo(() => {
+        const start = (page - 1) * pageSize;
+        return filtered.slice(start, start + pageSize);
+    }, [filtered, page, pageSize]);
 
     const profile1Options = useMemo(() => {
         if (!formData.esimProfile2) return profiles;
@@ -181,7 +198,7 @@ export default function EsimApnPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filtered.map((row, index) => (
+                                    {paged.map((row, index) => (
                                         <tr key={row._id || index} className="border-b hover:bg-gray-50 dark:hover:bg-strokedark">
                                             <td className="p-2 font-medium text-black dark:text-white">{row.apnName}</td>
                                             <td className="p-2">{getEsimMakeNameById(row.esimMake)}</td>
@@ -205,6 +222,17 @@ export default function EsimApnPage() {
                                 </tbody>
                             </table>
                         </div>
+
+                        <Pagination
+                            page={page}
+                            pageSize={pageSize}
+                            total={filtered.length}
+                            onPageChange={setPage}
+                            onPageSizeChange={(n) => {
+                                setPageSize(n);
+                                setPage(1);
+                            }}
+                        />
                     </div>
                 </div>
             </div>

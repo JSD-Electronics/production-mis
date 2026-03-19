@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: "standalone",
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -11,6 +12,8 @@ const nextConfig = {
   },
   experimental: {
     optimizeCss: false,
+    // Helps tree-shake large icon libs and other ESM packages.
+    optimizePackageImports: ["lucide-react"],
   },
   // images: {
   //   domains: ["localhost"],
@@ -19,6 +22,14 @@ const nextConfig = {
   //   ignoreBuildErrors: true,
   // },
   reactStrictMode: false,
+  webpack: (config, { dev }) => {
+    // Optional: disable webpack persistent caching to keep `.next/cache/webpack` small on servers.
+    // Enable via: `set NEXT_DISABLE_WEBPACK_CACHE=1&& npm run build`
+    if (!dev && process.env.NEXT_DISABLE_WEBPACK_CACHE === "1") {
+      config.cache = false;
+    }
+    return config;
+  },
   async rewrites() {
     return [
       {

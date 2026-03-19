@@ -7,6 +7,7 @@ import { viewEsimMasters, createEsimMaster, updateEsimMaster, deleteEsimMaster, 
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import Loader from "@/components/common/Loader";
+import Pagination from "@/components/common/Pagination";
 
 const formatDate = (value: any) => {
   if (!value) return "";
@@ -38,6 +39,8 @@ export default function EsimMasterListPage() {
     remarks: "",
   });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -80,6 +83,20 @@ export default function EsimMasterListPage() {
       return ccid.includes(q) || make.includes(q);
     });
   }, [query, rows]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query]);
+
+  const pageCount = useMemo(() => Math.max(1, Math.ceil(filtered.length / pageSize)), [filtered.length, pageSize]);
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
+
+  const paged = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
 
   const profile1Options = useMemo(() => {
     if (!formData.profile2) return profiles;
@@ -283,7 +300,7 @@ export default function EsimMasterListPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((row, index) => (
+                  {paged.map((row, index) => (
                     <tr key={row._id || index} className="border-b hover:bg-gray-50 dark:hover:bg-strokedark">
                       <td className="p-2">
                         <input
@@ -322,6 +339,17 @@ export default function EsimMasterListPage() {
                 </tbody>
               </table>
             </div>
+
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={filtered.length}
+              onPageChange={setPage}
+              onPageSizeChange={(n) => {
+                setPageSize(n);
+                setPage(1);
+              }}
+            />
           </div>
         </div>
       </div>

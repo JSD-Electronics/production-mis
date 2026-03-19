@@ -29,8 +29,7 @@ jobs:
             git pull origin main
 
             npm install
-            NODE_OPTIONS="--max-old-space-size=4096" npm run build
-
+            npm run build:slim
             pm2 restart production-mis || pm2 start npm --name "production-mis" -- start
             pm2 save
             pm2 status
