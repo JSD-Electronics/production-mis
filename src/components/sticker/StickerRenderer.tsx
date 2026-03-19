@@ -51,6 +51,15 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
   const fields = Array.isArray(template?.fields) ? template.fields : [];
   const device = Array.isArray(deviceData) ? (deviceData[0] ?? null) : deviceData ?? null;
 
+  const getSampleValueForSlug = (slugLike: any) => {
+    const s = String(slugLike || "").toLowerCase();
+    if (!s) return "N/A";
+    if (s.includes("imei")) return "868329082416730";
+    if (s.includes("ccid")) return "89911024059647563056F";
+    if (s.includes("serial") || s === "sn" || s.includes("s/n")) return "SN-2024-0001";
+    return "N/A";
+  };
+
   return (
     <div
       className="actual-sticker-container bg-white"
@@ -65,7 +74,8 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
         padding: "0",
         boxSizing: "border-box",
         overflow: "hidden",
-        fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+        // Match the app + designer default (Inter) and keep a sane fallback stack for print windows.
+        fontFamily: "Inter, Roboto, Helvetica, Arial, sans-serif",
         color: "black",
       }}
     >
@@ -115,7 +125,12 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
                 }}
               >
                 {(() => {
-                  const barcodeValue = String(fieldValue || "").trim() ? String(fieldValue) : "N/A";
+                  const raw = String(fieldValue ?? "").trim();
+                  const sample = getSampleValueForSlug(field?.slug || field?.name);
+                  // If device data isn't present (product designer / simulator), show meaningful sample values.
+                  const barcodeValue = raw
+                    ? raw
+                    : sample;
                   const estimatedModules = barcodeValue.length * 11 + 35;
                   const targetWidth = field?.width;
 
@@ -129,36 +144,76 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
                     ? Math.max(1, Number(targetWidth) - marginPx * 2)
                     : undefined;
 
-                  // Exact box sizing:
-                  // Prefer explicit x-dimension only if it still fits inside the box (including quiet-zone).
-                  // Otherwise compute bar width to fit within the box width.
-                  const explicitTotalWidth =
+                  // IMPORTANT: If an explicit X dimension is configured (barWidthMm/barWidth),
+                  // always respect it so all barcodes render with the same bar thickness.
+                  // Auto-fit is only used when no explicit bar width is provided.
+                  const computedBarWidth =
                     explicitBarWidth != null
-                      ? Number(explicitBarWidth) * estimatedModules + marginPx * 2
-                      : null;
-
-                  const computedBarWidth = usableWidth
-                    ? explicitBarWidth != null && explicitTotalWidth != null && explicitTotalWidth <= Number(targetWidth)
                       ? Math.max(0.5, Number(explicitBarWidth))
-                      : Math.max(0.5, usableWidth / estimatedModules)
-                    : explicitBarWidth != null
-                      ? Math.max(0.5, Number(explicitBarWidth))
-                      : 1;
+                      : usableWidth
+                        ? Math.max(0.5, usableWidth / estimatedModules)
+                        : 1;
 
                   const showValue = field?.displayValue !== false;
-                  const valueFontSize = field?.fontSize ?? 12;
-                  const valueTextMargin = field?.textMargin ?? 2;
+                  const desiredFontSize = Number(field?.fontSize ?? 12);
+                  const desiredTextMargin = Number(field?.textMargin ?? 2);
                   const valueFontOptions = field?.valueFontBold ? "bold" : undefined;
-                  const valueSpace = showValue ? valueFontSize + valueTextMargin : 0;
 
-                  // Predefined bar height:
-                  // If barHeightMm is set (designer "Height (mm)"), use it as bar height.
-                  // Otherwise, fill the available element height.
+                  // Height behavior:
+                  // 1) If Show Value is enabled and there is space, keep the value font size exactly as configured,
+                  //    and reduce the bar height to make room (so font respects properties on resize).
+                  // 2) Only if there is NOT enough space, auto-shrink the value font or hide it.
+
                   const explicitBarHeight =
                     field?.barHeightMm != null ? mmToPx(Number(field.barHeightMm)) : undefined;
-                  const fallbackBarHeight =
+
+                  const usableHeight =
                     field?.height != null ? Math.max(1, Number(field.height) - marginPx * 2) : 1;
-                  const computedBarHeight = Math.max(1, Number(explicitBarHeight ?? fallbackBarHeight));
+
+                  const minFontSize = 6;
+                  const minTextMargin = 0;
+
+                  let renderShowValue = Boolean(showValue);
+                  let valueFontSize = desiredFontSize;
+                  let valueTextMargin = desiredTextMargin;
+
+                  const desiredValueSpace = renderShowValue
+                    ? Math.max(0, valueFontSize + valueTextMargin)
+                    : 0;
+
+                  const maxBarHeightWithValue = Math.max(1, usableHeight - desiredValueSpace);
+
+                  // Try to honor configured font size by shrinking bar height first.
+                  let computedBarHeight = Math.max(
+                    1,
+                    Math.min(Number(explicitBarHeight ?? maxBarHeightWithValue), maxBarHeightWithValue),
+                  );
+
+                  // If even after shrinking bars we still can't fit the value, auto-adjust the typography.
+                  if (renderShowValue && usableHeight - computedBarHeight < minFontSize) {
+                    const availableForValue = Math.max(0, usableHeight - computedBarHeight);
+                    if (availableForValue < minFontSize) {
+                      renderShowValue = false;
+                    } else {
+                      valueTextMargin = Math.min(
+                        valueTextMargin,
+                        Math.max(minTextMargin, availableForValue - minFontSize),
+                      );
+                      valueFontSize = Math.min(
+                        valueFontSize,
+                        Math.max(minFontSize, availableForValue - valueTextMargin),
+                      );
+                      if (valueFontSize < minFontSize) renderShowValue = false;
+                    }
+
+                    // Recompute bar height if value got disabled.
+                    if (!renderShowValue) {
+                      computedBarHeight = Math.max(
+                        1,
+                        Math.min(Number(explicitBarHeight ?? usableHeight), usableHeight),
+                      );
+                    }
+                  }
 
                   return (
                     <Barcode
@@ -166,9 +221,9 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
                       renderer="svg"
                       width={computedBarWidth}
                       height={computedBarHeight}
-                      displayValue={showValue}
+                      displayValue={renderShowValue}
                       format={field?.format || "CODE128"}
-                      lineColor={field?.lineColor || "#000000"}
+                      lineColor={field?.lineColor || "#222222"}
                       background={field?.background || "transparent"}
                       // Default quiet-zone for scan reliability (can be overridden per field)
                       margin={marginPx}
