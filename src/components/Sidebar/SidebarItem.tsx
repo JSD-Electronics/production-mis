@@ -46,6 +46,7 @@ const SidebarItem = ({
 
   const isItemActive = isActive(item);
   const hasChildren = item.children?.length > 0;
+  const isRoutable = typeof item.route === "string" && item.route.trim() !== "" && item.route !== "#";
 
   const openTooltip = () => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -178,23 +179,26 @@ const SidebarItem = ({
     <>
       {hasPermission && (
         <li>
-          <Link
-            href={item.route}
-            onClick={handleClick}
-            className={`group relative flex items-center gap-2.5 rounded-lg px-4 py-2 font-medium duration-200 ease-in-out ${isItemActive
-              ? "bg-white/10 text-white shadow-inner"
-              : "text-white/80 hover:bg-white/5 hover:text-white"
-              }`}
-          >
-            <span
-              className={`absolute left-0 top-0 h-full w-1 rounded-r ${isItemActive
-                ? "bg-blue-500"
-                : "bg-transparent group-hover:bg-blue-500/60"
+          {hasChildren || !isRoutable ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                handleClick();
+              }}
+              className={`group relative flex w-full items-center gap-2.5 rounded-lg px-4 py-2 text-left font-medium duration-200 ease-in-out ${isItemActive
+                ? "bg-white/10 text-white shadow-inner"
+                : "text-white/80 hover:bg-white/5 hover:text-white"
                 }`}
-            />
-            <SvgIcon svgString={item.icon} />
-            <span className="flex-1">{item.label}</span>
-            {hasChildren && (
+            >
+              <span
+                className={`absolute left-0 top-0 h-full w-1 rounded-r ${isItemActive
+                  ? "bg-blue-500"
+                  : "bg-transparent group-hover:bg-blue-500/60"
+                  }`}
+              />
+              <SvgIcon svgString={item.icon} />
+              <span className="flex-1">{item.label}</span>
               <svg
                 className={`fill-white/70 transition-transform ${pageName === item.label.toLowerCase() ? "rotate-180" : ""
                   }`}
@@ -211,8 +215,28 @@ const SidebarItem = ({
                   fill=""
                 />
               </svg>
-            )}
-          </Link>
+            </button>
+          ) : (
+            <Link
+              href={item.route}
+              onClick={handleClick}
+              prefetch
+              scroll={false}
+              className={`group relative flex items-center gap-2.5 rounded-lg px-4 py-2 font-medium duration-200 ease-in-out ${isItemActive
+                ? "bg-white/10 text-white shadow-inner"
+                : "text-white/80 hover:bg-white/5 hover:text-white"
+                }`}
+            >
+              <span
+                className={`absolute left-0 top-0 h-full w-1 rounded-r ${isItemActive
+                  ? "bg-blue-500"
+                  : "bg-transparent group-hover:bg-blue-500/60"
+                  }`}
+              />
+              <SvgIcon svgString={item.icon} />
+              <span className="flex-1">{item.label}</span>
+            </Link>
+          )}
 
           {hasChildren && (
             <div

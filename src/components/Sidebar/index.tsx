@@ -44,9 +44,13 @@ const Sidebar = ({
     if (!isDesktop) setSidebarOpen(false);
   };
 
-  const [menuGroups, setMenuGroups] = useState<{ name: string; menuItems: any[] }[]>([{ name: "MENU", menuItems: [] }]);
-  const [userType, setUserType] = useState("");
-  const [permission, setPermission] = useState<any[]>([]);
+  // Persisted to avoid "blank sidebar" flicker on route changes / remounts.
+  const [menuGroups, setMenuGroups] = useLocalStorage<{ name: string; menuItems: any[] }[]>(
+    "sidebarMenuGroups",
+    [{ name: "MENU", menuItems: [] }],
+  );
+  const [userType, setUserType] = useLocalStorage<string>("sidebarUserType", "");
+  const [permission, setPermission] = useLocalStorage<any>("sidebarPermission", {});
   const [pageName, setPageName] = useLocalStorage("selectedMenu", "dashboard");
 
   React.useEffect(() => {
@@ -56,6 +60,32 @@ const Sidebar = ({
     getAccessPermission(userDetails.userType);
     getMenus(userDetails);
   }, []);
+
+  const normalizeRoute = (route: any) => {
+    const raw = (route ?? "").toString().trim();
+    if (!raw) return raw;
+    if (raw === "#") return "#";
+    // Backend sometimes returns absolute URLs; convert to SPA-friendly internal paths.
+    if (/^https?:\/\//i.test(raw)) {
+      try {
+        const u = new URL(raw);
+        return `${u.pathname}${u.search}${u.hash}` || "/";
+      } catch {
+        return raw;
+      }
+    }
+    // Ensure leading slash for internal routes (Next Link SPA navigation).
+    if (!raw.startsWith("/") && !raw.startsWith("?")) return `/${raw}`;
+    return raw;
+  };
+
+  const normalizeMenuTree = (node: any): any => {
+    if (!node || typeof node !== "object") return node;
+    const next: any = { ...node };
+    if (typeof next.route !== "undefined") next.route = normalizeRoute(next.route);
+    if (Array.isArray(next.children)) next.children = next.children.map(normalizeMenuTree);
+    return next;
+  };
 
   const getMenus = async (user: any) => {
     try {
@@ -101,7 +131,8 @@ const Sidebar = ({
         return menus;
       })();
 
-      const sortedMenus = [...menusWithReports].sort((a, b) => {
+      const normalizedMenus = menusWithReports.map(normalizeMenuTree);
+      const sortedMenus = [...normalizedMenus].sort((a, b) => {
         const aHasChildren = Array.isArray(a?.children) && a.children.length > 0;
         const bHasChildren = Array.isArray(b?.children) && b.children.length > 0;
         if (aHasChildren === bHasChildren) return 0;
@@ -118,12 +149,11 @@ const Sidebar = ({
     } catch { }
   };
 
-  const getAccessPermission = async (userType: any) => {
+  const getAccessPermission = async (ut: any) => {
     try {
-      setPermission([]);
       const result = await getUseTypeByType();
-      setUserType(userType);
-      setPermission(result.userType[0].roles);
+      setUserType(ut);
+      setPermission(result.userType?.[0]?.roles || {});
     } catch (error) {
       console.error("Failed to fetch permissions:", error);
     }
