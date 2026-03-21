@@ -1128,22 +1128,43 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       isSubmitting.current = false;
     }
   };
-  const handlePrintCartonSticker = () => {
-    const stickerElement = document.getElementById("carton-sticker-preview");
+  const handlePrintCartonSticker = async (elementId: string = "carton-sticker-preview") => {
+    const stickerElement = document.getElementById(elementId);
     if (!stickerElement) {
       toast.error("Carton sticker preview not found");
       return;
     }
 
-    const actualSticker = stickerElement.querySelector('[data-sticker-width]');
-    const widthPx = actualSticker ? parseInt(actualSticker.getAttribute('data-sticker-width') || '400') : 400;
-    const heightPx = actualSticker ? parseInt(actualSticker.getAttribute('data-sticker-height') || '250') : 250;
+    // Prefer DOM/SVG printing when the sticker is explicitly dimensioned (mm).
+    // This avoids raster scaling artifacts and keeps output 1:1 with the preview.
+    const mmSticker = stickerElement.querySelector(
+      ".actual-sticker-container[data-sticker-mm-width]",
+    ) as HTMLElement | null;
+    if (mmSticker) {
+      const { printStickerElements } = await import("@/lib/sticker/printSticker");
+      const res = await printStickerElements({
+        // Use a parent root so selector can find the sticker node(s).
+        root: stickerElement,
+        title: "Print Carton Sticker",
+        selector: ".actual-sticker-container",
+      });
+      if (!res.ok) toast.error("Unable to print sticker");
+      else setIsCartonBarCodePrinted(true);
+      return;
+    }
 
-    const stickerWidthMM = Math.round(widthPx * 0.264583) || 100;
-    const stickerHeightMM = Math.round(heightPx * 0.264583) || 60;
+    // Fallback: legacy raster print (kept for older StickerGenerator templates which
+    // rely on app CSS and canvas rendering).
+    const actualSticker = stickerElement.querySelector('[data-sticker-width]') as HTMLElement | null;
+    const captureEl = actualSticker || (stickerElement as HTMLElement);
+    const widthPx = actualSticker ? parseInt(actualSticker.getAttribute("data-sticker-width") || "400") : 400;
+    const heightPx = actualSticker ? parseInt(actualSticker.getAttribute("data-sticker-height") || "250") : 250;
 
-    html2canvas(stickerElement as HTMLElement, {
-      scale: 3,
+    const stickerWidthMM = Number((widthPx * 0.264583).toFixed(2)) || 100;
+    const stickerHeightMM = Number((heightPx * 0.264583).toFixed(2)) || 60;
+
+    html2canvas(captureEl, {
+      scale: 4,
       useCORS: true,
       backgroundColor: "#ffffff",
       logging: false,
@@ -1161,39 +1182,16 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           <head>
             <title>Print Carton Sticker</title>
             <style>
-              @page {
-                size: ${stickerWidthMM}mm ${stickerHeightMM}mm;
-                margin: 0;
-              }
-              body {
-                margin: 0;
-                padding: 0;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                width: ${stickerWidthMM}mm;
-                height: ${stickerHeightMM}mm;
-                background-color: white;
-                -webkit-print-color-adjust: exact;
-              }
-              img {
-                width: 100%;
-                height: 100%;
-                object-fit: contain;
-                display: block;
-              }
+              @page { size: ${stickerWidthMM}mm ${stickerHeightMM}mm; margin: 0; }
+              html, body { margin: 0; padding: 0; width: ${stickerWidthMM}mm; height: ${stickerHeightMM}mm; background: #fff; overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              img { width: ${stickerWidthMM}mm; height: ${stickerHeightMM}mm; object-fit: contain; display: block; }
             </style>
           </head>
           <body>
             <img src="${imageData}" alt="Sticker">
             <script>
               window.onload = function() {
-                setTimeout(() => {
-                  window.print();
-                  window.onafterprint = function() {
-                    window.close();
-                  };
-                }, 500);
+                setTimeout(() => { window.print(); window.onafterprint = function() { window.close(); }; }, 500);
               };
             </script>
           </body>

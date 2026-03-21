@@ -1,6 +1,6 @@
 import React from "react";
 import Barcode from "react-barcode";
-import { QRCodeCanvas } from "qrcode.react";
+import { QRCodeSVG } from "qrcode.react";
 import { mmToPx } from "@/lib/sticker/units";
 import { resolveStickerValue } from "@/lib/sticker/resolveStickerValue";
 
@@ -247,7 +247,7 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
                   boxSizing: "border-box",
                 }}
               >
-                <QRCodeCanvas
+                <QRCodeSVG
                   value={String(fieldValue || "N/A")}
                   size={512}
                   style={{ width: "100%", height: "100%" }}

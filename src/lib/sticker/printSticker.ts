@@ -1,4 +1,4 @@
-import { pxToMm } from "@/lib/sticker/units";
+import { pxToMmExact } from "@/lib/sticker/units";
 
 type PrintStickerOptions = {
   root: HTMLElement;
@@ -16,6 +16,17 @@ const getStickerDimsPx = (el: HTMLElement) => {
   return { widthPx, heightPx };
 };
 
+const getStickerDimsMm = (el: HTMLElement, fallbackPx: { widthPx: number; heightPx: number }) => {
+  const wMmAttr = el.getAttribute("data-sticker-mm-width");
+  const hMmAttr = el.getAttribute("data-sticker-mm-height");
+  const widthMm = wMmAttr ? Number(wMmAttr) : pxToMmExact(fallbackPx.widthPx);
+  const heightMm = hMmAttr ? Number(hMmAttr) : pxToMmExact(fallbackPx.heightPx);
+  return {
+    widthMm: Number.isFinite(widthMm) && widthMm > 0 ? widthMm : pxToMmExact(fallbackPx.widthPx),
+    heightMm: Number.isFinite(heightMm) && heightMm > 0 ? heightMm : pxToMmExact(fallbackPx.heightPx),
+  };
+};
+
 export const printStickerElements = async ({
   root,
   // Scale is kept for backward compatibility; DOM/SVG printing doesn't need it.
@@ -30,8 +41,9 @@ export const printStickerElements = async ({
 
   // Assume same size across pages; use first as @page size.
   const firstDims = getStickerDimsPx(targets[0]);
-  const pageWmm = Math.max(10, pxToMm(firstDims.widthPx));
-  const pageHmm = Math.max(10, pxToMm(firstDims.heightPx));
+  const firstMm = getStickerDimsMm(targets[0], firstDims);
+  const pageWmm = Math.max(10, firstMm.widthMm);
+  const pageHmm = Math.max(10, firstMm.heightMm);
 
   const printWindow = window.open("", "_blank");
   if (!printWindow) return { ok: false as const, reason: "popup-blocked" as const };
@@ -42,8 +54,9 @@ export const printStickerElements = async ({
   const bodyHtml = targets
     .map((el, idx) => {
       const dims = getStickerDimsPx(el);
-      const wmm = Math.max(10, pxToMm(dims.widthPx));
-      const hmm = Math.max(10, pxToMm(dims.heightPx));
+      const mm = getStickerDimsMm(el, dims);
+      const wmm = Math.max(10, mm.widthMm);
+      const hmm = Math.max(10, mm.heightMm);
       const pageBreak = idx < targets.length - 1 ? "page-break-after: always;" : "";
       return `
         <div class="page" style="width:${wmm}mm;height:${hmm}mm;${pageBreak}">
@@ -60,16 +73,22 @@ export const printStickerElements = async ({
       <head>
         <title>${title}</title>
         <style>
-          @import url("https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap");
           @page { size: ${pageWmm}mm ${pageHmm}mm; margin: 0; }
-          html, body { margin: 0; padding: 0; }
-          body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; font-family: Inter, Roboto, Helvetica, Arial, sans-serif; }
-          .page { display: flex; justify-content: center; align-items: center; overflow: hidden; }
-          .sticker-wrap { display: block; overflow: hidden; }
-          /* Force sticker to print at the exact designer size (mm), not the inline px size. */
+          html, body { margin: 0; padding: 0; width: ${pageWmm}mm; height: ${pageHmm}mm; }
+          body {
+            background: white;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            overflow: hidden;
+          }
+          /* Do not center or scale: print at (0,0) for a true 1:1 output. */
+          .page { position: relative; overflow: hidden; }
+          .sticker-wrap { position: absolute; left: 0; top: 0; overflow: hidden; }
+          /* If a sticker uses the canonical class, ensure it fills the page exactly. */
           .sticker-wrap > .actual-sticker-container { width: 100% !important; height: 100% !important; }
           svg { shape-rendering: crispEdges; }
-          .actual-sticker-container { background: #fff; }
+          /* Never print editor chrome/handles/icons. */
+          .sticker-lock-icon, .rnd-resize-handle, .react-resizable-handle, .resize-handle, .drag-handle { display: none !important; }
         </style>
       </head>
       <body>
