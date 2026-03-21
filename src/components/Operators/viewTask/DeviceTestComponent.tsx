@@ -496,9 +496,21 @@ export default function DeviceTestComponent({
       return "";
     }
   };
+  const getAttemptStageName = () =>
+    String(
+      processAssignUserStage?.name ||
+        processAssignUserStage?.stage ||
+        assignUserStage?.name ||
+        assignUserStage?.stage ||
+        assignedTaskDetails?.stageName ||
+        "",
+    ).trim();
+  const getAttemptKey = (serialOrDeviceId: string, stageName?: string) =>
+    `${String(serialOrDeviceId || "").trim()}::${String(stageName || getAttemptStageName()).trim()}`;
   const registerAttempt = async (serialNo: string, deviceId?: string) => {
     const planId = getPlanIdFromUrl();
     const processId = processData?._id || assignedTaskDetails?.processId || "";
+    const stageName = getAttemptStageName();
     if (!planId || !processId || (!serialNo && !deviceId)) return;
     try {
       const response = await registerDeviceAttempt({
@@ -507,9 +519,10 @@ export default function DeviceTestComponent({
         planId,
         processId,
         operatorId: getCurrentUserId(),
+        stageName,
       });
       if (response?.attemptCount != null) {
-        const key = serialNo || deviceId;
+        const key = getAttemptKey(serialNo || deviceId || "", stageName);
         setAttemptCounts((prev) => ({ ...prev, [key]: response.attemptCount }));
       }
     } catch (error) {
@@ -558,14 +571,14 @@ export default function DeviceTestComponent({
       return;
     }
 
-    const key = String(searchResult || "");
+    const key = getAttemptKey(String(searchResult || ""));
     const count = attemptCounts[key] || 0;
     if (count >= 3 && !showNGModal) {
       setNgReason("Auto NG after 3 attempts");
       setNgDescription("");
       setShowNGModal(true);
     }
-  }, [attemptCounts, searchResult, showNGModal, ngReason, processAssignUserStage]);
+  }, [attemptCounts, searchResult, showNGModal, ngReason, processAssignUserStage, assignUserStage, assignedTaskDetails]);
 
   const handleJigIdentification = async (capturedFields: any) => {
     setIsJigSearching(true);
@@ -1617,8 +1630,9 @@ export default function DeviceTestComponent({
     if (!Array.isArray(selectedLogs) || selectedLogs.length === 0) return;
 
     const safeTime = (value: any) => {
+      if (!value) return "N/A";
       const time = new Date(value).getTime();
-      return Number.isNaN(time) ? "N/A" : new Date(value).toLocaleString();
+      return Number.isNaN(time) ? String(value) : new Date(value).toLocaleString();
     };
 
     const content = selectedLogs
@@ -1637,7 +1651,8 @@ export default function DeviceTestComponent({
         const terminalLogs = Array.isArray(logGroup?.logData?.terminalLogs)
           ? logGroup.logData.terminalLogs
               .map((log: any) => {
-                const timestamp = safeTime(log?.timestamp);
+                const timestamp =
+                  log?.displayTimestamp || safeTime(log?.timestamp);
                 const type = log?.type || "log";
                 const message = log?.message || "";
                 return `[${timestamp}] [${type}] ${message}`;
@@ -1663,6 +1678,22 @@ export default function DeviceTestComponent({
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const formatHistoryLogTime = (log: any) => {
+    if (log?.displayTimestamp) return log.displayTimestamp;
+    const raw = log?.timestamp;
+    if (!raw) return "N/A";
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toLocaleTimeString([], {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+    }
+    return String(raw);
   };
 
 
@@ -2521,7 +2552,7 @@ export default function DeviceTestComponent({
                               <span className="text-[10px] font-black uppercase tracking-widest">Active Asset</span>
                             </div>
                             <div className="mt-2 rounded-full bg-indigo-500/20 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-indigo-100">
-                              Attempts: {attemptCounts[String(searchResult || "")] ?? 0}
+                              Attempts: {attemptCounts[getAttemptKey(String(searchResult || ""))] ?? 0}
                             </div>
                           </div>
                         </div>
@@ -2695,7 +2726,7 @@ export default function DeviceTestComponent({
                       />
                       {searchResult && (
                         <div className="mt-2 text-xs font-semibold text-indigo-600">
-                          Attempts: {attemptCounts[String(searchResult || "")] ?? 0}
+                          Attempts: {attemptCounts[getAttemptKey(String(searchResult || ""))] ?? 0}
                         </div>
                       )}
                     </>
@@ -4617,12 +4648,7 @@ export default function DeviceTestComponent({
                       <div key={lIndex} className="flex gap-2">
                         <span className="shrink-0 text-gray-600">
                           [
-                          {new Date(log.timestamp).toLocaleTimeString([], {
-                            hour12: false,
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            second: "2-digit",
-                          })}
+                          {formatHistoryLogTime(log)}
                           ]
                         </span>
                         <span
