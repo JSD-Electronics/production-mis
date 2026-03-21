@@ -949,9 +949,17 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           ? processAssignUserStage[0]
           : processAssignUserStage;
 
-        const testSteps = processStageData?.subSteps?.filter(
-          (s: any) => !s?.disabled && (s.stepType === "jig" || s.stepType === "manual")
-        ) || [];
+        const testSteps =
+          processStageData?.subSteps?.filter(
+            (s: any) =>
+              !s?.disabled &&
+              (
+                s.stepType === "jig" ||
+                s.stepType === "manual" ||
+                s.isPrinterEnable ||
+                s.isPackagingStatus
+              ),
+          ) || [];
 
         // 
 
@@ -961,42 +969,11 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           const result = subStepResults[key]; // { status, reason, data, timeTaken }
           const stepDef = testSteps[index];
 
-          // Optimize terminal logs to reduce payload size
-          let terminalLogs = result.data?.terminalLogs || [];
-          if (terminalLogs.length > 0) {
-            // Keep only important logs: errors, success, info (config/decisions), and sample data
-            const importantLogs = terminalLogs.filter((log: any) =>
-              log.type === 'error' ||
-              log.type === 'success' ||
-              log.type === 'info' ||
-              log.message.includes('Decision:') ||
-              log.message.includes('Config:') ||
-              log.message.includes('STARTING STEP')
-            );
-
-            // If we filtered too much, keep some data logs as samples
-            if (importantLogs.length < 10 && terminalLogs.length > importantLogs.length) {
-              const dataLogs = terminalLogs.filter((log: any) => log.type === 'data');
-              // Add first and last few data logs
-              const sampleDataLogs = [
-                ...dataLogs.slice(0, 3),
-                ...dataLogs.slice(-3)
-              ];
-              terminalLogs = [...importantLogs, ...sampleDataLogs]
-                .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-            } else {
-              terminalLogs = importantLogs;
-            }
-
-            // Limit to max 50 logs per step
-            if (terminalLogs.length > 50) {
-              terminalLogs = [
-                ...terminalLogs.slice(0, 25),
-                { timestamp: '...', message: `[${terminalLogs.length - 50} logs omitted]`, type: 'info' },
-                ...terminalLogs.slice(-25)
-              ];
-            }
-          }
+          // Preserve the full terminal history so the logs modal can show
+          // the complete command -> response -> validation flow.
+          const terminalLogs = Array.isArray(result.data?.terminalLogs)
+            ? result.data.terminalLogs
+            : [];
 
           return {
             stepName: stepDef?.stepName || stepDef?.name || "Unknown Step",

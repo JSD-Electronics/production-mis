@@ -26,6 +26,7 @@ interface JigSectionProps {
 
 interface LogEntry {
   timestamp: string;
+  displayTimestamp?: string;
   message: string;
   type?: "info" | "success" | "error" | "data";
 }
@@ -49,6 +50,20 @@ const formatTimestamp = () => {
     second: "2-digit",
     fractionalSecondDigits: 3,
   });
+};
+
+const formatDisplayTimestamp = (value?: string) => {
+  if (!value) return "N/A";
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleTimeString([], {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  }
+  return value;
 };
 
 const parseKeyValue = (key: string, source: string): string | null => {
@@ -252,7 +267,12 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
   }, [onStatusUpdate]);
 
   const addLog = useCallback((message: string, type: LogEntry["type"] = "data") => {
-    const newEntry = { timestamp: formatTimestamp(), message, type };
+    const newEntry = {
+      timestamp: new Date().toISOString(),
+      displayTimestamp: formatTimestamp(),
+      message,
+      type,
+    };
     persistentLogsRef.current.push(newEntry);
     setLogs((prev) => {
       const newLogs = [...prev, newEntry];
@@ -261,6 +281,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
   }, []);
 
   const currentStepIdRef = useRef<string | null>(null);
+  const currentStepLogStartIndexRef = useRef(0);
 
   // No longer clearing logs on subStep change to preserve history for download
   useEffect(() => {
@@ -269,6 +290,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       currentStepIdRef.current = stepId;
       accumulatedDataRef.current = "";
       stepStartTime.current = Date.now();
+      currentStepLogStartIndexRef.current = persistentLogsRef.current.length;
       const actionType = subStep.stepFields?.actionType || "Process";
       addLog(`--- STARTING STEP: ${stepId} (${actionType}) ---`, "info");
 
@@ -765,6 +787,33 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
           const status = allPassed ? "Pass" : "NG";
           const reasonStr = !allPassed ? failedFields.join(", ") : undefined;
 
+          const resultSummary = currentSubStep.jigFields
+            .map((field: any) => {
+              const fieldName = field.jigName;
+              let val =
+                parsedData[fieldName] && typeof parsedData[fieldName] === "string"
+                  ? parsedData[fieldName]
+                  : undefined;
+              if (val === undefined) {
+                for (const sectionKey in parsedData) {
+                  if (
+                    typeof parsedData[sectionKey] === "object" &&
+                    parsedData[sectionKey][fieldName] &&
+                    typeof parsedData[sectionKey][fieldName] === "string"
+                  ) {
+                    val = parsedData[sectionKey][fieldName];
+                    break;
+                  }
+                }
+              }
+              return val !== undefined ? `${fieldName}=${String(val).trim()}` : null;
+            })
+            .filter(Boolean);
+
+          if (resultSummary.length > 0) {
+            addLog(`Result: ${resultSummary.join(", ")}`, allPassed ? "success" : "info");
+          }
+
           if (allPassed) {
             const duration = ((Date.now() - stepStartTime.current) / 1000).toFixed(2);
             addLog(`Step Duration: ${duration}s`, "success");
@@ -804,8 +853,11 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
           // Include complete terminal logs in the data
           const dataWithLogs = {
             ...collectedData,
-            terminalLogs: persistentLogsRef.current.map(log => ({
+            terminalLogs: persistentLogsRef.current
+              .slice(currentStepLogStartIndexRef.current)
+              .map(log => ({
               timestamp: log.timestamp,
+              displayTimestamp: log.displayTimestamp,
               message: log.message,
               type: log.type
             })),
@@ -1440,7 +1492,9 @@ const TerminalOutput = ({ logs, onClear, onDownload, onSend, connected, expanded
         ) : (
           logs.map((log, i) => (
             <div key={i} className="flex gap-3 hover:bg-white/5">
-              <span className="shrink-0 select-none text-gray-400 font-medium">[{log.timestamp}]</span>
+              <span className="shrink-0 select-none text-gray-400 font-medium">
+                [{log.displayTimestamp || formatDisplayTimestamp(log.timestamp)}]
+              </span>
               <span className={`break-all tracking-wide ${log.type === 'error' ? 'text-red-400 font-bold' :
                 log.type === 'success' ? 'text-green-400 font-bold' :
                   log.type === 'info' ? 'text-cyan-400 font-semibold' :
