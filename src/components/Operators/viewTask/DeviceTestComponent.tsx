@@ -1,6 +1,7 @@
 "use client";
 import Modal from "@/components/Modal/page";
 import { useQRCode } from "next-qrcode";
+import { QRCodeSVG } from "qrcode.react";
 import SearchableInput from "@/components/SearchableInput/SearchableInput";
 import CartonSearchableInput from "@/components/SearchableInput/CartonSearchableInput";
 import NGModel from "@/components/Operators/viewTask/components/NGModal";
@@ -20,6 +21,7 @@ import {
   updateMarkAsComplete,
   createProcessLogs,
   registerDeviceAttempt,
+  verifyCartonSticker,
 } from "@/lib/api";
 import {
   Zap,
@@ -141,7 +143,7 @@ interface DeviceTestComponentProps {
   handleVerifyPackaging: () => void;
   handleVerifyPackagingModal: () => void;
   closeVerifyPackagingModal: () => void;
-  handlePrintCartonSticker: () => void;
+  handlePrintCartonSticker: (elementId?: string) => void | Promise<void>;
   historyFilterDate: string;
   setHistoryFilterDate: (date: string) => void;
   handlePauseResume: () => void;
@@ -219,6 +221,63 @@ export default function DeviceTestComponent({
   handleStop,
 }: DeviceTestComponentProps) {
   const isCommon = assignedTaskDetails?.stageType === "common";
+  const currentStageName =
+    (Array.isArray(assignUserStage) ? assignUserStage?.[0]?.name : null) ||
+    assignUserStage?.stage ||
+    assignUserStage?.name ||
+    "";
+  const isPDIStage = currentStageName === "PDI";
+  const isFGToStoreStage = currentStageName === "FG to Store";
+
+  const cartonStickerTemplate = React.useMemo(() => {
+    const fromProcess = processAssignUserStage?.subSteps?.find(
+      (s: any) => s?.isPackagingStatus && !s?.disabled,
+    )?.packagingData;
+    const fromAssign = (assignUserStage as any)?.subSteps?.find(
+      (s: any) => s?.isPackagingStatus && !s?.disabled,
+    )?.packagingData;
+
+    const fromAnyStage = (() => {
+      const stages = Array.isArray(processData?.stages) ? processData.stages : [];
+      for (const st of stages) {
+        const sub = st?.subSteps?.find(
+          (s: any) =>
+            s?.isPackagingStatus &&
+            !s?.disabled &&
+            Array.isArray(s?.packagingData?.fields),
+        );
+        if (sub?.packagingData) return sub.packagingData;
+      }
+      return null;
+    })();
+
+    const candidate = fromProcess || fromAssign || fromAnyStage || null;
+    return Array.isArray(candidate?.fields) ? candidate : null;
+  }, [processAssignUserStage, assignUserStage, processData?.stages]);
+
+  const getDeviceModelText = (device: any) =>
+    device?.modelName || device?.model || device?.productModel || "N/A";
+
+  const getDeviceImeiText = (device: any) => {
+    const imeiDirect = device?.imeiNo || device?.imei || "";
+    if (imeiDirect) return imeiDirect;
+
+    const cf = device?.customFields;
+    if (!cf || typeof cf !== "object") return "N/A";
+
+    for (const stageKey of Object.keys(cf)) {
+      const stageObj = (cf as any)?.[stageKey];
+      if (!stageObj || typeof stageObj !== "object") continue;
+      for (const k of Object.keys(stageObj)) {
+        if (String(k).toLowerCase() === "imei") {
+          const v = String(stageObj[k] ?? "").trim();
+          if (v) return v;
+        }
+      }
+    }
+
+    return "N/A";
+  };
 
   const [multiScanValues, setMultiScanValues] = useState<string[]>([]);
   useEffect(() => {
@@ -242,8 +301,13 @@ export default function DeviceTestComponent({
     }
   }, [processData?._id]);
 
-  const { Canvas } = useQRCode();
+  // Keep next-qrcode for other parts of the page, but carton sticker uses qrcode.react (SVG)
+  // for stable DOM printing without canvas cloning issues.
+  const { SVG } = useQRCode();
   const [qrCartons, setQrCartons] = useState<{ [key: string]: boolean }>({});
+  const [generatedCartonSticker, setGeneratedCartonSticker] = useState<
+    Record<string, boolean>
+  >({});
   const [todaySummary, setTodaySummary] = useState<any>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSopOpen, setIsSopOpen] = useState(true);
@@ -285,6 +349,81 @@ export default function DeviceTestComponent({
   const [loadingCartonDevices, setLoadingCartonDevices] = useState(false);
   const [isCartonsLoading, setIsCartonsLoading] = useState(false);
   const [showNGModal, setShowNGModal] = useState(false);
+
+  const selectedCartonObj = React.useMemo(() => {
+    if (!selectedCarton) return null;
+    const list = Array.isArray(cartonDetails) ? cartonDetails : [];
+    return list.find((c: any) => c?.cartonSerial === selectedCarton) || null;
+  }, [selectedCarton, cartonDetails]);
+  const isSelectedCartonVerified = Boolean((selectedCartonObj as any)?.isStickerVerified);
+
+  const cartonLabelData = React.useMemo(() => {
+    if (!selectedCarton) return null;
+
+    const carton = selectedCartonObj || {};
+    const size = carton?.cartonSize || {};
+    const p = carton?.packagingData || carton?.packagingData?.packagingData || {};
+
+    const w = size?.width ?? p?.cartonWidth;
+    const h = size?.height ?? p?.cartonHeight;
+    const d = size?.depth ?? p?.cartonDepth;
+    const dimensionsCm =
+      w != null && h != null && d != null ? `${w}*${h}*${d}CM` : "N/A";
+
+    const processName =
+      processData?.processName ||
+      processData?.name ||
+      processData?.processCode ||
+      "N/A";
+
+    const modelName =
+      product?.selectedProduct?.name || product?.name || product?.modelName || "N/A";
+
+    return {
+      cartonSerial: selectedCarton,
+      serialNo: selectedCarton,
+      deviceCount: Array.isArray(cartonDevices) ? cartonDevices.length : 0,
+      maxCapacity: carton?.maxCapacity ?? p?.maxCapacity ?? "",
+      processName,
+      productName: product?.name || "N/A",
+      modelName,
+      dimensionsCm,
+      weightCarton: carton?.weightCarton ?? p?.cartonWeight ?? "",
+      createdAt: carton?.createdAt || new Date().toISOString(),
+    };
+  }, [selectedCarton, selectedCartonObj, cartonDevices, processData, product]);
+
+  // Carton sticker is a fixed physical label: 80mm x 40mm.
+  const cartonStickerMm = { w: 80, h: 40 };
+  const cartonStickerPx = {
+    w: Math.round(cartonStickerMm.w / 0.264583),
+    h: Math.round(cartonStickerMm.h / 0.264583),
+  };
+  const packagingDescriptionHtml = React.useMemo(() => {
+    const stageName = String(
+      assignUserStage?.stage || assignedTaskDetails?.stageName || "",
+    );
+    const productStage = product?.stages?.find(
+      (st: any) => String(st?.stageName || st?.name || "") === stageName,
+    );
+    const subSteps =
+      (Array.isArray(processAssignUserStage?.subSteps) &&
+      processAssignUserStage.subSteps.length > 0
+        ? processAssignUserStage.subSteps
+        : Array.isArray(productStage?.subSteps)
+          ? productStage.subSteps
+          : []) || [];
+    const packagingStep = subSteps.find(
+      (s: any) => s?.isPackagingStatus && !s?.disabled,
+    );
+
+    return packagingStep?.description ? String(packagingStep.description) : "";
+  }, [
+    assignUserStage?.stage,
+    assignedTaskDetails?.stageName,
+    processAssignUserStage?.subSteps,
+    product?.stages,
+  ]);
   const [ngReason, setNgReason] = useState<string | null>(null);
   const [ngDescription, setNgDescription] = useState<string>("");
   const [jigDecision, setJigDecision] = useState<"Pass" | "NG" | null>(null);
@@ -309,7 +448,21 @@ export default function DeviceTestComponent({
     useState(false);
   const [isVerifyCartonModal, setIsVerifyCartonModal] = useState(false);
   const [selectedLogs, setSelectedLogs] = useState<any[]>([]);
+  const [selectedLogsTitle, setSelectedLogsTitle] =
+    useState("Detailed Step Logs");
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
+  const [isCartonDeviceHistoryOpen, setIsCartonDeviceHistoryOpen] =
+    useState(false);
+  const [cartonDeviceHistorySerial, setCartonDeviceHistorySerial] =
+    useState<string>("");
+  const [cartonDeviceHistoryRows, setCartonDeviceHistoryRows] = useState<any[]>(
+    [],
+  );
+  const [isCartonDeviceHistoryLoading, setIsCartonDeviceHistoryLoading] =
+    useState(false);
+  // Cache process-level records to avoid refetching the full dataset on each history click.
+  const processTestRecordsRef = React.useRef<any[] | null>(null);
+  const processTestRecordsPromiseRef = React.useRef<Promise<any[]> | null>(null);
   const [isCartonPopupOpen, setIsCartonPopupOpen] = useState(false);
   const [manualFieldValues, setManualFieldValues] = useState<
     Record<string, string>
@@ -460,12 +613,24 @@ export default function DeviceTestComponent({
     }
   };
 
-  const handleVerifyCarton = (scannedValue: string) => {
-    if (scannedValue === selectedCarton) {
-      alert("Carton Verified Successfully!");
+  const handleVerifyCarton = async (scannedValue: string) => {
+    const v = String(scannedValue || "").trim();
+    if (!selectedCarton) {
+      toast.error("No carton selected");
+      return;
+    }
+    if (v !== String(selectedCarton).trim()) {
+      toast.error("Incorrect carton serial. Please scan the correct carton.");
+      return;
+    }
+
+    try {
+      await verifyCartonSticker(String(selectedCarton));
+      toast.success("Carton verified successfully!");
       setIsVerifyCartonModal(false);
-    } else {
-      alert("Incorrect Carton Serial! Please scan the correct carton.");
+      fetchProcessCartons();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || e?.message || "Verification failed");
     }
   };
 
@@ -1272,6 +1437,234 @@ export default function DeviceTestComponent({
     }
   };
 
+  const ensureProcessRecords = async () => {
+    if (Array.isArray(processTestRecordsRef.current)) {
+      return processTestRecordsRef.current;
+    }
+    if (processTestRecordsPromiseRef.current) {
+      return processTestRecordsPromiseRef.current;
+    }
+
+    const promise = (async () => {
+      const recordResult = await getDeviceTestRecordsByProcessId(processData._id);
+      const all = Array.isArray(recordResult?.deviceTestRecords)
+        ? recordResult.deviceTestRecords
+        : [];
+      processTestRecordsRef.current = all;
+      return all;
+    })();
+
+    processTestRecordsPromiseRef.current = promise;
+    try {
+      return await promise;
+    } finally {
+      processTestRecordsPromiseRef.current = null;
+    }
+  };
+
+  const openCartonDeviceHistory = async (serialNo: string) => {
+    if (!serialNo) return;
+
+    // Open first so any global "outside click" handlers don't immediately close it
+    // due to the same click event that triggered open.
+    setCartonDeviceHistorySerial(String(serialNo));
+    setCartonDeviceHistoryRows([]);
+    setIsCartonDeviceHistoryOpen(true);
+
+    if (!processData?._id) return;
+
+    setIsCartonDeviceHistoryLoading(true);
+    try {
+      // Yield one frame so the modal paints immediately, even if the request/processing is heavy.
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+
+      const allRecords = await ensureProcessRecords();
+      const targetSerial = String(serialNo);
+
+      // Fast filter without mapping the full array first.
+      const rows: any[] = [];
+      for (const r of allRecords) {
+        if (String(r?.serialNo || "") !== targetSerial) continue;
+        rows.push({
+          _id: r?._id,
+          serialNo: r?.serialNo,
+          stageName: r?.stageName || r?.name || "N/A",
+          status: r?.status || "N/A",
+          assignedDeviceTo: r?.assignedDeviceTo || r?.assignedDeviceToDepartment || "",
+          operator: r?.operatorName || r?.operator || r?.operatorId || "",
+          createdAt: r?.createdAt || r?.updatedAt,
+          logs: Array.isArray(r?.logs) ? r.logs : [],
+        });
+      }
+
+      rows.sort((a: any, b: any) => {
+        const at = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bt = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bt - at;
+      });
+
+      setCartonDeviceHistoryRows(rows);
+    } catch (e: any) {
+      toast.error(e?.message || "Unable to load device history");
+    } finally {
+      setIsCartonDeviceHistoryLoading(false);
+    }
+  };
+
+  const openStageLogs = async (stageName: string, stageHistories: any[] = []) => {
+    const targetSerial =
+      typeof searchResult === "string"
+        ? searchResult
+        : searchResult?.serialNo || "";
+
+    if (!targetSerial || !stageName || !processData?._id) return;
+
+    setSelectedLogs([]);
+    setSelectedLogsTitle(`${stageName} Logs`);
+    setIsLogsModalOpen(true);
+
+    try {
+      let stageRecords = Array.isArray(stageHistories) ? [...stageHistories] : [];
+
+      if (stageRecords.length === 0) {
+        const allRecords = await ensureProcessRecords();
+        const normalizedStage = String(stageName).trim().toLowerCase();
+
+        stageRecords = allRecords.filter((record: any) => {
+          const recordSerial = String(record?.serialNo || "").trim();
+          const recordStage = String(
+            record?.stageName || record?.name || "",
+          )
+            .trim()
+            .toLowerCase();
+
+          return (
+            recordSerial === String(targetSerial).trim() &&
+            recordStage === normalizedStage
+          );
+        });
+      }
+
+      const normalizedRecords = stageRecords
+        .sort((a: any, b: any) => {
+          const at = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bt = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bt - at;
+        });
+
+      const stageLogs = normalizedRecords.flatMap((record: any) => {
+        if (!Array.isArray(record?.logs) || record.logs.length === 0) {
+          return [
+            {
+              stepName: record?.stageName || record?.name || stageName,
+              status: record?.status || "N/A",
+              createdAt:
+                record?.createdAt ||
+                record?.updatedAt ||
+                new Date().toISOString(),
+              logData: {
+                terminalLogs: Array.isArray(record?.logData?.terminalLogs)
+                  ? record.logData.terminalLogs
+                  : [],
+                reason: record?.logData?.reason || record?.reason,
+                description:
+                  record?.logData?.description || record?.ngDescription || "",
+              },
+            },
+          ];
+        }
+
+        return record.logs.map((logGroup: any) => ({
+          ...logGroup,
+          stepName:
+            logGroup?.stepName ||
+            record?.stageName ||
+            record?.name ||
+            stageName,
+          status: logGroup?.status || record?.status || "N/A",
+          createdAt:
+            logGroup?.createdAt ||
+            record?.createdAt ||
+            record?.updatedAt ||
+            new Date().toISOString(),
+          logData: {
+            terminalLogs: Array.isArray(logGroup?.logData?.terminalLogs)
+              ? logGroup.logData.terminalLogs
+              : [],
+            parsedData: logGroup?.logData?.parsedData,
+            reason:
+              logGroup?.logData?.reason ||
+              record?.logData?.reason ||
+              record?.reason,
+            description:
+              logGroup?.logData?.description ||
+              record?.logData?.description ||
+              record?.ngDescription ||
+              "",
+            timeTaken: logGroup?.logData?.timeTaken,
+          },
+        }));
+      });
+
+      setSelectedLogs(stageLogs);
+    } catch (error: any) {
+      setSelectedLogs([]);
+      toast.error(error?.message || "Unable to load stage logs");
+    }
+  };
+
+  const downloadSelectedLogs = () => {
+    if (!Array.isArray(selectedLogs) || selectedLogs.length === 0) return;
+
+    const safeTime = (value: any) => {
+      const time = new Date(value).getTime();
+      return Number.isNaN(time) ? "N/A" : new Date(value).toLocaleString();
+    };
+
+    const content = selectedLogs
+      .map((logGroup: any, index: number) => {
+        const header = [
+          `Step: ${logGroup?.stepName || `Step ${index + 1}`}`,
+          `Status: ${logGroup?.status || "N/A"}`,
+          `Created At: ${safeTime(logGroup?.createdAt)}`,
+          logGroup?.logData?.reason
+            ? `Reason: ${logGroup.logData.reason}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        const terminalLogs = Array.isArray(logGroup?.logData?.terminalLogs)
+          ? logGroup.logData.terminalLogs
+              .map((log: any) => {
+                const timestamp = safeTime(log?.timestamp);
+                const type = log?.type || "log";
+                const message = log?.message || "";
+                return `[${timestamp}] [${type}] ${message}`;
+              })
+              .join("\n")
+          : "No terminal logs available for this step.";
+
+        return `${header}\n\n${terminalLogs}`;
+      })
+      .join("\n\n----------------------------------------\n\n");
+
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${selectedLogsTitle
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "logs"}-${new Date()
+      .toISOString()
+      .replace(/[:.]/g, "-")}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
 
   const handleShiftToNextStage = async (cartonSerial: any) => {
     if (!cartonSerial) {
@@ -1371,7 +1764,7 @@ export default function DeviceTestComponent({
 
   return (
     <>
-      {/* SOP Section */}
+      {/* SOP Section
       <div className="mt-4 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all duration-300">
         <button
           onClick={() => setIsSopOpen(!isSopOpen)}
@@ -1443,6 +1836,7 @@ export default function DeviceTestComponent({
           </div>
         )}
       </div>
+      */}
 
       {/* Devices Section */}
       <div className="mt-4 rounded-xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm">
@@ -1554,146 +1948,446 @@ export default function DeviceTestComponent({
                 </div>
 
                 {/* 2. Unified Search Area */}
-                <div className="bg-white rounded-3xl border-2 border-slate-100 p-4 sm:p-6 lg:p-8 shadow-xl shadow-slate-200/50">
-                  <div className="flex flex-col md:flex-row items-center gap-4 sm:gap-6">
-                    <div className="flex-1 w-full space-y-2">
-                      <label className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400 ml-4">
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 lg:p-6 shadow-sm">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
                         <Search className="h-4 w-4" />
-                        Scan Carton Serial or Device IMEI
-                      </label>
-                      <div className="relative group">
-                        <input
-                          type="text"
-                          placeholder="SCAN OR TYPE SERIAL..."
-                          className="w-full h-12 sm:h-14 lg:h-16 pl-12 sm:pl-14 pr-6 sm:pr-8 rounded-2xl bg-slate-50 border-2 border-slate-100 text-base sm:text-lg lg:text-xl font-black tracking-tight text-slate-800 placeholder:text-slate-300 transition-all focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              const val = e.currentTarget.value.trim();
-                              // First check cartons
-                              const matchedCarton = (cartonSerial || []).find(c => c === val);
-                              if (matchedCarton) {
-                                handleSearchCarton(val);
-                                setSearchResult(""); // Clear device
-                                e.currentTarget.value = "";
-                                return;
-                              }
-                              // Then check devices
-                              const matchedDevice = deviceList.find(d => d.serialNo === val || d.imeiNo === val);
-                              if (matchedDevice) {
-                                setSearchResult(matchedDevice.serialNo);
-                                setSelectedCarton(null); // Clear carton
-                                if (matchedDevice?._id) {
-                                  getDeviceById(matchedDevice._id);
-                                }
-                                registerAttempt(
-                                  String(matchedDevice?.serialNo || ""),
-                                  String(matchedDevice?._id || "")
-                                );
-                                e.currentTarget.value = "";
-                                return;
-                              }
-                              toast.warning("Item not found in this stage");
-                            }
-                          }}
-                        />
-                        <Barcode className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 h-5 w-5 sm:h-6 sm:w-6 text-slate-300 group-focus-within:text-indigo-500 transition-colors" />
+                        <span className="truncate">Scan Carton Serial or Device IMEI</span>
+                      </div>
+                      <div className="mt-1 text-xs font-medium text-slate-400">
+                        Scan or type, then press Enter to search.
                       </div>
                     </div>
-                    <div className="w-full md:w-auto h-12 sm:h-14 lg:h-16 flex items-center gap-2 rounded-2xl bg-slate-50 border-2 border-slate-100 p-2">
-                      <button className="flex-1 h-full px-4 sm:px-6 flex items-center justify-center gap-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all active:scale-95">
-                        <ScanLine className="h-4 w-4" />
+
+                    <div className="flex items-center gap-2 md:shrink-0">
+                      <button
+                        type="button"
+                        className="h-11 px-4 rounded-xl border border-slate-200 bg-white text-xs font-black uppercase tracking-[0.14em] text-slate-700 hover:bg-slate-50 active:scale-[0.99] transition inline-flex items-center gap-2"
+                      >
+                        <ScanLine className="h-4 w-4 text-slate-500" />
                         Auto-Scan
                       </button>
                     </div>
                   </div>
 
-                  {/* Suggestions Row */}
-                  <div className="mt-6 flex flex-wrap gap-2 overflow-x-auto pb-2">
-                    <span className="text-[10px] font-black uppercase text-slate-300 self-center mr-2">Quick Access:</span>
-                    {(cartonSerial || []).slice(0, 5).map(c => (
-                      <button
-                        key={c}
-                        onClick={() => handleSearchCarton(c)}
-                        className="px-4 py-2 rounded-xl bg-indigo-50 border border-indigo-100 text-xs font-bold text-indigo-600 hover:bg-indigo-100 transition-all active:scale-95"
-                      >
-                        {c}
-                      </button>
-                    ))}
+                  <div className="mt-4">
+                    <div className="relative">
+                      <Barcode className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-300" />
+                      <input
+                        type="text"
+                        placeholder="Scan or type..."
+                        className="w-full h-12 pl-11 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-sm sm:text-base font-semibold text-slate-900 placeholder:text-slate-400 transition-colors focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const val = e.currentTarget.value.trim();
+                            // First check cartons
+                            const matchedCarton = (cartonSerial || []).find((c) => c === val);
+                            if (matchedCarton) {
+                              handleSearchCarton(val);
+                              setSearchResult(""); // Clear device
+                              e.currentTarget.value = "";
+                              return;
+                            }
+                            // Then check devices
+                            const matchedDevice = deviceList.find(
+                              (d) => d.serialNo === val || d.imeiNo === val,
+                            );
+                            if (matchedDevice) {
+                              setSearchResult(matchedDevice.serialNo);
+                              setSelectedCarton(null); // Clear carton
+                              if (matchedDevice?._id) {
+                                getDeviceById(matchedDevice._id);
+                              }
+                              registerAttempt(
+                                String(matchedDevice?.serialNo || ""),
+                                String(matchedDevice?._id || ""),
+                              );
+                              e.currentTarget.value = "";
+                              return;
+                            }
+                            toast.warning("Item not found in this stage");
+                          }
+                        }}
+                      />
+                    </div>
                   </div>
+
+                  {/* Quick Access */}
+                  {(cartonSerial || []).length > 0 && (
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
+                        Quick Access:
+                      </span>
+                      {(cartonSerial || []).slice(0, 6).map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => handleSearchCarton(c)}
+                          className="px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-100 text-xs font-bold text-indigo-700 hover:bg-indigo-100 active:scale-[0.99] transition"
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* 3. Detailed Results Section */}
                 <div className="relative">
                   {/* IF CARTON SELECTED */}
                   {selectedCarton && (
-                    <div className="animate-in fade-in zoom-in-95 duration-500 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+                    <div className="animate-in fade-in zoom-in-95 duration-500 grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] gap-6 lg:gap-8">
                       {/* Left: Carton Identity Card */}
-                      <div className="lg:col-span-4 space-y-6">
-                        <div className="group bg-white rounded-3xl border border-slate-100 p-5 sm:p-7 lg:p-8 shadow-2xl shadow-indigo-100 overflow-hidden relative">
-                          <div className="absolute top-0 right-0 p-8 opacity-[0.05] group-hover:scale-110 transition-transform duration-700">
-                            <Package className="h-48 w-48 text-indigo-600" />
+                      <div className="space-y-6 lg:sticky lg:top-6 self-start">
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                          <div className="p-5 sm:p-6">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex items-start gap-3 min-w-0">
+                                <span className="shrink-0 h-10 w-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
+                                  <Box className="h-5 w-5" />
+                                </span>
+                                <div className="min-w-0">
+                                  <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
+                                    Carton Identity
+                                  </div>
+                                  <div className="mt-1 text-[18px] sm:text-[20px] font-extrabold text-slate-900 break-words leading-snug">
+                                    {selectedCarton}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <span
+                                className={
+                                  "shrink-0 inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] " +
+                                  (isSelectedCartonVerified
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                                    : "bg-amber-50 text-amber-700 border border-amber-100")
+                                }
+                              >
+                                {isSelectedCartonVerified ? "Verified" : "Pending"}
+                              </span>
+                            </div>
+
+                            <div className="mt-5 grid grid-cols-2 gap-3">
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                                <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500">Devices</div>
+                                <div className="mt-1 text-lg sm:text-xl font-extrabold text-slate-900">
+                                  {cartonDevices.length}
+                                  <span className="ml-1 text-xs font-bold text-slate-500">pcs</span>
+                                </div>
+                              </div>
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                                <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500">Stage</div>
+                                <div className="mt-1 text-base font-extrabold text-slate-900 truncate">
+                                  {String(assignUserStage?.stage || "N/A")}
+                                </div>
+                              </div>
+                            </div>
+
                           </div>
 
-                          <div className="relative z-10">
-                            <div className="flex items-center gap-3 mb-5 sm:mb-6">
-                              <span className="p-3 rounded-2xl bg-indigo-50 text-indigo-600">
-                                <Box className="h-6 w-6" />
-                              </span>
-                              <div>
-                                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Carton Identity</h4>
-                                <h2 className="text-xl sm:text-2xl font-black text-slate-800 break-all">{selectedCarton}</h2>
-                              </div>
-                            </div>
-
-                            <div className="space-y-4 mb-8">
-                              <div className="flex justify-between items-center p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                                <span className="text-xs font-bold text-slate-500">Total Devices</span>
-                                <span className="text-lg font-black text-slate-800">{cartonDevices.length} pcs</span>
-                              </div>
-                              <div className="flex justify-between items-center p-4 rounded-2xl bg-emerald-50 border border-emerald-100">
-                                <span className="text-xs font-bold text-emerald-600">Verification Status</span>
-                                <span className="text-xs font-black uppercase tracking-tighter text-emerald-700">
-                                  {cartonDetails.find(c => c.cartonSerial === selectedCarton)?.isStickerVerified ? 'Verified' : 'Pending'}
-                                </span>
-                              </div>
-                            </div>
-
+                          <div className="px-5 sm:px-6 py-5 border-t border-slate-100 bg-slate-50/40">
                             <div className="space-y-3">
-                              {!qrCartons[selectedCarton] ? (
-                                <button
-                                  onClick={() => handleCommonGenerateQRCode(selectedCarton)}
-                                  className="w-full py-5 rounded-2xl bg-indigo-600 text-white font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-200 hover:bg-indigo-700 hover:-translate-y-1 transition-all active:scale-95"
-                                >
-                                  Generate QR Label
-                                </button>
+                              {isPDIStage || isFGToStoreStage ? (
+                                !generatedCartonSticker[selectedCarton] ? (
+                                  <button
+                                    onClick={() =>
+                                      setGeneratedCartonSticker((prev) => ({
+                                        ...prev,
+                                        [selectedCarton]: true,
+                                      }))
+                                    }
+                                    className="w-full h-12 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-[0.18em] shadow-sm hover:bg-indigo-700 active:scale-[0.99] transition"
+                                  >
+                                    Generate Sticker
+                                  </button>
+                                ) : (
+                                  <div className="space-y-4">
+                                    <div
+                                      id={`carton-sticker-print-${selectedCarton}`}
+                                      aria-hidden="true"
+                                      style={{
+                                        position: "fixed",
+                                        left: "-10000px",
+                                        top: "-10000px",
+                                        width: `${cartonStickerMm.w}mm`,
+                                        height: `${cartonStickerMm.h}mm`,
+                                        overflow: "hidden",
+                                        pointerEvents: "none",
+                                        background: "#fff",
+                                      }}
+                                    >
+                                      <div
+                                        data-sticker-width={cartonStickerPx.w}
+                                        data-sticker-height={cartonStickerPx.h}
+                                        data-sticker-mm-width={cartonStickerMm.w}
+                                        data-sticker-mm-height={cartonStickerMm.h}
+                                        className="actual-sticker-container"
+                                        style={{
+                                          width: `${cartonStickerMm.w}mm`,
+                                          height: `${cartonStickerMm.h}mm`,
+                                          background: "#fff",
+                                          boxSizing: "border-box",
+                                          // Physical borders in mm to avoid DPI-dependent px scaling.
+                                          border: "0.6mm solid #000",
+                                          padding: "0.5mm",
+                                          fontFamily: "Arial, sans-serif",
+                                          color: "#000",
+                                          overflow: "hidden",
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            width: "100%",
+                                            height: "100%",
+                                            border: "0.3mm solid #000",
+                                            boxSizing: "border-box",
+                                            display: "grid",
+                                            // Strict 80x40mm layout: header + body in mm.
+                                            gridTemplateRows: "6mm 1fr",
+                                            overflow: "hidden",
+                                          }}
+                                        >
+                                          {/* Header */}
+                                          <div
+                                            style={{
+                                              borderBottom: "0.3mm solid #000",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              justifyContent: "center",
+                                              fontWeight: 900,
+                                              // mm-only font sizing for physical print stability
+                                              fontSize: "5mm",
+                                              lineHeight: 1,
+                                              textTransform: "uppercase",
+                                              padding: "0 2mm",
+                                              boxSizing: "border-box",
+                                              whiteSpace: "nowrap",
+                                              overflow: "hidden",
+                                              textOverflow: "ellipsis",
+                                            }}
+                                          >
+                                            {String(cartonLabelData?.modelName || "N/A").toUpperCase()}
+                                          </div>
+
+                                          {/* Body */}
+                                          <div
+                                            style={{
+                                              display: "grid",
+                                              gridTemplateColumns: "55% 45%",
+                                              height: "100%",
+                                            }}
+                                          >
+                                            {/* Left table */}
+                                            <div
+                                              style={{
+                                                display: "grid",
+                                                gridTemplateRows: "repeat(4, 1fr)",
+                                                borderRight: "0.3mm solid #000",
+                                              }}
+                                            >
+                                              {(() => {
+                                                const qty = `${Number(cartonLabelData?.deviceCount ?? 0) || 0} PCS`;
+                                                let weight = String(cartonLabelData?.weightCarton ?? "").trim();
+                                                if (!weight) weight = "N/A";
+                                                if (weight !== "N/A" && !/kg/i.test(weight)) weight = `${weight} KG`;
+
+                                                const rows: Array<[string, string]> = [
+                                                  ["MODEL:", String(cartonLabelData?.modelName || "N/A")],
+                                                  ["DIMENSIONS:", String(cartonLabelData?.dimensionsCm || "N/A")],
+                                                  ["QUANTITY:", qty],
+                                                  ["WEIGHT:", weight],
+                                                ];
+
+                                                return rows.map(([label, value], idx) => (
+                                                  <div
+                                                    key={idx}
+                                                    style={{
+                                                      borderBottom:
+                                                        idx === rows.length - 1
+                                                          ? "none"
+                                                          : "0.3mm solid #000",
+                                                      padding: "0.5mm 0.9mm 0.3mm",
+                                                      boxSizing: "border-box",
+                                                      display: "flex",
+                                                      flexDirection: "column",
+                                                      justifyContent: "center",
+                                                      minHeight: 0,
+                                                      overflow: "hidden",
+                                                    }}
+                                                  >
+                                                    <div
+                                                      style={{
+                                                        fontSize: "2.1mm",
+                                                        fontWeight: 900,
+                                                        lineHeight: 1,
+                                                        whiteSpace: "nowrap",
+                                                        overflow: "hidden",
+                                                        textOverflow: "ellipsis",
+                                                      }}
+                                                    >
+                                                      {label}
+                                                    </div>
+                                                    <div
+                                                      style={{
+                                                        marginTop: "0.3mm",
+                                                        fontSize: "3.3mm",
+                                                        fontWeight: 900,
+                                                        lineHeight: 1,
+                                                        whiteSpace: "nowrap",
+                                                        overflow: "hidden",
+                                                        textOverflow: "ellipsis",
+                                                      }}
+                                                    >
+                                                      {String(value || "N/A").toUpperCase()}
+                                                    </div>
+                                                  </div>
+                                                ));
+                                              })()}
+                                            </div>
+
+                                            {/* Right QR */}
+                                            <div
+                                              style={{
+                                                display: "grid",
+                                                gridTemplateRows: "4.5mm 1fr 4.5mm",
+                                                padding: "0.8mm 1mm 0.6mm",
+                                                boxSizing: "border-box",
+                                                alignItems: "center",
+                                                minHeight: 0,
+                                                overflow: "hidden",
+                                              }}
+                                            >
+                                              <div
+                                                style={{
+                                                  fontSize: "2.2mm",
+                                                  fontWeight: 900,
+                                                  lineHeight: 1,
+                                                  whiteSpace: "nowrap",
+                                                  overflow: "hidden",
+                                                  textOverflow: "ellipsis",
+                                                }}
+                                              >
+                                                MCQ SERIAL:
+                                              </div>
+                                              <div
+                                                style={{
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                  justifyContent: "center",
+                                                  minHeight: 0,
+                                                  overflow: "hidden",
+                                                }}
+                                              >
+                                                <div
+                                                  style={{
+                                                    width: "100%",
+                                                    height: "100%",
+                                                    maxWidth: "22mm",
+                                                    maxHeight: "22mm",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "center",
+                                                    overflow: "hidden",
+                                                  }}
+                                                >
+                                                  <QRCodeSVG
+                                                    value={String(cartonLabelData?.cartonSerial || selectedCarton)}
+                                                    level="M"
+                                                    marginSize={1}
+                                                    bgColor="#ffffff"
+                                                    fgColor="#000000"
+                                                    // Render large internally; size is controlled by the mm box above.
+                                                    size={512}
+                                                    style={{ width: "100%", height: "100%", display: "block" }}
+                                                  />
+                                                </div>
+                                              </div>
+                                              <div
+                                                style={{
+                                                  textAlign: "left",
+                                                  fontSize: "2.2mm",
+                                                  fontWeight: 900,
+                                                  lineHeight: 1,
+                                                  whiteSpace: "nowrap",
+                                                  overflow: "hidden",
+                                                  textOverflow: "ellipsis",
+                                                }}
+                                              >
+                                                {String(
+                                                  cartonLabelData?.cartonSerial ||
+                                                  "N/A",
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <button
+                                        onClick={() =>
+                                          handlePrintCartonSticker(
+                                            `carton-sticker-print-${selectedCarton}`,
+                                          )
+                                        }
+                                        className="h-11 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-[0.18em] hover:bg-slate-800 active:scale-[0.99] transition flex items-center justify-center gap-2"
+                                      >
+                                        <Printer className="h-4 w-4" /> Print
+                                      </button>
+                                      <button
+                                        onClick={() => setIsVerifyCartonModal(true)}
+                                        className="h-11 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-[0.18em] hover:bg-indigo-700 active:scale-[0.99] transition flex items-center justify-center gap-2"
+                                      >
+                                        <ClipboardCheck className="h-4 w-4" /> Verify
+                                      </button>
+                                    </div>
+                                  </div>
+                                )
                               ) : (
                                 <div className="space-y-4">
-                                  <div className="flex justify-center p-6 bg-white border-2 border-dashed border-slate-200 rounded-3xl">
-                                    <Canvas
-                                      text={selectedCarton}
-                                      options={{
-                                        errorCorrectionLevel: "M",
-                                        margin: 2,
-                                        scale: 4,
-                                        width: 140,
-                                        color: { dark: "#0f172a", light: "#ffffff" },
-                                      }}
-                                    />
-                                  </div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  {!qrCartons[selectedCarton] ? (
                                     <button
-                                      onClick={handlePrint}
-                                      className="py-3 sm:py-4 rounded-2xl bg-slate-800 text-white font-bold text-xs uppercase tracking-widest hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
+                                      onClick={() =>
+                                        handleCommonGenerateQRCode(selectedCarton)
+                                      }
+                                      className="w-full h-12 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-[0.18em] shadow-sm hover:bg-indigo-700 active:scale-[0.99] transition"
                                     >
-                                      <Printer className="h-4 w-4" /> Print
+                                      Generate QR Label
                                     </button>
-                                    <button
-                                      onClick={() => setIsVerifyCartonModal(true)}
-                                      className="py-3 sm:py-4 rounded-2xl bg-purple-600 text-white font-bold text-xs uppercase tracking-widest hover:bg-purple-700 transition-all flex items-center justify-center gap-2"
-                                    >
-                                      <ClipboardCheck className="h-4 w-4" /> Verify
-                                    </button>
-                                  </div>
+                                  ) : (
+                                    <div className="space-y-4">
+                                      <div className="flex justify-center p-6 bg-white border-2 border-dashed border-slate-200 rounded-3xl">
+                                        <SVG
+                                          text={selectedCarton}
+                                          options={{
+                                            errorCorrectionLevel: "M",
+                                            margin: 2,
+                                            width: 140,
+                                            color: {
+                                              dark: "#0f172a",
+                                              light: "#ffffff",
+                                            },
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-3">
+                                        <button
+                                          onClick={handlePrint}
+                                          className="h-11 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-[0.18em] hover:bg-slate-800 active:scale-[0.99] transition flex items-center justify-center gap-2"
+                                        >
+                                          <Printer className="h-4 w-4" /> Print
+                                        </button>
+                                        <button
+                                          onClick={() => setIsVerifyCartonModal(true)}
+                                          className="h-11 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-[0.18em] hover:bg-indigo-700 active:scale-[0.99] transition flex items-center justify-center gap-2"
+                                        >
+                                          <ClipboardCheck className="h-4 w-4" /> Verify
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -1702,57 +2396,86 @@ export default function DeviceTestComponent({
                       </div>
 
                       {/* Right: Device Content Table */}
-                      <div className="lg:col-span-8 flex flex-col h-full">
-                        <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl shadow-slate-200/50 overflow-hidden flex flex-col flex-1">
-                          <div className="px-5 sm:px-8 py-5 sm:py-6 border-b border-slate-100 flex items-center justify-between">
-                            <h3 className="text-lg font-black text-slate-800 flex items-center gap-3">
+                      <div className="flex flex-col min-w-0">
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1">
+                          <div className="px-5 sm:px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-4">
+                            <h3 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
                               <List className="h-6 w-6 text-indigo-500" />
                               Carton Contents
                             </h3>
-                            <div className="px-4 py-1.5 rounded-full bg-slate-50 border border-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                            <div className="px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-[10px] font-bold text-slate-600 uppercase tracking-[0.14em] whitespace-nowrap">
                               {cartonDevices.length} Units Manifested
                             </div>
                           </div>
 
-                          <div className="flex-1 table-responsive">
-                            <table className="w-full text-left">
-                              <thead>
-                                <tr className="bg-slate-50/50 text-[10px] font-black uppercase tracking-[0.1em] text-slate-400">
-                                  <th className="px-5 sm:px-8 py-4">Serial No</th>
-                                  <th className="px-4 sm:px-6 py-4">Identity (Model/IMEI)</th>
-                                  <th className="px-4 sm:px-6 py-4">Stage Status</th>
-                                  <th className="px-4 sm:px-6 py-4 text-center">History</th>
+                          <div className="flex-1 overflow-auto">
+                            <table className="min-w-[640px] w-full text-left">
+                              <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur border-b border-slate-200">
+                                <tr className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500">
+                                  <th className="px-5 sm:px-6 py-3">Serial No</th>
+                                  <th className="px-4 sm:px-5 py-3">Identity (Model/IMEI)</th>
+                                  <th className="px-4 sm:px-5 py-3">Stage Status</th>
+                                  <th className="px-4 sm:px-5 py-3 text-center">History</th>
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-50">
-                                {cartonDevices.map((device: any) => (
-                                  <tr key={device._id} className="hover:bg-slate-50/50 group transition-colors">
-                                    <td className="px-5 sm:px-8 py-4">
-                                      <span className="text-sm font-black text-slate-800 group-hover:text-indigo-600 transition-colors">
-                                        {device.serialNo}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 sm:px-6 py-4">
-                                      <div className="flex flex-col">
-                                        <span className="text-xs font-bold text-slate-700">{device.modelName || 'N/A'}</span>
-                                        <span className="text-[10px] font-mono text-slate-400 tracking-tighter">{device.imeiNo || 'N/A'}</span>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 sm:px-6 py-4">
-                                      <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${device.status === 'Pass' ? 'bg-emerald-100 text-emerald-700' :
-                                        device.status === 'NG' ? 'bg-rose-100 text-rose-700' :
-                                          'bg-slate-100 text-slate-500'
-                                        }`}>
-                                        {device.status || 'Pending'}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 sm:px-6 py-4 text-center">
-                                      <button className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-slate-200 transition-all">
-                                        <History className="h-4 w-4 text-slate-400" />
-                                      </button>
+                              <tbody className="divide-y divide-slate-100">
+                                {cartonDevices.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={4} className="px-6 py-10 text-center text-sm text-slate-400">
+                                      No devices found in this carton.
                                     </td>
                                   </tr>
-                                ))}
+                                ) : (
+                                  cartonDevices.map((device: any) => (
+                                    <tr
+                                      key={device._id}
+                                      className="hover:bg-slate-50/70 transition-colors"
+                                    >
+                                      <td className="px-5 sm:px-6 py-3">
+                                        <span className="text-sm font-semibold text-slate-900">
+                                          {device.serialNo}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 sm:px-5 py-3">
+                                        <div className="flex flex-col">
+                                          <span className="text-xs font-semibold text-slate-800 leading-snug">
+                                            {getDeviceModelText(device)}
+                                          </span>
+                                          <span className="text-[11px] font-mono text-slate-400 tracking-tight">
+                                            {getDeviceImeiText(device)}
+                                          </span>
+                                        </div>
+                                      </td>
+                                      <td className="px-4 sm:px-5 py-3">
+                                        <span
+                                          className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${device.status === "Pass"
+                                              ? "bg-emerald-100 text-emerald-700"
+                                              : device.status === "NG"
+                                                ? "bg-rose-100 text-rose-700"
+                                                : "bg-slate-100 text-slate-600"
+                                            }`}
+                                        >
+                                          {device.status || "Pending"}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 sm:px-5 py-3 text-center">
+                                        <button
+                                          type="button"
+                                          onMouseDown={(e) => e.stopPropagation()}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openCartonDeviceHistory(device?.serialNo);
+                                          }}
+                                          className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 active:scale-[0.99] transition"
+                                          aria-label={`History for ${device?.serialNo || "device"}`}
+                                          title="View history"
+                                        >
+                                          <History className="h-4 w-4" />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
                               </tbody>
                             </table>
                           </div>
@@ -1997,18 +2720,17 @@ export default function DeviceTestComponent({
                 </div>
                 <div>
                   <h4 className="text-lg font-bold text-gray-900">
-                    Scan QR Code
+                    Scan Carton Label
                   </h4>
                   <p className="text-sm text-gray-500">
-                    Please scan the printed carton sticker QR code to
-                    verify details.
+                    Please scan the carton serial from the printed label to verify.
                   </p>
                 </div>
               </div>
 
               <input
                 autoFocus
-                placeholder="Scan Carton QR Code..."
+                placeholder="Scan Carton Serial..."
                 className="font-mono placeholder:font-sans w-full rounded-xl border-2 border-gray-200 px-4 py-4 text-center text-lg outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -2051,6 +2773,7 @@ export default function DeviceTestComponent({
                       const stageHistories = deviceHistory.filter(
                         (h: any) => h.stageName === stage.stageName,
                       );
+                      const hasHistory = stageHistories.length > 0;
                       const isPass = stageHistories.some(
                         (h: any) =>
                           h.status === "Pass" || h.status === "Completed",
@@ -2060,14 +2783,17 @@ export default function DeviceTestComponent({
                         stageHistories.some((h: any) => h.status === "NG");
 
                       return (
-                        <div
+                        <button
+                          type="button"
                           key={idx}
+                          disabled={!hasHistory}
+                          onClick={() => openStageLogs(stage.stageName, stageHistories)}
                           className={`group relative flex shrink-0 items-center gap-2 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${isPass
                             ? "border-green-200 bg-green-50/50 text-green-700 shadow-sm hover:shadow-green-100/50"
                             : isNG
                               ? "border-red-200 bg-red-50/50 text-red-700 shadow-sm hover:shadow-red-100/50"
                               : "border-gray-100 bg-gray-50 text-gray-400 opacity-60"
-                            }`}
+                            } ${hasHistory ? "cursor-pointer hover:-translate-y-0.5" : "cursor-not-allowed"}`}
                         >
                           <div
                             className={`rounded-md p-1 ${isPass ? "bg-green-500/10" : isNG ? "bg-red-500/10" : "bg-gray-500/10"}`}
@@ -2084,7 +2810,7 @@ export default function DeviceTestComponent({
                           {isPass && (
                             <div className="absolute -right-1 -top-1 h-2 w-2 animate-pulse rounded-full border-2 border-white bg-green-500" />
                           )}
-                        </div>
+                        </button>
                       );
                     },
                   )}
@@ -2170,7 +2896,7 @@ export default function DeviceTestComponent({
                                           %
                                         </span>
                                       </div>
-                                      <div className="h-2.5 w-full overflow-hidden rounded-full border border-gray-200 bg-gray-100">
+                                    <div className="h-2.5 w-full overflow-hidden rounded-full border border-gray-200 bg-gray-100">
                                         <div
                                           className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
                                           style={{
@@ -2179,6 +2905,30 @@ export default function DeviceTestComponent({
                                         />
                                       </div>
                                     </div>
+
+                                    {packagingDescriptionHtml && (
+                                      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                                        <div className="border-b border-slate-200 bg-slate-50/70 px-5 py-3">
+                                          <div className="flex items-center gap-2">
+                                            <ClipboardList className="h-4 w-4 text-slate-500" />
+                                            <h5 className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-700">
+                                              Packaging Instructions
+                                            </h5>
+                                          </div>
+                                          <p className="mt-1 text-xs font-medium text-slate-500">
+                                            Review these checks before adding devices to the carton.
+                                          </p>
+                                        </div>
+                                        <div className="max-h-40 overflow-y-auto px-5 py-4 custom-scrollbar">
+                                          <div
+                                            className="prose prose-sm max-w-none text-slate-700 [&_h1]:text-lg [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-bold [&_h3]:text-sm [&_h3]:font-bold [&_p]:my-1 [&_ol]:my-2 [&_ol]:list-decimal [&_ul]:my-2 [&_ul]:list-disc [&_ol]:pl-5 [&_ul]:pl-5 [&_li]:my-1.5"
+                                            dangerouslySetInnerHTML={{
+                                              __html: packagingDescriptionHtml,
+                                            }}
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
 
                                     {/* JIG STEP UI */}
                                     {testSteps.some(
@@ -3477,35 +4227,46 @@ export default function DeviceTestComponent({
                           </div>
 
                           {/* Carton Details (Moved from Recent Activity) */}
-                          {processAssignUserStage?.subSteps?.some(
-                            (s: any) => s.isPackagingStatus && !s?.disabled,
-                          ) && (
-                              <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-                                <div className="border-b border-gray-100 bg-gray-50/50 px-4 py-3">
-                                  <h4 className="flex items-center gap-2 text-sm font-bold text-gray-800">
-                                    <Box className="h-4 w-4 text-orange-500" />
-                                    Carton Details
-                                  </h4>
-                                  <button
-                                    onClick={() => setIsCartonPopupOpen(true)}
-                                    className="flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-600 hover:bg-blue-100 transition-colors"
-                                  >
-                                    <ScanLine className="h-3 w-3" />
-                                    Verify & Move
-                                  </button>
+                          {(isPDIStage ||
+                            processAssignUserStage?.subSteps?.some(
+                              (s: any) => s.isPackagingStatus && !s?.disabled,
+                            )) && (
+                              <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                                <div className="border-b border-slate-200 bg-slate-50/60 px-5 sm:px-6 py-4">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <h4 className="flex items-center gap-2 text-base font-extrabold text-slate-900">
+                                        <Box className="h-4 w-4 text-orange-500" />
+                                        Carton Details
+                                      </h4>
+                                    </div>
+
+                                    <button
+                                      onClick={() => setIsCartonPopupOpen(true)}
+                                      className="shrink-0 inline-flex items-center gap-2 h-9 px-3 rounded-xl bg-indigo-50 border border-indigo-100 text-[11px] font-black uppercase tracking-[0.14em] text-indigo-700 hover:bg-indigo-100 active:scale-[0.99] transition"
+                                    >
+                                      <ScanLine className="h-4 w-4" />
+                                      Verify & Move
+                                    </button>
+                                  </div>
                                 </div>
                                 <div className="p-0">
-                                  <table className="w-full text-left text-xs">
-                                    <thead className="bg-gray-50 font-medium uppercase tracking-wider text-gray-500">
-                                      <tr>
-                                        <th className="px-4 py-3">Serial</th>
-                                        <th className="px-4 py-3">Status</th>
-                                        <th className="px-4 py-3 text-right">
-                                          Timestamp
-                                        </th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
+                                  <div className="overflow-auto">
+                                    <table className="min-w-[560px] w-full text-left">
+                                      <thead className="bg-slate-50 text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500 border-b border-slate-200">
+                                        <tr>
+                                          <th className="px-5 sm:px-6 py-3">
+                                            Serial
+                                          </th>
+                                          <th className="px-4 sm:px-5 py-3">
+                                            Status
+                                          </th>
+                                          <th className="px-4 sm:px-5 py-3 text-right">
+                                            Timestamp
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
                                       {(() => {
                                         const cartonList = Array.isArray(
                                           processCartons,
@@ -3517,23 +4278,25 @@ export default function DeviceTestComponent({
                                             (row: any, rowIndex: number) => (
                                               <tr
                                                 key={rowIndex}
-                                                className="transition-colors hover:bg-gray-50/50"
+                                                className="transition-colors hover:bg-slate-50/70"
                                               >
-                                                <td className="px-4 py-3 font-semibold text-gray-900">
+                                                <td className="px-5 sm:px-6 py-3 text-sm font-semibold text-slate-900">
                                                   {row?.cartonSerial}
                                                 </td>
-                                                <td className="px-4 py-3">
-                                                  <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
-                                                    {row?.status}
+                                                <td className="px-4 sm:px-5 py-3">
+                                                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-tighter text-slate-600">
+                                                    {String(row?.status || "N/A")}
                                                   </span>
                                                 </td>
-                                                <td className="px-4 py-3 text-right text-gray-400">
+                                                <td className="px-4 sm:px-5 py-3 text-right">
+                                                  <span className="text-[12px] font-mono text-slate-500">
                                                   {new Date(
                                                     row?.createdAt,
                                                   ).toLocaleTimeString([], {
                                                     hour: "2-digit",
                                                     minute: "2-digit",
                                                   })}
+                                                  </span>
                                                 </td>
                                               </tr>
                                             ),
@@ -3542,28 +4305,16 @@ export default function DeviceTestComponent({
                                           <tr>
                                             <td
                                               colSpan={3}
-                                              className="p-6 text-center italic text-gray-400"
+                                              className="p-8 text-center text-sm text-slate-400"
                                             >
                                               No cartons found
                                             </td>
                                           </tr>
                                         );
                                       })()}
-                                    </tbody>
-                                  </table>
-                                  {(Array.isArray(processCartons)
-                                    ? processCartons.length > 0
-                                    : processCartons?.cartonDetails?.length >
-                                    0) && (
-                                      <div className="flex justify-end border-t border-gray-100 bg-gray-50/50 p-4">
-                                        <button
-                                          className="rounded-lg bg-cyan-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-cyan-700"
-                                          onClick={handleShiftToPDI}
-                                        >
-                                          Shift to PDI
-                                        </button>
-                                      </div>
-                                    )}
+                                      </tbody>
+                                    </table>
+                                  </div>
                                 </div>
                               </div>
                             )}
@@ -3578,15 +4329,15 @@ export default function DeviceTestComponent({
                           >
                             STAGE COMPLETE: {jigDecision}
                           </h4>
-          <button
-            className="flex items-center gap-2 rounded-xl bg-blue-600 px-8 py-4 font-bold text-white shadow-xl transition-all hover:bg-blue-700 active:scale-95"
-            onClick={() => {
-              if (jigDecision === "NG") {
-                // Open the assignment modal (same behavior as Report Issue NG)
-                setNgDescription("");
-                setShowNGModal(true);
-                return;
-              }
+                          <button
+                            className="flex items-center gap-2 rounded-xl bg-blue-600 px-8 py-4 font-bold text-white shadow-xl transition-all hover:bg-blue-700 active:scale-95"
+                            onClick={() => {
+                              if (jigDecision === "NG") {
+                                // Open the assignment modal (same behavior as Report Issue NG)
+                                setNgDescription("");
+                                setShowNGModal(true);
+                                return;
+                              }
                               if (jigDisconnectRef.current)
                                 jigDisconnectRef.current();
                               if (searchResult && setDeviceList) {
@@ -3629,9 +4380,7 @@ export default function DeviceTestComponent({
             </div>
           )}
         </div>
-      </div >
-      {/* </div > */}
-      {/* </div> */}
+      </div>
 
       {/* Footer */}
       <div className="mt-4 flex justify-end gap-3">
@@ -3730,33 +4479,33 @@ export default function DeviceTestComponent({
                           return serial.includes(historySerialQuery.trim().toLowerCase());
                         })
                         .map((row, rowIndex) => (
-                        <tr
-                          key={rowIndex}
-                          className="transition-colors hover:bg-gray-50/50"
-                        >
-                          <td className="px-4 py-3">
-                            <span className="block font-bold text-gray-900">
-                              {row?.deviceInfo?.serialNo}
-                            </span>
-                            <span className="text-[10px] text-gray-500">
-                              {row?.stageName}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${row?.status === "Pass"
-                                ? "bg-green-100 text-green-700"
-                                : "bg-red-100 text-red-700"
-                                }`}
-                            >
-                              {row?.status}
-                            </span>
-                          </td>
-                          <td className="font-mono px-4 py-3 text-right italic text-gray-500">
-                            {formatHistoryTime(row)}
-                          </td>
-                        </tr>
-                      ))
+                          <tr
+                            key={rowIndex}
+                            className="transition-colors hover:bg-gray-50/50"
+                          >
+                            <td className="px-4 py-3">
+                              <span className="block font-bold text-gray-900">
+                                {row?.deviceInfo?.serialNo}
+                              </span>
+                              <span className="text-[10px] text-gray-500">
+                                {row?.stageName}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${row?.status === "Pass"
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-red-100 text-red-700"
+                                  }`}
+                              >
+                                {row?.status}
+                              </span>
+                            </td>
+                            <td className="font-mono px-4 py-3 text-right italic text-gray-500">
+                              {formatHistoryTime(row)}
+                            </td>
+                          </tr>
+                        ))
                     ) : (
                       <tr>
                         <td
@@ -3825,11 +4574,26 @@ export default function DeviceTestComponent({
       <Modal
         isOpen={isLogsModalOpen}
         onClose={() => setIsLogsModalOpen(false)}
-        title="Detailed Step Logs"
+        title={selectedLogsTitle}
         submitOption={false}
         onSubmit={() => { }}
       >
-        <div className="font-mono max-h-[70vh] overflow-y-auto rounded-b-xl bg-gray-900 p-4 text-xs">
+        <div className="rounded-b-xl bg-gray-900 p-4">
+          <div className="mb-3 flex items-center justify-end">
+            <button
+              type="button"
+              onClick={downloadSelectedLogs}
+              disabled={selectedLogs.length === 0}
+              className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-black uppercase tracking-[0.14em] transition ${selectedLogs.length > 0
+                  ? "bg-slate-800 text-slate-100 hover:bg-slate-700"
+                  : "cursor-not-allowed bg-slate-800/60 text-slate-500"
+                }`}
+            >
+              <FileText className="h-4 w-4" />
+              Download History
+            </button>
+          </div>
+          <div className="font-mono max-h-[70vh] overflow-y-auto text-xs">
           {selectedLogs.map((logGroup: any, gIndex: number) => (
             <div key={gIndex} className="mb-6 last:mb-0">
               <div className="mb-2 flex items-center gap-2 border-b border-gray-700 pb-1">
@@ -3896,6 +4660,100 @@ export default function DeviceTestComponent({
           {selectedLogs.length === 0 && (
             <div className="py-10 text-center italic text-gray-500">
               No logs found for this record.
+            </div>
+          )}
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isCartonDeviceHistoryOpen}
+        onClose={() => setIsCartonDeviceHistoryOpen(false)}
+        title={`Device History - ${cartonDeviceHistorySerial || ""}`}
+        submitOption={false}
+        onSubmit={() => { }}
+      >
+        <div className="max-h-[72vh] overflow-hidden">
+          {isCartonDeviceHistoryLoading ? (
+            <div className="p-10 text-center text-sm font-medium text-slate-500">Loading...</div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+              <div className="max-h-[64vh] overflow-auto">
+                <table className="min-w-[780px] w-full text-left text-sm table-fixed">
+                  <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur border-b border-slate-200">
+                    <tr className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500">
+                      <th className="px-5 py-3 w-[36%]">Stage</th>
+                      <th className="px-4 py-3 w-[14%]">Status</th>
+                      <th className="px-4 py-3 w-[18%]">Assigned To</th>
+                      <th className="px-4 py-3 w-[20%]">Created At</th>
+                      <th className="px-4 py-3 w-[12%] text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {cartonDeviceHistoryRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-10 text-center text-sm text-slate-400">
+                          No history found for this device.
+                        </td>
+                      </tr>
+                    ) : (
+                      cartonDeviceHistoryRows.map((r: any) => (
+                        <tr
+                          key={r._id || `${r.stageName}-${r.createdAt}`}
+                          className="hover:bg-slate-50/70 transition-colors"
+                        >
+                          <td className="px-5 py-3">
+                            <div className="font-semibold text-slate-900 leading-snug break-words">
+                              {r.stageName}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${r.status === "Pass" || r.status === "Completed"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : r.status === "NG"
+                                    ? "bg-rose-100 text-rose-700"
+                                    : "bg-slate-100 text-slate-600"
+                                }`}
+                            >
+                              {r.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-xs font-medium text-slate-600">
+                              {r.assignedDeviceTo || "-"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-[12px] font-mono text-slate-600">
+                              {r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              type="button"
+                              disabled={!r.logs || r.logs.length === 0}
+                              onClick={() => {
+                                setSelectedLogsTitle(
+                                  `${r.stageName || "Detailed Step"} Logs`,
+                                );
+                                setSelectedLogs(r.logs || []);
+                                setIsLogsModalOpen(true);
+                              }}
+                              className={`inline-flex items-center justify-center h-9 px-3 rounded-lg text-xs font-black uppercase tracking-[0.12em] transition ${r.logs && r.logs.length > 0
+                                  ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                                  : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                                }`}
+                            >
+                              Logs
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>

@@ -14,7 +14,15 @@ import {
   QrCode
 } from "lucide-react";
 import { toast } from "react-toastify";
-import { verifyCartonSticker, shiftToPDI, saveCartonWeight, updateCartonPrintingStatus, fetchOpenCartonsByProcessID, closeLooseCarton } from "@/lib/api";
+import {
+  verifyCartonSticker,
+  shiftToNextCommonStage,
+  shiftToPDI,
+  saveCartonWeight,
+  updateCartonPrintingStatus,
+  fetchOpenCartonsByProcessID,
+  closeLooseCarton,
+} from "@/lib/api";
 
 interface Carton {
   cartonSerial: string;
@@ -50,6 +58,13 @@ const CartonDetailsPopup = ({
   onUpdate,
   isLoading = false,
 }: CartonDetailsPopupProps) => {
+  const currentStageName =
+    (Array.isArray(assignUserStage) ? assignUserStage?.[0]?.name : null) ||
+    assignUserStage?.stage ||
+    assignUserStage?.name ||
+    "";
+  const isPDIStage = currentStageName === "PDI";
+
   const [isVerifying, setIsVerifying] = useState<string | null>(null);
   const [scanValue, setScanValue] = useState("");
   const [isMovingStage, setIsMovingStage] = useState(false);
@@ -365,14 +380,29 @@ const CartonDetailsPopup = ({
     setIsMovingStage(true);
     try {
       const cartonSerials = fullCartons.map(c => c.cartonSerial);
-      const data = await shiftToPDI(cartonSerials);
 
-      if (data.success) {
-        toast.success("Ready for PDI stage!");
+      if (isPDIStage) {
+        for (const serial of cartonSerials) {
+          const formData = new FormData();
+          formData.append("selectedCarton", serial);
+          const result = await shiftToNextCommonStage(processData?._id, formData);
+          if (!result) {
+            throw new Error("Shift failed.");
+          }
+        }
+        toast.success("Cartons shifted to next stage!");
         onUpdate();
         onClose();
       } else {
-        toast.error(data.message || "Shift failed.");
+        const data = await shiftToPDI(cartonSerials);
+
+        if (data?.success) {
+          toast.success("Ready for PDI stage!");
+          onUpdate();
+          onClose();
+        } else {
+          toast.error(data?.message || "Shift failed.");
+        }
       }
     } catch (error: any) {
       console.error("Move failed:", error);
@@ -388,7 +418,7 @@ const CartonDetailsPopup = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Carton Packaging & QC"
+      title={isPDIStage ? "Carton PDI & Move" : "Carton Packaging & QC"}
       submitOption={false}
       maxWidth="max-w-5xl"
     >
@@ -631,7 +661,7 @@ const CartonDetailsPopup = ({
             ) : (
               <ArrowRightCircle className="h-6 w-6" />
             )}
-            Shift to PDI
+            {isPDIStage ? "Move to Next Stage" : "Shift to PDI"}
           </button>
           {!allVerified && fullCartons.length > 0 && (
             <div className="flex items-center gap-2 text-[11px] font-black text-amber-600 bg-amber-50 px-5 py-2 rounded-full border border-amber-200 animate-pulse">
