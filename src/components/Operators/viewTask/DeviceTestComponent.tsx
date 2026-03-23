@@ -330,6 +330,74 @@ export default function DeviceTestComponent({
     return row?.timeTaken || "-";
   };
 
+  const getHistoryTimestamp = (record: any) => {
+    const raw =
+      record?.createdAt ||
+      record?.updatedAt ||
+      record?.deviceInfo?.createdAt ||
+      record?.logData?.createdAt ||
+      null;
+    if (!raw) return null;
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+  };
+
+  const getRecordFlowVersion = (record: any) => {
+    const raw =
+      record?.flowVersion ??
+      record?.deviceInfo?.flowVersion ??
+      record?.logData?.flowVersion ??
+      null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
+
+  const isFlowBoundaryRecord = (record: any) =>
+    Boolean(record?.flowBoundary) ||
+    String(record?.flowType || "").trim().toLowerCase() === "reset";
+
+  const isTransferHistoryRecord = (record: any) => {
+    const searchType = String(record?.searchType || "").trim().toLowerCase();
+    const status = String(record?.status || "").trim().toLowerCase();
+    const stageName = String(record?.stageName || record?.name || "")
+      .trim()
+      .toLowerCase();
+    return (
+      isFlowBoundaryRecord(record) ||
+      searchType.includes("kit transfer") ||
+      status === "transferred" ||
+      stageName === "kit transfer approval"
+    );
+  };
+
+  const visibleDeviceHistory = React.useMemo(() => {
+    const history = Array.isArray(deviceHistory) ? [...deviceHistory] : [];
+    if (history.length === 0) return history;
+
+    const latestBoundary = history
+      .filter(isFlowBoundaryRecord)
+      .sort((a: any, b: any) => {
+        const at = getHistoryTimestamp(a) ?? 0;
+        const bt = getHistoryTimestamp(b) ?? 0;
+        return bt - at;
+      })[0];
+
+    const boundaryVersion = latestBoundary ? getRecordFlowVersion(latestBoundary) : null;
+    const boundaryTime = latestBoundary ? getHistoryTimestamp(latestBoundary) : null;
+    if (boundaryVersion == null) return history.filter((record) => !isTransferHistoryRecord(record));
+
+    return history.filter((record: any) => {
+      if (isTransferHistoryRecord(record)) return false;
+      const recordVersion = getRecordFlowVersion(record);
+      if (recordVersion == null) {
+        if (boundaryTime == null) return false;
+        const recordTime = getHistoryTimestamp(record);
+        return recordTime != null && recordTime >= boundaryTime;
+      }
+      return recordVersion === boundaryVersion;
+    });
+  }, [deviceHistory]);
+
   // Reset verification inputs whenever modal opens
   useEffect(() => {
     if (isVerifyStickerModal) {
@@ -1540,10 +1608,9 @@ export default function DeviceTestComponent({
       let stageRecords = Array.isArray(stageHistories) ? [...stageHistories] : [];
 
       if (stageRecords.length === 0) {
-        const allRecords = await ensureProcessRecords();
         const normalizedStage = String(stageName).trim().toLowerCase();
 
-        stageRecords = allRecords.filter((record: any) => {
+        stageRecords = visibleDeviceHistory.filter((record: any) => {
           const recordSerial = String(record?.serialNo || "").trim();
           const recordStage = String(
             record?.stageName || record?.name || "",
@@ -1777,13 +1844,13 @@ export default function DeviceTestComponent({
   };
 
   const lastHistoryEntry =
-    Array.isArray(deviceHistory) && deviceHistory.length > 0
-      ? deviceHistory[deviceHistory.length - 1]
+    Array.isArray(visibleDeviceHistory) && visibleDeviceHistory.length > 0
+      ? visibleDeviceHistory[visibleDeviceHistory.length - 1]
       : null;
 
   const hasQCResolved =
-    Array.isArray(deviceHistory) &&
-    deviceHistory.some((h: any) => {
+    Array.isArray(visibleDeviceHistory) &&
+    visibleDeviceHistory.some((h: any) => {
       const s = (h?.status || "").toString().toLowerCase();
       return s.includes("resolved");
     });
@@ -2786,7 +2853,7 @@ export default function DeviceTestComponent({
                   <h3 className="text-sm font-bold text-gray-800">
                     {searchResult}
                   </h3>
-                  {deviceHistory.length > 0 && (
+                  {visibleDeviceHistory.length > 0 && (
                     <button
                       onClick={() => setIsPreviousStagesModalOpen(true)}
                       className="flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600 transition-colors hover:bg-indigo-100"
@@ -2801,7 +2868,7 @@ export default function DeviceTestComponent({
                 <div className="no-scrollbar flex flex-nowrap gap-2.5 overflow-x-auto pb-2">
                   {(processData?.stages || []).map(
                     (stage: any, idx: number) => {
-                      const stageHistories = deviceHistory.filter(
+                      const stageHistories = visibleDeviceHistory.filter(
                         (h: any) => h.stageName === stage.stageName,
                       );
                       const hasHistory = stageHistories.length > 0;
@@ -2863,7 +2930,7 @@ export default function DeviceTestComponent({
                       </span>
                     </div>
                     <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
-                      {deviceHistory.map((value, index) => (
+                      {visibleDeviceHistory.map((value, index) => (
                         <div
                           key={index}
                           className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-3"

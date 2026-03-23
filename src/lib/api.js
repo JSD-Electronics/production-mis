@@ -456,6 +456,18 @@ export const getAllMenus = async () => {
       return label === "fg store management" || route === "/fg-to-store/view";
     });
 
+    const alreadyHasKitTransfer = menus.some((m) => {
+      const label = (m?.label || "").toString().trim().toLowerCase();
+      const route = (m?.route || "").toString().trim().toLowerCase();
+      return label === "kit transfer" || route === "/production-manager/kit-transfer";
+    });
+
+    const alreadyHasTransferRequests = menus.some((m) => {
+      const label = (m?.label || "").toString().trim().toLowerCase();
+      const route = (m?.route || "").toString().trim().toLowerCase();
+      return label === "transfer requests" || route === "/store-portal/transfer-requests";
+    });
+
     const esimMasterMenu = {
       label: "ESIM Master",
       route: "/esim-master",
@@ -508,10 +520,26 @@ export const getAllMenus = async () => {
       children: [],
     };
 
+    const kitTransferMenu = {
+      label: "Kit Transfer",
+      route: "/production-manager/kit-transfer",
+      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 7h10M7 17h10M5 12h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M8 4l-4 4 4 4M16 12l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      children: [],
+    };
+
+    const transferRequestsMenu = {
+      label: "Transfer Requests",
+      route: "/store-portal/transfer-requests",
+      icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 6h8M8 10h8M8 14h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6 3h12a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V5a2 2 0 0 1 2-2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
+      children: [],
+    };
+
     let nextMenus = [...menus];
     if (!alreadyHasEsimMaster) nextMenus = [...nextMenus, esimMasterMenu];
     if (!alreadyHasLiveDashboard) nextMenus = [...nextMenus, liveDashboardMenu];
     if (!alreadyHasFGStore) nextMenus = [...nextMenus, fgStoreMenu];
+    if (!alreadyHasKitTransfer) nextMenus = [...nextMenus, kitTransferMenu];
+    if (!alreadyHasTransferRequests) nextMenus = [...nextMenus, transferRequestsMenu];
 
     const nextGetMenu = Array.isArray(data?.getMenu) ? [...data.getMenu] : [];
     if (nextGetMenu.length === 0) {
@@ -1373,6 +1401,64 @@ export const getLatestDeviceTestsByPlanId = async (planId, processId) => {
       "Error Fetching Latest Device Test Records By Plan Id :",
       error.message,
     );
+  }
+};
+export const getDevicesByProcessId = async (processId) => {
+  try {
+    const response = await api.get(`/devices/by-process/${processId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching devices by process:", error);
+    throw error.response?.data || { message: "Failed to fetch devices by process" };
+  }
+};
+export const createKitTransferRequest = async (data) => {
+  try {
+    const response = await api.post("/kit-transfer/request", data);
+    return response.data;
+  } catch (error) {
+    console.error("Error creating kit transfer request:", error);
+    const responseData = error.response?.data;
+    if (typeof responseData === "string") {
+      throw { message: responseData };
+    }
+    throw responseData || { message: "Failed to create kit transfer request" };
+  }
+};
+export const getKitTransferRequests = async (params) => {
+  try {
+    const response = await api.get("/kit-transfer/request", { params });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching kit transfer requests:", error);
+    throw error.response?.data || { message: "Failed to fetch kit transfer requests" };
+  }
+};
+export const getKitTransferRequestById = async (id) => {
+  try {
+    const response = await api.get(`/kit-transfer/request/${id}`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching kit transfer request:", error);
+    throw error.response?.data || { message: "Failed to fetch kit transfer request" };
+  }
+};
+export const approveKitTransferRequest = async (id) => {
+  try {
+    const response = await api.put(`/kit-transfer/request/${id}/approve`);
+    return response.data;
+  } catch (error) {
+    console.error("Error approving kit transfer request:", error);
+    throw error.response?.data || { message: "Failed to approve kit transfer request" };
+  }
+};
+export const rejectKitTransferRequest = async (id, data) => {
+  try {
+    const response = await api.put(`/kit-transfer/request/${id}/reject`, data);
+    return response.data;
+  } catch (error) {
+    console.error("Error rejecting kit transfer request:", error);
+    throw error.response?.data || { message: "Failed to reject kit transfer request" };
   }
 };
 export const getOrderConfirmationNumers = async () => {
