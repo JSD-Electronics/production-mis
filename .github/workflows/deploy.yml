@@ -23,13 +23,14 @@ jobs:
             APP_ROOT="/var/www/html"
             LIVE_DIR="$APP_ROOT/$APP_NAME"
             DEPLOY_ROOT="$APP_ROOT/.deployments/$APP_NAME"
-            REPO_CACHE="$DEPLOY_ROOT/repo.git"
             RELEASES_DIR="$DEPLOY_ROOT/releases"
             TIMESTAMP="$(date +%Y%m%d%H%M%S)"
             RELEASE_DIR="$RELEASES_DIR/$TIMESTAMP"
             BACKUP_DIR="$RELEASES_DIR/rollback-$TIMESTAMP"
             ENV_BACKUP="/tmp/${APP_NAME}.env"
             NPM_CACHE_DIR="/tmp/.npm-${APP_NAME}"
+            REPO_URL=""
+            MIN_FREE_KB=1048576
 
             echo "== SAFE DEPLOY START =="
             echo "Live dir: $LIVE_DIR"
@@ -41,37 +42,47 @@ jobs:
             echo "== DISK BEFORE CLEANUP =="
             df -h "$APP_ROOT" || true
 
-            # Free space early: keep only 2 most recent release dirs before install/build.
-            find "$RELEASES_DIR" -maxdepth 1 -mindepth 1 -type d | sort | head -n -2 | xargs -r rm -rf
+            # Free space early.
+            find "$RELEASES_DIR" -maxdepth 1 -mindepth 1 -type d | sort | head -n -1 | xargs -r rm -rf
+            rm -rf "$RELEASES_DIR"/rollback-* || true
             rm -rf "$NPM_CACHE_DIR"
+            pm2 flush || true
+            rm -rf "$HOME/.npm/_cacache" || true
 
             echo "== DISK AFTER CLEANUP =="
             df -h "$APP_ROOT" || true
+            FREE_KB="$(df -Pk "$APP_ROOT" | awk 'NR==2 {print $4}')"
+            echo "Free space (KB): $FREE_KB"
+
+            # Emergency cleanup if disk is still too full.
+            if [ "$FREE_KB" -lt "$MIN_FREE_KB" ]; then
+              echo "== EMERGENCY CLEANUP =="
+              rm -rf "$DEPLOY_ROOT/repo.git" || true
+              find /home -type f -path "*/.pm2/logs/*.log" -delete 2>/dev/null || true
+              rm -rf /tmp/.npm-* || true
+              df -h "$APP_ROOT" || true
+            fi
 
             if [ -f "$LIVE_DIR/.env" ]; then
               cp "$LIVE_DIR/.env" "$ENV_BACKUP"
             fi
 
-            if [ ! -d "$REPO_CACHE" ]; then
-              REPO_URL="$(git -C "$LIVE_DIR" config --get remote.origin.url)"
-              if [ -z "$REPO_URL" ]; then
-                echo "Remote origin URL not found; cannot initialize deploy cache."
-                exit 1
-              fi
-              git clone --mirror "$REPO_URL" "$REPO_CACHE"
+            if [ -d "$LIVE_DIR/.git" ]; then
+              REPO_URL="$(git -C "$LIVE_DIR" config --get remote.origin.url || true)"
             fi
 
-            # Mirror repos keep branch refs under refs/heads/* (not refs/remotes/origin/*).
-            # Fetch main explicitly into refs/heads/main so archive always has a valid ref.
-            git --git-dir="$REPO_CACHE" fetch --prune origin "+refs/heads/main:refs/heads/main"
+            if [ -z "$REPO_URL" ] && [ -d "$DEPLOY_ROOT/repo.git" ]; then
+              REPO_URL="$(git --git-dir="$DEPLOY_ROOT/repo.git" config --get remote.origin.url || true)"
+            fi
 
-            if ! git --git-dir="$REPO_CACHE" rev-parse --verify refs/heads/main >/dev/null 2>&1; then
-              echo "Could not resolve refs/heads/main in deploy cache."
+            if [ -z "$REPO_URL" ]; then
+              echo "Remote origin URL not found; cannot continue deploy."
               exit 1
             fi
 
-            mkdir -p "$RELEASE_DIR"
-            git --git-dir="$REPO_CACHE" archive refs/heads/main | tar -x -C "$RELEASE_DIR"
+            echo "Using repo: $REPO_URL"
+            git clone --depth 1 --branch main "$REPO_URL" "$RELEASE_DIR"
+            rm -rf "$RELEASE_DIR/.git"
 
             if [ -f "$ENV_BACKUP" ]; then
               cp "$ENV_BACKUP" "$RELEASE_DIR/.env"
