@@ -43,10 +43,10 @@ jobs:
             df -h "$APP_ROOT" || true
 
             # Free space early.
-            find "$RELEASES_DIR" -maxdepth 1 -mindepth 1 -type d | sort | head -n -1 | xargs -r rm -rf
+            find "$RELEASES_DIR" -maxdepth 1 -mindepth 1 -type d | xargs -r rm -rf
             rm -rf "$RELEASES_DIR"/rollback-* || true
             rm -rf "$NPM_CACHE_DIR"
-            pm2 flush || true
+            find "$HOME/.pm2/logs" -type f -name "*.log" -exec truncate -s 0 {} + 2>/dev/null || true
             rm -rf "$HOME/.npm/_cacache" || true
 
             echo "== DISK AFTER CLEANUP =="
@@ -61,6 +61,13 @@ jobs:
               find /home -type f -path "*/.pm2/logs/*.log" -delete 2>/dev/null || true
               rm -rf /tmp/.npm-* || true
               df -h "$APP_ROOT" || true
+            fi
+
+            FREE_KB="$(df -Pk "$APP_ROOT" | awk 'NR==2 {print $4}')"
+            echo "Free space after emergency cleanup (KB): $FREE_KB"
+            if [ "$FREE_KB" -lt "$MIN_FREE_KB" ]; then
+              echo "Insufficient disk space (<1GB) after cleanup; aborting deploy early."
+              exit 1
             fi
 
             if [ -f "$LIVE_DIR/.env" ]; then
