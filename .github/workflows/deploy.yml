@@ -29,11 +29,24 @@ jobs:
             RELEASE_DIR="$RELEASES_DIR/$TIMESTAMP"
             BACKUP_DIR="$RELEASES_DIR/rollback-$TIMESTAMP"
             ENV_BACKUP="/tmp/${APP_NAME}.env"
+            NPM_CACHE_DIR="/tmp/.npm-${APP_NAME}"
 
             echo "== SAFE DEPLOY START =="
             echo "Live dir: $LIVE_DIR"
 
             mkdir -p "$DEPLOY_ROOT" "$RELEASES_DIR"
+            # Ensure a failed run does not leave a partial release occupying disk.
+            trap 'rm -rf "$RELEASE_DIR"' ERR
+
+            echo "== DISK BEFORE CLEANUP =="
+            df -h "$APP_ROOT" || true
+
+            # Free space early: keep only 2 most recent release dirs before install/build.
+            find "$RELEASES_DIR" -maxdepth 1 -mindepth 1 -type d | sort | head -n -2 | xargs -r rm -rf
+            rm -rf "$NPM_CACHE_DIR"
+
+            echo "== DISK AFTER CLEANUP =="
+            df -h "$APP_ROOT" || true
 
             if [ -f "$LIVE_DIR/.env" ]; then
               cp "$LIVE_DIR/.env" "$ENV_BACKUP"
@@ -66,8 +79,8 @@ jobs:
 
             cd "$RELEASE_DIR"
             rm -rf .next/cache
-            npm cache clean --force
-            npm install
+            # Use temporary cache outside release dir to reduce repeated disk growth.
+            npm install --cache "$NPM_CACHE_DIR" --no-audit --no-fund
             npm run build
 
             echo "== BUILD SUCCEEDED =="
@@ -96,6 +109,7 @@ jobs:
             pm2 status
 
             rm -rf "$BACKUP_DIR"
-            find "$RELEASES_DIR" -maxdepth 1 -mindepth 1 -type d | sort | head -n -5 | xargs -r rm -rf
+            rm -rf "$NPM_CACHE_DIR"
+            find "$RELEASES_DIR" -maxdepth 1 -mindepth 1 -type d | sort | head -n -3 | xargs -r rm -rf
 
             echo "== SAFE DEPLOY COMPLETE =="
