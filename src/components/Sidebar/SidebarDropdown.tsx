@@ -4,11 +4,12 @@ import { usePathname } from "next/navigation";
 
 const SidebarDropdown = ({ item, permission, userType, onNavigate }: any) => {
   const pathname = usePathname();
+  const items = Array.isArray(item) ? item : [];
 
   return (
     <>
       <ul className="mb-5.5 mt-4 flex flex-col gap-2.5 pl-6">
-        {item.map((item: any, index: number) => {
+        {items.map((item: any, index: number) => {
           const transformedLabel = item?.label
             ?.replace(/\s+/g, "_")
             .toLowerCase();

@@ -3,7 +3,6 @@ import React, { useEffect, useState } from "react";
 import View from "@/components/Process/view";
 import DefaultLayout from "@/components/Layouts/DefaultLayout";
 import ProductionProcess from "@/components/ProductionManager/Process/index";
-import { userInfo } from "os";
 
 const ViewProcess = () => {
   const [userDetails, setUserDetails] = useState({});

@@ -1,5 +1,6 @@
-﻿const decodeToken = (token) => {
+const decodeToken = (token) => {
   if (!token) return null;
+  if (typeof window === "undefined") return null;
 
   const base64Url = token.split(".")[1];
   const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
@@ -11,18 +12,23 @@
     return null;
   }
 };
+
 export const verifyTokenClientSide = () => {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
+    return false;
+  }
+
   const token = localStorage.getItem("token");
 
   if (!token) {
-    return false; // No token, treat as not authenticated
+    return false;
   }
 
   const decoded = decodeToken(token);
   if (!decoded) {
     localStorage.removeItem("token");
     localStorage.removeItem("userDetails");
-    return false; // Decoding failed
+    return false;
   }
 
   const currentTime = Date.now() / 1000;
@@ -30,8 +36,8 @@ export const verifyTokenClientSide = () => {
   if (decoded.exp < currentTime) {
     localStorage.removeItem("token");
     localStorage.removeItem("userDetails");
-    return false; // Token expired
+    return false;
   }
 
-  return true; // Token is valid
+  return true;
 };

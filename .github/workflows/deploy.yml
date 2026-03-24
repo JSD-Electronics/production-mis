@@ -18,34 +18,77 @@ jobs:
           key: ${{ secrets.EC2_KEY }}
           script: |
             set -e
-            cd /var/www/html/production-mis
 
-            echo "== DEPLOY START =="
-            pwd
-            git status --short || true
+            APP_NAME="production-mis"
+            APP_ROOT="/var/www/html"
+            LIVE_DIR="$APP_ROOT/$APP_NAME"
+            DEPLOY_ROOT="$APP_ROOT/.deployments/$APP_NAME"
+            REPO_CACHE="$DEPLOY_ROOT/repo.git"
+            RELEASES_DIR="$DEPLOY_ROOT/releases"
+            TIMESTAMP="$(date +%Y%m%d%H%M%S)"
+            RELEASE_DIR="$RELEASES_DIR/$TIMESTAMP"
+            BACKUP_DIR="$RELEASES_DIR/rollback-$TIMESTAMP"
+            ENV_BACKUP="/tmp/${APP_NAME}.env"
 
-            # Free up space before Git operations
+            echo "== SAFE DEPLOY START =="
+            echo "Live dir: $LIVE_DIR"
+
+            mkdir -p "$DEPLOY_ROOT" "$RELEASES_DIR"
+
+            if [ -f "$LIVE_DIR/.env" ]; then
+              cp "$LIVE_DIR/.env" "$ENV_BACKUP"
+            fi
+
+            if [ ! -d "$REPO_CACHE" ]; then
+              REPO_URL="$(git -C "$LIVE_DIR" config --get remote.origin.url)"
+              if [ -z "$REPO_URL" ]; then
+                echo "Remote origin URL not found; cannot initialize deploy cache."
+                exit 1
+              fi
+              git clone --mirror "$REPO_URL" "$REPO_CACHE"
+            fi
+
+            git --git-dir="$REPO_CACHE" fetch --prune origin main
+
+            mkdir -p "$RELEASE_DIR"
+            git --git-dir="$REPO_CACHE" archive origin/main | tar -x -C "$RELEASE_DIR"
+
+            if [ -f "$ENV_BACKUP" ]; then
+              cp "$ENV_BACKUP" "$RELEASE_DIR/.env"
+            fi
+
+            cd "$RELEASE_DIR"
             rm -rf .next/cache
             npm cache clean --force
-            pm2 flush || true
-
-            # Keep server-only env values while forcing the code checkout to match origin/main.
-            cp .env /tmp/production-mis.env || true
-            git merge --abort || true
-            git rebase --abort || true
-            rm -f .git/index.lock .git/MERGE_HEAD .git/MERGE_MSG .git/ORIG_HEAD
-            git reset --hard || true
-            git fetch --prune origin main
-            git reset --hard FETCH_HEAD
-            git clean -fd -e .env
-            cp /tmp/production-mis.env .env || true
-
-            echo "== POST GIT SYNC =="
-            git rev-parse --short HEAD
-            git status --short || true
-
             npm install
             npm run build
-            pm2 restart production-mis || pm2 start npm --name "production-mis" -- start
+
+            echo "== BUILD SUCCEEDED =="
+
+            if [ -d "$LIVE_DIR" ]; then
+              mv "$LIVE_DIR" "$BACKUP_DIR"
+            fi
+
+            mv "$RELEASE_DIR" "$LIVE_DIR"
+
+            if pm2 restart "$APP_NAME" --update-env --cwd "$LIVE_DIR"; then
+              echo "PM2 restart succeeded"
+            elif pm2 start npm --name "$APP_NAME" --cwd "$LIVE_DIR" -- start; then
+              echo "PM2 start succeeded"
+            else
+              echo "PM2 failed; rolling back"
+              rm -rf "$LIVE_DIR"
+              if [ -d "$BACKUP_DIR" ]; then
+                mv "$BACKUP_DIR" "$LIVE_DIR"
+                pm2 restart "$APP_NAME" --update-env --cwd "$LIVE_DIR" || true
+              fi
+              exit 1
+            fi
+
             pm2 save
             pm2 status
+
+            rm -rf "$BACKUP_DIR"
+            find "$RELEASES_DIR" -maxdepth 1 -mindepth 1 -type d | sort | head -n -5 | xargs -r rm -rf
+
+            echo "== SAFE DEPLOY COMPLETE =="

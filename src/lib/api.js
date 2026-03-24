@@ -14,6 +14,10 @@ const api = axios.create({
 });
 api.interceptors.request.use(
   (config) => {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") {
+      return config;
+    }
+
     const token = localStorage.getItem("token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -25,6 +29,10 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (typeof window === "undefined" || typeof localStorage === "undefined") {
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401) {
       localStorage.removeItem("token");
       localStorage.removeItem("userDetails");
@@ -49,8 +57,10 @@ export const login = async (identifier, password) => {
     }
 
     const response = await api.post("/login", payload);
-    localStorage.setItem("token", response.data.token);
-    localStorage.setItem("userDetails", JSON.stringify(response.data.user));
+    if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+      localStorage.setItem("token", response.data.token);
+      localStorage.setItem("userDetails", JSON.stringify(response.data.user));
+    }
     return response.data;
   } catch (error) {
     throw error.response?.data || { message: "Login failed" };
@@ -62,8 +72,10 @@ export const logout = async () => {
   } catch (error) {
     console.error("Logout failed:", error);
   } finally {
-    localStorage.removeItem("token");
-    localStorage.removeItem("userDetails");
+    if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
+      localStorage.removeItem("token");
+      localStorage.removeItem("userDetails");
+    }
   }
 };
 export const getUserDetail = async (id) => {

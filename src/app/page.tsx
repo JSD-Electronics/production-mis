@@ -18,6 +18,10 @@ export default function Home() {
   }, []);
   const isTokenExpired = (token: string | null) => {
     try {
+      if (typeof window === "undefined") {
+        return true;
+      }
+
       if (!token) {
         return true;
       }
@@ -25,7 +29,7 @@ export default function Home() {
       if (!payload) {
         return true;
       }
-      const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+      const decoded = JSON.parse(window.atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
       const currentTime = Math.floor(Date.now() / 1000);
       if (decoded?.exp && decoded.exp < currentTime) {
         router.push("/auth/signin");

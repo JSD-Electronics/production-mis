@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from "react";
 import DefaultLayout from "@/components/Layouts/DefaultLayout";
 import ViewFGToStore from "@/components/FgToStore/view";
-import { userInfo } from "os";
 
 const ViewProcess = () => {
   const [userDetails, setUserDetails] = useState({});

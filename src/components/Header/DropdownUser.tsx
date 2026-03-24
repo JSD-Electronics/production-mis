@@ -15,20 +15,16 @@ const DropdownUser = () => {
   const [imageError, setImageError] = useState(false);
   const router = useRouter();
   React.useEffect(() => {
-    const decoded = verifyTokenClientSide();
-    // if (!decoded) {
-    //   router.push("/");
-    // } else {
-    let response = JSON.parse(localStorage.getItem("userDetails") || "{}");
+    if (typeof window === "undefined") return;
+
+    verifyTokenClientSide();
+    const response = JSON.parse(localStorage.getItem("userDetails") || "{}");
     setUserDetails(response);
     const filePath = response.profilePic || "";
     const normalizedFilePath = filePath.replace(/\\/g, "/");
-    setProfilePicture(
-      `${CONFIG.BASE_URL}/${normalizedFilePath}`,
-    );
-    setImageError(false); // Reset error state when details change
-    // }
-  }, [localStorage.getItem("userDetails")]);
+    setProfilePicture(`${CONFIG.BASE_URL}/${normalizedFilePath}`);
+    setImageError(false);
+  }, []);
   const handleLogout = async () => {
     await logout(); // Call the logout function
     router.push("/"); // Redirect to login page

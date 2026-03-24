@@ -52,6 +52,9 @@ const Sidebar = ({
   const [userType, setUserType] = useLocalStorage<string>("sidebarUserType", "");
   const [permission, setPermission] = useLocalStorage<any>("sidebarPermission", {});
   const [pageName, setPageName] = useLocalStorage("selectedMenu", "dashboard");
+  const safeMenuGroups = Array.isArray(menuGroups)
+    ? menuGroups
+    : [{ name: "MENU", menuItems: [] }];
 
   React.useEffect(() => {
     const raw = localStorage.getItem("userDetails");
@@ -140,7 +143,7 @@ const Sidebar = ({
       });
 
       setMenuGroups((prev) =>
-        prev.map((group) =>
+        (Array.isArray(prev) ? prev : [{ name: "MENU", menuItems: [] }]).map((group) =>
           group.name === "MENU"
             ? { ...group, menuItems: sortedMenus }
             : group,
@@ -255,7 +258,7 @@ const Sidebar = ({
             className={`mt-1 py-4 ${effectiveCollapsed ? "px-2" : "px-4 lg:px-6"
               }`}
           >
-            {menuGroups.map((group, groupIndex) => (
+            {safeMenuGroups.map((group, groupIndex) => (
               <div key={groupIndex}>
                 {effectiveCollapsed ? (
                   <div className="mb-3 border-t border-white/10" />
@@ -266,7 +269,7 @@ const Sidebar = ({
                 )}
 
                 <ul className="mb-6 flex flex-col gap-1.5">
-                  {group.menuItems.map((menuItem, menuIndex) => {
+                  {(Array.isArray(group?.menuItems) ? group.menuItems : []).map((menuItem, menuIndex) => {
                     const transformedLabel = menuItem.label
                       .replace(/\s+/g, "_")
                       .toLowerCase();

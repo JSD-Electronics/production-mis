@@ -15,6 +15,7 @@ const SidebarItem = ({
   const [tooltipOpen, setTooltipOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pathname = usePathname();
+  const itemChildren = Array.isArray(item?.children) ? item.children : [];
 
   const handleClick = () => {
     const updatedPageName =
@@ -45,7 +46,7 @@ const SidebarItem = ({
   };
 
   const isItemActive = isActive(item);
-  const hasChildren = item.children?.length > 0;
+  const hasChildren = itemChildren.length > 0;
   const isRoutable = typeof item.route === "string" && item.route.trim() !== "" && item.route !== "#";
 
   const openTooltip = () => {
@@ -125,7 +126,7 @@ const SidebarItem = ({
                     </div>
                     {/* Child links */}
                     <ul className="py-1.5">
-                      {item.children.map((child: any, idx: number) => {
+                      {itemChildren.map((child: any, idx: number) => {
                         const childLabel = child?.label
                           ?.replace(/\s+/g, "_")
                           .toLowerCase();
@@ -244,7 +245,7 @@ const SidebarItem = ({
                 }`}
             >
               <SidebarDropdown
-                item={item.children}
+                item={itemChildren}
                 permission={permission}
                 userType={userType}
                 onNavigate={onNavigate}

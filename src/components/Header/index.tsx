@@ -41,7 +41,7 @@ const Header = ({
           : [];
         const flat: { label: string; route: string }[] = [];
         const walk = (items: any[]) => {
-          items.forEach((item) => {
+          (Array.isArray(items) ? items : []).forEach((item) => {
             if (item?.children?.length) {
               walk(item.children);
             } else if (item?.route && item.route !== "#") {
