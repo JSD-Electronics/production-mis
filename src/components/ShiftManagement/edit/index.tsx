@@ -1,4 +1,4 @@
-ï»¿"use client";
+"use client";
 
 import React, { useState, useEffect, useMemo } from "react";
 import {
@@ -21,6 +21,7 @@ import {
 } from "react-beautiful-dnd";
 import { ToastContainer, toast } from "react-toastify";
 import { updateShift, getShift } from "../../../lib/api";
+import { FormSkeleton } from "@/components/common/Skeletons";
 
 import "react-toastify/dist/ReactToastify.css";
 
@@ -258,11 +259,7 @@ const EditShiftManagement = () => {
   const dayNames = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
   if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="h-16 w-16 animate-spin rounded-full border-4 border-solid border-primary border-t-transparent"></div>
-      </div>
-    );
+    return <FormSkeleton rows={6} />;
   }
 
   return (
@@ -413,7 +410,7 @@ const EditShiftManagement = () => {
                         }`}
                     >
                       {interval.breakTime ? <Coffee size={13} className="opacity-70" /> : <Clock size={13} className="opacity-70" />}
-                      <span>{interval.startTime} â€” {interval.endTime}</span>
+                      <span>{interval.startTime} — {interval.endTime}</span>
                       <span className="ml-1 text-[9px] opacity-50 uppercase tracking-tighter">
                         ({Math.floor(calculateTimeDifference(interval.startTime, interval.endTime) / 60)}h {calculateTimeDifference(interval.startTime, interval.endTime) % 60}m)
                       </span>
@@ -465,7 +462,7 @@ const EditShiftManagement = () => {
                                   className="w-full rounded-xl border-2 border-transparent bg-white py-2 px-3 text-sm font-bold shadow-sm outline-none transition-all focus:border-primary dark:bg-boxdark dark:text-white"
                                 />
                               </div>
-                              <div className="mt-5 text-gray-300">â€”</div>
+                              <div className="mt-5 text-gray-300">—</div>
                               <div className="flex flex-1 flex-col gap-1.5">
                                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">End Time</label>
                                 <input
@@ -523,3 +520,8 @@ const EditShiftManagement = () => {
 };
 
 export default EditShiftManagement;
+
+
+
+
+

@@ -46,6 +46,7 @@ const EditPlanSchedule = () => {
   const [selectedProcess, setSelectedProcess] = useState<any>(null);
   const [roomPlan, setRoomPlan] = useState<any[]>([]);
   const [assignedStages, setAssignedStages] = useState<any>({});
+  const [reservedSeatMap, setReservedSeatMap] = useState<any>({});
   const [startDate, setStartDate] = useState("");
   const [totalTimeEstimation, setTotalTimeEstimation] = useState("");
   const [totalUPHA, setTotalUPHA] = useState("");
@@ -103,16 +104,22 @@ const EditPlanSchedule = () => {
     }
   };
   useEffect(() => {
-    getAllProcess();
-    getAllRoomPlan();
-    getAllShifts();
-    getOperators();
-    fetchJigCategories();
-    const pathname = window.location.pathname;
-    const id = pathname.split("/").pop();
-    setID(id);
-    getPlaningById(id);
-  }, [loading]);
+    const loadInitialData = async () => {
+      const pathname = window.location.pathname;
+      const planId = pathname.split("/").pop();
+      setID(planId);
+      await Promise.all([
+        getAllProcess(),
+        getAllRoomPlan(),
+        getAllShifts(),
+        getOperators(),
+        fetchJigCategories(),
+        getPlaningById(planId),
+      ]);
+    };
+
+    loadInitialData();
+  }, []);
   useEffect(() => {
     if (rawSelectedProcessId && process.length > 0) {
       const singleProcess = process.find(
@@ -149,13 +156,13 @@ const EditPlanSchedule = () => {
   const getProduct = async (id: any) => {
     try {
       let result = await getProductById(id);
-      result.product.stages.forEach((stage) => {
-        stage?.subSteps
-          .filter((value) => value.isPackagingStatus)
-          .forEach((value) => {
-            setPackagingData((prev) => [...prev, value]);
-          });
-      });
+      const packagingItems =
+        result?.product?.stages?.flatMap((stage) =>
+          (stage?.subSteps || [])
+            .filter((value) => value.isPackagingStatus)
+            .map((value) => value),
+        ) || [];
+      setPackagingData(packagingItems);
       setInventoryData(result.inventory);
       setProductName(result.product.name);
       setSelectedProduct(result);
@@ -184,9 +191,12 @@ const EditPlanSchedule = () => {
     calculateTimeDifference(Shift);
     setRepeatCount(result?.repeatCount);
     setStartDate(formatDate(result?.startDate));
-    setAssignedStages(safeParse(result?.assignedStages, {}));
-    setAssignedOperators(safeParse(result?.assignedOperators, {}));
-    setAssignedJigs(safeParse(result?.assignedJigs, {}));
+    const currentAssignedStages = safeParse(result?.assignedStages, {});
+    const currentAssignedOperators = safeParse(result?.assignedOperators, {});
+    const currentAssignedJigs = safeParse(result?.assignedJigs, {});
+    setAssignedStages(currentAssignedStages);
+    setAssignedOperators(currentAssignedOperators);
+    setAssignedJigs(currentAssignedJigs);
     setAssignedCustomOperators(safeParse(result?.assignedCustomStagesOp, []));
     setEstimatedEndDate(formatDate(result?.estimatedEndDate));
     setTotalTimeEstimation(result?.totalTimeEstimation);
@@ -211,24 +221,15 @@ const EditPlanSchedule = () => {
       formatDate(result?.estimatedEndDate),
     );
     await getProductById(singleProcess?.selectedProduct);
-    const assignedStages = allocateStagesToSeats(
-      singleProcess.stages,
-      room,
-      result?.repeatCount,
-      reservedSeats,
-      safeParse(result?.assignedStages, {}),
-      singleProcess,
-    );
-    const uniqueAssignedStages = new Set();
-    const seatCountPerStage = {};
-
-    for (let key in assignedStages) {
-      assignedStages[key].forEach((stage) => {
-        uniqueAssignedStages.add(stage?.name);
-        seatCountPerStage[stage?.name] =
-          (seatCountPerStage[stage?.name] || 0) + 1;
-      });
-    }
+    setReservedSeatMap(reservedSeats || {});
+    setAssignedOperators((prev) => ({
+      ...prev,
+      ...(currentAssignedOperators || {}),
+    }));
+    setAssignedJigs((prev) => ({
+      ...prev,
+      ...(currentAssignedJigs || {}),
+    }));
     handleCalculation();
   };
 
@@ -236,11 +237,6 @@ const EditPlanSchedule = () => {
     try {
       let result = await getPlaningAndSchedulingById(id);
       setPlaningData(result);
-      // Apply only when prerequisite lists are loaded
-      if (process.length > 0 && roomPlan.length > 0 && shifts.length > 0) {
-        await applyPlaningData(result);
-      }
-      setLoading(false);
     } catch (error) {
       setLoading(false);
       return {};
@@ -250,6 +246,7 @@ const EditPlanSchedule = () => {
   useEffect(() => {
     if (planingData && process.length > 0 && roomPlan.length > 0 && shifts.length > 0) {
       applyPlaningData(planingData);
+      setLoading(false);
     }
   }, [planingData, process, roomPlan, shifts]);
   const checkSeatAvailability = async (
@@ -291,12 +288,19 @@ const EditPlanSchedule = () => {
               ...prev,
               ...assignedJigs,
             }));
-            const parsedStages = JSON.parse(plan.assignedStages);
+            const parsedStages = JSON.parse(plan.assignedStages || "{}");
             Object.keys(parsedStages).forEach((seatKey) => {
               if (!acc[seatKey]) {
                 acc[seatKey] = [];
               }
-              acc[seatKey] = acc[seatKey].concat(parsedStages[seatKey]);
+              acc[seatKey] = acc[seatKey].concat(
+                parsedStages[seatKey].map((stage: any) => ({
+                  ...stage,
+                  reserved: true,
+                  processName: plan.processName,
+                  pId: plan?.processDetails?.processID || plan?.pId,
+                })),
+              );
             });
           }
         } catch (error) {
@@ -313,26 +317,31 @@ const EditPlanSchedule = () => {
   const getOperators = async () => {
     try {
       const result = await getOperatorsForPlan();
-      setOperators(result.users);
-      return false;
+      const users = result?.users || [];
+      setOperators(users);
+      return users;
     } catch (error) {
-
+      return [];
     }
   };
   const getAllShifts = async () => {
     try {
       const result = await viewShift();
-      setShifts(result?.Shifts);
+      const shifts = result?.Shifts || [];
+      setShifts(shifts);
+      return shifts;
     } catch (error) {
-
+      return [];
     }
   };
   const getAllProcess = async () => {
     try {
       const result = await viewProcess();
-      setProcess(result.Processes);
+      const processes = result.Processes || [];
+      setProcess(processes);
+      return processes;
     } catch (error) {
-
+      return [];
     }
   };
   const handleRemoveStage = (
@@ -404,9 +413,12 @@ const EditPlanSchedule = () => {
   const getAllRoomPlan = async () => {
     try {
       const result = await viewRoom();
-      setRoomPlan(result.RoomPlan);
+      const rooms = result.RoomPlan || [];
+      setRoomPlan(rooms);
+      return rooms;
     } catch (error) {
       console.error("Error Fetching Room Plan:", error);
+      return [];
     }
   };
   const calculateTimeDifference = (selected) => {
@@ -444,7 +456,7 @@ const EditPlanSchedule = () => {
       setAssignedStages((prev) => {
         const updatedStages = { ...prev };
         const currentKey = `${rowIndex}-${seatIndex}`;
-        if (updatedStages[currentKey]?.[0]?.reserved) {
+        if (reservedSeatMap[currentKey]) {
           return prev;
         }
         const isSeatAssigned = updatedStages[currentKey]?.length > 0;
@@ -481,7 +493,13 @@ const EditPlanSchedule = () => {
   };
   const calculateSingleStage = async (updatedStages, rowIndex, seatIndex) => {
     let totalQuantity = parseInt(selectedProcess?.quantity);
-    const stages = selectedProduct.stages;
+    const stages =
+      selectedProduct?.product?.stages ||
+      selectedProduct?.stages ||
+      [];
+    if (!stages.length || !selectedProcess) {
+      return;
+    }
     const uniqueAssignedStages = new Set();
     const seatCountPerStage = {};
 
@@ -698,11 +716,11 @@ const EditPlanSchedule = () => {
     setAssignedStages((prevStages) => {
       const updatedStages = { ...prevStages };
       const updatedOperators = { ...assignedOperators };
-      if (updatedStages[fromCoordinates]?.[0]?.reserved) {
+      if (reservedSeatMap[fromCoordinates]) {
 
         return prevStages;
       }
-      if (updatedStages[toCoordinates]?.[0]?.reserved) {
+      if (reservedSeatMap[toCoordinates]) {
 
         return prevStages;
       }
@@ -717,7 +735,7 @@ const EditPlanSchedule = () => {
         const maxRows = selectedRoom.lines.length;
         const overflow = [];
         while (fromStage || fromOperator) {
-          if (updatedStages[currentPosition]?.[0]?.reserved) {
+          if (reservedSeatMap[currentPosition]) {
             seatIndex++;
             if (seatIndex >= seatsPerRow) {
               seatIndex = 0;
@@ -1550,6 +1568,7 @@ const EditPlanSchedule = () => {
                                         handleRemoveStage={handleRemoveStage}
                                         item={seat}
                                         assignedStages={assignedStages}
+                                        reservedStages={reservedSeatMap}
                                         coordinates={`${rowIndex}-${seatIndex}`}
                                         moveItem={moveItem}
                                         operators={operators}

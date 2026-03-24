@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import DataTable, { TableColumn } from "react-data-table-component";
@@ -14,7 +14,7 @@ import {
   Hash,
   CheckCircle2
 } from "lucide-react";
-import { BallTriangle } from "react-loader-spinner";
+import { TableSkeleton } from "@/components/common/Skeletons";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -318,9 +318,7 @@ const ViewOrderNumber = () => {
 
         <div className="relative">
           {loading ? (
-            <div className="flex h-64 items-center justify-center">
-              <BallTriangle height={80} width={80} color="#3c50e0" />
-            </div>
+            <TableSkeleton rows={6} />
           ) : (
             <DataTable
               columns={columns}
@@ -381,3 +379,6 @@ const ViewOrderNumber = () => {
 };
 
 export default ViewOrderNumber;
+
+
+

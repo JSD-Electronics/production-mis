@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from "react";
+"use client";
+
+import React from "react";
 import { createPortal } from "react-dom";
 
 const Modal = ({
@@ -26,46 +28,49 @@ const Modal = ({
   extraActions?: React.ReactNode;
   children: React.ReactNode;
 }) => {
-  const [mounted, setMounted] = useState(false);
+  const [portalHost, setPortalHost] = React.useState<HTMLElement | null>(null);
 
-  useEffect(() => {
-    setMounted(true);
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    }
+  React.useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const host = document.createElement("div");
+    host.setAttribute("data-modal-portal", "true");
+    document.body.appendChild(host);
+    setPortalHost(host);
+
     return () => {
-      document.body.style.overflow = 'unset';
+      setPortalHost((current) => (current === host ? null : current));
+      if (host.parentNode?.contains(host)) {
+        host.parentNode.removeChild(host);
+      }
     };
-  }, [isOpen]);
+  }, []);
 
-  if (!isOpen || !mounted) return null;
+  if (!isOpen) return null;
 
-  const modalContent = (
-    <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300 p-3 sm:p-6">
+  const modal = (
+    <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 transition-all duration-300 sm:p-6">
       <div
-        className={`w-full ${maxWidth} max-h-[85vh] sm:max-h-[90vh] flex flex-col scale-100 transform overflow-hidden rounded-2xl bg-white p-0 shadow-2xl transition-all duration-300 animate-in fade-in zoom-in-95 duration-200`}
+        className={`max-h-[85vh] w-full ${maxWidth} flex transform scale-100 flex-col overflow-hidden rounded-2xl bg-white p-0 shadow-2xl transition-all duration-300 animate-in fade-in zoom-in-95 duration-200 sm:max-h-[90vh]`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Modal Header */}
-        <div className="border-gray-100 bg-gray-50/50 border-b px-4 py-3 sm:px-6 sm:py-4">
+        <div className="border-gray-100 border-b bg-gray-50/50 px-4 py-3 sm:px-6 sm:py-4">
           <h2 className="text-gray-800 text-lg font-bold tracking-tight">
             {title}
           </h2>
         </div>
 
-        {/* Modal Body */}
-        <div className="px-4 py-4 sm:px-6 sm:py-5 overflow-y-auto flex-1">
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           {children}
         </div>
 
-        {/* Modal Footer */}
         <div className="border-gray-100 flex flex-wrap justify-end gap-3 border-t bg-gray-50/30 px-4 py-3 sm:px-6 sm:py-4">
           {extraActions}
           {closeOption && (
             <button
               type="button"
               onClick={onClose}
-              className="hover:bg-gray-100 active:bg-gray-200 text-gray-600 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 focus:outline-none"
+              className="text-gray-600 hover:bg-gray-100 active:bg-gray-200 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 focus:outline-none"
             >
               Cancel
             </button>
@@ -75,10 +80,11 @@ const Modal = ({
               type="button"
               onClick={onSubmit}
               disabled={submitDisabled}
-              className={`rounded-xl px-5 py-2 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-all duration-200 focus:outline-none active:scale-95 ${submitDisabled
-                ? "bg-gray-300 cursor-not-allowed shadow-none"
-                : "bg-blue-600 hover:bg-blue-700 hover:shadow-blue-500/40"
-                }`}
+              className={`rounded-xl px-5 py-2 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-all duration-200 focus:outline-none active:scale-95 ${
+                submitDisabled
+                  ? "cursor-not-allowed bg-gray-300 shadow-none"
+                  : "bg-blue-600 hover:bg-blue-700 hover:shadow-blue-500/40"
+              }`}
             >
               {submitText}
             </button>
@@ -88,7 +94,9 @@ const Modal = ({
     </div>
   );
 
-  return createPortal(modalContent, document.body);
+  if (!portalHost) return null;
+
+  return createPortal(modal, portalHost);
 };
 
 export default Modal;

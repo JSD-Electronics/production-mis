@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useState, useEffect } from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
@@ -7,7 +7,7 @@ import {
   getLogsByProcessID,
 } from "@/lib/api";
 import { formatDate } from "@/lib/common";
-import { BallTriangle } from "react-loader-spinner";
+import { TableSkeleton } from "@/components/common/Skeletons";
 import { FileText } from "lucide-react";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -87,11 +87,11 @@ const PlaningAndSchedulingLogsComponent = () => {
 
   return (
     <div className="bg-gray-100 min-h-screen p-4 md:p-6">
-      {/* ðŸ”¹ Breadcrumb */}
+      {/* 🔹 Breadcrumb */}
       <Breadcrumb pageName="Process Logs" parentName="Process" />
 
       <div className="mt-6 rounded-xl bg-white p-6 shadow-md">
-        {/* ðŸ”¹ Header Section */}
+        {/* 🔹 Header Section */}
         <div className="border-gray-200 flex items-center gap-3 border-b pb-4">
           <FileText className="h-6 w-6 text-primary" />
           <h2 className="text-gray-800 text-xl font-semibold dark:text-white">
@@ -99,7 +99,7 @@ const PlaningAndSchedulingLogsComponent = () => {
           </h2>
         </div>
         <>
-          {/* ðŸ”¹ Process Details */}
+          {/* 🔹 Process Details */}
           {startDate || totalTimeEstimation || totalUPHA || estimatedEndDate ? (
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
@@ -130,22 +130,20 @@ const PlaningAndSchedulingLogsComponent = () => {
           ) : (
             <div className="mt-6 rounded-lg bg-danger/10 p-4 text-center">
               <p className="font-medium text-danger">
-                âš ï¸ Please do Planning & Scheduling for more details
+                ⚠️ Please do Planning & Scheduling for more details
               </p>
             </div>
           )}
         </>
 
-        {/* ðŸ”¹ Logs Table */}
+        {/* 🔹 Logs Table */}
         <div className="mt-8">
           <h3 className="text-gray-800 mb-4 text-lg font-semibold dark:text-white">
             Activity Logs
           </h3>
 
           {loading ? (
-            <div className="flex justify-center py-10">
-              <BallTriangle height={80} width={80} color="#3B82F6" />
-            </div>
+            <TableSkeleton rows={6} />
           ) : (
             <div className="border-gray-200 overflow-x-auto rounded-md border">
               <DataTable
@@ -213,7 +211,7 @@ export default PlaningAndSchedulingLogsComponent;
 // import { formatDate } from "@/lib/common";
 // import { useRouter } from "next/navigation";
 // import { FiEdit, FiTrash } from "react-icons/fi";
-// import { BallTriangle } from "react-loader-spinner";
+// import { TableSkeleton } from "@/components/common/Skeletons";
 // import ConfirmationPopup from "@/components/Confirmation/page";
 // import { ToastContainer, toast } from "react-toastify";
 // import "react-toastify/dist/ReactToastify.css";
@@ -408,3 +406,6 @@ export default PlaningAndSchedulingLogsComponent;
 //   );
 // };
 // export default PlaningAndSchedulingLogsComponent;
+
+
+

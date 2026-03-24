@@ -17,6 +17,7 @@ import {
   Layers,
   X,
 } from "lucide-react";
+import { CardGridSkeleton, TableSkeleton } from "@/components/common/Skeletons";
 
 /* ─── status meta ─── */
 const PROCESS_STATUS_META: Record<string, { label: string; cls: string; dot: string }> = {
@@ -833,10 +834,9 @@ const ViewFGToStore = () => {
       {/* Content */}
       <div className="mt-4">
         {loading ? (
-          <div className="flex flex-col items-center justify-center gap-4 py-24">
-            <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
-            <p className="text-sm text-slate-400">Loading FG store inventory…</p>
-            <p className="text-xs text-slate-300">Fetching all processes and their cartons…</p>
+          <div className="space-y-4">
+            <CardGridSkeleton rows={3} />
+            <TableSkeleton rows={6} />
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-red-200 bg-red-50 py-16">
@@ -874,3 +874,4 @@ const ViewFGToStore = () => {
 };
 
 export default ViewFGToStore;
+

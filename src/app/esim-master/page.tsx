@@ -26,6 +26,7 @@ export default function EsimMasterListPage() {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [apns, setApns] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [referenceLoading, setReferenceLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -45,12 +46,7 @@ export default function EsimMasterListPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [resMaster, resMakes, resProfiles, resApns] = await Promise.all([
-        viewEsimMasters(),
-        viewEsimMakes(),
-        viewEsimProfiles(),
-        viewEsimApns(),
-      ]);
+      const resMaster = await viewEsimMasters();
 
       const list = Array.isArray(resMaster)
         ? resMaster
@@ -60,9 +56,6 @@ export default function EsimMasterListPage() {
             ? resMaster.esimMasters
             : [];
       setRows(list);
-      setMakes(resMakes.data || []);
-      setProfiles(resProfiles.data || []);
-      setApns(resApns.data || []);
     } catch (e: any) {
       toast.error(e?.message || "Failed to load data.");
     } finally {
@@ -70,9 +63,28 @@ export default function EsimMasterListPage() {
     }
   }, []);
 
+  const loadReferenceData = useCallback(async () => {
+    setReferenceLoading(true);
+    try {
+      const [resMakes, resProfiles, resApns] = await Promise.all([
+        viewEsimMakes(),
+        viewEsimProfiles(),
+        viewEsimApns(),
+      ]);
+      setMakes(resMakes.data || []);
+      setProfiles(resProfiles.data || []);
+      setApns(resApns.data || []);
+    } catch (e: any) {
+      console.error("Failed to load ESIM reference data:", e);
+    } finally {
+      setReferenceLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     load();
-  }, [load]);
+    void loadReferenceData();
+  }, [load, loadReferenceData]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -207,8 +219,11 @@ export default function EsimMasterListPage() {
 
   return (
     <DefaultLayout>
-      {loading && <Loader />}
-      <div className="mx-auto max-w-270">
+      {loading ? (
+        <Loader />
+      ) : (
+        <>
+          <div className="mx-auto max-w-270">
         <Breadcrumb pageName="ESIM Masters" parentName="" />
         <ToastContainer />
 
@@ -223,6 +238,9 @@ export default function EsimMasterListPage() {
                     setEditingId(null);
                     setFormData({ ccid: "", esimMake: "", profile1: "", profile2: "", apnProfile1: "", apnProfile2: "", remarks: "" });
                     setShowModal(true);
+                    if (!makes.length || !profiles.length || !apns.length) {
+                      void loadReferenceData();
+                    }
                   }}
                   className="rounded bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-opacity-90"
                 >
@@ -339,6 +357,12 @@ export default function EsimMasterListPage() {
                 </tbody>
               </table>
             </div>
+
+            {referenceLoading && (
+              <div className="mt-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+                Loading makes, profiles, and APNs in the background...
+              </div>
+            )}
 
             <Pagination
               page={page}
@@ -503,9 +527,10 @@ export default function EsimMasterListPage() {
               </div>
             </form>
           </div>
-        </div >
-      )
-      }
+              </div >
+      )}
+      </>
+      )}
     </DefaultLayout >
   );
 }

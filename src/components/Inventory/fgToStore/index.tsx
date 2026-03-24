@@ -13,7 +13,7 @@ import {
     LayoutGrid,
     ClipboardList
 } from "lucide-react";
-import { BallTriangle } from "react-loader-spinner";
+import { TableSkeleton } from "@/components/common/Skeletons";
 import { useRouter } from "next/navigation";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -133,9 +133,7 @@ const FGInventoryView = () => {
             </div>
 
             {loading ? (
-                <div className="flex h-64 items-center justify-center">
-                    <BallTriangle height={80} width={80} color="#3c50e0" />
-                </div>
+                <TableSkeleton rows={6} />
             ) : filteredData.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 rounded-2xl bg-white border border-dashed border-gray-300 dark:bg-boxdark dark:border-strokedark">
                     <ClipboardList size={48} className="text-gray-300 mb-4" />
@@ -223,3 +221,8 @@ const FGInventoryView = () => {
 };
 
 export default FGInventoryView;
+
+
+
+
+

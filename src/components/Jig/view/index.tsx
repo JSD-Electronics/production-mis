@@ -15,7 +15,7 @@ import {
   Layers,
   FolderOpen,
 } from "lucide-react";
-import { BallTriangle } from "react-loader-spinner";
+import { DetailSkeleton, TableSkeleton } from "@/components/common/Skeletons";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -440,9 +440,7 @@ const ViewJig = () => {
 
         <div className="relative">
           {loading ? (
-            <div className="flex h-64 items-center justify-center">
-              <BallTriangle height={80} width={80} color="#3c50e0" />
-            </div>
+            <TableSkeleton rows={6} />
           ) : (
             <DataTable
               columns={columns}
@@ -485,9 +483,7 @@ const ViewJig = () => {
         submitDisabled={submitDisabled}
       >
         {modalLoading ? (
-          <div className="flex h-32 items-center justify-center">
-            <BallTriangle height={50} width={50} color="#3c50e0" />
-          </div>
+          <DetailSkeleton />
         ) : (
           <div className="pt-4 space-y-5">
             {/* Jig Name */}
@@ -545,3 +541,11 @@ const ViewJig = () => {
 };
 
 export default ViewJig;
+
+
+
+
+
+
+
+

@@ -1,6 +1,8 @@
 "use client";
 import React from "react";
 import StageSimulator from "@/components/product/StageSimulator";
+import DefaultLayout from "@/components/Layouts/DefaultLayout";
+import { PageSkeleton } from "@/components/common/Skeletons";
 import { getOverallDeviceTestEntry, getProcessByID } from "@/lib/api";
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
@@ -97,9 +99,9 @@ export default function NGDeviceSimulatePage({
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
-        <div className="h-16 w-16 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
-      </div>
+      <DefaultLayout>
+        <PageSkeleton variant="detail" />
+      </DefaultLayout>
     );
   }
 
@@ -151,3 +153,7 @@ export default function NGDeviceSimulatePage({
     </div>
   );
 }
+
+
+
+

@@ -109,16 +109,12 @@ export default function NGDevicesReportPage() {
         const result = await fetchNGDevicesByProcess(processId);
         setEntries(result?.data || []);
       } else {
-        const result = await getOverallDeviceTestEntry();
-        const data = result?.DeviceTestEntry || [];
-        const ngEntries = data.filter(
-          (e: any) => (e.status || "").toString().toUpperCase() === "NG",
-        );
-        setEntries(ngEntries);
+        const result = await getOverallDeviceTestEntry({ page: 1, limit: 200, status: "NG" });
+        setEntries(result?.DeviceTestEntry || []);
       }
     } catch (err: any) {
       console.error("Error fetching NG devices:", err);
-      setError(err?.message || "Failed to load data");
+      setError(err?.message || err?.error || err?.message?.message || "Failed to load data");
     } finally {
       setLoading(false);
     }
@@ -207,7 +203,7 @@ export default function NGDevicesReportPage() {
               <p className="mt-1 text-sm text-gray-500">Read-only report of devices marked as NG.</p>
             </div>
             <button
-              onClick={() => fetchData(selectedProcess)}
+              onClick={() => fetchData(selectedProcess || undefined)}
               disabled={loading}
               className="group flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 transition-all hover:bg-gray-50 hover:text-blue-600 disabled:opacity-50"
             >

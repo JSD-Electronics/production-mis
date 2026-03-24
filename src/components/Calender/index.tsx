@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import Breadcrumb from "../Breadcrumbs/Breadcrumb";
 import { viewPlaning } from "../../lib/api";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, Layers } from "lucide-react";
+import { TableSkeleton } from "@/components/common/Skeletons";
 
 interface ScheduleEvent {
   id: string;
@@ -190,9 +191,7 @@ const Calendar = () => {
       </div>
 
       {loading ? (
-        <div className="flex h-96 items-center justify-center rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-solid border-primary border-t-transparent"></div>
-        </div>
+        <TableSkeleton rows={6} />
       ) : (
         <div className="w-full max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-strokedark dark:bg-boxdark">
           <div className="grid grid-cols-7 bg-slate-50 text-slate-600">
@@ -311,5 +310,7 @@ const Calendar = () => {
 };
 
 export default Calendar;
+
+
 
 

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import Modal from "@/components/Modal/page";
@@ -21,7 +21,7 @@ import {
   XCircle,
   ShieldCheck
 } from "lucide-react";
-import { BallTriangle } from "react-loader-spinner";
+import { TableSkeleton } from "@/components/common/Skeletons";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import CardDataStats from "@/components/CardDataStats";
@@ -213,10 +213,7 @@ const ViewSkillManagementComponent = () => {
           <ToastContainer position="top-center" autoClose={3000} />
 
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-24">
-              <BallTriangle height={80} width={80} color="#3C50E0" />
-              <p className="mt-4 text-gray-500 font-medium">Loading skills...</p>
-            </div>
+            <TableSkeleton rows={6} />
           ) : (
             <>
               {/* Action Bar */}
@@ -365,3 +362,9 @@ const ViewSkillManagementComponent = () => {
 };
 
 export default ViewSkillManagementComponent;
+
+
+
+
+
+

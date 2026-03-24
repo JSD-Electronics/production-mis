@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import FormComponent from "@/components/PlaningScheduling/edit/FormComponents";
 import {
@@ -305,6 +305,15 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   const [selectedReason, setSelectedReason] = useState("");
   const [id, setID] = useState("");
   const [loading, setLoading] = useState(true);
+  const isMountedRef = useRef(true);
+  const safeParse = (val: any, fallback: any) => {
+    if (!val) return fallback;
+    try {
+      return typeof val === "string" ? JSON.parse(val) : val;
+    } catch {
+      return fallback;
+    }
+  };
 
   useEffect(() => {
     if (planingId) {
@@ -529,6 +538,12 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   };
 
   useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     getOperators();
     fetchJigCategories();
     const id = resolvedPlaningId;
@@ -645,13 +660,13 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   const getProduct = async (id: any) => {
     try {
       let result = await getProductById(id);
-      result.product.stages.forEach((stage) => {
-        stage?.subSteps
-          .filter((value) => value.isPackagingStatus)
-          .forEach((value) => {
-            setPackagingData((prev) => [...prev, value]);
-          });
-      });
+      const packagingItems =
+        result?.product?.stages?.flatMap((stage) =>
+          (stage?.subSteps || [])
+            .filter((value) => value.isPackagingStatus)
+            .map((value) => value),
+        ) || [];
+      setPackagingData(packagingItems);
       setInventoryData(result.inventory);
       setProductName(result.product.name);
       setSelectedProduct(result);
@@ -708,9 +723,11 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       if (result.downTime) {
         setDownTimeVal(result.downTime);
       }
-      let shifts = await getAllShifts();
-      let roomPlan = await getAllRoomPlan();
-      let processes = await getAllProcess();
+      let [shifts, roomPlan, processes] = await Promise.all([
+        getAllShifts(),
+        getAllRoomPlan(),
+        getAllProcess(),
+      ]);
       let processData;
       const singleProcess = processes.find(
         (value) => value?._id === result.selectedProcess,
@@ -738,9 +755,6 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         }
       }
 
-      if (singleProcess?.selectedProduct) {
-        getProduct(singleProcess?.selectedProduct);
-      }
       setSelectedProcess(singleProcess);
       const room = roomPlan.find(
         (value) => value?._id === result?.selectedRoom,
@@ -749,184 +763,19 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       const Shift = shifts.find(
         (value) => value?._id === result?.selectedShift,
       );
-      let deviceTestEntry = await getDeviceTestRecordsByProcessId(
-        result.selectedProcess,
-      );
-      let deviceTests = deviceTestEntry?.deviceTestRecords || [];
-      setAllDeviceTests(deviceTests);
-      let latestTests = [];
-      try {
-        const latestEntry = await getLatestDeviceTestsByPlanId(result?._id, result.selectedProcess);
-        latestTests = latestEntry?.deviceTestRecords || [];
-      } catch (e) {
-        latestTests = deviceTests.filter(
-          (record) => String(record?.planId) === String(result?._id),
-        );
-      }
-
-      if (singleProcess?.selectedProduct) {
-        processData = await getProductById(singleProcess?.selectedProduct);
-        // Fetch all devices for this product and filter to current process for WIP view
-        try {
-          const deviceResult = await getDeviceByProductId(singleProcess.selectedProduct);
-          const allDevices = deviceResult?.data || [];
-          const onlyProcessDevices = allDevices.filter(
-            (d: any) => String(d.processID) === String(singleProcess._id),
-          );
-          setProcessDevices(onlyProcessDevices);
-        } catch (e) {
-          console.error("Failed to fetch devices for process:", e);
-        }
-      }
-      const stageHeaders =
-        processData?.product?.stages?.map((stage) =>
-          stage?.stageName?.trim(),
-        ) || [];
-      const totalHours = calculateWorkingHours(
-        result.startTime,
-        result.endTime,
-        result.totalBreakTime,
-      );
-      const stageUPHMap =
-        processData?.product?.stages?.reduce((acc, stage) => {
-          acc[stage.stageName] = stage.upha || 0;
-          return acc;
-        }, {}) || {};
-      const rawIntervals = Shift?.intervals || [];
-      const intervals = [];
-      rawIntervals.forEach((interval) => {
-        if (!interval.breakTime) {
-          let curr = toDate(interval.startTime);
-          const end = toDate(interval.endTime);
-          while (curr < end) {
-            let next = new Date(curr);
-            next.setHours(curr.getHours() + 1);
-            if (next > end) next = new Date(end);
-
-            intervals.push({
-              startTime: toTimeString(curr),
-              endTime: toTimeString(next),
-              breakTime: false,
-            });
-            curr = next;
-          }
-        }
-      });
-
-      const tableData = intervals.map((interval) => ({
-        hour: `${interval.startTime} - ${interval.endTime}`,
-        isBreak: interval.breakTime,
-        values: stageHeaders.map((stage) => ({
-          stage,
-          Pass: 0,
-          NG: 0,
-          targetUPH: interval.breakTime ? 0 : (stageUPHMap[stage] || 0),
-        })),
-        status: "future",
-      }));
-
-      const now = new Date();
-      tableData.forEach((row, i) => {
-        const [sH, sM] = intervals[i].startTime.split(":").map(Number);
-        const [eH, eM] = intervals[i].endTime.split(":").map(Number);
-        const start = new Date(now);
-        start.setHours(sH, sM, 0, 0);
-        const end = new Date(now);
-        end.setHours(eH, eM, 0, 0);
-
-        if (now >= start && now < end) row.status = "current";
-        else if (now >= end) row.status = "past";
-        else row.status = "future";
-      });
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (deviceTests.length > 0) {
-        deviceTests?.forEach((record) => {
-          const recordTime = new Date(record.createdAt);
-          const recordDateOnly = new Date(recordTime);
-          recordDateOnly.setHours(0, 0, 0, 0);
-          if (recordDateOnly.getTime() !== today.getTime()) return;
-
-          const recH = recordTime.getHours();
-          const recM = recordTime.getMinutes();
-          const recTotalMin = recH * 60 + recM;
-
-          const hourIndex = intervals.findIndex((interval) => {
-            const [sH, sM] = interval.startTime.split(":").map(Number);
-            const [eH, eM] = interval.endTime.split(":").map(Number);
-            const startMinTotal = sH * 60 + sM;
-            const endMinTotal = eH * 60 + eM;
-            return recTotalMin >= startMinTotal && recTotalMin < endMinTotal;
-          });
-
-          if (hourIndex === -1) return;
-
-          const cleanedStageName = record.stageName?.trim();
-          const stageIndex = stageHeaders.indexOf(cleanedStageName);
-          if (stageIndex === -1) return;
-
-          const status = record.status;
-          if (status === "Pass" || status === "NG") {
-            tableData[hourIndex].values[stageIndex][status] += 1;
-          }
-        });
-
-        const lastStageIndex = stageHeaders.length - 1;
-        const lastStageSummaryList = tableData.map((row) => {
-          const lastStageData = row.values[lastStageIndex];
-          return {
-            hour: row.hour,
-            stage: stageHeaders[lastStageIndex],
-            Pass: row.isBreak ? 0 : (lastStageData?.Pass || 0),
-            NG: row.isBreak ? 0 : (lastStageData?.NG || 0),
-            status: row.status,
-            isBreak: row.isBreak,
-          };
-        });
-        setCompletedKitsUPH(lastStageSummaryList);
-
-        const totalRow = {
-          hour: "Total Count",
-          values: stageHeaders.map((stage, i) => {
-            const totalPass = tableData.reduce(
-              (sum, row) => sum + row.values[i].Pass,
-              0,
-            );
-            const totalNG = tableData.reduce(
-              (sum, row) => sum + row.values[i].NG,
-              0,
-            );
-            return { stage, Pass: totalPass, NG: totalNG };
-          }),
-        };
-
-        const avgRow = {
-          hour: "Avg UPH",
-          values: totalRow.values.map((val) => ({
-            stage: val.stage,
-            Pass: val.Pass ? (val.Pass / totalHours).toFixed(2) : "0",
-            NG: val.NG ? (val.NG / totalHours).toFixed(2) : "0",
-          })),
-        };
-        tableData.push(totalRow);
-        tableData.push(avgRow);
-      }
-      setOverallUPHA(tableData);
       setProcessName(result?.processName);
       setSelectedShift(Shift);
       calculateTimeDifference(Shift);
       setRepeatCount(result?.repeatCount);
       setStartDate(formatDate(result?.startDate));
-
-      setAssignedOperators(JSON.parse(result?.assignedOperators));
+      setAssignedOperators(safeParse(result?.assignedOperators, {}));
       if (result?.assignedCustomStages) {
-        setAssignedCustomStages(JSON.parse(result?.assignedCustomStages));
+        setAssignedCustomStages(safeParse(result?.assignedCustomStages, []));
       }
       if (result?.assignedCustomStagesOp) {
-        setAssignedCustomOperators(JSON.parse(result?.assignedCustomStagesOp));
+        setAssignedCustomOperators(safeParse(result?.assignedCustomStagesOp, []));
       }
-      setAssignedJigs(JSON.parse(result?.assignedJigs));
+      setAssignedJigs(safeParse(result?.assignedJigs, {}));
       setEstimatedEndDate(formatDate(result?.estimatedEndDate));
       setTotalTimeEstimation(result?.totalTimeEstimation);
       const downTimeArr = result.downTime;
@@ -947,36 +796,218 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       setEndTime(result?.ProcessShiftMappings?.endTime);
       setStartTime(result?.ProcessShiftMappings?.startTime);
       setTotalConsumedkits(singleProcess?.consumedKits || 0);
+      const currentAssignedStages = safeParse(result?.assignedStages, {});
+      const currentAssignedOperators = safeParse(result?.assignedOperators, {});
+      const currentAssignedJigs = safeParse(result?.assignedJigs, {});
       let reservedSeats = await checkSeatAvailability(
         room,
         Shift,
         formatDate(result?.startDate),
         formatDate(result?.estimatedEndDate),
       );
-      let result1 = await getProductById(singleProcess?.selectedProduct);
-      const assignedStages = allocateStagesToSeats(
-        result1,
-        room,
-        result?.repeatCount,
-        reservedSeats,
-        JSON.parse(result?.assignedStages),
-        singleProcess,
-        result?.assignedIssuedKits,
-        latestTests,
-      );
-      setAssignedStages(assignedStages);
-      const uniqueAssignedStages = new Set();
-      const seatCountPerStage = {};
-
-      for (let key in assignedStages) {
-        assignedStages[key].forEach((stage) => {
-          uniqueAssignedStages.add(stage?.name);
-          seatCountPerStage[stage?.name] =
-            (seatCountPerStage[stage?.name] || 0) + 1;
-        });
-      }
-
+      setAssignedStages({
+        ...(reservedSeats || {}),
+        ...(currentAssignedStages || {}),
+      });
+      setAssignedOperators((prev) => ({
+        ...prev,
+        ...(currentAssignedOperators || {}),
+      }));
+      setAssignedJigs((prev) => ({
+        ...prev,
+        ...(currentAssignedJigs || {}),
+      }));
       setLoading(false);
+      void (async () => {
+        try {
+          const [deviceTestEntry, latestEntry, productData, deviceResult] = await Promise.all([
+            result.selectedProcess
+              ? getDeviceTestRecordsByProcessId(result.selectedProcess)
+              : Promise.resolve(null),
+            result.selectedProcess
+              ? getLatestDeviceTestsByPlanId(result?._id, result.selectedProcess).catch(() => null)
+              : Promise.resolve(null),
+            singleProcess?.selectedProduct
+              ? getProductById(singleProcess.selectedProduct)
+              : Promise.resolve(null),
+            singleProcess?.selectedProduct
+              ? getDeviceByProductId(singleProcess.selectedProduct).catch(() => null)
+              : Promise.resolve(null),
+          ]);
+
+          if (!isMountedRef.current) return;
+
+          const deviceTests = deviceTestEntry?.deviceTestRecords || [];
+          setAllDeviceTests(deviceTests);
+          let latestTests = latestEntry?.deviceTestRecords || [];
+          if (!Array.isArray(latestTests) || latestTests.length === 0) {
+            latestTests = deviceTests.filter(
+              (record) => String(record?.planId) === String(result?._id),
+            );
+          }
+
+          if (productData) {
+            processData = productData;
+            const packagingItems =
+              productData?.product?.stages?.flatMap((stage) =>
+                (stage?.subSteps || [])
+                  .filter((value) => value.isPackagingStatus)
+                  .map((value) => value),
+              ) || [];
+            setPackagingData(packagingItems);
+            setInventoryData(productData.inventory);
+            setProductName(productData.product?.name || "");
+            setSelectedProduct(productData);
+          }
+
+          if (deviceResult) {
+            const allDevices = deviceResult?.data || [];
+            const onlyProcessDevices = allDevices.filter(
+              (d: any) => String(d.processID) === String(singleProcess?._id),
+            );
+            setProcessDevices(onlyProcessDevices);
+          }
+
+          const stageHeaders =
+            processData?.product?.stages?.map((stage) =>
+              stage?.stageName?.trim(),
+            ) || [];
+          const totalHours = calculateWorkingHours(
+            result.startTime,
+            result.endTime,
+            result.totalBreakTime,
+          );
+          const stageUPHMap =
+            processData?.product?.stages?.reduce((acc, stage) => {
+              acc[stage.stageName] = stage.upha || 0;
+              return acc;
+            }, {}) || {};
+          const rawIntervals = Shift?.intervals || [];
+          const intervals = [];
+          rawIntervals.forEach((interval) => {
+            if (!interval.breakTime) {
+              let curr = toDate(interval.startTime);
+              const end = toDate(interval.endTime);
+              while (curr < end) {
+                let next = new Date(curr);
+                next.setHours(curr.getHours() + 1);
+                if (next > end) next = new Date(end);
+
+                intervals.push({
+                  startTime: toTimeString(curr),
+                  endTime: toTimeString(next),
+                  breakTime: false,
+                });
+                curr = next;
+              }
+            }
+          });
+
+          const tableData = intervals.map((interval) => ({
+            hour: `${interval.startTime} - ${interval.endTime}`,
+            isBreak: interval.breakTime,
+            values: stageHeaders.map((stage) => ({
+              stage,
+              Pass: 0,
+              NG: 0,
+              targetUPH: interval.breakTime ? 0 : (stageUPHMap[stage] || 0),
+            })),
+            status: "future",
+          }));
+
+          const now = new Date();
+          tableData.forEach((row, i) => {
+            const [sH, sM] = intervals[i].startTime.split(":").map(Number);
+            const [eH, eM] = intervals[i].endTime.split(":").map(Number);
+            const start = new Date(now);
+            start.setHours(sH, sM, 0, 0);
+            const end = new Date(now);
+            end.setHours(eH, eM, 0, 0);
+
+            if (now >= start && now < end) row.status = "current";
+            else if (now >= end) row.status = "past";
+            else row.status = "future";
+          });
+
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          if (deviceTests.length > 0) {
+            deviceTests?.forEach((record) => {
+              const recordTime = new Date(record.createdAt);
+              const recordDateOnly = new Date(recordTime);
+              recordDateOnly.setHours(0, 0, 0, 0);
+              if (recordDateOnly.getTime() !== today.getTime()) return;
+
+              const recH = recordTime.getHours();
+              const recM = recordTime.getMinutes();
+              const recTotalMin = recH * 60 + recM;
+
+              const hourIndex = intervals.findIndex((interval) => {
+                const [sH, sM] = interval.startTime.split(":").map(Number);
+                const [eH, eM] = interval.endTime.split(":").map(Number);
+                const startMinTotal = sH * 60 + sM;
+                const endMinTotal = eH * 60 + eM;
+                return recTotalMin >= startMinTotal && recTotalMin < endMinTotal;
+              });
+
+              if (hourIndex === -1) return;
+
+              const cleanedStageName = record.stageName?.trim();
+              const stageIndex = stageHeaders.indexOf(cleanedStageName);
+              if (stageIndex === -1) return;
+
+              const status = record.status;
+              if (status === "Pass" || status === "NG") {
+                tableData[hourIndex].values[stageIndex][status] += 1;
+              }
+            });
+
+            const lastStageIndex = stageHeaders.length - 1;
+            const lastStageSummaryList = tableData.map((row) => {
+              const lastStageData = row.values[lastStageIndex];
+              return {
+                hour: row.hour,
+                stage: stageHeaders[lastStageIndex],
+                Pass: row.isBreak ? 0 : (lastStageData?.Pass || 0),
+                NG: row.isBreak ? 0 : (lastStageData?.NG || 0),
+                status: row.status,
+                isBreak: row.isBreak,
+              };
+            });
+            setCompletedKitsUPH(lastStageSummaryList);
+
+            const totalRow = {
+              hour: "Total Count",
+              values: stageHeaders.map((stage, i) => {
+                const totalPass = tableData.reduce(
+                  (sum, row) => sum + row.values[i].Pass,
+                  0,
+                );
+                const totalNG = tableData.reduce(
+                  (sum, row) => sum + row.values[i].NG,
+                  0,
+                );
+                return { stage, Pass: totalPass, NG: totalNG };
+              }),
+            };
+
+            const avgRow = {
+              hour: "Avg UPH",
+              values: totalRow.values.map((val) => ({
+                stage: val.stage,
+                Pass: val.Pass ? (val.Pass / totalHours).toFixed(2) : "0",
+                NG: val.NG ? (val.NG / totalHours).toFixed(2) : "0",
+              })),
+            };
+            tableData.push(totalRow);
+            tableData.push(avgRow);
+          }
+          if (!isMountedRef.current) return;
+          setOverallUPHA(tableData);
+        } catch (backgroundError) {
+          console.error("Background analytics load failed:", backgroundError);
+        }
+      })();
     } catch (error) {
 
       setLoading(false);
@@ -1053,27 +1084,29 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         (user) => user.userType === "Operator",
       );
       setOperators(operators);
-      return false;
+      return operators;
     } catch (error) {
-
+      return [];
     }
   };
   const getAllShifts = async () => {
     try {
       const result = await viewShift();
-      return result?.Shifts;
-      setShifts(result?.Shifts);
+      const shifts = result?.Shifts || [];
+      setShifts(shifts);
+      return shifts;
     } catch (error) {
-
+      return [];
     }
   };
   const getAllProcess = async () => {
     try {
       const result = await viewProcess();
-      setProcess(result.Processes);
-      return result.Processes;
+      const processes = result.Processes || [];
+      setProcess(processes);
+      return processes;
     } catch (error) {
-
+      return [];
     }
   };
   const handleRemoveStage = (
@@ -1145,10 +1178,12 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   const getAllRoomPlan = async () => {
     try {
       const result = await viewRoom();
-      return result.RoomPlan;
-      setRoomPlan(result.RoomPlan);
+      const rooms = result.RoomPlan || [];
+      setRoomPlan(rooms);
+      return rooms;
     } catch (error) {
       console.error("Error Fetching Room Plan:", error);
+      return [];
     }
   };
   const calculateTimeDifference = (selected) => {
@@ -1223,7 +1258,13 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   };
   const calculateSingleStage = async (updatedStages, rowIndex, seatIndex) => {
     let totalQuantity = parseInt(selectedProcess?.quantity);
-    const stages = selectedProduct.stages;
+    const stages =
+      selectedProduct?.product?.stages ||
+      selectedProduct?.stages ||
+      [];
+    if (!stages.length || !selectedProcess) {
+      return;
+    }
     const uniqueAssignedStages = new Set();
     const seatCountPerStage = {};
 

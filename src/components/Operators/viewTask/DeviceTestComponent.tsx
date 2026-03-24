@@ -330,6 +330,74 @@ export default function DeviceTestComponent({
     return row?.timeTaken || "-";
   };
 
+  const getHistoryTimestamp = (record: any) => {
+    const raw =
+      record?.createdAt ||
+      record?.updatedAt ||
+      record?.deviceInfo?.createdAt ||
+      record?.logData?.createdAt ||
+      null;
+    if (!raw) return null;
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+  };
+
+  const getRecordFlowVersion = (record: any) => {
+    const raw =
+      record?.flowVersion ??
+      record?.deviceInfo?.flowVersion ??
+      record?.logData?.flowVersion ??
+      null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
+
+  const isFlowBoundaryRecord = (record: any) =>
+    Boolean(record?.flowBoundary) ||
+    String(record?.flowType || "").trim().toLowerCase() === "reset";
+
+  const isTransferHistoryRecord = (record: any) => {
+    const searchType = String(record?.searchType || "").trim().toLowerCase();
+    const status = String(record?.status || "").trim().toLowerCase();
+    const stageName = String(record?.stageName || record?.name || "")
+      .trim()
+      .toLowerCase();
+    return (
+      isFlowBoundaryRecord(record) ||
+      searchType.includes("kit transfer") ||
+      status === "transferred" ||
+      stageName === "kit transfer approval"
+    );
+  };
+
+  const visibleDeviceHistory = React.useMemo(() => {
+    const history = Array.isArray(deviceHistory) ? [...deviceHistory] : [];
+    if (history.length === 0) return history;
+
+    const latestBoundary = history
+      .filter(isFlowBoundaryRecord)
+      .sort((a: any, b: any) => {
+        const at = getHistoryTimestamp(a) ?? 0;
+        const bt = getHistoryTimestamp(b) ?? 0;
+        return bt - at;
+      })[0];
+
+    const boundaryVersion = latestBoundary ? getRecordFlowVersion(latestBoundary) : null;
+    const boundaryTime = latestBoundary ? getHistoryTimestamp(latestBoundary) : null;
+    if (boundaryVersion == null) return history.filter((record) => !isTransferHistoryRecord(record));
+
+    return history.filter((record: any) => {
+      if (isTransferHistoryRecord(record)) return false;
+      const recordVersion = getRecordFlowVersion(record);
+      if (recordVersion == null) {
+        if (boundaryTime == null) return false;
+        const recordTime = getHistoryTimestamp(record);
+        return recordTime != null && recordTime >= boundaryTime;
+      }
+      return recordVersion === boundaryVersion;
+    });
+  }, [deviceHistory]);
+
   // Reset verification inputs whenever modal opens
   useEffect(() => {
     if (isVerifyStickerModal) {
@@ -476,6 +544,33 @@ export default function DeviceTestComponent({
     if (!searchResult || !Array.isArray(deviceList)) return false;
     return deviceList.some((device: any) => device.serialNo === searchResult);
   }, [deviceList, searchResult]);
+  const excludedSearchSerials = React.useMemo(() => {
+    const serials = new Set<string>();
+
+    const addSerial = (value: any) => {
+      const serial = String(value || "").trim();
+      if (serial) serials.add(serial.toLowerCase());
+    };
+
+    const collectCartonSerials = (source: any) => {
+      const list = Array.isArray(source) ? source : [];
+      list.forEach((carton: any) => {
+        const devices = Array.isArray(carton?.devices) ? carton.devices : [];
+        devices.forEach((device: any) => {
+          if (typeof device === "string") {
+            addSerial(device);
+          } else {
+            addSerial(device?.serialNo || device?.serial_no || device?.serial);
+          }
+        });
+      });
+    };
+
+    collectCartonSerials(cartons);
+    collectCartonSerials(cartonDetails);
+
+    return Array.from(serials);
+  }, [cartons, cartonDetails]);
   const [hasManualValues, setHasManualValues] = useState(false);
   const [generatedCommand, setGeneratedCommand] = useState<string>("");
   const [isJigSearching, setIsJigSearching] = useState(false);
@@ -1051,7 +1146,10 @@ export default function DeviceTestComponent({
     try {
       const confirmed = window.confirm("Are you sure you want to close this partial carton?");
       if (!confirmed) return;
-      await closeLooseCarton(cartonSerial);
+      await closeLooseCarton({
+        cartonSerial,
+        action: "existing",
+      });
       toast.success("Loose carton closed successfully!");
       setCartons((prev: any[]) => {
         const copy = [...prev];
@@ -1187,63 +1285,9 @@ export default function DeviceTestComponent({
       return;
     }
 
-    let newCartonObj: any = null;
-
-    setCartons((prevCarts: Cart[]) => {
-      const deviceExists = prevCarts.some((c) =>
-        c.devices.includes(selectedDevice.serialNo),
-      );
-      if (deviceExists) {
-        alert("This device is already in a carton!");
-        return prevCarts;
-      }
-
-      let updatedCarts = [...prevCarts];
-      let targetCart = updatedCarts.find(
-        (c) =>
-          c.processId === processData._id &&
-          c.devices.length < c.maxCapacity &&
-          !c.isLooseCarton &&
-          c.status !== "full",
-      );
-
-      if (!targetCart) {
-        targetCart = {
-          cartonSerial: `CARTON-${Date.now()}`,
-          processId: processData._id,
-          devices: [],
-          cartonSize: {
-            width: packagingData.packagingData.cartonWidth,
-            height: packagingData.packagingData.cartonHeight,
-            depth: packagingData.packagingData.cartonDepth,
-          },
-          maxCapacity: packagingData.packagingData.maxCapacity,
-          weightCarton: packagingData.packagingData.cartonWeight,
-          status: "empty",
-        };
-
-        updatedCarts.push(targetCart);
-        newCartonObj = targetCart;
-      }
-
-      targetCart.devices = [...targetCart.devices, selectedDevice.serialNo];
-
-      targetCart.status =
-        targetCart.devices.length >= targetCart.maxCapacity
-          ? "full"
-          : "partial";
-      if (targetCart.status == "partial") {
-        setIsCartonBarCodePrinted(false);
-      }
-      return updatedCarts;
-    });
-
-    // ðŸ”¹ Backend call after state update
     try {
-      await createCarton({
-        cartonSerial: newCartonObj
-          ? newCartonObj.cartonSerial
-          : `CARTON-${Date.now()}`,
+      const response = await createCarton({
+        cartonSerial: `CARTON-${Date.now()}`,
         processId: processData._id,
         devices: [selectedDevice._id],
         packagingData: {
@@ -1254,12 +1298,20 @@ export default function DeviceTestComponent({
           maxCapacity: packagingData.packagingData.maxCapacity,
         },
       });
+      if (response?.carton?.status === "partial") {
+        setIsCartonBarCodePrinted(false);
+      }
       setSerialNumber("");
       setIsAddedToCart(true);
       fetchExistingCartonsByProcessID();
       fetchProcessCartons();
     } catch (error) {
       console.error("Failed to create carton on backend:", error);
+      alert(
+        (error as any)?.message ||
+          (error as any)?.response?.data?.message ||
+          "This device is already assigned to a carton.",
+      );
     }
   };
   const handleShiftToPDI = async () => {
@@ -1540,10 +1592,9 @@ export default function DeviceTestComponent({
       let stageRecords = Array.isArray(stageHistories) ? [...stageHistories] : [];
 
       if (stageRecords.length === 0) {
-        const allRecords = await ensureProcessRecords();
         const normalizedStage = String(stageName).trim().toLowerCase();
 
-        stageRecords = allRecords.filter((record: any) => {
+        stageRecords = visibleDeviceHistory.filter((record: any) => {
           const recordSerial = String(record?.serialNo || "").trim();
           const recordStage = String(
             record?.stageName || record?.name || "",
@@ -1777,13 +1828,13 @@ export default function DeviceTestComponent({
   };
 
   const lastHistoryEntry =
-    Array.isArray(deviceHistory) && deviceHistory.length > 0
-      ? deviceHistory[deviceHistory.length - 1]
+    Array.isArray(visibleDeviceHistory) && visibleDeviceHistory.length > 0
+      ? visibleDeviceHistory[visibleDeviceHistory.length - 1]
       : null;
 
   const hasQCResolved =
-    Array.isArray(deviceHistory) &&
-    deviceHistory.some((h: any) => {
+    Array.isArray(visibleDeviceHistory) &&
+    visibleDeviceHistory.some((h: any) => {
       const s = (h?.status || "").toString().toLowerCase();
       return s.includes("resolved");
     });
@@ -2716,6 +2767,7 @@ export default function DeviceTestComponent({
                             String(device?._id || "")
                           )
                         }
+                        excludedSerials={excludedSearchSerials}
                         setIsPassNGButtonShow={setIsPassNGButtonShow}
                         setIsStickerPrinted={setIsStickerPrinted}
                         setIsVerifiedSticker={setIsVerifiedSticker}
@@ -2786,7 +2838,7 @@ export default function DeviceTestComponent({
                   <h3 className="text-sm font-bold text-gray-800">
                     {searchResult}
                   </h3>
-                  {deviceHistory.length > 0 && (
+                  {visibleDeviceHistory.length > 0 && (
                     <button
                       onClick={() => setIsPreviousStagesModalOpen(true)}
                       className="flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600 transition-colors hover:bg-indigo-100"
@@ -2801,7 +2853,7 @@ export default function DeviceTestComponent({
                 <div className="no-scrollbar flex flex-nowrap gap-2.5 overflow-x-auto pb-2">
                   {(processData?.stages || []).map(
                     (stage: any, idx: number) => {
-                      const stageHistories = deviceHistory.filter(
+                      const stageHistories = visibleDeviceHistory.filter(
                         (h: any) => h.stageName === stage.stageName,
                       );
                       const hasHistory = stageHistories.length > 0;
@@ -2863,7 +2915,7 @@ export default function DeviceTestComponent({
                       </span>
                     </div>
                     <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
-                      {deviceHistory.map((value, index) => (
+                      {visibleDeviceHistory.map((value, index) => (
                         <div
                           key={index}
                           className="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-3"
@@ -3731,9 +3783,7 @@ export default function DeviceTestComponent({
                                                               </div>
                                                             </div>
                                                             <button
-                                                              onClick={
-                                                                handlePrintCartonSticker
-                                                              }
+                                                              onClick={() => handlePrintCartonSticker()}
                                                               className={`flex items-center gap-2 rounded-xl px-5 py-2.5 font-bold text-white shadow-lg transition-all active:scale-95 ${isCartonBarcodePrinted ? "bg-green-600 hover:bg-green-700" : "bg-primary hover:bg-primary/90"}`}
                                                             >
                                                               <Printer className="h-5 w-5" />

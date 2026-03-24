@@ -13,6 +13,7 @@ const DraggableGridItem = ({
   handleDragOver,
   handleRemoveStage,
   assignedStages,
+  reservedStages,
   coordinates,
   moveItem,
   operators,
@@ -185,9 +186,9 @@ const DraggableGridItem = ({
       ref={(node) => drag(drop(node))}
       key={seatIndex}
       className={`flex flex-col h-full rounded-xl border-2 p-2 transition-all duration-300 ${assignedStages[coordinates] && assignedStages[coordinates].length > 0
-          ? !assignedStages[coordinates][0]?.reserved
-            ? "border-green-500/50 bg-green-50 shadow-sm transform hover:scale-[1.01] dark:bg-green-900/20"
-            : "border-red-500/50 bg-red-50 shadow-sm dark:bg-red-900/20"
+          ? "border-green-500/50 bg-green-50 shadow-sm transform hover:scale-[1.01] dark:bg-green-900/20"
+          : reservedStages?.[coordinates] && reservedStages[coordinates].length > 0
+            ? "border-red-500/50 bg-red-50 shadow-sm dark:bg-red-900/20"
           : "border-dashed border-gray-300 bg-white hover:border-primary/50 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700"
         }`}
       onDrop={handleDrop(rowIndex, seatIndex)}
@@ -195,7 +196,9 @@ const DraggableGridItem = ({
       title={
         assignedStages[coordinates] && assignedStages[coordinates].length > 0
           ? assignedStages[coordinates].join(",")
-          : "Drop Stage Here"
+          : reservedStages?.[coordinates] && reservedStages[coordinates].length > 0
+            ? reservedStages[coordinates].map((stage: any) => stage.name).join(",")
+            : "Vacant"
       }
     >
       <span className="text-gray-800 flex items-center justify-between text-[10px] font-bold">
@@ -329,14 +332,43 @@ const DraggableGridItem = ({
             ))}
           </div>
         </div>
+      ) : reservedStages?.[coordinates] && reservedStages[coordinates].length > 0 ? (
+        <div className="mt-1">
+          {reservedStages[coordinates].map((stage: any, stageIndex: number) => (
+            <div key={stageIndex}>
+              <div className="flex items-center justify-between">
+                <strong className="text-gray-900 text-[10px] leading-tight">
+                  {stage.name}
+                  <p className="text-[9px] text-gray-500">Reserved</p>
+                </strong>
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-500">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="2"
+                    stroke="currentColor"
+                    className="h-3 w-3"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </span>
+              </div>
+              <p className="text-[10px] text-gray-500">{stage.processName || ""}</p>
+            </div>
+          ))}
+        </div>
       ) : (
-        <span className="text-gray-400 text-[10px] italic mt-2">Empty Seat</span>
+        <span className="text-gray-400 text-[10px] italic mt-2">Vacant</span>
       )}
 
       <div className="mt-auto flex justify-end gap-1 pt-2">
         {assignedStages[coordinates] &&
           assignedStages[coordinates].length > 0 &&
-          !assignedStages[`${rowIndex}-${seatIndex}`][0]?.reserved &&
           !assignedOperators[`${rowIndex}-${seatIndex}`] && (
             <button
               type="button"

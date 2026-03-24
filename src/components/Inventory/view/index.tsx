@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useMemo } from "react";
 import DataTable from "react-data-table-component";
@@ -22,7 +22,7 @@ import {
   ArrowRight,
   Eye
 } from "lucide-react";
-import { BallTriangle } from "react-loader-spinner";
+import { TableSkeleton } from "@/components/common/Skeletons";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import Modal from "@/components/Modal/page";
 import { ToastContainer, toast } from "react-toastify";
@@ -336,9 +336,7 @@ const InventoryManagement = () => {
 
         <div className="relative overflow-hidden">
           {loading ? (
-            <div className="flex h-64 items-center justify-center">
-              <BallTriangle height={80} width={80} color="#3c50e0" />
-            </div>
+            <TableSkeleton rows={6} />
           ) : (
             <DataTable
               columns={columns}
@@ -396,4 +394,7 @@ const InventoryManagement = () => {
 };
 
 export default InventoryManagement;
+
+
+
 

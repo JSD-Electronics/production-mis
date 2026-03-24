@@ -12,6 +12,7 @@ import {
   markDeviceAsResolved,
   updateStageByDeviceId,
 } from "@/lib/api";
+import { PageSkeleton } from "@/components/common/Skeletons";
 import {
   Activity,
   AlertTriangle,
@@ -705,9 +706,7 @@ export default function NGDeviceDetails({
   if (loading) {
     return (
       <DefaultLayout>
-        <div className="flex h-[80vh] items-center justify-center">
-          <div className="h-16 w-16 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
-        </div>
+        <PageSkeleton variant="detail" />
       </DefaultLayout>
     );
   }
@@ -1729,3 +1728,8 @@ export default function NGDeviceDetails({
     </DefaultLayout>
   );
 }
+
+
+
+
+
