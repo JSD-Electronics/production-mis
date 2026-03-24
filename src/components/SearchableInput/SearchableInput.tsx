@@ -11,11 +11,13 @@ interface SearchableInputProps {
   setSearchResult: any;
   getDeviceById: any;
   onDeviceSelected?: (device: any) => void;
+  excludedSerials?: string[];
   setIsPassNGButtonShow: any;
   setIsStickerPrinted: any;
   setIsVerifiedSticker: any;
   checkIsPrintEnable: any;
   setIsDevicePassed: any;
+  allowPassedOptions?: boolean;
 }
 
 const SearchableInput = ({
@@ -27,13 +29,24 @@ const SearchableInput = ({
   setSearchResult,
   getDeviceById,
   onDeviceSelected,
+  excludedSerials = [],
   setIsPassNGButtonShow,
   setIsStickerPrinted,
   setIsVerifiedSticker,
   checkIsPrintEnable,
   setIsDevicePassed,
+  allowPassedOptions = false,
 }: SearchableInputProps) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const excludedSet = React.useMemo(
+    () =>
+      new Set(
+        (Array.isArray(excludedSerials) ? excludedSerials : [])
+          .map((value) => String(value || "").trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    [excludedSerials],
+  );
 
   // Derived state for filtered options
   const filteredOptions = React.useMemo(() => {
@@ -44,10 +57,19 @@ const SearchableInput = ({
       const serial = String(value?.serialNo || "").toLowerCase();
       if (!serial.includes(searchQuery.toLowerCase())) return false;
       const status = String(value?.status || value?.testStatus || "").trim().toLowerCase();
-      const isNg = status.includes("ng") || status.includes("fail") || status.includes("rework");
-      return !isNg;
+      const isNg =
+        status.includes("ng") ||
+        status.includes("fail") ||
+        status.includes("rework");
+      const isPassed =
+        status === "pass" ||
+        status.includes("pass") ||
+        status.includes("completed") ||
+        status.includes("done");
+      const isExcluded = excludedSet.has(serial);
+      return !isNg && (allowPassedOptions || !isPassed) && !isExcluded;
     });
-  }, [options, searchQuery]);
+  }, [options, searchQuery, excludedSet, allowPassedOptions]);
 
   // Handle No Results side effect
   React.useEffect(() => {

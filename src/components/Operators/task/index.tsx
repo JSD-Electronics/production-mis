@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -22,7 +22,7 @@ import {
   Calendar,
   UserCheck
 } from "lucide-react";
-import { BallTriangle } from "react-loader-spinner";
+import { TableSkeleton } from "@/components/common/Skeletons";
 
 const TaskComponent = () => {
   const router = useRouter();
@@ -341,9 +341,7 @@ const TaskComponent = () => {
 
         <div className="relative">
           {loading ? (
-            <div className="flex h-64 items-center justify-center">
-              <BallTriangle height={80} width={80} color="#3c50e0" />
-            </div>
+            <TableSkeleton rows={6} />
           ) : (
             <DataTable
               columns={columns}
@@ -424,3 +422,6 @@ const TaskComponent = () => {
 };
 
 export default TaskComponent;
+
+
+

@@ -94,6 +94,7 @@ export default function DeviceSearchSection({
             setIsStickerPrinted={setIsStickerPrinted}
             checkIsPrintEnable={checkIsPrintEnable}
             setIsDevicePassed={setIsDevicePassed}
+            allowPassedOptions={isPackagingActive}
           />
           {/* Inline Pass / NG within Search Device box */}
           {isPassNGButtonShow && !lastStatusIsNG && !isPackagingActive && (

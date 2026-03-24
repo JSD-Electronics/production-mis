@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useState, useEffect, useMemo } from "react";
 import { ToastContainer, toast } from "react-toastify";
 import {
@@ -10,6 +10,7 @@ import {
 import "react-toastify/dist/ReactToastify.css";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import { Search, Shield, ChevronRight, CheckSquare, Square, CheckCircle2 } from "lucide-react";
+import { FormSkeleton } from "@/components/common/Skeletons";
 
 const EditUserRoles = () => {
   const [menus, setMenus] = useState<any[]>([]);
@@ -63,7 +64,7 @@ const EditUserRoles = () => {
           ? existingReports.children
           : [];
         const hasNgReport = children.some(
-          (c) => String(c?.route || "") === "/reports/ng-devices",
+          (c: any) => String(c?.route || "") === "/reports/ng-devices",
         );
         if (!hasNgReport) {
           existingReports.children = [
@@ -166,11 +167,7 @@ const EditUserRoles = () => {
   }, [menus, searchQuery]);
 
   if (loading) {
-    return (
-      <div className="flex h-96 items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-      </div>
-    );
+    return <FormSkeleton rows={5} />;
   }
 
   return (
@@ -357,5 +354,6 @@ const EditUserRoles = () => {
 };
 
 export default EditUserRoles;
+
 
 

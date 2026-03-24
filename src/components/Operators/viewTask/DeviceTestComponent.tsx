@@ -544,6 +544,33 @@ export default function DeviceTestComponent({
     if (!searchResult || !Array.isArray(deviceList)) return false;
     return deviceList.some((device: any) => device.serialNo === searchResult);
   }, [deviceList, searchResult]);
+  const excludedSearchSerials = React.useMemo(() => {
+    const serials = new Set<string>();
+
+    const addSerial = (value: any) => {
+      const serial = String(value || "").trim();
+      if (serial) serials.add(serial.toLowerCase());
+    };
+
+    const collectCartonSerials = (source: any) => {
+      const list = Array.isArray(source) ? source : [];
+      list.forEach((carton: any) => {
+        const devices = Array.isArray(carton?.devices) ? carton.devices : [];
+        devices.forEach((device: any) => {
+          if (typeof device === "string") {
+            addSerial(device);
+          } else {
+            addSerial(device?.serialNo || device?.serial_no || device?.serial);
+          }
+        });
+      });
+    };
+
+    collectCartonSerials(cartons);
+    collectCartonSerials(cartonDetails);
+
+    return Array.from(serials);
+  }, [cartons, cartonDetails]);
   const [hasManualValues, setHasManualValues] = useState(false);
   const [generatedCommand, setGeneratedCommand] = useState<string>("");
   const [isJigSearching, setIsJigSearching] = useState(false);
@@ -1119,7 +1146,10 @@ export default function DeviceTestComponent({
     try {
       const confirmed = window.confirm("Are you sure you want to close this partial carton?");
       if (!confirmed) return;
-      await closeLooseCarton(cartonSerial);
+      await closeLooseCarton({
+        cartonSerial,
+        action: "existing",
+      });
       toast.success("Loose carton closed successfully!");
       setCartons((prev: any[]) => {
         const copy = [...prev];
@@ -1255,63 +1285,9 @@ export default function DeviceTestComponent({
       return;
     }
 
-    let newCartonObj: any = null;
-
-    setCartons((prevCarts: Cart[]) => {
-      const deviceExists = prevCarts.some((c) =>
-        c.devices.includes(selectedDevice.serialNo),
-      );
-      if (deviceExists) {
-        alert("This device is already in a carton!");
-        return prevCarts;
-      }
-
-      let updatedCarts = [...prevCarts];
-      let targetCart = updatedCarts.find(
-        (c) =>
-          c.processId === processData._id &&
-          c.devices.length < c.maxCapacity &&
-          !c.isLooseCarton &&
-          c.status !== "full",
-      );
-
-      if (!targetCart) {
-        targetCart = {
-          cartonSerial: `CARTON-${Date.now()}`,
-          processId: processData._id,
-          devices: [],
-          cartonSize: {
-            width: packagingData.packagingData.cartonWidth,
-            height: packagingData.packagingData.cartonHeight,
-            depth: packagingData.packagingData.cartonDepth,
-          },
-          maxCapacity: packagingData.packagingData.maxCapacity,
-          weightCarton: packagingData.packagingData.cartonWeight,
-          status: "empty",
-        };
-
-        updatedCarts.push(targetCart);
-        newCartonObj = targetCart;
-      }
-
-      targetCart.devices = [...targetCart.devices, selectedDevice.serialNo];
-
-      targetCart.status =
-        targetCart.devices.length >= targetCart.maxCapacity
-          ? "full"
-          : "partial";
-      if (targetCart.status == "partial") {
-        setIsCartonBarCodePrinted(false);
-      }
-      return updatedCarts;
-    });
-
-    // ðŸ”¹ Backend call after state update
     try {
-      await createCarton({
-        cartonSerial: newCartonObj
-          ? newCartonObj.cartonSerial
-          : `CARTON-${Date.now()}`,
+      const response = await createCarton({
+        cartonSerial: `CARTON-${Date.now()}`,
         processId: processData._id,
         devices: [selectedDevice._id],
         packagingData: {
@@ -1322,12 +1298,20 @@ export default function DeviceTestComponent({
           maxCapacity: packagingData.packagingData.maxCapacity,
         },
       });
+      if (response?.carton?.status === "partial") {
+        setIsCartonBarCodePrinted(false);
+      }
       setSerialNumber("");
       setIsAddedToCart(true);
       fetchExistingCartonsByProcessID();
       fetchProcessCartons();
     } catch (error) {
       console.error("Failed to create carton on backend:", error);
+      alert(
+        (error as any)?.message ||
+          (error as any)?.response?.data?.message ||
+          "This device is already assigned to a carton.",
+      );
     }
   };
   const handleShiftToPDI = async () => {
@@ -2783,6 +2767,7 @@ export default function DeviceTestComponent({
                             String(device?._id || "")
                           )
                         }
+                        excludedSerials={excludedSearchSerials}
                         setIsPassNGButtonShow={setIsPassNGButtonShow}
                         setIsStickerPrinted={setIsStickerPrinted}
                         setIsVerifiedSticker={setIsVerifiedSticker}
@@ -3798,9 +3783,7 @@ export default function DeviceTestComponent({
                                                               </div>
                                                             </div>
                                                             <button
-                                                              onClick={
-                                                                handlePrintCartonSticker
-                                                              }
+                                                              onClick={() => handlePrintCartonSticker()}
                                                               className={`flex items-center gap-2 rounded-xl px-5 py-2.5 font-bold text-white shadow-lg transition-all active:scale-95 ${isCartonBarcodePrinted ? "bg-green-600 hover:bg-green-700" : "bg-primary hover:bg-primary/90"}`}
                                                             >
                                                               <Printer className="h-5 w-5" />

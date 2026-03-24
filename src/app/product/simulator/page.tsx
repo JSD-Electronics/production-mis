@@ -1,7 +1,8 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import StageSimulator from "@/components/product/StageSimulator";
-import { Loader2, AlertTriangle } from "lucide-react";
+import { CenteredSkeleton } from "@/components/common/Skeletons";
+import { AlertTriangle } from "lucide-react";
 
 export default function SimulatorPage() {
     const [config, setConfig] = useState<any>(null);
@@ -30,12 +31,7 @@ export default function SimulatorPage() {
     }, []);
 
     if (loading) {
-        return (
-            <div className="flex bg-white dark:bg-black h-screen items-center justify-center flex-col gap-4">
-                <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
-                <p className="text-gray-500">Loading Configuration...</p>
-            </div>
-        );
+        return <CenteredSkeleton />;
     }
 
     if (error || !config) {
@@ -69,3 +65,7 @@ export default function SimulatorPage() {
         />
     );
 }
+
+
+
+

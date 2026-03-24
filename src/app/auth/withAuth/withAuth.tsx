@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 import React, { ComponentType, useEffect, useState } from "react";
 import { getUseTypeByType, getAllMenus } from "../../../lib/api";
+import { CenteredSkeleton } from "@/components/common/Skeletons";
 
 interface UserRoles {
   [key: string]: { [key: string]: boolean };
@@ -26,7 +27,6 @@ const withAuth = (WrappedComponent: ComponentType<any>) => {
           localStorage.getItem("userDetails") || "{}",
         );
         if (!userDetails || !userDetails.userType) {
-          
           window.location.href = "/not-authorized";
           return;
         }
@@ -103,7 +103,11 @@ const withAuth = (WrappedComponent: ComponentType<any>) => {
     }, [hasAccess]);
 
     if (loading) {
-      return <div>Loading...</div>;
+      return (
+        <div className="min-h-screen bg-slate-50 dark:bg-boxdark-2">
+          <CenteredSkeleton />
+        </div>
+      );
     }
 
     return hasAccess === true ? <WrappedComponent {...props} /> : null;

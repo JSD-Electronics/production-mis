@@ -86,6 +86,24 @@ const ViewTaskDetailsComponent = ({
   const [cartons, setCartons] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
   const { SVG } = useQRCode();
+  const excludedSearchSerials = React.useMemo(() => {
+    const serials = new Set<string>();
+    const list = Array.isArray(cartons) ? cartons : [];
+
+    list.forEach((carton: any) => {
+      const devices = Array.isArray(carton?.devices) ? carton.devices : [];
+      devices.forEach((device: any) => {
+        const serial = String(
+          typeof device === "string"
+            ? device
+            : device?.serialNo || device?.serial_no || device?.serial || "",
+        ).trim();
+        if (serial) serials.add(serial.toLowerCase());
+      });
+    });
+
+    return Array.from(serials);
+  }, [cartons]);
   useEffect(() => {
     const pathname = window.location.pathname;
     let user = JSON.parse(localStorage.getItem("userDetails"));
@@ -581,6 +599,22 @@ const ViewTaskDetailsComponent = ({
   };
   const handleAddToCart = async (device: Device, packageData: any) => {
     try {
+      const normalizedSerial = String(device?.serialNo || "").trim();
+      const alreadyAssigned = cartons.some((carton: any) =>
+        Array.isArray(carton?.devices)
+          ? carton.devices.some((entry: any) => {
+              const serial = String(
+                typeof entry === "string" ? entry : entry?.serialNo || entry?.serial_no || entry?.serial || "",
+              ).trim();
+              return serial && serial === normalizedSerial;
+            })
+          : false,
+      );
+      if (alreadyAssigned) {
+        alert("This device is already assigned to a carton!");
+        return;
+      }
+
       let lastCarton = cartons[cartons.length - 1];
 
       if (!lastCarton || lastCarton.devices.length >= lastCarton.maxCapacity) {
@@ -625,6 +659,7 @@ const ViewTaskDetailsComponent = ({
       }
     } catch (error: any) {
       console.error("Error Creating/Updating Carton", error?.message);
+      alert(error?.message || "Failed to assign device to carton.");
     }
   };
   // const handleAddToCart = async (packageData: any) => {
@@ -990,6 +1025,7 @@ const ViewTaskDetailsComponent = ({
             handleNoResults={handleNoResults}
             setSearchResult={setSearchResult}
             getDeviceById={getDeviceById}
+            excludedSerials={excludedSearchSerials}
             setIsPassNGButtonShow={setIsPassNGButtonShow}
             setIsStickerPrinted={setIsStickerPrinted}
             searchResult={searchResult}

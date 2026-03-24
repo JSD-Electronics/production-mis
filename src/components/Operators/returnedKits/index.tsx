@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useState } from "react";
 import DataTable from "react-data-table-component";
 import { Stages } from "@/types/stage";
@@ -12,7 +12,7 @@ import {
 } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { FiEdit, FiEye, FiTrash } from "react-icons/fi";
-import { BallTriangle } from "react-loader-spinner";
+import { TableSkeleton } from "@/components/common/Skeletons";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -231,15 +231,8 @@ const ReturnedKits = () => {
           pauseOnHover
         />
         {loading ? (
-          <div className="flex justify-center">
-            <BallTriangle
-              height={100}
-              width={100}
-              color="#4fa94d"
-              ariaLabel="loading"
-            />
-          </div>
-        ) : (
+            <TableSkeleton rows={6} />
+          ) : (
           <>
             <div className="mb-4 mt-4 text-right">
               <button
@@ -422,3 +415,6 @@ const ReturnedKits = () => {
 };
 
 export default ReturnedKits;
+
+
+

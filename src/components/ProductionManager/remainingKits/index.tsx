@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useMemo } from "react";
 import DataTable from "react-data-table-component";
@@ -24,7 +24,7 @@ import {
   Clock,
   Layers
 } from "lucide-react";
-import { BallTriangle } from "react-loader-spinner";
+import { TableSkeleton } from "@/components/common/Skeletons";
 import Modal from "@/components/Modal/page";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -321,9 +321,7 @@ const ViewProcessInventory = () => {
 
         <div className="relative">
           {loading ? (
-            <div className="flex h-64 items-center justify-center">
-              <BallTriangle height={80} width={80} color="#3c50e0" />
-            </div>
+            <TableSkeleton rows={6} />
           ) : (
             <DataTable
               columns={columns}
@@ -348,3 +346,6 @@ const ViewProcessInventory = () => {
 };
 
 export default ViewProcessInventory;
+
+
+

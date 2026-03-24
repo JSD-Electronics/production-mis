@@ -16,7 +16,7 @@ import {
     ExternalLink,
     Briefcase
 } from "lucide-react";
-import { BallTriangle } from "react-loader-spinner";
+import { DetailSkeleton, TableSkeleton } from "@/components/common/Skeletons";
 import { toast } from "react-toastify";
 import moment from "moment-timezone";
 
@@ -299,10 +299,8 @@ const OperatorLogs = () => {
 
                 <div className="relative">
                     {loading ? (
-                        <div className="flex h-64 items-center justify-center">
-                            <BallTriangle height={80} width={80} color="#3c50e0" />
-                        </div>
-                    ) : (
+            <TableSkeleton rows={6} />
+          ) : (
                         <DataTable
                             columns={columns}
                             data={sessions}
@@ -331,9 +329,7 @@ const OperatorLogs = () => {
             >
                 <div className="space-y-6 py-2">
                     {detailLoading ? (
-                        <div className="flex h-48 items-center justify-center">
-                            <BallTriangle height={60} width={60} color="#3c50e0" />
-                        </div>
+                        <DetailSkeleton />
                     ) : selectedSessionDetails.length > 0 ? (
                         <div className="grid grid-cols-1 gap-4">
                             <div className="grid grid-cols-4 gap-4 px-4 py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100">
@@ -377,3 +373,9 @@ const OperatorLogs = () => {
 };
 
 export default OperatorLogs;
+
+
+
+
+
+

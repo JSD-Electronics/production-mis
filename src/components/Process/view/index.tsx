@@ -16,7 +16,7 @@ import { useRouter } from "next/navigation";
 import { Tooltip } from "react-tooltip";
 import { FiEdit, FiEye, FiPlus, FiTrash } from "react-icons/fi";
 import { Search, Trash2, XCircle, Activity, CheckCircle, Clock, PauseCircle, Truck, PackageCheck, Plus } from "lucide-react";
-import { BallTriangle } from "react-loader-spinner";
+import { TableSkeleton } from "@/components/common/Skeletons";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -384,10 +384,8 @@ const ViewProcess = () => {
         <ToastContainer position="top-center" closeOnClick pauseOnHover />
 
         {loading ? (
-          <div className="flex justify-center py-12">
-            <BallTriangle height={80} width={80} color="#3B82F6" />
-          </div>
-        ) : (
+            <TableSkeleton rows={6} />
+          ) : (
           <>
             {/* Action Bar */}
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -521,3 +519,6 @@ const ViewProcess = () => {
 };
 
 export default ViewProcess;
+
+
+

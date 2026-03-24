@@ -23,6 +23,7 @@ export default function DeviceTestComponent({
   handleNoResults,
   setSearchResult,
   getDeviceById,
+  excludedSerials = [],
   setIsPassNGButtonShow,
   setIsStickerPrinted,
   searchResult,
@@ -119,6 +120,7 @@ export default function DeviceTestComponent({
                               onNoResults={handleNoResults}
                               setSearchResult={setSearchResult}
                               getDeviceById={getDeviceById}
+                              excludedSerials={excludedSerials}
                               setIsPassNGButtonShow={setIsPassNGButtonShow}
                               setIsStickerPrinted={setIsStickerPrinted}
                             />

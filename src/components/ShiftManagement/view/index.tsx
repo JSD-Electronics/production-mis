@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useState, useMemo } from "react";
 import DataTable, { TableColumn } from "react-data-table-component";
@@ -14,7 +14,7 @@ import {
   AlertCircle,
   LayoutGrid
 } from "lucide-react";
-import { BallTriangle } from "react-loader-spinner";
+import { TableSkeleton } from "@/components/common/Skeletons";
 import { ToastContainer, toast } from "react-toastify";
 
 import ConfirmationPopup from "@/components/Confirmation/page";
@@ -284,9 +284,7 @@ const ViewShift = () => {
 
         <div className="relative">
           {loading ? (
-            <div className="flex h-64 items-center justify-center">
-              <BallTriangle height={80} width={80} color="#3c50e0" />
-            </div>
+            <TableSkeleton rows={6} />
           ) : (
             <DataTable
               columns={columns}
@@ -322,3 +320,6 @@ const ViewShift = () => {
 };
 
 export default ViewShift;
+
+
+

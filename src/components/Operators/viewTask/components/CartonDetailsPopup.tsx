@@ -67,13 +67,25 @@ const CartonDetailsPopup = ({
 
   const [isVerifying, setIsVerifying] = useState<string | null>(null);
   const [scanValue, setScanValue] = useState("");
+  const [verifyError, setVerifyError] = useState<string>("");
   const [isMovingStage, setIsMovingStage] = useState(false);
   const [localCartonStatuses, setLocalCartonStatuses] = useState<Record<string, string>>({});
   const [cartonWeights, setCartonWeights] = useState<Record<string, string>>({});
   const [isSavingWeight, setIsSavingWeight] = useState<string | null>(null);
+  const [weightError, setWeightError] = useState<string>("");
   const [openCartons, setOpenCartons] = useState<Carton[]>([]);
   const [isLoadingOpen, setIsLoadingOpen] = useState(false);
   const [closingCarton, setClosingCarton] = useState<string | null>(null);
+  const [looseCartonTarget, setLooseCartonTarget] = useState<Carton | null>(null);
+  const [looseCartonStep, setLooseCartonStep] = useState<"choice" | "assign">("choice");
+  const [looseCartonSubmitting, setLooseCartonSubmitting] = useState(false);
+  const [looseCartonForm, setLooseCartonForm] = useState({
+    cartonWidth: "",
+    cartonHeight: "",
+    cartonDepth: "",
+    cartonWeight: "",
+    quantity: "",
+  });
 
   const fullCartons = cartons.filter(c =>
     (c.status || "").toLowerCase() === "full" ||
@@ -87,6 +99,16 @@ const CartonDetailsPopup = ({
     if (cartons) {
       const statuses: Record<string, string> = {};
       const weights: Record<string, string> = {};
+      const localOpenCartons = cartons.filter((c) => {
+        const status = String(c?.status || "").toLowerCase();
+        return (
+          status !== "full" ||
+          c?.isLooseCarton ||
+          status === "partial" ||
+          status === "empty"
+        );
+      });
+      setOpenCartons(localOpenCartons);
       cartons.forEach(c => {
         if (c.isStickerVerified) {
           statuses[c.cartonSerial] = "Verified";
@@ -110,9 +132,11 @@ const CartonDetailsPopup = ({
       try {
         const result = await fetchOpenCartonsByProcessID(processData._id);
         const list = Array.isArray(result) ? result : (result?.cartonDetails || []);
-        setOpenCartons(list || []);
+        if (Array.isArray(list) && list.length > 0) {
+          setOpenCartons(list);
+        }
       } catch (e) {
-        setOpenCartons([]);
+        // keep the locally derived list if the background refresh fails
       } finally {
         setIsLoadingOpen(false);
       }
@@ -120,12 +144,47 @@ const CartonDetailsPopup = ({
     loadOpenCartons();
   }, [isOpen, processData?._id]);
 
-  const handleCloseLooseCarton = async (cartonSerial: string) => {
+  const resetLooseCartonFlow = () => {
+    setLooseCartonTarget(null);
+    setLooseCartonStep("choice");
+    setLooseCartonSubmitting(false);
+    setLooseCartonForm({
+      cartonWidth: "",
+      cartonHeight: "",
+      cartonDepth: "",
+      cartonWeight: "",
+      quantity: "",
+    });
+  };
+
+  const openLooseCartonFlow = (carton: Carton) => {
+    if (String(carton?.status || "").toLowerCase() !== "partial") {
+      toast.error("Only partial cartons can be closed as loose cartons.");
+      return;
+    }
+    const packagingData = assignUserStage?.subSteps?.find((s: any) => s.isPackagingStatus)?.packagingData || {};
+    setLooseCartonTarget(carton);
+    setLooseCartonStep("choice");
+    setLooseCartonForm({
+      cartonWidth: String(carton?.cartonSize?.width || packagingData?.cartonWidth || ""),
+      cartonHeight: String(carton?.cartonSize?.height || packagingData?.cartonHeight || ""),
+      cartonDepth: String(carton?.cartonSize?.depth || packagingData?.cartonDepth || ""),
+      cartonWeight: String(carton?.weightCarton || packagingData?.cartonWeight || ""),
+      quantity: String(carton?.devices?.length || 0),
+    });
+  };
+
+  const handleProceedLooseExisting = async () => {
+    if (!looseCartonTarget) return;
     try {
-      setClosingCarton(cartonSerial);
-      await closeLooseCarton(cartonSerial);
+      setClosingCarton(looseCartonTarget.cartonSerial);
+      await closeLooseCarton({
+        cartonSerial: looseCartonTarget.cartonSerial,
+        action: "existing",
+      });
       toast.success("Loose carton closed successfully!");
-      setOpenCartons((prev) => prev.filter((c) => c.cartonSerial !== cartonSerial));
+      setOpenCartons((prev) => prev.filter((c) => c.cartonSerial !== looseCartonTarget.cartonSerial));
+      resetLooseCartonFlow();
       onUpdate();
     } catch (e: any) {
       toast.error(e?.message || "Failed to close loose carton");
@@ -134,10 +193,80 @@ const CartonDetailsPopup = ({
     }
   };
 
-  const handlePrint = async (carton: Carton) => {
-    const weight = cartonWeights[carton.cartonSerial];
+  const handleAssignNewCarton = async () => {
+    if (!looseCartonTarget) return;
+
+    const sourceQuantity = Array.isArray(looseCartonTarget.devices) ? looseCartonTarget.devices.length : 0;
+    const quantity = Number(looseCartonForm.quantity);
+    const cartonWidth = Number(looseCartonForm.cartonWidth);
+    const cartonHeight = Number(looseCartonForm.cartonHeight);
+    const cartonDepth = Number(looseCartonForm.cartonDepth);
+    const cartonWeight = Number(looseCartonForm.cartonWeight);
+
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      toast.error("Quantity must be a positive integer.");
+      return;
+    }
+    if (quantity > sourceQuantity) {
+      toast.error("Quantity cannot exceed the devices in the partial carton.");
+      return;
+    }
+    if (!cartonWidth || cartonWidth <= 0 || !cartonHeight || cartonHeight <= 0 || !cartonDepth || cartonDepth <= 0) {
+      toast.error("Please enter valid carton dimensions.");
+      return;
+    }
+    if (!cartonWeight || cartonWeight <= 0) {
+      toast.error("Please enter a valid carton weight.");
+      return;
+    }
+
+    try {
+      setLooseCartonSubmitting(true);
+      setClosingCarton(looseCartonTarget.cartonSerial);
+      const response = await closeLooseCarton({
+        cartonSerial: looseCartonTarget.cartonSerial,
+        action: "assign-new",
+        quantity,
+        cartonWidth,
+        cartonHeight,
+        cartonDepth,
+        cartonWeight,
+        packagingData: {
+          cartonWidth,
+          cartonHeight,
+          cartonDepth,
+          cartonWeight,
+          maxCapacity: quantity,
+        },
+      });
+      toast.success("Loose carton reassigned successfully!");
+
+      if (response?.newCarton?.cartonSerial) {
+        await handlePrint(response.newCarton, cartonWeight.toString(), { skipWeightCheck: true });
+      }
+
+      setOpenCartons((prev) => prev.filter((c) => c.cartonSerial !== looseCartonTarget.cartonSerial));
+      resetLooseCartonFlow();
+      onUpdate();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to assign a new carton");
+    } finally {
+      setLooseCartonSubmitting(false);
+      setClosingCarton(null);
+    }
+  };
+
+  const handlePrint = async (
+    carton: Carton,
+    overrideWeight?: string | number,
+    options?: { skipWeightCheck?: boolean },
+  ) => {
+    setWeightError("");
+    const weight = String(overrideWeight ?? cartonWeights[carton.cartonSerial] ?? "");
     if (!weight || parseFloat(weight) <= 0) {
-      toast.error("Please enter a valid weight for the carton!");
+      const message = "Please enter a valid weight for the carton!";
+      setWeightError(message);
+      toast.error(message);
       return;
     }
 
@@ -147,12 +276,12 @@ const CartonDetailsPopup = ({
     const expectedWeight = parseFloat(packagingData.cartonWeight || "0");
     const toleranceKg = 0.5;
 
-    if (expectedWeight > 0) {
+    if (!options?.skipWeightCheck && expectedWeight > 0) {
       const variance = Math.abs(recordedWeight - expectedWeight);
       if (variance > toleranceKg) {
-        toast.error(
-          `Weight mismatch! Expected ${expectedWeight} KG, got ${recordedWeight} KG.`,
-        );
+        const message = `Weight mismatch! Expected ${expectedWeight} KG, got ${recordedWeight} KG.`;
+        setWeightError(message);
+        toast.error(message);
         return;
       }
     }
@@ -335,7 +464,12 @@ const CartonDetailsPopup = ({
       }
     } catch (error) {
       console.error("Print failed:", error);
-      toast.error("Failed to save. Check connection.");
+      const message =
+        (error as any)?.message ||
+        (error as any)?.response?.data?.message ||
+        "Failed to save carton weight.";
+      setWeightError(message);
+      toast.error(message);
     } finally {
       setIsSavingWeight(null);
     }
@@ -344,13 +478,16 @@ const CartonDetailsPopup = ({
   const handleVerifyClick = (cartonSerial: string) => {
     setIsVerifying(cartonSerial);
     setScanValue("");
+    setVerifyError("");
   };
 
   const handleVerifyScan = async () => {
     if (!isVerifying) return;
 
     if (scanValue.trim() !== isVerifying) {
-      toast.error("Scanned serial does not match!");
+      const message = "Scanned serial does not match!";
+      setVerifyError(message);
+      toast.error(message);
       setScanValue("");
       return;
     }
@@ -362,11 +499,14 @@ const CartonDetailsPopup = ({
         toast.success(`Carton ${isVerifying} verified!`);
         setIsVerifying(null);
         setScanValue("");
+        setVerifyError("");
         onUpdate();
       }
     } catch (error) {
       console.error("Verification failed:", error);
-      toast.error("Verification failed.");
+      const message = "Verification failed. Please try again.";
+      setVerifyError(message);
+      toast.error(message);
     }
   };
 
@@ -415,25 +555,28 @@ const CartonDetailsPopup = ({
   const allVerified = fullCartons.length > 0 && fullCartons.every(c => localCartonStatuses[c.cartonSerial] === "Verified");
 
   return (
+    <>
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title={isPDIStage ? "Carton PDI & Move" : "Carton Packaging & QC"}
-      submitOption={false}
+      submitOption={isPDIStage}
+      submitDisabled={!allVerified || isMovingStage}
+      onSubmit={handleMoveToNextStage}
+      submitText={isPDIStage ? "Move to Next Stage" : "Shift to PDI"}
       maxWidth="max-w-5xl"
     >
       <div className="flex flex-col gap-6">
         {/* Open/Loose Cartons Quick Access */}
-        {isLoadingOpen ? (
-          <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-            <div className="text-xs font-black text-gray-400 uppercase tracking-widest">
-              Loading open cartons...
-            </div>
-          </div>
-        ) : openCartons.length > 0 ? (
+        {openCartons.length > 0 ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-            <div className="mb-3 text-xs font-black uppercase tracking-widest text-amber-700">
-              Open / Loose Cartons
+            <div className="mb-3 flex items-center justify-between gap-3 text-xs font-black uppercase tracking-widest text-amber-700">
+              <span>Open / Loose Cartons</span>
+              {isLoadingOpen && (
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-[10px] text-amber-700">
+                  Syncing in background
+                </span>
+              )}
             </div>
             <div className="space-y-3">
               {openCartons.map((c) => (
@@ -448,11 +591,11 @@ const CartonDetailsPopup = ({
                     </div>
                   </div>
                   <button
-                    onClick={() => handleCloseLooseCarton(c.cartonSerial)}
+                    onClick={() => openLooseCartonFlow(c)}
                     disabled={closingCarton === c.cartonSerial}
                     className="rounded-lg bg-amber-600 px-4 py-2 text-xs font-black text-white hover:bg-amber-700 disabled:opacity-50"
                   >
-                    {closingCarton === c.cartonSerial ? "CLOSING..." : "CLOSE AS LOOSE"}
+                    {closingCarton === c.cartonSerial ? "OPENING..." : "CLOSE AS LOOSE"}
                   </button>
                 </div>
               ))}
@@ -462,40 +605,62 @@ const CartonDetailsPopup = ({
         {/* Verification Scanner Input */}
         {isVerifying && (
           <div className="rounded-xl border-2 border-blue-600 bg-blue-50 p-5 animate-in fade-in slide-in-from-top-4">
-            <div className="flex items-center justify-between mb-3">
+            <div className="sticky top-0 z-10 -mx-1 mb-3 flex flex-col gap-3 rounded-t-2xl bg-white/95 px-1 py-2 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
               <h4 className="text-sm font-black text-blue-900 flex items-center gap-2 uppercase tracking-tight">
                 <QrCode className="h-4 w-4" />
                 Scanning Carton Serial: {isVerifying}
               </h4>
-              <button
-                onClick={() => setIsVerifying(null)}
-                className="text-blue-600 hover:text-blue-800 text-xs font-black uppercase"
-              >
-                Cancel
-              </button>
+              <div className="flex items-center gap-3 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsVerifying(null);
+                    setScanValue("");
+                    setVerifyError("");
+                  }}
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-black uppercase tracking-wide text-slate-600 transition-all hover:border-slate-300 hover:text-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleVerifyScan}
+                  className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-black uppercase tracking-wide text-white shadow-lg shadow-blue-200 transition-all hover:bg-blue-700 active:scale-95"
+                >
+                  Submit
+                </button>
+              </div>
             </div>
-            <div className="flex gap-3">
+            {verifyError && (
+              <div className="mb-3 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 shadow-sm">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{verifyError}</span>
+              </div>
+            )}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
               <input
                 autoFocus
                 type="text"
                 value={scanValue}
-                onChange={(e) => setScanValue(e.target.value)}
+                onChange={(e) => {
+                  setScanValue(e.target.value);
+                  if (verifyError) setVerifyError("");
+                }}
                 onKeyDown={(e) => e.key === "Enter" && handleVerifyScan()}
                 placeholder="Scan QR Code or Type Serial..."
                 className="flex-1 rounded-xl border-2 border-blue-200 px-4 py-3 text-sm font-black focus:outline-none focus:ring-4 focus:ring-blue-100 outline-none transition-all placeholder:text-blue-300"
               />
-              <button
-                onClick={handleVerifyScan}
-                className="rounded-xl bg-blue-600 px-8 py-3 text-sm font-black text-white hover:bg-blue-700 shadow-xl shadow-blue-200 transition-all active:scale-95"
-              >
-                Verify
-              </button>
             </div>
           </div>
         )}
 
         {/* Cartons Table */}
         <div className="overflow-hidden rounded-2xl border border-gray-200 shadow-xl bg-white">
+          {weightError && (
+            <div className="border-b border-red-200 bg-red-50 px-6 py-3 text-sm font-semibold text-red-700">
+              {weightError}
+            </div>
+          )}
           <table className="w-full text-left text-sm">
             <thead className="bg-gray-900 font-black uppercase tracking-widest text-white text-[10px]">
               <tr>
@@ -568,7 +733,10 @@ const CartonDetailsPopup = ({
                               type="number"
                               step="0.01"
                               value={currentWeight}
-                              onChange={(e) => setCartonWeights({ ...cartonWeights, [carton.cartonSerial]: e.target.value })}
+                              onChange={(e) => {
+                                setCartonWeights({ ...cartonWeights, [carton.cartonSerial]: e.target.value });
+                                if (weightError) setWeightError("");
+                              }}
                               placeholder="0.00"
                               className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-2 text-sm font-black focus:border-black focus:bg-white outline-none transition-all pr-12"
                             />
@@ -648,21 +816,23 @@ const CartonDetailsPopup = ({
 
         {/* Action Button */}
         <div className="flex flex-col items-center gap-4 pt-6 border-t-2 border-gray-50">
-          <button
-            onClick={handleMoveToNextStage}
-            disabled={!allVerified || isMovingStage}
-            className={`flex items-center gap-3 rounded-2xl px-16 py-5 font-black uppercase text-sm tracking-[0.2em] text-white transition-all active:scale-95 ${allVerified && !isMovingStage
-              ? "bg-green-600 hover:bg-green-700 shadow-2xl shadow-green-200 border-b-4 border-green-900"
-              : "bg-gray-200 text-gray-400 cursor-not-allowed grayscale"
-              }`}
-          >
-            {isMovingStage ? (
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            ) : (
-              <ArrowRightCircle className="h-6 w-6" />
-            )}
-            {isPDIStage ? "Move to Next Stage" : "Shift to PDI"}
-          </button>
+          {!isPDIStage && (
+            <button
+              onClick={handleMoveToNextStage}
+              disabled={!allVerified || isMovingStage}
+              className={`flex items-center gap-3 rounded-2xl px-16 py-5 font-black uppercase text-sm tracking-[0.2em] text-white transition-all active:scale-95 ${allVerified && !isMovingStage
+                ? "bg-green-600 hover:bg-green-700 shadow-2xl shadow-green-200 border-b-4 border-green-900"
+                : "bg-gray-200 text-gray-400 cursor-not-allowed grayscale"
+                }`}
+            >
+              {isMovingStage ? (
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                <ArrowRightCircle className="h-6 w-6" />
+              )}
+              Shift to PDI
+            </button>
+          )}
           {!allVerified && fullCartons.length > 0 && (
             <div className="flex items-center gap-2 text-[11px] font-black text-amber-600 bg-amber-50 px-5 py-2 rounded-full border border-amber-200 animate-pulse">
               <AlertCircle className="h-4 w-4" />
@@ -672,6 +842,143 @@ const CartonDetailsPopup = ({
         </div>
       </div>
     </Modal>
+    <Modal
+      isOpen={!!looseCartonTarget}
+      onClose={resetLooseCartonFlow}
+      title={
+        looseCartonStep === "choice"
+          ? `Close As Loose Carton - ${looseCartonTarget?.cartonSerial || ""}`
+          : `Assign New Carton - ${looseCartonTarget?.cartonSerial || ""}`
+      }
+      submitOption={false}
+      maxWidth="max-w-2xl"
+    >
+      {looseCartonTarget && looseCartonStep === "choice" ? (
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+            <div className="text-sm font-black text-amber-900">Partial carton detected</div>
+            <div className="mt-1 text-xs font-semibold text-amber-700">
+              {looseCartonTarget.cartonSerial} has {looseCartonTarget.devices?.length || 0} device(s).
+              Choose how to handle this carton now.
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={handleProceedLooseExisting}
+              disabled={looseCartonSubmitting}
+              className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-left transition hover:bg-emerald-100 disabled:opacity-50"
+            >
+              <div className="text-sm font-black text-emerald-900">Proceed with Existing Carton</div>
+              <div className="mt-1 text-xs font-semibold text-emerald-700">
+                Keep the current partial carton flow and close it as loose.
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setLooseCartonStep("assign")}
+              disabled={looseCartonSubmitting}
+              className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-left transition hover:bg-blue-100 disabled:opacity-50"
+            >
+              <div className="text-sm font-black text-blue-900">Assign New Carton</div>
+              <div className="mt-1 text-xs font-semibold text-blue-700">
+                Choose new dimensions, weight, and quantity before generating the new sticker.
+              </div>
+            </button>
+          </div>
+        </div>
+      ) : looseCartonTarget ? (
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Quantity</div>
+                <input
+                  type="number"
+                  min={1}
+                  max={looseCartonTarget.devices?.length || 1}
+                  value={looseCartonForm.quantity}
+                  onChange={(e) => setLooseCartonForm((prev) => ({ ...prev, quantity: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500"
+                />
+                <div className="text-[11px] font-semibold text-slate-500">
+                  Must be between 1 and {looseCartonTarget.devices?.length || 0}.
+                </div>
+                <div className="text-[11px] font-semibold text-slate-400">
+                  The selected quantity will move into the new carton. Any remainder stays on the current partial carton.
+                </div>
+              </label>
+              <label className="space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Gross Weight (KG)</div>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={looseCartonForm.cartonWeight}
+                  onChange={(e) => setLooseCartonForm((prev) => ({ ...prev, cartonWeight: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500"
+                />
+              </label>
+              <label className="space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Width (cm)</div>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={looseCartonForm.cartonWidth}
+                  onChange={(e) => setLooseCartonForm((prev) => ({ ...prev, cartonWidth: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500"
+                />
+              </label>
+              <label className="space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Height (cm)</div>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={looseCartonForm.cartonHeight}
+                  onChange={(e) => setLooseCartonForm((prev) => ({ ...prev, cartonHeight: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500"
+                />
+              </label>
+              <label className="space-y-1 sm:col-span-2">
+                <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Depth (cm)</div>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={looseCartonForm.cartonDepth}
+                  onChange={(e) => setLooseCartonForm((prev) => ({ ...prev, cartonDepth: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={() => setLooseCartonStep("choice")}
+              disabled={looseCartonSubmitting}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={handleAssignNewCarton}
+              disabled={looseCartonSubmitting}
+              className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {looseCartonSubmitting ? "Saving..." : "Create & Print Sticker"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </Modal>
+    </>
   );
 };
 

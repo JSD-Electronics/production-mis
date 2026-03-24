@@ -518,20 +518,14 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const getDevices = async (id: any, assignStageToUser: any, pId: any) => {
     try {
       const result = await getDeviceByProductId(id);
-      // result?.data contains product devices
-      const targetStageName = (assignStageToUser?.[0]?.name || assignStageToUser?.name || "").trim();
+      // Keep all non-NG devices for this process in the search source.
+      // WIP kits may not sit on the exact current stage, but they should still be searchable.
       const filteredDeviceList = (result?.data || []).filter((device: any) => {
-        const deviceStage = String(device?.currentStage || "").trim();
         const deviceProcessId = String(device?.processID || device?.processId || "");
         const deviceStatus = String(device?.status || "").trim().toLowerCase();
-        if (deviceStatus === "ng") return false;
-        return (
-          deviceStage === targetStageName &&
-          deviceProcessId === String(pId)
-        );
+        return deviceProcessId === String(pId) && deviceStatus !== "ng";
       });
 
-      // set filtered list
       setDeviceList(filteredDeviceList);
     } catch (error) {
       console.error("Error Fetching Devices:", error);

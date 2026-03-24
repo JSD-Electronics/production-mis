@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React from "react";
 import DataTable from "react-data-table-component";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
@@ -6,7 +6,7 @@ import { viewIMEI, deleteIMEI, deleteMultipleIMEI } from "@/lib/api";
 import { PlaningData } from "@/types/planning";
 import { useRouter } from "next/navigation";
 import { FiEdit, FiTrash } from "react-icons/fi";
-import { BallTriangle } from "react-loader-spinner";
+import { TableSkeleton } from "@/components/common/Skeletons";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -140,15 +140,8 @@ const ViewImei = () => {
           pauseOnHover
         />
         {loading ? (
-          <div className="flex justify-center">
-            <BallTriangle
-              height={100}
-              width={100}
-              color="#4fa94d"
-              ariaLabel="loading"
-            />
-          </div>
-        ) : (
+            <TableSkeleton rows={6} />
+          ) : (
           <>
             <div className="mb-4 mt-4 text-right">
               <button
@@ -219,3 +212,6 @@ const ViewImei = () => {
 };
 
 export default ViewImei;
+
+
+

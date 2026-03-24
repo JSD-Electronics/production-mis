@@ -1013,9 +1013,9 @@ export const searchByJigFields = async (data) => {
     throw error.response?.data || { message: "Error searching device" };
   }
 };
-export const getOverallDeviceTestEntry = async (id) => {
+export const getOverallDeviceTestEntry = async (params = {}) => {
   try {
-    let response = await api.get(`/getOverallDeviceTestEntry`);
+    let response = await api.get(`/getOverallDeviceTestEntry`, { params });
     return response.data;
   } catch (error) {
 
@@ -1565,7 +1565,7 @@ export const createCarton = async (formData) => {
     let response = await api.post(`/carton/createCarton`, formData);
     return response.data;
   } catch (error) {
-    throw error; throw error;
+    throw error.response?.data || error;
   }
 };
 export const saveCartonWeight = async (data) => {
@@ -1573,7 +1573,7 @@ export const saveCartonWeight = async (data) => {
     let response = await api.put(`/carton/updateWeight`, data);
     return response.data;
   } catch (error) {
-    throw error;
+    throw error.response?.data || error;
   }
 };
 
@@ -1987,11 +1987,13 @@ export const getStorePortalCartons = async () => {
   }
 };
 
-export const closeLooseCarton = async (cartonSerial) => {
+export const closeLooseCarton = async (payload) => {
   try {
-    const response = await api.put("/carton/close-loose", {
-      cartonSerial,
-    });
+    const body =
+      typeof payload === "string"
+        ? { cartonSerial: payload, action: "existing" }
+        : { action: "existing", ...(payload || {}) };
+    const response = await api.put("/carton/close-loose", body);
     return response.data;
   } catch (error) {
     throw error.response?.data || { message: "Error closing loose carton" };
