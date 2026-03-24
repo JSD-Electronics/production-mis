@@ -17,7 +17,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_KEY }}
           script: |
-            set -e
+            set -euo pipefail
 
             APP_NAME="production-mis"
             APP_ROOT="/var/www/html"
@@ -48,10 +48,17 @@ jobs:
               git clone --mirror "$REPO_URL" "$REPO_CACHE"
             fi
 
-            git --git-dir="$REPO_CACHE" fetch --prune origin main
+            # Mirror repos keep branch refs under refs/heads/* (not refs/remotes/origin/*).
+            # Fetch main explicitly into refs/heads/main so archive always has a valid ref.
+            git --git-dir="$REPO_CACHE" fetch --prune origin "+refs/heads/main:refs/heads/main"
+
+            if ! git --git-dir="$REPO_CACHE" rev-parse --verify refs/heads/main >/dev/null 2>&1; then
+              echo "Could not resolve refs/heads/main in deploy cache."
+              exit 1
+            fi
 
             mkdir -p "$RELEASE_DIR"
-            git --git-dir="$REPO_CACHE" archive origin/main | tar -x -C "$RELEASE_DIR"
+            git --git-dir="$REPO_CACHE" archive refs/heads/main | tar -x -C "$RELEASE_DIR"
 
             if [ -f "$ENV_BACKUP" ]; then
               cp "$ENV_BACKUP" "$RELEASE_DIR/.env"
