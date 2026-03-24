@@ -20,114 +20,62 @@ jobs:
             set -euo pipefail
 
             APP_NAME="production-mis"
-            APP_ROOT="/var/www/html"
-            LIVE_DIR="$APP_ROOT/$APP_NAME"
-            DEPLOY_ROOT="$APP_ROOT/.deployments/$APP_NAME"
-            RELEASES_DIR="$DEPLOY_ROOT/releases"
-            TIMESTAMP="$(date +%Y%m%d%H%M%S)"
-            RELEASE_DIR="$RELEASES_DIR/$TIMESTAMP"
-            BACKUP_DIR="$RELEASES_DIR/rollback-$TIMESTAMP"
+            APP_DIR="/var/www/html/$APP_NAME"
             ENV_BACKUP="/tmp/${APP_NAME}.env"
-            NPM_CACHE_DIR="/tmp/.npm-${APP_NAME}"
-            REPO_URL=""
-            MIN_FREE_KB=1048576
+            PREV_LOCK_HASH=""
+            NEW_LOCK_HASH=""
 
-            echo "== SAFE DEPLOY START =="
-            echo "Live dir: $LIVE_DIR"
+            echo "== SIMPLE DEPLOY START =="
+            echo "App dir: $APP_DIR"
 
-            mkdir -p "$DEPLOY_ROOT" "$RELEASES_DIR"
-            # Ensure a failed run does not leave a partial release occupying disk.
-            trap 'rm -rf "$RELEASE_DIR"' ERR
+            if [ ! -d "$APP_DIR/.git" ]; then
+              echo "Git repository not found at $APP_DIR"
+              exit 1
+            fi
 
-            echo "== DISK BEFORE CLEANUP =="
-            df -h "$APP_ROOT" || true
+            df -h / || true
 
-            # Free space early.
-            find "$RELEASES_DIR" -maxdepth 1 -mindepth 1 -type d | xargs -r rm -rf
-            rm -rf "$RELEASES_DIR"/rollback-* || true
-            rm -rf "$NPM_CACHE_DIR"
-            find "$HOME/.pm2/logs" -type f -name "*.log" -exec truncate -s 0 {} + 2>/dev/null || true
+            if [ -f "$APP_DIR/.env" ]; then
+              cp "$APP_DIR/.env" "$ENV_BACKUP"
+            fi
+
+            cd "$APP_DIR"
+            if [ -f "package-lock.json" ]; then
+              PREV_LOCK_HASH="$(sha1sum package-lock.json | awk '{print $1}')"
+            fi
+
+            # Keep deploy small and predictable on low disk instances.
             rm -rf "$HOME/.npm/_cacache" || true
+            find "$HOME/.pm2/logs" -type f -name "*.log" -exec truncate -s 0 {} + 2>/dev/null || true
 
-            echo "== DISK AFTER CLEANUP =="
-            df -h "$APP_ROOT" || true
-            FREE_KB="$(df -Pk "$APP_ROOT" | awk 'NR==2 {print $4}')"
-            echo "Free space (KB): $FREE_KB"
+            git fetch --prune origin main
+            git reset --hard FETCH_HEAD
 
-            # Emergency cleanup if disk is still too full.
-            if [ "$FREE_KB" -lt "$MIN_FREE_KB" ]; then
-              echo "== EMERGENCY CLEANUP =="
-              rm -rf "$DEPLOY_ROOT/repo.git" || true
-              find /home -type f -path "*/.pm2/logs/*.log" -delete 2>/dev/null || true
-              rm -rf /tmp/.npm-* || true
-              df -h "$APP_ROOT" || true
+            if [ -f "package-lock.json" ]; then
+              NEW_LOCK_HASH="$(sha1sum package-lock.json | awk '{print $1}')"
             fi
-
-            FREE_KB="$(df -Pk "$APP_ROOT" | awk 'NR==2 {print $4}')"
-            echo "Free space after emergency cleanup (KB): $FREE_KB"
-            if [ "$FREE_KB" -lt "$MIN_FREE_KB" ]; then
-              echo "Insufficient disk space (<1GB) after cleanup; aborting deploy early."
-              exit 1
-            fi
-
-            if [ -f "$LIVE_DIR/.env" ]; then
-              cp "$LIVE_DIR/.env" "$ENV_BACKUP"
-            fi
-
-            if [ -d "$LIVE_DIR/.git" ]; then
-              REPO_URL="$(git -C "$LIVE_DIR" config --get remote.origin.url || true)"
-            fi
-
-            if [ -z "$REPO_URL" ] && [ -d "$DEPLOY_ROOT/repo.git" ]; then
-              REPO_URL="$(git --git-dir="$DEPLOY_ROOT/repo.git" config --get remote.origin.url || true)"
-            fi
-
-            if [ -z "$REPO_URL" ]; then
-              echo "Remote origin URL not found; cannot continue deploy."
-              exit 1
-            fi
-
-            echo "Using repo: $REPO_URL"
-            git clone --depth 1 --branch main "$REPO_URL" "$RELEASE_DIR"
-            rm -rf "$RELEASE_DIR/.git"
 
             if [ -f "$ENV_BACKUP" ]; then
-              cp "$ENV_BACKUP" "$RELEASE_DIR/.env"
+              cp "$ENV_BACKUP" "$APP_DIR/.env"
             fi
 
-            cd "$RELEASE_DIR"
-            rm -rf .next/cache
-            # Use temporary cache outside release dir to reduce repeated disk growth.
-            npm install --cache "$NPM_CACHE_DIR" --no-audit --no-fund
+            if [ ! -d "node_modules" ] || [ "$PREV_LOCK_HASH" != "$NEW_LOCK_HASH" ]; then
+              echo "Installing dependencies (lockfile changed or node_modules missing)..."
+              npm ci --no-audit --no-fund --prefer-offline --progress=false
+            else
+              echo "Skipping dependency install (lockfile unchanged)."
+            fi
+
             npm run build
 
-            echo "== BUILD SUCCEEDED =="
-
-            if [ -d "$LIVE_DIR" ]; then
-              mv "$LIVE_DIR" "$BACKUP_DIR"
-            fi
-
-            mv "$RELEASE_DIR" "$LIVE_DIR"
-
-            if pm2 restart "$APP_NAME" --update-env --cwd "$LIVE_DIR"; then
+            if pm2 restart "$APP_NAME" --update-env --cwd "$APP_DIR"; then
               echo "PM2 restart succeeded"
-            elif pm2 start npm --name "$APP_NAME" --cwd "$LIVE_DIR" -- start; then
-              echo "PM2 start succeeded"
             else
-              echo "PM2 failed; rolling back"
-              rm -rf "$LIVE_DIR"
-              if [ -d "$BACKUP_DIR" ]; then
-                mv "$BACKUP_DIR" "$LIVE_DIR"
-                pm2 restart "$APP_NAME" --update-env --cwd "$LIVE_DIR" || true
-              fi
-              exit 1
+              pm2 start npm --name "$APP_NAME" --cwd "$APP_DIR" -- start
             fi
 
             pm2 save
             pm2 status
+            df -h / || true
 
-            rm -rf "$BACKUP_DIR"
-            rm -rf "$NPM_CACHE_DIR"
-            find "$RELEASES_DIR" -maxdepth 1 -mindepth 1 -type d | sort | head -n -3 | xargs -r rm -rf
-
-            echo "== SAFE DEPLOY COMPLETE =="
+            echo "== SIMPLE DEPLOY COMPLETE =="
