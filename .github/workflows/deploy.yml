@@ -20,6 +20,10 @@ jobs:
             set -e
             cd /var/www/html/production-mis
 
+            echo "== DEPLOY START =="
+            pwd
+            git status --short || true
+
             # Free up space before Git operations
             rm -rf .next/cache
             npm cache clean --force
@@ -27,12 +31,18 @@ jobs:
 
             # Keep server-only env values while forcing the code checkout to match origin/main.
             cp .env /tmp/production-mis.env || true
+            git merge --abort || true
+            git rebase --abort || true
             rm -f .git/index.lock .git/MERGE_HEAD .git/MERGE_MSG .git/ORIG_HEAD
-            git fetch origin main
-            git checkout -B main origin/main
-            git reset --hard origin/main
-            git clean -fd
+            git reset --hard || true
+            git fetch --prune origin main
+            git reset --hard FETCH_HEAD
+            git clean -fd -e .env
             cp /tmp/production-mis.env .env || true
+
+            echo "== POST GIT SYNC =="
+            git rev-parse --short HEAD
+            git status --short || true
 
             npm install
             npm run build
