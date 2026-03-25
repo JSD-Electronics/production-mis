@@ -172,6 +172,15 @@ const ViewProcessInventory = () => {
       const additionalQuantity = parseInt(updatedQuantity.toString()) || 0;
       const additionalCartonQuantity = parseInt(updatedCartonQuantity.toString()) || 0;
 
+      if (additionalQuantity <= 0 && additionalCartonQuantity <= 0) {
+        toast.error("Please enter a quantity greater than 0");
+        return;
+      }
+      if (additionalQuantity < 0 || additionalCartonQuantity < 0) {
+        toast.error("Quantity values must be greater than 0");
+        return;
+      }
+
       const finalCartonQuantity = currentCartonQuantity + additionalCartonQuantity;
       const finalQuantity = currentQuantity + additionalQuantity;
 

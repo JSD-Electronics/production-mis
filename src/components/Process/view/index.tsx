@@ -189,6 +189,10 @@ const ViewProcess = () => {
   };
 
   const handleSubmitQuantity = async () => {
+    if (Number(addMoreQuantity) <= 0) {
+      toast.error("Please enter a quantity greater than 0.");
+      return;
+    }
     try {
       const userDetails = JSON.parse(localStorage.getItem("userDetails") || "{}");
       const formData = new FormData();

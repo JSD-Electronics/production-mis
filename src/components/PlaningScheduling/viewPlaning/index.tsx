@@ -314,6 +314,16 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       return fallback;
     }
   };
+  const buildCustomStagesFromCommonStages = (commonStages: any[] = []) =>
+    (commonStages || []).map((val: any) => ({
+      stage: val?.stageName || val?.stage || "",
+      totalUPHA: 0,
+      upha: val?.upha || 0,
+      achievedUph: 0,
+      wip: 0,
+      pass: 0,
+      ng: 0,
+    }));
 
   useEffect(() => {
     if (planingId) {
@@ -408,19 +418,20 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       return currentStage === stageKey && status !== "pass";
     });
   }, [processDevices, selectedStageNameForDevices]);
+  const selectedProcessStageEntries = React.useMemo(() => {
+    return Object.entries(assignedStages || {}).filter(([, stages]) => {
+      if (!Array.isArray(stages) || stages.length === 0) return false;
+      return !stages[0]?.reserved;
+    });
+  }, [assignedStages]);
   const occupancyStats = React.useMemo(() => {
     let active = 0;
     let downtime = 0;
     let completed = 0;
-    let reserved = 0;
-    Object.keys(assignedStages || {}).forEach((coord) => {
-      const arr = assignedStages[coord];
-      if (!arr || arr.length === 0) return;
+
+    selectedProcessStageEntries.forEach(([, arr]) => {
       const s = arr[0];
-      if (s?.reserved) {
-        reserved += 1;
-        return;
-      }
+      if (!s) return;
       const status =
         selectedProcess?.quantity > s?.totalUPHA
           ? s?.totalUPHA > 0
@@ -431,8 +442,13 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       else if (status === "Downtime") downtime += 1;
       else completed += 1;
     });
-    return { active, downtime, completed, reserved };
-  }, [assignedStages, selectedProcess]);
+    return {
+      active,
+      downtime,
+      completed,
+      total: selectedProcessStageEntries.length,
+    };
+  }, [selectedProcessStageEntries, selectedProcess]);
   const getCurrentDate = () => {
     const today = new Date();
     const yyyy = today.getFullYear();
@@ -806,8 +822,8 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         formatDate(result?.estimatedEndDate),
       );
       setAssignedStages({
-        ...(reservedSeats || {}),
         ...(currentAssignedStages || {}),
+        ...(reservedSeats || {}),
       });
       setAssignedOperators((prev) => ({
         ...prev,
@@ -858,6 +874,20 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
             setInventoryData(productData.inventory);
             setProductName(productData.product?.name || "");
             setSelectedProduct(productData);
+
+            const fallbackCustomStages = buildCustomStagesFromCommonStages(
+              productData?.product?.commonStages || singleProcess?.commonStages || [],
+            );
+            if (fallbackCustomStages.length > 0) {
+              setAssignedCustomStages((prev: any[]) =>
+                Array.isArray(prev) && prev.length > 0 ? prev : fallbackCustomStages,
+              );
+              setAssignedCustomOperators((prev: any[]) =>
+                Array.isArray(prev) && prev.length > 0
+                  ? prev
+                  : fallbackCustomStages.map(() => []),
+              );
+            }
           }
 
           if (deviceResult) {
@@ -2148,7 +2178,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                           <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <h3 className="text-gray-900 text-2xl font-bold dark:text-white flex items-center gap-2">
                               {/* Option: could add an icon here like <FiLayers /> */}
-                              Room Overview
+                              Selected Process Insights
                             </h3>
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 border border-red-200 dark:bg-red-900/20 dark:border-red-900/40 dark:text-red-400">
@@ -2164,7 +2194,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                                 Completed: {occupancyStats.completed}
                               </span>
                               <span className="flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 border border-gray-200 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300">
-                                Reserved: {occupancyStats.reserved}
+                                Seats: {occupancyStats.total}
                               </span>
                             </div>
                           </div>

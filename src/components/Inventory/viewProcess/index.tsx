@@ -8,8 +8,7 @@ import {
   updateInventoryById,
   getProcessByProductID,
   deleteProcess,
-  updateIssueKit,
-  updateIssueCarton
+  updateIssueKit
 } from "@/lib/api";
 import { Inventory } from "@/types/inventory";
 import { useRouter } from "next/navigation";
@@ -44,7 +43,6 @@ const AllocationManagement = () => {
   const [selectedInventory, setSelectedInventory] = useState<Inventory | null>(null);
   const [isDetailsModel, setIsDetailsModel] = useState(false);
   const [isIssueKitModel, setIsIssueKitModel] = useState(false);
-  const [isIssueCartonModel, setIsIssueCartonModel] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
 
   // Form State
@@ -52,7 +50,6 @@ const AllocationManagement = () => {
   const [selectedProcess, setSelectedProcess] = useState("");
   const [selectedProcessDetails, setSelectedProcessDetails] = useState<any>({});
   const [issueKitProcess, setIssueKitProcess] = useState("");
-  const [issueCartonProcess, setIssueCartonProcess] = useState("");
   const [packagingData, setPackagingData] = useState<any[]>([]);
 
   useEffect(() => {
@@ -104,33 +101,6 @@ const AllocationManagement = () => {
     setSelectedProcessDetails(inventory);
     setIsIssueKitModel(true);
     setIssueKitProcess("");
-  };
-
-  const openIssueCarton = (inventory: Inventory) => {
-    setSelectedInventory(inventory);
-    setSelectedProcess(inventory._id);
-    setSelectedProcessDetails(inventory);
-    setIsIssueCartonModel(true);
-    setIssueCartonProcess("");
-  };
-
-  const handleSubmitCarton = async () => {
-    try {
-      if (selectedProcessDetails.status === "completed") {
-        toast.error("Process is already fully allocated");
-        return;
-      }
-      const data = new FormData();
-      data.append("process", selectedProcess);
-      data.append("issueCartonProcess", issueCartonProcess);
-      await updateIssueCarton(data);
-      toast.success("Cartons Issued Successfully!");
-      setIsIssueCartonModel(false);
-      getInventory();
-    } catch (error) {
-      console.error("Error issuing cartons:", error);
-      toast.error("Failed to issue cartons");
-    }
   };
 
   const handleSubmitIssuedKit = async () => {
@@ -277,18 +247,7 @@ const AllocationManagement = () => {
       name: "Actions",
       cell: (row: Inventory) => {
         const kitComplete = row.issuedKits >= row.processQuantity || row.status === "completed";
-
-        // Calculate estimated cartons needed if packaging info exists
-        let cartonsNeeded = 0;
-        const packStep = row.productDetails?.stages
-          ?.flatMap((s: any) => s.subSteps || [])
-          .find((step: any) => step.isPackagingStatus);
-
-        if (packStep?.packagingData?.maxCapacity) {
-          cartonsNeeded = Math.ceil(row.processQuantity / packStep.packagingData.maxCapacity);
-        }
-
-        const cartonComplete = (cartonsNeeded > 0 && row.cartonQuantity >= cartonsNeeded) || row.status === "completed";
+        const cartonComplete = (row.cartonShortage || 0) <= 0 || row.status === "completed";
 
         return (
           <div className="flex items-center gap-2">
@@ -310,14 +269,18 @@ const AllocationManagement = () => {
               </button>
             )}
 
-            {!cartonComplete && (
-              <button
-                onClick={() => openIssueCarton(row)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition hover:bg-emerald-600 hover:text-white dark:bg-emerald-900/20"
-                title="Issue Carton"
+            {(row.cartonCapacity || 0) > 0 && (
+              <span
+                className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${
+                  cartonComplete
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-amber-100 text-amber-700"
+                }`}
               >
-                <Truck size={16} />
-              </button>
+                {cartonComplete
+                  ? row.cartonAllocationStatus || "Cartons Auto Allocated"
+                  : `${row.cartonShortage || 0} Cartons Pending`}
+              </span>
             )}
           </div>
         );
@@ -473,21 +436,30 @@ const AllocationManagement = () => {
 
             {packagingData.length > 0 && (
               <div className="space-y-3 border-t pt-6 dark:border-strokedark">
-                <h4 className="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
-                  <Truck size={16} className="text-emerald-500" />
-                  Carton Fulfillment
-                </h4>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4 rounded-xl border border-gray-100 p-4 text-sm dark:border-strokedark">
+              <h4 className="flex items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
+                <Truck size={16} className="text-emerald-500" />
+                  Auto Carton Fulfillment
+              </h4>
+              <div className="grid grid-cols-2 gap-x-8 gap-y-4 rounded-xl border border-gray-100 p-4 text-sm dark:border-strokedark">
                   <div className="flex justify-between border-b pb-2 dark:border-strokedark">
                     <span className="text-gray-500">Est. Needed:</span>
                     <span className="font-bold">
                       {Math.ceil(selectedInventory.processQuantity / (packagingData[0]?.packagingData?.maxCapacity || 1))}
                     </span>
                   </div>
-                  <div className="flex justify-between border-b pb-2 dark:border-strokedark">
-                    <span className="text-gray-500">Allocated:</span>
-                    <span className="font-bold">{selectedInventory.cartonQuantity}</span>
-                  </div>
+                <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                  <span className="text-gray-500">Allocated:</span>
+                  <span className="font-bold">{selectedInventory.cartonsAllocated ?? selectedInventory.issuedCartons ?? 0}</span>
+                </div>
+                <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                  <span className="text-gray-500">Pending:</span>
+                  <span className="font-bold text-amber-600">
+                    {selectedInventory.cartonShortage ?? Math.max(0, Math.ceil(selectedInventory.processQuantity / (packagingData[0]?.packagingData?.maxCapacity || 1)) - (selectedInventory.cartonsAllocated ?? selectedInventory.issuedCartons ?? 0))}
+                  </span>
+                </div>
+                </div>
+                <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
+                  Cartons are derived automatically from the product packaging capacity and current stock.
                 </div>
               </div>
             )}
@@ -553,36 +525,6 @@ const AllocationManagement = () => {
               {parseInt(issueKitProcess) > ((selectedInventory?.processQuantity || 0) - (selectedInventory?.issuedKits || 0)) && (
                 <p className="mt-1 text-[10px] font-bold text-rose-500">Cannot allocate more than pending requirement</p>
               )}
-            </div>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Issue Carton Modal */}
-      <Modal
-        isOpen={isIssueCartonModel}
-        onSubmit={handleSubmitCarton}
-        onClose={() => setIsIssueCartonModel(false)}
-        title={`Allocate Cartons: ${selectedInventory?.productName}`}
-      >
-        <div className="space-y-5 pt-2">
-          <div className="rounded-xl bg-gray-50 p-5 space-y-3 dark:bg-meta-4 ring-1 ring-gray-100 dark:ring-strokedark">
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500 font-bold uppercase">Process Name:</span>
-              <span className="font-bold text-gray-900 dark:text-white">{selectedInventory?.name}</span>
-            </div>
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-strokedark">
-              <label className="mb-2 block text-xs font-bold uppercase text-gray-500">Carton Quantity</label>
-              <div className="relative">
-                <Truck className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input
-                  type="number"
-                  placeholder="Enter cartons"
-                  value={issueCartonProcess}
-                  onChange={(e) => setIssueCartonProcess(e.target.value)}
-                  className="w-full rounded-lg border border-primary bg-white py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-4 focus:ring-primary/10 dark:bg-form-input dark:text-white"
-                />
-              </div>
             </div>
           </div>
         </div>

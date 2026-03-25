@@ -5,11 +5,18 @@
     productName: string;
     processQuantity: number;
     issuedKits: number;
+    issuedCartons?: number;
+    fgToStore?: number;
     inventoryQuantity: number;
     status: string;
     description?: string;
     productType?: string;
     cartonQuantity: number;
+    cartonCapacity?: number;
+    cartonsNeeded?: number;
+    cartonsAllocated?: number;
+    cartonShortage?: number;
+    cartonAllocationStatus?: string;
     updatedAt: string;
     createdAt: string;
     productDetails?: {

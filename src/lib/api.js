@@ -630,9 +630,9 @@ export const createProcess = async (formData, id) => {
     throw error.response?.data || { message: `Error Creating Process` };
   }
 };
-export const viewProcess = async () => {
+export const viewProcess = async (params = {}) => {
   try {
-    const response = await api.get(`/process/view`);
+    const response = await api.get(`/process/view`, { params });
     return response.data;
   } catch (error) {
 

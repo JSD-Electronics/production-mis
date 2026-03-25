@@ -185,26 +185,56 @@ const DraggableGridItem = ({
     <div
       ref={(node) => drag(drop(node))}
       key={seatIndex}
-      className={`flex flex-col h-full rounded-xl border-2 p-2 transition-all duration-300 ${assignedStages[coordinates] && assignedStages[coordinates].length > 0
-          ? "border-green-500/50 bg-green-50 shadow-sm transform hover:scale-[1.01] dark:bg-green-900/20"
-          : reservedStages?.[coordinates] && reservedStages[coordinates].length > 0
-            ? "border-red-500/50 bg-red-50 shadow-sm dark:bg-red-900/20"
-          : "border-dashed border-gray-300 bg-white hover:border-primary/50 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700"
+      className={`flex flex-col h-full rounded-xl border-2 p-2 transition-all duration-300 ${reservedStages?.[coordinates] && reservedStages[coordinates].length > 0
+          ? "border-red-500/50 bg-red-50 shadow-sm dark:bg-red-900/20"
+          : assignedStages[coordinates] && assignedStages[coordinates].length > 0
+            ? "border-green-500/50 bg-green-50 shadow-sm transform hover:scale-[1.01] dark:bg-green-900/20"
+            : "border-dashed border-gray-300 bg-white hover:border-primary/50 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700"
         }`}
       onDrop={handleDrop(rowIndex, seatIndex)}
       onDragOver={handleDragOver}
       title={
-        assignedStages[coordinates] && assignedStages[coordinates].length > 0
-          ? assignedStages[coordinates].join(",")
-          : reservedStages?.[coordinates] && reservedStages[coordinates].length > 0
-            ? reservedStages[coordinates].map((stage: any) => stage.name).join(",")
+        reservedStages?.[coordinates] && reservedStages[coordinates].length > 0
+          ? reservedStages[coordinates].map((stage: any) => stage.name).join(",")
+          : assignedStages[coordinates] && assignedStages[coordinates].length > 0
+            ? assignedStages[coordinates].join(",")
             : "Vacant"
       }
     >
       <span className="text-gray-800 flex items-center justify-between text-[10px] font-bold">
         <p className="text-xs"> S{item.seatNumber} </p>
       </span>
-      {assignedStages[coordinates] && assignedStages[coordinates].length > 0 ? (
+      {reservedStages?.[coordinates] && reservedStages[coordinates].length > 0 ? (
+        <div className="mt-1">
+          {reservedStages[coordinates].map((stage: any, stageIndex: number) => (
+            <div key={stageIndex}>
+              <div className="flex items-center justify-between">
+                <strong className="text-gray-900 text-[10px] leading-tight">
+                  {stage.name}
+                  <p className="text-[9px] text-gray-500">Reserved</p>
+                </strong>
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-500">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="2"
+                    stroke="currentColor"
+                    className="h-3 w-3"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </span>
+              </div>
+              <p className="text-[10px] text-gray-500">{stage.processName || ""}</p>
+            </div>
+          ))}
+        </div>
+      ) : assignedStages[coordinates] && assignedStages[coordinates].length > 0 ? (
         <div className="mt-1">
           <div>
             {assignedStages[coordinates].map((stage: any, stageIndex: any) => (
@@ -331,36 +361,6 @@ const DraggableGridItem = ({
               </div>
             ))}
           </div>
-        </div>
-      ) : reservedStages?.[coordinates] && reservedStages[coordinates].length > 0 ? (
-        <div className="mt-1">
-          {reservedStages[coordinates].map((stage: any, stageIndex: number) => (
-            <div key={stageIndex}>
-              <div className="flex items-center justify-between">
-                <strong className="text-gray-900 text-[10px] leading-tight">
-                  {stage.name}
-                  <p className="text-[9px] text-gray-500">Reserved</p>
-                </strong>
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-500">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth="2"
-                    stroke="currentColor"
-                    className="h-3 w-3"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </span>
-              </div>
-              <p className="text-[10px] text-gray-500">{stage.processName || ""}</p>
-            </div>
-          ))}
         </div>
       ) : (
         <span className="text-gray-400 text-[10px] italic mt-2">Vacant</span>

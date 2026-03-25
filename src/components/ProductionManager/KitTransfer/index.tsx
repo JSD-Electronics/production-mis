@@ -38,7 +38,7 @@ export default function KitTransferPageContent() {
   useEffect(() => {
     const load = async () => {
       try {
-        const response = await viewProcess();
+        const response = await viewProcess({ lite: 1 });
         setProcesses(response?.Processes || []);
       } catch (error: any) {
         toast.error(error?.message || "Failed to load processes");
@@ -107,6 +107,15 @@ export default function KitTransferPageContent() {
     });
     return map;
   }, [destinationStages]);
+  const functionalStageIndex = useMemo(() => {
+    return destinationStages.findIndex((stage: any) =>
+      String(stage?.stageName || stage?.name || "").trim().toLowerCase().includes("functional"),
+    );
+  }, [destinationStages]);
+  const eligibleDestinationStages = useMemo(() => {
+    if (functionalStageIndex < 0) return destinationStages;
+    return destinationStages.slice(0, functionalStageIndex + 1);
+  }, [destinationStages, functionalStageIndex]);
 
   const destinationProcesses = useMemo(() => {
     if (!fromProcess) return [];
@@ -146,6 +155,12 @@ export default function KitTransferPageContent() {
 
     if (targetIndex < 0) {
       return "Selected destination stage is invalid";
+    }
+    if (functionalStageIndex >= 0 && targetIndex > functionalStageIndex) {
+      return "Destination stage must be Functional or earlier";
+    }
+    if (functionalStageIndex >= 0 && currentIndex > functionalStageIndex) {
+      return `${serial} has already passed Functional and is not eligible for kit transfer`;
     }
     if (targetIndex === currentIndex) {
       return "";
@@ -327,7 +342,7 @@ export default function KitTransferPageContent() {
                   <option value="">
                     {canSelectTargetStage ? "Select stage" : "Select process first"}
                   </option>
-                  {destinationStages.map((stage: any) => (
+                  {eligibleDestinationStages.map((stage: any) => (
                     <option key={stage.stageName} value={stage.stageName}>
                       {stage.stageName}
                     </option>
