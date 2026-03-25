@@ -515,15 +515,34 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       console.error("Error Fetching Devices:", error);
     }
   };
-  const getDevices = async (id: any, assignStageToUser: any, pId: any) => {
+  const getDevices = async (
+    id: any,
+    assignStageToUser: any,
+    pId: any,
+    processStages: any[] = [],
+  ) => {
     try {
       const result = await getDeviceByProductId(id);
-      // Keep all non-NG devices for this process in the search source.
-      // WIP kits may not sit on the exact current stage, but they should still be searchable.
+      const operatorStageName = String(
+        Array.isArray(assignStageToUser)
+          ? assignStageToUser?.[0]?.name || assignStageToUser?.[0]?.stageName || ""
+          : assignStageToUser?.name || assignStageToUser?.stageName || "",
+      ).trim();
+      const firstStageName = String(processStages?.[0]?.stageName || "").trim();
+
+      // Only show devices that belong to this process and are currently at the
+      // operator's assigned stage. This prevents already-passed devices from
+      // reappearing in the current stage search.
       const filteredDeviceList = (result?.data || []).filter((device: any) => {
         const deviceProcessId = String(device?.processID || device?.processId || "");
         const deviceStatus = String(device?.status || "").trim().toLowerCase();
-        return deviceProcessId === String(pId) && deviceStatus !== "ng";
+        const deviceCurrentStage = String(device?.currentStage || "").trim();
+
+        const stageMatches =
+          deviceCurrentStage === operatorStageName ||
+          (!deviceCurrentStage && operatorStageName && operatorStageName === firstStageName);
+
+        return deviceProcessId === String(pId) && deviceStatus !== "ng" && stageMatches;
       });
 
       setDeviceList(filteredDeviceList);
@@ -780,7 +799,12 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         );
       });
       setProcessAssignUserStage(processStage);
-      getDevices(result?.selectedProduct, assignStageToUser, result?._id);
+      getDevices(
+        result?.selectedProduct,
+        assignStageToUser,
+        result?._id,
+        result?.stages || [],
+      );
       getProduct(result.selectedProduct, assignStageToUser);
       setProduct(result);
     } catch (error: any) {
