@@ -591,15 +591,26 @@ export default function DeviceTestComponent({
       return "";
     }
   };
-  const getAttemptStageName = () =>
-    String(
-      processAssignUserStage?.name ||
-        processAssignUserStage?.stage ||
-        assignUserStage?.name ||
-        assignUserStage?.stage ||
+  const getAttemptStageName = () => {
+    const processStage = Array.isArray(processAssignUserStage)
+      ? processAssignUserStage?.[0]
+      : processAssignUserStage;
+    const assignedStage = Array.isArray(assignUserStage)
+      ? assignUserStage?.[0]
+      : assignUserStage;
+
+    return String(
+      processStage?.stageName ||
+        processStage?.name ||
+        processStage?.stage ||
+        assignedStage?.stageName ||
+        assignedStage?.name ||
+        assignedStage?.stage ||
         assignedTaskDetails?.stageName ||
+        assignedTaskDetails?.name ||
         "",
     ).trim();
+  };
   const getAttemptKey = (serialOrDeviceId: string, stageName?: string) =>
     `${String(serialOrDeviceId || "").trim()}::${String(stageName || getAttemptStageName()).trim()}`;
   const registerAttempt = async (serialNo: string, deviceId?: string) => {
