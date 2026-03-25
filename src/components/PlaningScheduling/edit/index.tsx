@@ -24,6 +24,7 @@ import {
   updateJigStatus,
   updateDownTimeProcess,
   updateProcessStatus,
+  getDowntimeReasons,
 } from "@/lib/api";
 import { formatDate } from "@/lib/common";
 import { ToastContainer, toast } from "react-toastify";
@@ -94,6 +95,13 @@ const EditPlanSchedule = () => {
   const [commonStages, setCommonStages] = useState([]);
   const [isFullLayoutModalOpen, setIsFullLayoutModalOpen] = useState(false);
   const [planingData, setPlaningData] = useState<any>(null);
+  const [downtimeReasons, setDowntimeReasons] = useState<string[]>([]);
+  const [overtimeWindows, setOvertimeWindows] = useState<any[]>([]);
+  const [overtimeSummary, setOvertimeSummary] = useState<any>({
+    totalMinutes: 0,
+    totalWindows: 0,
+    lastUpdatedAt: null,
+  });
 
   const safeParse = (val: any, fallback: any) => {
     if (!val) return fallback;
@@ -102,6 +110,13 @@ const EditPlanSchedule = () => {
     } catch {
       return fallback;
     }
+  };
+  const toLocalIso = (d: any) => {
+    if (!d) return "";
+    const date = new Date(d);
+    if (Number.isNaN(date.getTime())) return "";
+    const tzOffset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
   };
   useEffect(() => {
     const loadInitialData = async () => {
@@ -115,11 +130,22 @@ const EditPlanSchedule = () => {
         getOperators(),
         fetchJigCategories(),
         getPlaningById(planId),
+        fetchDowntimeReasons(),
       ]);
     };
 
     loadInitialData();
   }, []);
+
+  const fetchDowntimeReasons = async () => {
+    try {
+      const resp = await getDowntimeReasons();
+      setDowntimeReasons(resp?.reasons || []);
+    } catch (error) {
+      console.error("Failed to fetch downtime reasons", error);
+      setDowntimeReasons([]);
+    }
+  };
   useEffect(() => {
     if (rawSelectedProcessId && process.length > 0) {
       const singleProcess = process.find(
@@ -201,10 +227,26 @@ const EditPlanSchedule = () => {
     setEstimatedEndDate(formatDate(result?.estimatedEndDate));
     setTotalTimeEstimation(result?.totalTimeEstimation);
     const downTimeArr = result.downTime;
-    setDownTimeFrom(downTimeArr?.downTimeFrom);
-    setDownTimeTo(downTimeArr?.downTimeTo);
-    setDownTimeDescription(downTimeArr?.downTimeDesc);
+    const downFrom = downTimeArr?.from || downTimeArr?.downTimeFrom || "";
+    const downTo = downTimeArr?.to || downTimeArr?.downTimeTo || "";
+    const downReason =
+      downTimeArr?.downTimeType ||
+      downTimeArr?.downTimeDesc ||
+      downTimeArr?.description ||
+      "";
+    setDownTimeFrom(toLocalIso(downFrom));
+    setDownTimeTo(toLocalIso(downTo));
+    setDownTimeDescription(downReason);
+    setDownTimeType(downReason);
     setDownTimeVal(downTimeArr);
+    setOvertimeWindows(Array.isArray(result?.overtimeWindows) ? result.overtimeWindows : []);
+    setOvertimeSummary(
+      result?.overtimeSummary || {
+        totalMinutes: 0,
+        totalWindows: 0,
+        lastUpdatedAt: null,
+      },
+    );
     setTotalUPHA(result?.totalUPHA);
     if (result?.ProcessShiftMappings) {
       setShiftChangedFromDate(
@@ -1029,13 +1071,17 @@ const EditPlanSchedule = () => {
         }
         if (isConfirmDownTime) {
           let downTime = downTimeval;
+          const logDownFrom = downTime?.from || downTime?.downTimeFrom || "";
+          const logDownTo = downTime?.to || downTime?.downTimeTo || "";
+          const logDownReason =
+            downTime?.downTimeType || downTime?.downTimeDesc || downTime?.description || "";
           const formData1 = new FormData();
           formData1.append("action", "HOLD");
           formData1.append("processId", selectedProcess?._id);
           formData1.append("userId", userDetails?._id);
           formData1.append(
             "description",
-            `${selectedProcess?.name} is on Hold From Date ${downTime.downTimeFrom} - to Date ${downTime.downTimeTo} due to ${downTime?.downTimeDesc} by ${userDetails?.name}`,
+            `${selectedProcess?.name} is on Hold From Date ${logDownFrom} - to Date ${logDownTo} due to ${logDownReason} by ${userDetails?.name}`,
           );
           const result2 = await createProcessLogs(formData1);
           if (result2 && result2?.status === 200) {
@@ -1060,24 +1106,47 @@ const EditPlanSchedule = () => {
     return false;
   };
   const handlesubmitDowntime = async () => {
-    let data = {
-      downTimeFrom,
-      downTimeTo,
-      downTimeDesc,
-      downTimeType,
-    };
-    const dateFrom = new Date(downTimeFrom);
-    const dateTo = new Date(downTimeTo);
-    const timeDifference = dateTo.getTime() - dateFrom.getTime();
-    const dayDifference = timeDifference / (1000 * 60 * 60 * 24);
-    const total = parseFloat(totalTimeEstimation) + dayDifference;
-    const expectedEndDate = await calculateEstimatedEndDate(total);
-    setEstimatedEndDate(expectedEndDate);
-    setDownTimeVal(data);
+    try {
+      if (!downTimeFrom || !downTimeTo || !downTimeType) {
+        toast.error("Please fill all downtime fields");
+        return;
+      }
+      const dateFrom = new Date(downTimeFrom);
+      const dateTo = new Date(downTimeTo);
+      if (dateTo <= dateFrom) {
+        toast.error("Downtime To must be later than Downtime From");
+        return;
+      }
 
-    setIsDownTimeModalOpen(false);
-    setShowPopup(true);
-    setConfirmDownTime(true);
+      const pathname = window.location.pathname;
+      const currentId = pathname.split("/").pop();
+      const payload = {
+        downTimeFrom: dateFrom.toISOString(),
+        downTimeTo: dateTo.toISOString(),
+        downTimeDesc: downTimeType,
+      };
+
+      await updateDownTimeProcess(currentId, {
+        selectedProcess: selectedProcess?._id,
+        downTime: JSON.stringify(payload),
+      });
+
+      toast.success("Downtime scheduled and process put on hold");
+      setIsDownTimeModalOpen(false);
+      setProcessStatus("down_time_hold");
+      setDownTimeVal({
+        from: payload.downTimeFrom,
+        to: payload.downTimeTo,
+        downTimeType: payload.downTimeDesc,
+        description: payload.downTimeDesc,
+      });
+      setDownTimeDescription(payload.downTimeDesc);
+      setConfirmDownTime(true);
+      await getPlaningById(currentId);
+    } catch (error) {
+      console.error("Failed to schedule downtime", error);
+      toast.error("Failed to schedule downtime");
+    }
   };
   const handleConfirmationShiftTimeSubmit = () => {
     handlePlaningSubmit();
@@ -1106,13 +1175,16 @@ const EditPlanSchedule = () => {
   const handleDownTimeProcessStatus = async () => {
     try {
       const pathname = window.location.pathname;
-      const id = pathname.split("/").pop();
+      const currentId = pathname.split("/").pop();
       let formData = new FormData();
       formData.append("selectedProcess", selectedProcess?._id);
       formData.append("status", "active");
-      let response = await updateProcessStatus(id, formData);
+      let response = await updateProcessStatus(currentId, formData);
       if (response && response.status == 200) {
-        toast.success(response.message || "DownTime Updated Successfully!!");
+        toast.success(response.message || "Process resumed successfully");
+        setProcessStatus("active");
+        setDownTimeVal({});
+        await getPlaningById(currentId);
       }
     } catch (error) {
 
@@ -1207,23 +1279,31 @@ const EditPlanSchedule = () => {
               {downTimeval &&
                 (() => {
                   const currentDate = new Date();
-                  const downTimeFrom = new Date(downTimeval?.downTimeFrom);
-                  const downTimeTo = new Date(downTimeval?.downTimeTo);
-                  currentDate.setHours(0, 0, 0, 0);
-                  downTimeFrom.setHours(0, 0, 0, 0);
-                  downTimeTo.setHours(0, 0, 0, 0);
+                  const downTimeFrom = new Date(
+                    downTimeval?.from || downTimeval?.downTimeFrom,
+                  );
+                  const downTimeTo = new Date(
+                    downTimeval?.to || downTimeval?.downTimeTo,
+                  );
 
                   return (
                     downTimeFrom <= currentDate && currentDate <= downTimeTo
                   );
                 })() && (
                   <p className="text-danger">
-                    On Hold : ( {downTimeval?.downTimeFrom} -{" "}
-                    {downTimeval?.downTimeTo} ) Due to{" "}
-                    {downTimeval?.downTimeDesc}
+                    On Hold : ({" "}
+                    {new Date(
+                      downTimeval?.from || downTimeval?.downTimeFrom,
+                    ).toLocaleString()}{" "}
+                    -{" "}
+                    {new Date(
+                      downTimeval?.to || downTimeval?.downTimeTo,
+                    ).toLocaleString()}{" "}
+                    ) Due to{" "}
+                    {downTimeval?.downTimeType || downTimeval?.downTimeDesc || downTimeval?.description}
                   </p>
                 )}
-
+              {/* 
               <div className="flex gap-2">
                 {processStatus == "down_time_hold" && (
                   <>
@@ -1277,99 +1357,61 @@ const EditPlanSchedule = () => {
                       <span>Downtime</span>
                     </button>
                   )}
-              </div>
+              </div> */}
 
-              {showPopup && (
-                <ConfirmationPopup
-                  message="Are you sure you want to Hold the Process?"
-                  onConfirm={() => {
-                    handleDownTimeProcess();
-                    setShowPopup(false);
-                  }}
-                  onCancel={() => setShowPopup(false)}
-                />
-              )}
               <Modal
                 isOpen={isDownTimeModalOpen}
                 onSubmit={handlesubmitDowntime}
                 onClose={closeDownTimeModal}
-                title="Add Downtime"
+                title="Schedule Downtime Hold"
               >
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                      From
-                    </label>
-                    <input
-                      type="date"
-                      value={downTimeFrom}
-                      onChange={(e) => setDownTimeFrom(e.target.value)}
-                      placeholder=""
-                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                    />
+                <div className="space-y-4 p-2">
+                  <div className="rounded-lg bg-orange-50 p-4 border-l-4 border-orange-500 text-orange-800 text-sm">
+                    <p className="font-bold">Warning:</p>
+                    <p>Putting the process on hold will prevent any further work logs until it is resumed.</p>
                   </div>
-                  <div>
-                    <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                      To
-                    </label>
-                    <input
-                      type="date"
-                      value={downTimeTo}
-                      onChange={(e) => setDownTimeTo(e.target.value)}
-                      placeholder=""
-                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                      DownTime Type
-                    </label>
-                    <select
-                      value={downTimeType}
-                      onChange={(e) => setDownTimeType(e.target.value)}
-                      className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
-                    // disabled={processStatus == "process_created" ? false : true}
-                    >
-                      <option value="" className="text-body dark:text-bodydark">
-                        Please Select
-                      </option>
-                      <option
-                        value="kits_shortage"
-                        className="text-body dark:text-bodydark"
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                        DownTime From
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={downTimeFrom}
+                        onChange={(e) => setDownTimeFrom(e.target.value)}
+                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                        DownTime To
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={downTimeTo}
+                        onChange={(e) => setDownTimeTo(e.target.value)}
+                        className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
+                        Reason for Downtime
+                      </label>
+                      <select
+                        value={downTimeType}
+                        onChange={(e) => setDownTimeType(e.target.value)}
+                        className="w-full rounded-lg border border-stroke bg-transparent px-4 py-3 outline-none transition focus:border-primary active:border-primary dark:border-strokedark dark:bg-form-input"
                       >
-                        Kits Shortage
-                      </option>
-                      <option
-                        value="jig_issue"
-                        className="text-body dark:text-bodydark"
-                      >
-                        Jig Issue
-                      </option>
-                      <option
-                        value="maintainence_issue"
-                        className="text-body dark:text-bodydark"
-                      >
-                        Maintainence issue
-                      </option>
-                      <option
-                        value="manpower_shortage"
-                        className="text-body dark:text-bodydark"
-                      >
-                        Manpower Shortage
-                      </option>
-                    </select>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-gray-800 mb-3 block text-sm font-medium dark:text-bodydark">
-                      Descripition
-                    </label>
-                    <textarea
-                      rows={6}
-                      value={downTimeDesc}
-                      onChange={(e) => setDownTimeDescription(e.target.value)}
-                      placeholder="Default textarea"
-                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-5 py-3 text-black outline-none transition focus:border-primary active:border-primary disabled:cursor-default disabled:bg-whiter dark:border-form-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary"
-                    ></textarea>
+                        <option value="" className="text-body dark:text-bodydark">
+                          Select a reason
+                        </option>
+                        {downtimeReasons.map((reason, idx) => (
+                          <option key={idx} value={reason} className="text-body dark:text-bodydark">
+                            {reason}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               </Modal>
@@ -1432,9 +1474,9 @@ const EditPlanSchedule = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 2xl:grid-cols-4">
                       {/* Estimated Completion */}
-                      <div className="relative overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white p-6 dark:border-gray-700 dark:from-gray-900 dark:to-gray-800">
+                      <div className="relative min-h-[190px] overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white p-6 dark:border-gray-700 dark:from-gray-900 dark:to-gray-800">
                         <div className="relative z-10">
                           <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Estimated Completion</span>
                           <div className="mt-2 flex items-baseline gap-1">
@@ -1448,7 +1490,7 @@ const EditPlanSchedule = () => {
                       </div>
 
                       {/* Total Duration */}
-                      <div className="relative overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white p-6 dark:border-gray-700 dark:from-gray-900 dark:to-gray-800">
+                      <div className="relative min-h-[190px] overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white p-6 dark:border-gray-700 dark:from-gray-900 dark:to-gray-800">
                         <div className="relative z-10">
                           <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Total Duration</span>
                           <div className="mt-2 flex items-baseline gap-1">
@@ -1465,18 +1507,44 @@ const EditPlanSchedule = () => {
                       </div>
 
                       {/* UPH Analysis */}
-                      <div className="relative overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white p-6 dark:border-gray-700 dark:from-gray-900 dark:to-gray-800">
+                      <div className="relative min-h-[190px] overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white p-6 dark:border-gray-700 dark:from-gray-900 dark:to-gray-800">
                         <div className="relative z-10">
-                          <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                            UPHA ({(shiftTime - parseInt(selectedShift?.totalBreakTime || "0") / 60).toFixed(2)}h Shift)
-                          </span>
+                          <span className="text-xs font-bold uppercase tracking-wider text-gray-400">UPHA</span>
                           <div className="mt-2 flex items-baseline gap-1">
                             <span className="text-2xl font-black text-blue-600 dark:text-blue-400">{totalUPHA}</span>
                             <span className="text-sm font-bold text-gray-500 uppercase">Units/Day</span>
                           </div>
+                          <p className="mt-1 text-xs text-gray-500 font-medium">
+                            {(
+                              shiftTime - parseInt(selectedShift?.totalBreakTime || "0") / 60
+                            ).toFixed(2)}h productive shift
+                          </p>
                           <p className="mt-1 text-xs text-gray-400 font-medium">Capacity calculated at 100% efficiency</p>
                         </div>
                         <FaCogs className="absolute -bottom-2 -right-2 h-20 w-20 text-orange-500/5" />
+                      </div>
+
+                      {/* Overtime Summary */}
+                      <div className="relative min-h-[190px] overflow-hidden rounded-2xl border border-gray-100 bg-gradient-to-br from-gray-50 to-white p-6 dark:border-gray-700 dark:from-gray-900 dark:to-gray-800">
+                        <div className="relative z-10">
+                          <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Overtime Summary</span>
+                          <div className="mt-2 flex items-baseline gap-2">
+                            <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+                              {overtimeSummary?.totalWindows || 0}
+                            </span>
+                            <span className="text-sm font-bold text-gray-500 uppercase">Windows</span>
+                          </div>
+                          <p className="mt-1 text-xs font-medium text-gray-500">
+                            Total Minutes: {overtimeSummary?.totalMinutes || 0}
+                          </p>
+                          <p className="mt-1 truncate text-[11px] text-gray-400" title={overtimeSummary?.lastUpdatedAt ? new Date(overtimeSummary.lastUpdatedAt).toLocaleString() : "N/A"}>
+                            Last Updated: {overtimeSummary?.lastUpdatedAt ? new Date(overtimeSummary.lastUpdatedAt).toLocaleTimeString() : "N/A"}
+                          </p>
+                          <p className="mt-1 text-[11px] text-gray-400">
+                            Entries: {overtimeWindows?.length || 0}
+                          </p>
+                        </div>
+                        <FaClock className="absolute -bottom-2 -right-2 h-20 w-20 text-indigo-500/10" />
                       </div>
                     </div>
                   </div>
