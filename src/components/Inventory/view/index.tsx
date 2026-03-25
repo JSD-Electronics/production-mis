@@ -55,7 +55,6 @@ const InventoryManagement = () => {
 
   // Form State
   const [updatedQuantity, setUpdatedQuantity] = useState(0);
-  const [updatedCartonQuantity, setUpdatedCartonQuantity] = useState(0);
 
   useEffect(() => {
     getInventory();
@@ -77,7 +76,6 @@ const InventoryManagement = () => {
   const handleEdit = (inventory: Inventory) => {
     setSelectedInventory(inventory);
     setUpdatedQuantity(0);
-    setUpdatedCartonQuantity(0);
     setIsInventoryModel(true);
   };
 
@@ -85,14 +83,17 @@ const InventoryManagement = () => {
     if (!selectedInventory) return;
     try {
       const currentQuantity = parseInt(selectedInventory.quantity.toString()) || 0;
-      const currentCartonQuantity = parseInt(selectedInventory.cartonQuantity.toString()) || 0;
+      const additionalQuantity = parseInt(updatedQuantity.toString()) || 0;
 
-      const finalQuantity = currentQuantity + (parseInt(updatedQuantity.toString()) || 0);
-      const finalCartonQuantity = currentCartonQuantity + (parseInt(updatedCartonQuantity.toString()) || 0);
+      if (additionalQuantity <= 0) {
+        toast.error("Please enter a quantity greater than 0");
+        return;
+      }
+
+      const finalQuantity = currentQuantity + additionalQuantity;
 
       const formData = new FormData();
       formData.append("quantity", finalQuantity.toString());
-      formData.append("cartonQuantity", finalCartonQuantity.toString());
       if (finalQuantity > 0) {
         formData.append("status", "In Stock");
       }
@@ -373,17 +374,8 @@ const InventoryManagement = () => {
               className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
             />
           </div>
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-300">
-              Additional Cartons
-            </label>
-            <input
-              type="number"
-              placeholder="0"
-              value={updatedCartonQuantity || ""}
-              onChange={(e) => setUpdatedCartonQuantity(parseInt(e.target.value) || 0)}
-              className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm transition focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
-            />
+          <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300">
+            Carton quantity is auto-derived from the product packaging capacity and the total kit stock.
           </div>
         </div>
       </Modal>

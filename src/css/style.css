@@ -315,3 +315,12 @@ input[type="search"]::-webkit-search-cancel-button {
   overflow: hidden !important;
   text-overflow: inherit !important;
 }
+/* Keep toast notifications above modal overlays */
+.Toastify__toast-container {
+  z-index: 1000001 !important;
+}
+
+.Toastify__toast {
+  position: relative;
+  z-index: 1000001 !important;
+}
