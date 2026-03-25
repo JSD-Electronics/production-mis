@@ -18,6 +18,8 @@ import {
   getDowntimeReasons,
   updateDownTimeProcess,
   updateProcessStatus,
+  addProcessOvertime,
+  removeProcessOvertime,
 } from "@/lib/api";
 import {
   FiClipboard,
@@ -32,6 +34,8 @@ import {
   FiArchive,
   FiTrendingUp,
   FiDownload,
+  FiPlus,
+  FiTrash2,
 } from "react-icons/fi";
 import { FiUsers, FiActivity, FiCheckCircle, FiXCircle, FiSearch, FiFilter, FiRefreshCcw, FiEye, FiGrid, FiList } from "react-icons/fi";
 import { formatDate } from "@/lib/common";
@@ -338,6 +342,17 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   const [downTimeTo, setDownTimeTo] = useState("");
   const [isDownTimeModalOpen, setIsDownTimeModalOpen] = useState(false);
   const closeDownTimeModal = () => setIsDownTimeModalOpen(false);
+  const [isOvertimeModalOpen, setIsOvertimeModalOpen] = useState(false);
+  const [overtimeFrom, setOvertimeFrom] = useState("");
+  const [overtimeTo, setOvertimeTo] = useState("");
+  const [overtimeReason, setOvertimeReason] = useState("");
+  const [overtimeWindows, setOvertimeWindows] = useState<any[]>([]);
+  const [overtimeSummary, setOvertimeSummary] = useState<any>({
+    totalMinutes: 0,
+    totalWindows: 0,
+    lastUpdatedAt: null,
+  });
+  const [overtimeConflictMessage, setOvertimeConflictMessage] = useState("");
   const [showPopup, setShowPopup] = useState(false);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
@@ -645,6 +660,59 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       setLoading(false);
     }
   };
+
+  const handleSubmitOvertime = async () => {
+    if (isReadOnly) return;
+    setOvertimeConflictMessage("");
+
+    if (!overtimeFrom || !overtimeTo) {
+      toast.error("Please select overtime from/to time");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await addProcessOvertime(id, {
+        from: new Date(overtimeFrom).toISOString(),
+        to: new Date(overtimeTo).toISOString(),
+        reason: overtimeReason?.trim() || "",
+      });
+      toast.success("Overtime added successfully");
+      setIsOvertimeModalOpen(false);
+      setOvertimeFrom("");
+      setOvertimeTo("");
+      setOvertimeReason("");
+      await getPlaningById(id);
+    } catch (e: any) {
+      const statusCode = e?.response?.status;
+      if (statusCode === 409) {
+        const msg =
+          e?.response?.data?.message ||
+          "Overtime overlaps with another active plan for this room/shift.";
+        setOvertimeConflictMessage(msg);
+      } else {
+        console.error("Overtime submission failed:", e);
+        toast.error("Failed to add overtime");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveOvertime = async (windowId: string) => {
+    if (isReadOnly) return;
+    try {
+      setLoading(true);
+      await removeProcessOvertime(id, windowId);
+      toast.success("Overtime removed successfully");
+      await getPlaningById(id);
+    } catch (e) {
+      console.error("Remove overtime failed:", e);
+      toast.error("Failed to remove overtime");
+    } finally {
+      setLoading(false);
+    }
+  };
   const assignedStageKeys = Object.keys(assignedStages || {}).filter(
     (key) => assignedStages[key][0].name !== "Reserved",
   );
@@ -736,6 +804,14 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       // Keep existing UI visible; refresh in background
       let result = await getPlaningAndSchedulingById(id);
       setPlanData(result);
+      setOvertimeWindows(Array.isArray(result?.overtimeWindows) ? result.overtimeWindows : []);
+      setOvertimeSummary(
+        result?.overtimeSummary || {
+          totalMinutes: 0,
+          totalWindows: 0,
+          lastUpdatedAt: null,
+        },
+      );
       if (result.downTime) {
         setDownTimeVal(result.downTime);
       }
@@ -1851,83 +1927,84 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
             <div className="container mx-auto grid grid-cols-1 gap-9 p-6 sm:grid-cols-1">
               <div className="flex flex-col gap-9">
                 <div className="rounded-lg border border-stroke bg-white p-6 shadow-lg dark:border-strokedark dark:bg-boxdark">
-                  <div className="flex flex-wrap items-center justify-between border-b border-stroke px-2 py-4 dark:border-strokedark">
-                    {/* Title */}
-                    <div className="flex items-center gap-4">
-                      <h3 className="text-xl font-semibold text-black dark:text-white">
-                        View Planning
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={handleRefresh}
-                          title="Manual Refresh"
-                          className={`flex items-center justify-center rounded-full p-2 transition-all hover:bg-gray-100 dark:hover:bg-gray-700 ${isRefreshing ? "animate-spin cursor-not-allowed opacity-50" : ""
-                            }`}
-                        >
-                          <FiRefreshCcw className="h-5 w-5 text-primary" />
-                        </button>
-                        {lastRefreshed && (
-                          <span className="text-xs text-black/50 dark:text-white/50">
-                            Last Sync: {lastRefreshed}
-                          </span>
+                  <div className="border-b border-stroke px-2 py-4 dark:border-strokedark">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-xl font-semibold text-black dark:text-white">
+                          View Planning
+                        </h3>
+                        {planData?.processStatus === "down_time_hold" && (
+                          <div className="flex animate-pulse items-center gap-2 rounded-full bg-red-100 px-3 py-1 text-[11px] font-bold text-red-700 dark:bg-red-900/40 dark:text-red-400">
+                            <FiClock className="animate-spin-slow" />
+                            HOLD
+                          </div>
                         )}
                       </div>
-                    </div>
 
-                    {/* Status Message */}
-                    {planData?.processStatus === "down_time_hold" && (
-                      <div className="flex animate-pulse items-center gap-2 rounded-full bg-red-100 px-4 py-1.5 text-xs font-bold text-red-700 dark:bg-red-900/40 dark:text-red-400">
-                        <FiClock className="animate-spin-slow" />
-                        SYSTEM ON HOLD
-                        {downTimeval?.to && (
-                          <span className="ml-1 opacity-75">
-                            Until {new Date(downTimeval.to).toLocaleString()}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    {selectedProcess?.status !== "completed" ? (
-                      <div className="flex flex-wrap gap-2">
-                        {planData?.processStatus === "down_time_hold" ? (
+                      {selectedProcess?.status !== "completed" ? (
+                        <div className="flex items-center gap-2 rounded-xl border border-stroke bg-gray-50 p-2 dark:border-strokedark dark:bg-meta-4">
                           <button
-                            onClick={handleManualResume}
-                            className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white shadow-lg transition-all hover:bg-green-700 hover:scale-105 active:scale-95"
+                            onClick={handleRefresh}
+                            title={lastRefreshed ? `Refresh (Last Sync: ${lastRefreshed})` : "Refresh"}
+                            aria-label="Refresh"
+                            className={`flex h-9 w-9 items-center justify-center rounded-lg border border-stroke bg-white text-primary transition hover:bg-gray-100 dark:border-strokedark dark:bg-boxdark dark:hover:bg-meta-4 ${isRefreshing ? "animate-spin cursor-not-allowed opacity-50" : ""}`}
                           >
                             <FiRefreshCcw size={16} />
-                            Resume Process
                           </button>
-                        ) : (
+                          {planData?.processStatus === "down_time_hold" ? (
+                            <button
+                              onClick={handleManualResume}
+                              title="Resume Process"
+                              aria-label="Resume Process"
+                              className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 text-white transition hover:bg-emerald-700"
+                            >
+                              <FiRefreshCcw size={16} />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setIsDownTimeModalOpen(true)}
+                              title="Downtime Hold"
+                              aria-label="Downtime Hold"
+                              className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500 text-white transition hover:bg-orange-600"
+                            >
+                              <FiClock size={16} />
+                            </button>
+                          )}
                           <button
-                            onClick={() => setIsDownTimeModalOpen(true)}
-                            className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white shadow-lg transition-all hover:bg-orange-600 hover:scale-105 active:scale-95"
+                            onClick={() => {
+                              setOvertimeConflictMessage("");
+                              setIsOvertimeModalOpen(true);
+                            }}
+                            title="Add Overtime"
+                            aria-label="Add Overtime"
+                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-700 transition hover:bg-indigo-50 dark:border-indigo-700/40 dark:bg-boxdark dark:text-indigo-300 dark:hover:bg-indigo-900/20"
                           >
-                            <FiClock size={16} />
-                            Downtime Hold
+                            <FiPlus size={16} />
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={handleDeviceSerialNo}
-                          className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white shadow-md transition hover:bg-primary/90"
-                        >
-                          <FiCodepen size={16} />
-                          Generate Serials
-                        </button>
-                        <button
-                          onClick={handleEditPlaning}
-                          className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-md transition hover:bg-blue-700"
-                        >
-                          <FiEdit size={16} />
-                          Edit Planning
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="rounded-lg bg-green-100 px-3 py-1 text-sm font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                        Completed
-                      </span>
-                    )}
+                          <button
+                            type="button"
+                            onClick={handleDeviceSerialNo}
+                            title="Generate Serials"
+                            aria-label="Generate Serials"
+                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-stroke bg-white text-gray-800 transition hover:bg-gray-100 dark:border-strokedark dark:bg-boxdark dark:text-gray-100 dark:hover:bg-meta-4"
+                          >
+                            <FiCodepen size={16} />
+                          </button>
+                          <button
+                            onClick={handleEditPlaning}
+                            title="Edit Planning"
+                            aria-label="Edit Planning"
+                            className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white transition hover:bg-blue-700"
+                          >
+                            <FiEdit size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="rounded-lg bg-green-100 px-3 py-1 text-sm font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                          Completed
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <form action="#">
                     <div className="p-6">
@@ -2169,6 +2246,85 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                             </div>
                           </div>
                         )}
+
+                        <div className="dark:bg-gray-800 mb-4 rounded-lg border-l-4 border-cyan-500 bg-white p-4 shadow-md">
+                          <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-cyan-700 dark:text-cyan-400">
+                            <FiClock /> Overtime Summary
+                          </h3>
+                          <div className="grid gap-2 text-sm text-gray-700 dark:text-gray-300 sm:grid-cols-3">
+                            <p>
+                              <strong>Active Windows:</strong>{" "}
+                              {overtimeSummary?.totalWindows || 0}
+                            </p>
+                            <p>
+                              <strong>Total Minutes:</strong>{" "}
+                              {overtimeSummary?.totalMinutes || 0}
+                            </p>
+                            <p>
+                              <strong>Last Updated:</strong>{" "}
+                              {overtimeSummary?.lastUpdatedAt
+                                ? new Date(overtimeSummary.lastUpdatedAt).toLocaleString()
+                                : "N/A"}
+                            </p>
+                          </div>
+
+                          <div className="mt-4 overflow-x-auto border border-stroke rounded-md">
+                            <table className="w-full table-auto text-xs">
+                              <thead className="bg-gray-100 dark:bg-meta-4">
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">From</th>
+                                  <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">To</th>
+                                  <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">Reason</th>
+                                  <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">Status</th>
+                                  <th className="px-3 py-2 text-left font-bold uppercase tracking-wider">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-stroke dark:divide-strokedark">
+                                {(overtimeWindows || []).length === 0 && (
+                                  <tr>
+                                    <td className="px-3 py-3 text-center text-gray-500" colSpan={5}>
+                                      No overtime windows configured.
+                                    </td>
+                                  </tr>
+                                )}
+                                {(overtimeWindows || [])
+                                  .slice()
+                                  .sort(
+                                    (a: any, b: any) =>
+                                      new Date(b?.from || 0).getTime() - new Date(a?.from || 0).getTime(),
+                                  )
+                                  .map((window: any) => (
+                                    <tr key={window?._id || `${window?.from}-${window?.to}`}>
+                                      <td className="px-3 py-2">{window?.from ? new Date(window.from).toLocaleString() : "-"}</td>
+                                      <td className="px-3 py-2">{window?.to ? new Date(window.to).toLocaleString() : "-"}</td>
+                                      <td className="px-3 py-2">{window?.reason || "-"}</td>
+                                      <td className="px-3 py-2">
+                                        <span
+                                          className={`rounded px-2 py-1 font-semibold ${window?.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                                            }`}
+                                        >
+                                          {window?.active ? "Active" : "Inactive"}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-2">
+                                        {window?.active ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRemoveOvertime(window?._id)}
+                                            className="inline-flex items-center gap-1 rounded bg-red-50 px-2 py-1 text-red-600 hover:bg-red-100"
+                                          >
+                                            <FiTrash2 size={12} /> Remove
+                                          </button>
+                                        ) : (
+                                          <span className="text-gray-400">-</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
                       </div>
                       {/* component 2 */}
 
@@ -2843,6 +2999,61 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                       <option key={idx} value={reason}>{reason}</option>
                     ))}
                   </select>
+                </div>
+              </div>
+            </Modal>
+            <Modal
+              isOpen={isOvertimeModalOpen}
+              onClose={() => setIsOvertimeModalOpen(false)}
+              title="Add Overtime Window"
+              submitOption={true}
+              onSubmit={handleSubmitOvertime}
+            >
+              <div className="space-y-4 p-4">
+                <div className="rounded-lg bg-indigo-50 p-4 border-l-4 border-indigo-500 text-indigo-800 text-sm">
+                  <p className="font-bold flex items-center gap-2">
+                    <FiInfo /> Overtime Rule:
+                  </p>
+                  <p>
+                    Overtime is applied as an explicit datetime window. It updates planning estimation and is blocked if it overlaps another active plan in the same room/shift.
+                  </p>
+                </div>
+                {overtimeConflictMessage && (
+                  <div className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700 border border-red-200">
+                    {overtimeConflictMessage}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">Overtime From</label>
+                    <input
+                      type="datetime-local"
+                      value={overtimeFrom}
+                      onChange={(e) => setOvertimeFrom(e.target.value)}
+                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-4 py-2 text-black outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">Overtime To</label>
+                    <input
+                      type="datetime-local"
+                      value={overtimeTo}
+                      onChange={(e) => setOvertimeTo(e.target.value)}
+                      className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-4 py-2 text-black outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold mb-1">Reason (optional)</label>
+                  <input
+                    type="text"
+                    value={overtimeReason}
+                    onChange={(e) => setOvertimeReason(e.target.value)}
+                    placeholder="Reason for overtime"
+                    className="w-full rounded-lg border-[1.5px] border-stroke bg-transparent px-4 py-2 text-black outline-none transition focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                  />
                 </div>
               </div>
             </Modal>

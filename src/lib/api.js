@@ -1500,6 +1500,32 @@ export const updateDownTimeProcess = async (id, formData) => {
     throw error;
   }
 };
+export const addProcessOvertime = async (id, formData) => {
+  try {
+    const response = await api.put(`/process/addOvertime/${id}`, formData);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const removeProcessOvertime = async (id, windowId) => {
+  try {
+    const response = await api.delete(`/process/removeOvertime/${id}/${windowId}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getProcessOvertime = async (id) => {
+  try {
+    const response = await api.get(`/process/overtime/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
 export const getDowntimeReasons = async () => {
   try {
     const response = await api.get("/planing/downtime-reasons");

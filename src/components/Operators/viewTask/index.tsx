@@ -2,7 +2,7 @@
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import BasicInformation from "./BasicInformation";
 import DeviceTestComponent from "./DeviceTestComponent";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQRCode } from "next-qrcode";
 import Barcode from "react-barcode";
 import html2canvas from "html2canvas";
@@ -181,6 +181,25 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [operatorSessionId, setOperatorSessionId] = useState<string | null>(null);
+
+  const overtimeStats = useMemo(() => {
+    const summary = getPlaningAndScheduling?.overtimeSummary || {};
+    const windows = Array.isArray(getPlaningAndScheduling?.overtimeWindows)
+      ? getPlaningAndScheduling.overtimeWindows
+      : [];
+    const activeWindows = windows.filter((w: any) => w?.active);
+
+    const nextActive = activeWindows
+      .map((w: any) => ({ ...w, toTs: new Date(w?.to || 0).getTime() }))
+      .filter((w: any) => Number.isFinite(w.toTs) && w.toTs >= Date.now())
+      .sort((a: any, b: any) => a.toTs - b.toTs)[0];
+
+    return {
+      totalWindows: Number(summary?.totalWindows || activeWindows.length || 0),
+      totalMinutes: Number(summary?.totalMinutes || 0),
+      nextEndsAt: nextActive?.to ? new Date(nextActive.to) : null,
+    };
+  }, [getPlaningAndScheduling]);
 
   const ensureOperatorSession = React.useCallback(
     async (): Promise<string | null> => {
@@ -1745,7 +1764,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         </button>
       </div>
       {/* Stats */}
-      <div className="mt-4 grid grid-cols-1 gap-4 px-6 md:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-4 px-6 md:grid-cols-4">
         <div className="rounded-xl border-l-4 border-blue-500 bg-blue-50 p-5 shadow">
           <h3 className="text-lg font-bold text-blue-700">UPH Target</h3>
           <div className="mt-2 space-y-1 text-sm text-blue-900">
@@ -1794,6 +1813,23 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             )}
             %
           </p>
+        </div>
+        <div className="rounded-xl border-l-4 border-indigo-500 bg-indigo-50 p-5 shadow">
+          <h3 className="text-lg font-bold text-indigo-700">Overtime</h3>
+          <div className="mt-2 flex flex-col gap-1 text-sm text-indigo-900">
+            <span>
+              <b>Active Windows:</b> {overtimeStats.totalWindows}
+            </span>
+            <span>
+              <b>Total Minutes:</b> {overtimeStats.totalMinutes}
+            </span>
+            <span className="truncate" title={overtimeStats.nextEndsAt ? overtimeStats.nextEndsAt.toLocaleString() : "No active overtime window"}>
+              <b>Next End:</b>{" "}
+              {overtimeStats.nextEndsAt
+                ? overtimeStats.nextEndsAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                : "N/A"}
+            </span>
+          </div>
         </div>
       </div>
 
