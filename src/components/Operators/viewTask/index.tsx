@@ -316,6 +316,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             selectedProduct._id || selectedProduct?.product?._id,
             assignUserStage,
             selectedProcess,
+            processData?.stages || [],
           );
         } catch (e) { /* ignore */ }
       }
@@ -868,12 +869,23 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       }
 
       const currentStatus = result?.processStatus || result?.status;
-      if (currentStatus === "down_time_hold") {
+      const dt =
+        typeof result?.downTime === "string"
+          ? JSON.parse(result.downTime)
+          : result.downTime;
+      const downtimeEnd = dt?.to ? new Date(dt.to).getTime() : null;
+      const nowMs = Date.now();
+      const stillInDowntime =
+        currentStatus === "down_time_hold" &&
+        (downtimeEnd == null || Number.isNaN(downtimeEnd) || downtimeEnd > nowMs);
+
+      if (stillInDowntime) {
         setIsDownTimeAvailable(true);
-        const dt = typeof result?.downTime === 'string' ? JSON.parse(result.downTime) : result.downTime;
         setDownTimeVal(dt || {});
       } else {
         setIsDownTimeAvailable(false);
+        // Keep details for UI context, but overlay is not shown once downtime expires.
+        if (dt) setDownTimeVal(dt);
       }
 
       getShiftByID(result?.selectedShift);
@@ -882,6 +894,28 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       console.error("Error fetching planning data:", error);
     }
   };
+  useEffect(() => {
+    if (!isDownTimeEnable) return;
+    if (!getDownTimeVal?.to) return;
+
+    const endTimeMs = new Date(getDownTimeVal.to).getTime();
+    if (Number.isNaN(endTimeMs)) return;
+
+    const remainingMs = endTimeMs - Date.now();
+    if (remainingMs <= 0) {
+      setIsDownTimeAvailable(false);
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setIsDownTimeAvailable(false);
+      const pathname = window.location.pathname;
+      const id = pathname.split("/").pop();
+      if (id) getPlaningAndSchedulingByID(id);
+    }, remainingMs + 250);
+
+    return () => clearTimeout(timeoutId);
+  }, [isDownTimeEnable, getDownTimeVal?.to]);
   const toggleFullScreenMode = () => {
     setIsFullScreenMode(!isFullScreenMode);
   };
