@@ -4,6 +4,7 @@ import CardDataStats from "../CardDataStats";
 import { Activity, CheckCircle, Clock } from "lucide-react";
 import { getDeviceTestEntryByOperatorId, getActiveOperatorWorkSession, getDeviceTestTrends } from "@/lib/api";
 import ChartTwo from "@/components/Charts/ChartTwo";
+import { useManagedInterval } from "@/hooks/useManagedInterval";
 
 const OperatorDashboard = () => {
   const [stats, setStats] = useState({
@@ -17,54 +18,61 @@ const OperatorDashboard = () => {
   });
   const [recentHistory, setRecentHistory] = useState<any[]>([]);
 
-  useEffect(() => {
-    const fetchOperatorData = async () => {
-      try {
-        const raw = localStorage.getItem("userDetails");
-        if (!raw) return;
-        const user = JSON.parse(raw);
-        const operatorId = user._id || user.id;
+  const fetchOperatorData = React.useCallback(async () => {
+    try {
+      const raw = localStorage.getItem("userDetails");
+      if (!raw) return;
+      const user = JSON.parse(raw);
+      const operatorId = user._id || user.id;
 
-        const today = new Date().toISOString().split("T")[0];
-        const resRecords = await getDeviceTestEntryByOperatorId(operatorId, today);
-        const recordCount = resRecords?.data?.length || 0;
-        setRecentHistory((resRecords?.data || []).slice(0, 8));
+      const today = new Date().toISOString().split("T")[0];
+      const resRecords = await getDeviceTestEntryByOperatorId(operatorId, today);
+      const recordCount = resRecords?.data?.length || 0;
+      setRecentHistory((resRecords?.data || []).slice(0, 8));
 
-        const resSession = await getActiveOperatorWorkSession();
-        const session = resSession?.session;
-        let activeHours = "0h";
-        if (session && session.startedAt) {
-          const start = new Date(session.startedAt).getTime();
-          const now = new Date().getTime();
-          const diffMs = now - start;
-          const hours = (diffMs / (1000 * 60 * 60)).toFixed(1);
-          activeHours = `${hours}h`;
-        }
-
-        setStats({
-          processedToday: recordCount,
-          efficiency: recordCount > 0 ? "85%" : "0%",
-          activeTime: activeHours,
-        });
-
-        const trend = await getDeviceTestTrends({
-          interval: "hour",
-          hours: 12,
-          operatorId,
-        });
-        setHourlyTrend({
-          categories: trend?.categories || [],
-          series: trend?.series || [],
-        });
-      } catch (e) {
-        console.error("Error fetching operator dashboard data:", e);
+      const resSession = await getActiveOperatorWorkSession();
+      const session = resSession?.session;
+      let activeHours = "0h";
+      if (session && session.startedAt) {
+        const start = new Date(session.startedAt).getTime();
+        const now = new Date().getTime();
+        const diffMs = now - start;
+        const hours = (diffMs / (1000 * 60 * 60)).toFixed(1);
+        activeHours = `${hours}h`;
       }
-    };
 
-    fetchOperatorData();
-    const interval = setInterval(fetchOperatorData, 60000);
-    return () => clearInterval(interval);
+      setStats({
+        processedToday: recordCount,
+        efficiency: recordCount > 0 ? "85%" : "0%",
+        activeTime: activeHours,
+      });
+
+      const trend = await getDeviceTestTrends({
+        interval: "hour",
+        hours: 12,
+        operatorId,
+      });
+      setHourlyTrend({
+        categories: trend?.categories || [],
+        series: trend?.series || [],
+      });
+    } catch (e) {
+      console.error("Error fetching operator dashboard data:", e);
+    }
   }, []);
+
+  useEffect(() => {
+    void fetchOperatorData();
+  }, [fetchOperatorData]);
+
+  useManagedInterval(
+    () => {
+      void fetchOperatorData();
+    },
+    60000,
+    true,
+    { pauseWhenHidden: true },
+  );
 
   return (
     <div className="space-y-6">

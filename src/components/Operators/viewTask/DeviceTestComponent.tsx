@@ -64,10 +64,10 @@ import {
 import Image from "next/image";
 import React, { useEffect, useState } from "react";
 import StickerGenerator from "../viewTask-old/StickerGenerator";
-import { toast } from "react-toastify";
 import JigSection from "./components/JigSection";
 import JigIdentificationSection from "./components/JigIdentificationSection";
 import CartonDetailsPopup from "./components/CartonDetailsPopup";
+import { notifyError, notifyInfo, notifySuccess, notifyWarning } from "@/lib/messages/notify";
 
 interface Cart {
   cartonSerial: string;
@@ -718,14 +718,14 @@ export default function DeviceTestComponent({
           setIsPassNGButtonShow(!hasPrinter);
         }
 
-        toast.success(`Device Identified: ${serial}`);
+        notifySuccess("operator.deviceTestSaved", {}, `Device identified: ${serial}`);
       }
     } catch (err: any) {
       const msg =
         err.response?.data?.message || err.message || "Device not found";
       setJigSearchError(msg);
       if (err.response?.status === 409) {
-        toast.error(msg);
+        notifyError(msg);
       }
     } finally {
       setIsJigSearching(false);
@@ -735,21 +735,21 @@ export default function DeviceTestComponent({
   const handleVerifyCarton = async (scannedValue: string) => {
     const v = String(scannedValue || "").trim();
     if (!selectedCarton) {
-      toast.error("No carton selected");
+      notifyError("common.validationRequired", {}, "Please select a carton first.");
       return;
     }
     if (v !== String(selectedCarton).trim()) {
-      toast.error("Incorrect carton serial. Please scan the correct carton.");
+      notifyError("operator.serialMismatch", {}, "Incorrect carton serial. Please scan the correct carton.");
       return;
     }
 
     try {
       await verifyCartonSticker(String(selectedCarton));
-      toast.success("Carton verified successfully!");
+      notifySuccess("operator.packagingVerified", {}, "Carton verified successfully.");
       setIsVerifyCartonModal(false);
       fetchProcessCartons();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || e?.message || "Verification failed");
+      notifyError(e, {}, "Verification failed. Please try again.");
     }
   };
 
@@ -878,7 +878,7 @@ export default function DeviceTestComponent({
 
   const handleManualNG = async () => {
     if (!hasActiveDevice) {
-      alert("Please scan/select a device before marking NG.");
+      notifyWarning("common.validationRequired", {}, "Please scan or select a device before marking NG.");
       return;
     }
     const currentSubStep = testSteps[currentJigStepIndex];
@@ -907,7 +907,7 @@ export default function DeviceTestComponent({
 
   const handleManualNGFromModal = async () => {
     if (!hasActiveDevice) {
-      alert("Please scan/select a device before marking NG.");
+      notifyWarning("common.validationRequired", {}, "Please scan or select a device before marking NG.");
       return;
     }
     const currentSubStep = testSteps[currentJigStepIndex];
@@ -1161,7 +1161,7 @@ export default function DeviceTestComponent({
         cartonSerial,
         action: "existing",
       });
-      toast.success("Loose carton closed successfully!");
+      notifySuccess("common.saveSuccess", {}, "Loose carton closed successfully.");
       setCartons((prev: any[]) => {
         const copy = [...prev];
         const last = copy[copy.length - 1];
@@ -1172,7 +1172,7 @@ export default function DeviceTestComponent({
         return copy;
       });
     } catch (e: any) {
-      toast.error(e.message || "Failed to close loose carton");
+      notifyError(e, {}, "Failed to close loose carton.");
       console.error(e);
     }
   };
@@ -1183,7 +1183,7 @@ export default function DeviceTestComponent({
         // Case 1: New carton â†’ save first
         const response = await createCarton(carton);
         if (response?.newCartonModel) {
-          alert("Carton saved! Now generating QR Code...");
+          notifyInfo("common.saveSuccess", {}, "Carton saved. Generating QR code.");
           setQrCartons((prev) => ({
             ...prev,
             [response.newCartonModel.cartonSerial]: true,
@@ -1206,7 +1206,7 @@ export default function DeviceTestComponent({
         // Case 1: New carton â†’ save first
         const response = await createCarton(carton);
         if (response?.newCartonModel) {
-          alert("Carton saved! Now generating QR Code...");
+          notifyInfo("common.saveSuccess", {}, "Carton saved. Generating QR code.");
           setQrCartons((prev) => ({
             ...prev,
             [response.newCartonModel.cartonSerial]: true,
@@ -1283,7 +1283,7 @@ export default function DeviceTestComponent({
 
   const handleAddToCart = async (packagingData: any) => {
     if (!searchResult) {
-      alert("No device selected to add.");
+      notifyWarning("common.validationRequired", {}, "Please select a device before adding to carton.");
       return;
     }
 
@@ -1292,7 +1292,7 @@ export default function DeviceTestComponent({
     );
 
     if (!selectedDevice) {
-      alert("Selected device not found.");
+      notifyError("operator.deviceNotFound", {}, "Selected device was not found.");
       return;
     }
 
@@ -1318,7 +1318,7 @@ export default function DeviceTestComponent({
       fetchProcessCartons();
     } catch (error) {
       console.error("Failed to create carton on backend:", error);
-      alert(
+      notifyError(
         (error as any)?.message ||
           (error as any)?.response?.data?.message ||
           "This device is already assigned to a carton.",
@@ -1331,7 +1331,7 @@ export default function DeviceTestComponent({
         ? processCartons
         : processCartons?.cartonDetails || [];
       if (cartonList.length === 0) {
-        alert("No cartons available to shift.");
+        notifyWarning("common.validationRequired", {}, "No cartons are available to shift.");
         return;
       }
       const cartonSerials = cartonList.map((row: any) => row.cartonSerial);
@@ -1342,15 +1342,15 @@ export default function DeviceTestComponent({
       const response = await shiftToPDI(formData);
       if (response) {
         const data = response;
-        alert("Cartons shifted to PDI successfully!");
+        notifySuccess("common.saveSuccess", {}, "Cartons shifted to PDI successfully.");
         setProcessCartons([]);
       } else {
         console.error("Failed to shift cartons:", response.statusText);
-        alert("Error shifting cartons to PDI.");
+        notifyError("common.operationFailed", {}, "Unable to shift cartons to PDI.");
       }
     } catch (error) {
       console.error("Error:", error);
-      alert("Something went wrong while shifting cartons.");
+      notifyError("common.operationFailed", {}, "Something went wrong while shifting cartons.");
     }
   };
 
@@ -1506,7 +1506,7 @@ export default function DeviceTestComponent({
           } was automatically marked as completed.`);
 
         await createProcessLogs(logData);
-        toast.success("Process automatically completed!");
+        notifySuccess("common.saveSuccess", {}, "Process automatically completed.");
       }
     } catch (error) {
       console.error("Error checking process completion:", error);
@@ -1581,7 +1581,7 @@ export default function DeviceTestComponent({
 
       setCartonDeviceHistoryRows(rows);
     } catch (e: any) {
-      toast.error(e?.message || "Unable to load device history");
+      notifyError(e, {}, "Unable to load device history.");
     } finally {
       setIsCartonDeviceHistoryLoading(false);
     }
@@ -1684,7 +1684,7 @@ export default function DeviceTestComponent({
       setSelectedLogs(stageLogs);
     } catch (error: any) {
       setSelectedLogs([]);
-      toast.error(error?.message || "Unable to load stage logs");
+      notifyError(error, {}, "Unable to load stage logs.");
     }
   };
 
@@ -1761,7 +1761,7 @@ export default function DeviceTestComponent({
 
   const handleShiftToNextStage = async (cartonSerial: any) => {
     if (!cartonSerial) {
-      alert("No carton selected.");
+      notifyWarning("common.validationRequired", {}, "Please select a carton.");
       return;
     }
     try {
@@ -1770,7 +1770,7 @@ export default function DeviceTestComponent({
       let result = await shiftToNextCommonStage(processData._id, formData);
       if (result) {
         const data = result;
-        alert("Cartons shifted to STORE successfully!");
+        notifySuccess("common.saveSuccess", {}, "Cartons shifted to STORE successfully.");
         fetchExistingCartonsByProcessID();
         fetchProcessCartons();
         setSelectedCarton("");
@@ -1784,17 +1784,17 @@ export default function DeviceTestComponent({
         return false;
       } else {
         console.error("Failed to shift cartons:", result.statusText);
-        alert("Error shifting cartons to STORE.");
+        notifyError("common.operationFailed", {}, "Unable to shift cartons to STORE.");
       }
     } catch (error) {
       console.error("Error:", error);
-      alert("Something went wrong while shifting cartons.");
+      notifyError("common.operationFailed", {}, "Something went wrong while shifting cartons.");
     }
   };
 
   const handleKeepInStore = async (cartonSerial: any) => {
     if (!cartonSerial) {
-      alert("No carton selected.");
+      notifyWarning("common.validationRequired", {}, "Please select a carton.");
       return;
     }
     try {
@@ -1802,7 +1802,7 @@ export default function DeviceTestComponent({
       formData.append("selectedCarton", cartonSerial);
       let result = await keepCartonInStore(processData._id, formData);
       if (result) {
-        alert("Carton kept in store successfully!");
+        notifySuccess("common.saveSuccess", {}, "Carton kept in store successfully.");
         fetchExistingCartonsByProcessID();
         fetchProcessCartons();
         setSelectedCarton("");
@@ -1816,11 +1816,11 @@ export default function DeviceTestComponent({
         return false;
       } else {
         console.error("Failed to keep carton in store:", result.statusText);
-        alert("Error keeping carton in store.");
+        notifyError("common.operationFailed", {}, "Unable to keep carton in store.");
       }
     } catch (error) {
       console.error("Error:", error);
-      alert("Something went wrong while keeping carton in store.");
+      notifyError("common.operationFailed", {}, "Something went wrong while keeping carton in store.");
     }
   };
   const canShowPassNGButtons = (
@@ -2099,7 +2099,7 @@ export default function DeviceTestComponent({
                               e.currentTarget.value = "";
                               return;
                             }
-                            toast.warning("Item not found in this stage");
+                            notifyWarning("common.validationRequired", {}, "Item not found in this stage.");
                           }
                         }}
                       />

@@ -12,7 +12,10 @@
     "start": "next start",
     "lint": "next lint",
     "build:legacy": "next build",
-    "build:fast": "set NEXT_TELEMETRY_DISABLED=1&& set NODE_OPTIONS=--max-old-space-size=4096&& next build"
+    "build:fast": "set NEXT_TELEMETRY_DISABLED=1&& set NODE_OPTIONS=--max-old-space-size=4096&& next build",
+    "check:user-messages": "node scripts/check-user-messages.js",
+    "check:hotpaths": "node scripts/check-hotpath-budgets.js",
+    "check:regression-checklist": "node scripts/check-regression-checklist.js"
   },
     "dependencies": {
         "@fortawesome/fontawesome-svg-core": "^6.6.0",

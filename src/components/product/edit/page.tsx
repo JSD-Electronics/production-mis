@@ -15,7 +15,7 @@ import {
   viewEsimProfiles,
 } from "../../../lib/api";
 import CloneProcessModal from "./CloneProcessModal";
-import { ToastContainer, toast } from "react-toastify";
+import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
   faPlus,
@@ -31,6 +31,7 @@ import {
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import Loader from "@/components/common/Loader";
 import ConfirmationPopup from "@/components/Confirmation/page";
+import { notifyError, notifyInfo, notifySuccess } from "@/lib/messages/notify";
 
 import PrintTableComponent from "../printTableComponents";
 import {
@@ -231,7 +232,7 @@ const EditProduct = () => {
     setName(lastState.name);
     setStages(lastState.stages);
     setCommonStages(lastState.commonStages);
-    toast.info("Reverted last change");
+    notifyInfo("common.refreshed", {}, "Reverted the last change.");
   };
   const [processes, setProcesses] = useState<any[]>([]);
   const [isProcessLoading, setIsProcessLoading] = useState(false);
@@ -295,7 +296,7 @@ const EditProduct = () => {
     let tempErrors: any = { name: false, stages: [] };
 
     if (!name) {
-      toast.error("Name is required.");
+      notifyError("common.validationRequired", {}, "Name is required.");
       tempErrors.name = true;
       isValid = false;
     }
@@ -304,22 +305,24 @@ const EditProduct = () => {
       tempErrors.stages[stageIndex] = { stageName: false, subSteps: [] };
 
       if (!stage.stageName) {
-        toast.error(`Stage name is required for stage ${stageIndex + 1}`);
+        notifyError("common.validationRequired", {}, `Stage name is required for stage ${stageIndex + 1}.`);
         tempErrors.stages[stageIndex].stageName = true;
         isValid = false;
       }
 
       if (!stage.upha) {
-        toast.error(`UPHA is required for stage ${stageIndex + 1}`);
+        notifyError("common.validationRequired", {}, `UPHA is required for stage ${stageIndex + 1}.`);
         isValid = false;
       }
 
       if (!stage.requiredSkill) {
         if (stageIndex === 0) {
-          toast.error("Required Skill is mandatory for stage 1");
+          notifyError("common.validationRequired", {}, "Required skill is mandatory for stage 1.");
         } else {
-          toast.error(
-            `Required Skill is mandatory for stage ${stageIndex + 1}`,
+          notifyError(
+            "common.validationRequired",
+            {},
+            `Required skill is mandatory for stage ${stageIndex + 1}.`,
           );
         }
         isValid = false;
@@ -327,8 +330,10 @@ const EditProduct = () => {
 
       stage.subSteps.forEach((subStep, subStepIndex) => {
         if (!subStep.stepName) {
-          toast.error(
-            `Step Name is required for Stage ${stageIndex + 1}, Step ${subStepIndex + 1}`,
+          notifyError(
+            "common.validationRequired",
+            {},
+            `Step name is required for stage ${stageIndex + 1}, step ${subStepIndex + 1}.`,
           );
           isValid = false;
         }
@@ -337,12 +342,14 @@ const EditProduct = () => {
 
     commonStages.forEach((cStage) => {
       if (!cStage.stageName) {
-        toast.error(`Stage Name is required for Common Stage`);
+        notifyError("common.validationRequired", {}, "Stage name is required for common stage.");
         isValid = false;
       }
       if (!cStage.requiredSkill) {
-        toast.error(
-          `Required Skill is mandatory for Common Stage: ${cStage.stageName}`,
+        notifyError(
+          "common.validationRequired",
+          {},
+          `Required skill is mandatory for common stage: ${cStage.stageName || "-"}.`,
         );
         isValid = false;
       }
@@ -415,7 +422,7 @@ const EditProduct = () => {
       }
     } catch (error) {
       console.error("Error fetching product:", error);
-      toast.error("Failed to fetch product details.");
+      notifyError("common.operationFailed", {}, "Failed to fetch product details.");
     }
   };
   const handleAddStage = () => {
@@ -482,13 +489,13 @@ const EditProduct = () => {
       try {
         const result = await updateProduct(formData, id);
         if (result && result.status === 200) {
-          toast.success("Stage Updated successfully!!");
+          notifySuccess("common.saveSuccess", {}, "Stage updated successfully.");
           setSubmitDisabled(false);
         } else {
           throw new Error(result.message || "Failed to Update stage");
         }
       } catch (error) {
-        toast.error(
+        notifyError(
           (error as any)?.message ||
           "An error occurred while creating the stage.",
         );
@@ -596,7 +603,7 @@ const EditProduct = () => {
     const updatedStages = [...stages];
     updatedStages.splice(index + 1, 0, newStage);
     setStages(updatedStages);
-    toast.success(`Stage "${stageToCopy.stageName}" duplicated successfully!`);
+    notifySuccess("common.saveSuccess", {}, `Stage "${stageToCopy.stageName}" duplicated successfully.`);
   };
 
   // Function to handle adding new sub-steps
@@ -974,7 +981,7 @@ const EditProduct = () => {
       }
 
       if (addedSteps.length > 0) {
-        toast.success("ESIM steps added automatically");
+        notifySuccess("common.saveSuccess", {}, "eSIM steps added automatically.");
       }
     }
 
@@ -1420,12 +1427,12 @@ const EditProduct = () => {
         setProcesses(result.Processes);
         setIsCloneModalOpen(true);
       } else {
-        toast.info("No processes found for this product.");
+        notifyInfo("common.refreshed", {}, "No processes found for this product.");
         setProcesses([]);
       }
     } catch (error) {
       console.error("Error fetching processes:", error);
-      toast.error("Failed to fetch processes.");
+      notifyError("common.operationFailed", {}, "Failed to fetch processes.");
     } finally {
       setIsProcessLoading(false);
     }
@@ -1454,7 +1461,7 @@ const EditProduct = () => {
 
       const result = await updateProcess(formData, processId);
       if (result && result.status === 200) {
-        toast.success("Stages cloned successfully to process!");
+        notifySuccess("common.saveSuccess", {}, "Stages cloned successfully to process.");
         setIsCloneModalOpen(false);
       } else {
         throw new Error(result.message || "Failed to clone stages.");
@@ -1463,7 +1470,7 @@ const EditProduct = () => {
       console.error("Error cloning process:", error);
       const message =
         error instanceof Error ? error.message : "Failed to clone stages.";
-      toast.error(message);
+      notifyError(message);
     } finally {
       setIsProcessLoading(false);
     }

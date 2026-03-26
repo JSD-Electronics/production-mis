@@ -1,13 +1,13 @@
 "use client";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
 import BasicInformation from "./BasicInformation";
-import DeviceTestComponent from "./DeviceTestComponent";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useQRCode } from "next-qrcode";
 import Barcode from "react-barcode";
 import html2canvas from "html2canvas";
 import { printStickerElements } from "@/lib/sticker/printSticker";
-import { ToastContainer, toast } from "react-toastify";
+import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
   getPlaningAndSchedulingById,
@@ -39,6 +39,12 @@ import {
 import { calculateTimeDifference } from "@/lib/common";
 import SearchableInput from "@/components/SearchableInput/SearchableInput";
 import { RefreshCw, Video, ExternalLink, Coffee } from "lucide-react";
+import { notifyError, notifySuccess } from "@/lib/messages/notify";
+import { useManagedInterval } from "@/hooks/useManagedInterval";
+
+const DeviceTestComponent = dynamic(() => import("./DeviceTestComponent"), {
+  ssr: false,
+});
 
 // Utility: safely read current user from localStorage
 const getCurrentUser = () => {
@@ -276,18 +282,23 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   useEffect(() => {
     const pathname = window.location.pathname;
     const id = pathname.split("/").pop();
-    // prefetch using helper
     getDeviceTestEntry();
-
-    // Fetch planning data with background polling for status updates
     getPlaningAndSchedulingByID(id);
-    const intervalId = setInterval(() => {
-      getPlaningAndSchedulingByID(id);
-    }, 15000); // Check every 15 seconds
-
-    return () => clearInterval(intervalId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyFilterDate]);
+
+  useManagedInterval(
+    () => {
+      const pathname = window.location.pathname;
+      const id = pathname.split("/").pop();
+      if (id) {
+        getPlaningAndSchedulingByID(id);
+      }
+    },
+    15000,
+    true,
+    { pauseWhenHidden: true },
+  );
 
   useEffect(() => {
     const pathname = window.location.pathname;
@@ -346,19 +357,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     }
   };
 
-  // ── Auto-refresh counts every 30 s ─────────────────────────────────────────
-  const autoRefreshIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    const startPolling = () => {
-      if (autoRefreshIdRef.current) clearInterval(autoRefreshIdRef.current);
-      autoRefreshIdRef.current = setInterval(runSync, 30_000);
-    };
-    startPolling();
-    return () => {
-      if (autoRefreshIdRef.current) clearInterval(autoRefreshIdRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignedTaskDetails, operatorSeatInfo, selectedProduct, selectedProcess]);
+  // Auto-refresh counts every 30s; pauses when tab is hidden.
+  useManagedInterval(
+    () => {
+      void runSync();
+    },
+    30000,
+    true,
+    { pauseWhenHidden: true },
+  );
 
   const closeScanModal = () => {
     setScanModalOpen(false);
@@ -1001,7 +1008,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         } else if (searchResult) {
           await updateStageBySerialNo(searchResult, formData1);
         } else {
-          toast.error("Device not found. Please re-search the serial.");
+          notifyError("operator.deviceNotFound");
           isSubmitting.current = false;
           return;
         }
@@ -1153,7 +1160,11 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         setIsAddedToCart(false);
         setIsVerifiedPackaging(false);
 
-        toast.success(result.message || `Device ${status} Successfully!!`);
+        notifySuccess(
+          "operator.deviceTestSaved",
+          {},
+          result.message || `Device ${status} recorded successfully.`,
+        );
         // Log device test submission as an operator event
         safeLogOperatorEvent(
           "DEVICE_TEST_SUBMIT",
@@ -1167,11 +1178,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           "OPERATION",
         );
       } else {
-        toast.error(result?.message || "Error creating device test entry");
+        notifyError(
+          { response: { data: { message: result?.message } } },
+          {},
+          "operator.deviceTestFailed",
+        );
       }
     } catch (error: any) {
 
-      toast.error(error?.message || "Error creating device test entry");
+      notifyError(error, {}, "operator.deviceTestFailed");
     } finally {
       isSubmitting.current = false;
     }
@@ -1179,7 +1194,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const handlePrintCartonSticker = async (elementId: string = "carton-sticker-preview") => {
     const stickerElement = document.getElementById(elementId);
     if (!stickerElement) {
-      toast.error("Carton sticker preview not found");
+      notifyError("operator.stickerPreviewMissing");
       return;
     }
 
@@ -1196,7 +1211,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         title: "Print Carton Sticker",
         selector: ".actual-sticker-container",
       });
-      if (!res.ok) toast.error("Unable to print sticker");
+      if (!res.ok) notifyError("operator.stickerPrintFailed");
       else setIsCartonBarCodePrinted(true);
       return;
     }
@@ -1221,7 +1236,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
 
       const printWindow = window.open("", "_blank");
       if (!printWindow) {
-        toast.error("Please allow popups to print stickers");
+        notifyError("operator.popupBlocked");
         return;
       }
 
@@ -1291,15 +1306,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       printStickerElements({ root: stickerRoot, scale: 6, title: "Print Sticker" })
         .then((res) => {
           if (!res.ok) {
-            toast.error(
+            notifyError(
               res.reason === "popup-blocked"
-                ? "Please allow popups to print stickers"
-                : "Sticker preview not found",
+                ? "operator.popupBlocked"
+                : "operator.stickerPreviewMissing",
             );
           }
         })
         .catch(() => {
-          toast.error("Failed to print sticker");
+          notifyError("operator.stickerPrintFailed");
         });
       setIsPassNGButtonShow(false);
       setIsStickerPrinted(!isStickerPrinted);
@@ -1382,7 +1397,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     isSubmitting.current = true;
     const input = String(serialNumber || "").trim();
     if (!input) {
-      toast.error("Sticker Verification Failed. Please try again.");
+      notifyError("operator.stickerVerifyFailed");
       isSubmitting.current = false;
       return;
     }
@@ -1557,12 +1572,16 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       if (inMultiMode && currentScanStep < expectedScanTypes.length - 1) {
         const nextStep = currentScanStep + 1;
         const nextType = expectedScanTypes[nextStep] || "code";
-        toast.success(`Code ${currentScanStep + 1} verified. Scan next: ${String(nextType).toUpperCase()}`);
+        notifySuccess(
+          "common.saveSuccess",
+          {},
+          `Code ${currentScanStep + 1} verified. Please scan ${String(nextType).toUpperCase()} next.`,
+        );
         setCurrentScanStep(nextStep);
         setSerialNumber("");
         isSubmitting.current = false;
       } else {
-        toast.success("Sticker Verification Successful.");
+        notifySuccess("operator.stickerVerifySuccess");
         setIsVerifiedSticker(true);
         setIsVerifyStickerModal(false);
         setExpectedScanTypes([]);
@@ -1579,9 +1598,13 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       }
     } else {
       if (inMultiMode && requiredType && requiredType !== "any") {
-        toast.error(`Scan ${currentScanStep + 1} failed. Please scan ${String(requiredType).toUpperCase()}.`);
+        notifyError(
+          "common.operationFailed",
+          {},
+          `Scan ${currentScanStep + 1} failed. Please scan ${String(requiredType).toUpperCase()}.`,
+        );
       } else {
-        toast.error("Sticker Verification Failed. Please try again.");
+        notifyError("operator.stickerVerifyFailed");
       }
       isSubmitting.current = false;
     }
@@ -1593,15 +1616,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     );
 
     if (matchedDevice && matchedDevice.serialNo === searchResult) {
-      toast.success("Packaging verified successfully!");
+      notifySuccess("operator.packagingVerified");
       setIsVerifiedPackaging(true);
       setIsVerifyPackagingModal(false);
     } else {
-      toast.error("Serial number does not match. Try again.");
+      notifyError("operator.serialMismatch");
     }
   };
   const handleSubmitScan = () => {
-    alert("hello");
+    // no-op: kept intentionally to preserve behavior hook without debug alert side-effects
   };
   const handlePrintField = (index: number) => {
     let newValues = [...isScanValuePass];

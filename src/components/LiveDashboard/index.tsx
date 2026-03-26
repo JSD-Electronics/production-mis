@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import type { ApexOptions } from "apexcharts";
 import { getMesProductionDashboard } from "@/lib/api";
 import { RefreshCcw, Search } from "lucide-react";
+import { useManagedInterval } from "@/hooks/useManagedInterval";
 
 const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
@@ -94,12 +95,18 @@ const LiveDashboard = ({
   };
 
   useEffect(() => {
-    fetchDashboard(false);
-    const interval = setInterval(() => {
-      fetchDashboard(false);
-    }, 60000);
-    return () => clearInterval(interval);
+    void fetchDashboard(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [processId]);
+
+  useManagedInterval(
+    () => {
+      void fetchDashboard(false);
+    },
+    60000,
+    true,
+    { pauseWhenHidden: true },
+  );
 
   const kpis = dashboard?.kpis || {};
   const cells = dashboard?.cells || [];

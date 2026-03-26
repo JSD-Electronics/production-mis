@@ -27,7 +27,7 @@ import {
   getDowntimeReasons,
 } from "@/lib/api";
 import { formatDate } from "@/lib/common";
-import { ToastContainer, toast } from "react-toastify";
+import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
@@ -35,6 +35,7 @@ import Modal from "@/components/Modal/page";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import { Clock, Calendar, Coffee, UserPlus, Settings, Wrench } from "lucide-react";
 import { FaClock, FaCogs, FaLayerGroup, FaClipboardList, FaBox } from "react-icons/fa";
+import { notifyError, notifySuccess } from "@/lib/messages/notify";
 
 const EditPlanSchedule = () => {
   const router = useRouter();
@@ -490,7 +491,7 @@ const EditPlanSchedule = () => {
             assignedOperator.includes(droppedData?.name),
         );
         if (!compatibleOperators) {
-          alert("Operator's skill set is not compatible with this stage.");
+          notifyError("planning.stageSkillMismatch");
           return false;
         }
       }
@@ -515,7 +516,7 @@ const EditPlanSchedule = () => {
             ),
           );
           if (!isNearbyAssigned) {
-            alert("Only nearby stages are assigned to specific seats.");
+            notifyError("planning.stageSequenceInvalid");
             return prev;
           }
         }
@@ -606,9 +607,7 @@ const EditPlanSchedule = () => {
     const totalRequiredSeats =
       Object.keys(reservedSeats).length + stages.length * repeatCount;
     if (totalRequiredSeats > totalSeatsAvailable) {
-      alert(
-        "Insufficient seats available to assign all stages. Please adjust the allocation.",
-      );
+      notifyError("planning.stageAssignmentBlocked");
       return false;
     }
     const newAssignedStages: Record<string, any[]> = {};
@@ -1096,8 +1095,10 @@ const EditPlanSchedule = () => {
           result.message || "Failed to Update Planing and Scheduling!!",
         );
       }
-      toast.success(
-        result.message || "Planing and Scheduling Updated Successfully!!",
+      notifySuccess(
+        "common.saveSuccess",
+        {},
+        result.message || "Planning and scheduling updated successfully.",
       );
       router.push("/process/view");
     } catch (e) {
@@ -1108,13 +1109,13 @@ const EditPlanSchedule = () => {
   const handlesubmitDowntime = async () => {
     try {
       if (!downTimeFrom || !downTimeTo || !downTimeType) {
-        toast.error("Please fill all downtime fields");
+        notifyError("common.validationRequired");
         return;
       }
       const dateFrom = new Date(downTimeFrom);
       const dateTo = new Date(downTimeTo);
       if (dateTo <= dateFrom) {
-        toast.error("Downtime To must be later than Downtime From");
+        notifyError("planning.downtimeInvalidRange");
         return;
       }
 
@@ -1131,7 +1132,7 @@ const EditPlanSchedule = () => {
         downTime: JSON.stringify(payload),
       });
 
-      toast.success("Downtime scheduled and process put on hold");
+      notifySuccess("planning.downtimeScheduled");
       setIsDownTimeModalOpen(false);
       setProcessStatus("down_time_hold");
       setDownTimeVal({
@@ -1145,7 +1146,7 @@ const EditPlanSchedule = () => {
       await getPlaningById(currentId);
     } catch (error) {
       console.error("Failed to schedule downtime", error);
-      toast.error("Failed to schedule downtime");
+      notifyError(error, {}, "planning.downtimeFailed");
     }
   };
   const handleConfirmationShiftTimeSubmit = () => {
@@ -1166,7 +1167,7 @@ const EditPlanSchedule = () => {
       formData.append("downTime", JSON.stringify(downTimeArr));
       let response = await updateDownTimeProcess(id, formData);
       if (response && response.status == 200) {
-        toast.success(result.message || "DownTime Updated Successfully!!");
+        notifySuccess("planning.downtimeScheduled", {}, result.message || "Downtime updated successfully.");
       }
     } catch (error) {
 
@@ -1181,7 +1182,7 @@ const EditPlanSchedule = () => {
       formData.append("status", "active");
       let response = await updateProcessStatus(currentId, formData);
       if (response && response.status == 200) {
-        toast.success(response.message || "Process resumed successfully");
+        notifySuccess("planning.resumeSuccess", {}, response.message || "Process resumed successfully.");
         setProcessStatus("active");
         setDownTimeVal({});
         await getPlaningById(currentId);

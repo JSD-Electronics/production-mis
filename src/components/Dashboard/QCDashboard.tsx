@@ -5,6 +5,7 @@ import { ClipboardList, AlertTriangle } from "lucide-react";
 import { viewProcess, getNGDevicesByProcessId, getNGReasonDistribution, getDeviceTestTrends } from "@/lib/api";
 import ChartOne from "@/components/Charts/ChartOne";
 import ChartThree from "@/components/Charts/ChartThree";
+import { useManagedInterval } from "@/hooks/useManagedInterval";
 
 const QCDashboard = () => {
   const [stats, setStats] = useState({
@@ -20,52 +21,59 @@ const QCDashboard = () => {
     series: [],
   });
 
-  useEffect(() => {
-    const fetchQCData = async () => {
-      try {
-        const resProcesses = await viewProcess();
-        const activeProcesses = resProcesses?.Processes?.filter(
-          (p: any) => p.status === "active"
-        ) || [];
+  const fetchQCData = React.useCallback(async () => {
+    try {
+      const resProcesses = await viewProcess();
+      const activeProcesses = resProcesses?.Processes?.filter(
+        (p: any) => p.status === "active"
+      ) || [];
 
-        let totalNG = 0;
-        for (const process of activeProcesses) {
-          try {
-            const resNG = await getNGDevicesByProcessId(process._id);
-            totalNG += resNG?.data?.length || 0;
-          } catch (err) {
-            console.warn(`Could not fetch NG for process ${process._id}`);
-          }
+      let totalNG = 0;
+      for (const process of activeProcesses) {
+        try {
+          const resNG = await getNGDevicesByProcessId(process._id);
+          totalNG += resNG?.data?.length || 0;
+        } catch (err) {
+          console.warn(`Could not fetch NG for process ${process._id}`);
         }
-
-        setStats({
-          pendingInspections: activeProcesses.length,
-          ngDetectedToday: totalNG,
-        });
-
-        const [dist, trend] = await Promise.all([
-          getNGReasonDistribution({ days: 30 }),
-          getDeviceTestTrends({ days: 7, interval: "day" }),
-        ]);
-
-        setNgDistribution({
-          labels: dist?.labels || [],
-          series: dist?.series || [],
-        });
-
-        setWeeklyTrend({
-          categories: trend?.categories || [],
-          series: trend?.series || [],
-        });
-      } catch (e) {
-        console.error("Error fetching QC dashboard data:", e);
       }
-    };
 
-    fetchQCData();
-    const interval = setInterval(fetchQCData, 300000);
-    return () => clearInterval(interval);
+      setStats({
+        pendingInspections: activeProcesses.length,
+        ngDetectedToday: totalNG,
+      });
+
+      const [dist, trend] = await Promise.all([
+        getNGReasonDistribution({ days: 30 }),
+        getDeviceTestTrends({ days: 7, interval: "day" }),
+      ]);
+
+      setNgDistribution({
+        labels: dist?.labels || [],
+        series: dist?.series || [],
+      });
+
+      setWeeklyTrend({
+        categories: trend?.categories || [],
+        series: trend?.series || [],
+      });
+    } catch (e) {
+      console.error("Error fetching QC dashboard data:", e);
+    }
   }, []);
+
+  useEffect(() => {
+    void fetchQCData();
+  }, [fetchQCData]);
+
+  useManagedInterval(
+    () => {
+      void fetchQCData();
+    },
+    300000,
+    true,
+    { pauseWhenHidden: true },
+  );
 
   return (
     <div className="space-y-6">

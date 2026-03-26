@@ -39,7 +39,7 @@ import {
 } from "react-icons/fi";
 import { FiUsers, FiActivity, FiCheckCircle, FiXCircle, FiSearch, FiFilter, FiRefreshCcw, FiEye, FiGrid, FiList } from "react-icons/fi";
 import { formatDate } from "@/lib/common";
-import { ToastContainer, toast } from "react-toastify";
+import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
@@ -50,6 +50,13 @@ import { Tab, Tabs, TabList, TabPanel } from "react-tabs";
 import "react-tabs/style/react-tabs.css";
 import CardDataStats from "@/components/CardDataStats";
 import Loader from "@/components/common/Loader";
+import {
+  notifyError,
+  notifyInfo,
+  notifySuccess,
+} from "@/lib/messages/notify";
+import { useManagedInterval } from "@/hooks/useManagedInterval";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 const DraggableGridItem = ({
   item,
   rowIndex,
@@ -372,6 +379,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   const [seatStatusFilter, setSeatStatusFilter] = useState("all");
   const [showOccupiedOnly, setShowOccupiedOnly] = useState(true);
   const [seatSearch, setSeatSearch] = useState("");
+  const debouncedSeatSearch = useDebouncedValue(seatSearch, 250);
   const [lastRefreshed, setLastRefreshed] = useState("");
   const [allDeviceTests, setAllDeviceTests] = useState([]);
   const [processDevices, setProcessDevices] = useState<any[]>([]);
@@ -530,7 +538,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   const handleDownloadSerials = async () => {
     try {
       if (!selectedProcess?.selectedProduct || !selectedProcess?._id) {
-        toast.error("Process data missing");
+        notifyError("planning.processDataMissing");
         return;
       }
       const result = await getDeviceByProductId(selectedProcess.selectedProduct);
@@ -540,7 +548,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       const processDevices = allDevices.filter((d: any) => d.processID === selectedProcess._id);
 
       if (processDevices.length === 0) {
-        toast.info("No serials found for this process");
+        notifyInfo("planning.noSerials");
         return;
       }
 
@@ -564,7 +572,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       document.body.removeChild(link);
     } catch (error) {
       console.error("Error downloading serials:", error);
-      toast.error("Failed to download serials");
+      notifyError(error, {}, "planning.serialDownloadFailed");
     }
   };
 
@@ -584,14 +592,19 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     fetchDowntimeReasons();
     setLastRefreshed(new Date().toLocaleTimeString());
 
-    // Polling for live updates every 30 seconds
-    const interval = setInterval(() => {
+  }, [resolvedPlaningId]);
+
+  useManagedInterval(
+    () => {
+      const id = resolvedPlaningId;
+      if (!id) return;
       getPlaningById(id);
       setLastRefreshed(new Date().toLocaleTimeString());
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [resolvedPlaningId]);
+    },
+    30000,
+    Boolean(resolvedPlaningId),
+    { pauseWhenHidden: true },
+  );
 
   const fetchDowntimeReasons = async () => {
     try {
@@ -608,7 +621,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     if (!id) return;
     await getPlaningById(id);
     setLastRefreshed(new Date().toLocaleTimeString());
-    toast.success("Data Refreshed Successfully");
+    notifySuccess("common.refreshed");
     setIsRefreshing(false);
   };
 
@@ -620,11 +633,11 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         selectedProcess: selectedProcess?._id,
         status: "active",
       });
-      toast.success("Process resumed successfully");
+      notifySuccess("planning.resumeSuccess");
       await getPlaningById(id);
     } catch (e) {
       console.error("Manual resume failed:", e);
-      toast.error("Failed to resume process");
+      notifyError(e, {}, "planning.resumeFailed");
     } finally {
       setLoading(false);
     }
@@ -633,7 +646,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   const handleSubmitDowntime = async () => {
     if (isReadOnly) return;
     if (!downTimeFrom || !downTimeTo || !selectedReason) {
-      toast.error("Please fill all downtime fields");
+      notifyError("common.validationRequired");
       return;
     }
 
@@ -650,12 +663,12 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         downTime: JSON.stringify(downtimeData),
       });
 
-      toast.success("Downtime scheduled and process put on hold");
+      notifySuccess("planning.downtimeScheduled");
       setIsDownTimeModalOpen(false);
       await getPlaningById(id);
     } catch (e) {
       console.error("Downtime submission failed:", e);
-      toast.error("Failed to schedule downtime");
+      notifyError(e, {}, "planning.downtimeFailed");
     } finally {
       setLoading(false);
     }
@@ -666,7 +679,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     setOvertimeConflictMessage("");
 
     if (!overtimeFrom || !overtimeTo) {
-      toast.error("Please select overtime from/to time");
+      notifyError("common.validationRequired");
       return;
     }
 
@@ -677,7 +690,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         to: new Date(overtimeTo).toISOString(),
         reason: overtimeReason?.trim() || "",
       });
-      toast.success("Overtime added successfully");
+      notifySuccess("planning.overtimeAdded");
       setIsOvertimeModalOpen(false);
       setOvertimeFrom("");
       setOvertimeTo("");
@@ -692,7 +705,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         setOvertimeConflictMessage(msg);
       } else {
         console.error("Overtime submission failed:", e);
-        toast.error("Failed to add overtime");
+        notifyError(e, {}, "planning.overtimeFailed");
       }
     } finally {
       setLoading(false);
@@ -704,11 +717,11 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     try {
       setLoading(true);
       await removeProcessOvertime(id, windowId);
-      toast.success("Overtime removed successfully");
+      notifySuccess("planning.overtimeRemoved");
       await getPlaningById(id);
     } catch (e) {
       console.error("Remove overtime failed:", e);
-      toast.error("Failed to remove overtime");
+      notifyError(e, {}, "planning.overtimeFailed");
     } finally {
       setLoading(false);
     }
@@ -1319,7 +1332,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
             assignedOperator.includes(droppedData?.name),
         );
         if (!compatibleOperators) {
-          alert("Operator's skill set is not compatible with this stage.");
+          notifyError("planning.stageSkillMismatch");
           return false;
         }
       }
@@ -1344,7 +1357,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
             ),
           );
           if (!isNearbyAssigned) {
-            alert("Only nearby stages are assigned to specific seats.");
+            notifyError("planning.stageSequenceInvalid");
             return prev;
           }
         }
@@ -1467,9 +1480,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     const totalRequiredSeats =
       Object.keys(reservedSeats).length + stages.length * repeatCount;
     if (totalRequiredSeats > totalSeatsAvailable) {
-      alert(
-        "Insufficient seats available to assign all stages. Please adjust the allocation.",
-      );
+      notifyError("planning.stageAssignmentBlocked");
       return false;
     }
     let seatIndex = 0;
@@ -1696,8 +1707,8 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       });
       if (!anyMatch) return false;
     }
-    if (seatSearch) {
-      const q = seatSearch.toLowerCase();
+    if (debouncedSeatSearch) {
+      const q = debouncedSeatSearch.toLowerCase();
       const stageNames = arr.map((st) => String(st?.name || st?.stage || "")).join(" ").toLowerCase();
       const ops = (assignedOperators[coordinates] || [])
         .map((op) => String(op?.name || ""))
