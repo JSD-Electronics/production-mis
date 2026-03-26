@@ -1046,12 +1046,10 @@ export const fetchNGDevicesByProcess = async (processId) => {
     throw error?.response?.data || { message: "Error Fetching NG Devices" };
   }
 };
-export const getDeviceTestEntryByOperatorId = async (id, date) => {
+export const getDeviceTestEntryByOperatorId = async (id, date, serialNo) => {
   try {
     let url = `/getDeviceTestEntryByOperatorId/${id}`;
-    if (date) {
-      url += `?date=${date}`;
-    }
+    if (date) { url += `?date=${date}`; } if (serialNo) { url += `${url.includes("?") ? "&" : "?"}serialNo=${serialNo}`; }
     let response = await api.get(url);
     return response.data;
   } catch (error) {

@@ -97,6 +97,7 @@ const SearchableInput = ({
     setSearchQuery(option?.serialNo || "");
     setSearchResult(option?.serialNo || "");
     if (onDeviceSelected) onDeviceSelected(option);
+    setIsPassNGButtonShow(false);
     setIsStickerPrinted(false);
     setIsVerifiedSticker(false);
     setIsDevicePassed(false);
@@ -122,11 +123,7 @@ const SearchableInput = ({
       setIsDevicePassed(false);
       setIsStickerPrinted(false);
       setIsVerifiedSticker(false);
-      if (!checkIsPrintEnable) {
-        setIsPassNGButtonShow(true);
-      } else {
-        setIsPassNGButtonShow(false);
-      }
+      setIsPassNGButtonShow(false);
       setShowSuggestions(false);
     }
   };

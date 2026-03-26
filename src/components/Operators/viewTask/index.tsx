@@ -39,6 +39,7 @@ import {
 import { calculateTimeDifference } from "@/lib/common";
 import SearchableInput from "@/components/SearchableInput/SearchableInput";
 import { RefreshCw, Video, ExternalLink, Coffee } from "lucide-react";
+import { resolvePreviousStageEligibility } from "./stageEligibility";
 
 // Utility: safely read current user from localStorage
 const getCurrentUser = () => {
@@ -107,6 +108,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const [showOnScan, setShowOnScan] = useState(false);
   const [notFoundError, setNotFoundError] = useState("");
   const [deviceHistory, setDeviceHistory] = useState<any[]>([]);
+  const [isDeviceHistoryLoading, setIsDeviceHistoryLoading] = useState(false);
   const [isDeviceSectionShow, setIsDeviceSectionShow] = useState(false);
   const [isReportIssueModal, setIsReportIssueModal] = useState(false);
   const [issueType, setIssueType] = useState("");
@@ -178,6 +180,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     const day = String(now.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   });
+  const [historySerialQuery, setHistorySerialQuery] = useState("");
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [operatorSessionId, setOperatorSessionId] = useState<string | null>(null);
@@ -200,6 +203,40 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       nextEndsAt: nextActive?.to ? new Date(nextActive.to) : null,
     };
   }, [getPlaningAndScheduling]);
+
+  const currentAssignedStageName = useMemo(
+    () =>
+      String(
+        (Array.isArray(assignUserStage)
+          ? assignUserStage?.[0]?.name || assignUserStage?.[0]?.stageName
+          : assignUserStage?.name || assignUserStage?.stageName || assignUserStage?.stage) || "",
+      ).trim(),
+    [assignUserStage],
+  );
+
+  const selectedDevice = useMemo(
+    () =>
+      deviceList.find(
+        (device: any) =>
+          String(device?.serialNo || device?.serial_no || "").trim() ===
+          String(searchResult || "").trim(),
+      ) || null,
+    [deviceList, searchResult],
+  );
+
+  const stageEligibility = useMemo(
+    () =>
+      resolvePreviousStageEligibility({
+        processStages: processData?.stages,
+        currentStageName: currentAssignedStageName,
+        serialNo:
+          selectedDevice?.serialNo ||
+          selectedDevice?.serial_no ||
+          searchResult,
+        deviceHistory,
+      }),
+    [processData?.stages, currentAssignedStageName, selectedDevice, searchResult, deviceHistory],
+  );
 
   const ensureOperatorSession = React.useCallback(
     async (): Promise<string | null> => {
@@ -287,7 +324,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
 
     return () => clearInterval(intervalId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [historyFilterDate]);
+  }, [historyFilterDate, historySerialQuery]);
 
   useEffect(() => {
     const pathname = window.location.pathname;
@@ -476,24 +513,28 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   };
 
   const getDeviceById = async (id: any) => {
+    setIsDeviceHistoryLoading(true);
     try {
       let result = await getDeviceTestByDeviceId(id);
-      // return;
       if (result && result.status == 200) {
         setDeviceHistory(result.data);
-        // QC/TRC resolution should not auto-reset currentStage here.
+        return result.data;
       } else {
         setDeviceHistory([]);
+        return [];
       }
     } catch (error) {
-
+      setDeviceHistory([]);
+      return [];
+    } finally {
+      setIsDeviceHistoryLoading(false);
     }
   };
 
   const getDeviceTestEntry = async () => {
     try {
       const userDetails = getCurrentUser();
-      const result = await getDeviceTestEntryByOperatorId(userDetails?._id, historyFilterDate);
+      const result = await getDeviceTestEntryByOperatorId(userDetails?._id, historyFilterDate, historySerialQuery);
       let devices = result.data;
 
       let deviceHistory = [];
@@ -962,6 +1003,24 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       const stageData = Array.isArray(assignUserStage)
         ? assignUserStage[0]
         : assignUserStage;
+
+      const targetSerial =
+        deviceInfo?.[0]?.serialNo ||
+        selectedDevice?.serialNo ||
+        searchResult ||
+        "";
+      const eligibility = resolvePreviousStageEligibility({
+        processStages: processData?.stages,
+        currentStageName: stageData?.name || stageData?.stageName || stageData?.stage || "",
+        serialNo: targetSerial,
+        deviceHistory,
+      });
+
+      if (!eligibility.isEligible) {
+        toast.error(eligibility.message || "Previous stage must be passed before testing this device.");
+        isSubmitting.current = false;
+        return;
+      }
 
       if (status === "Pass") {
         // setIsPassNGButtonShow(false);
@@ -2024,8 +2083,12 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             handlePrintCartonSticker={handlePrintCartonSticker}
             historyFilterDate={historyFilterDate}
             setHistoryFilterDate={setHistoryFilterDate}
+            historySerialQuery={historySerialQuery}
+            setHistorySerialQuery={setHistorySerialQuery}
             handlePauseResume={handlePauseResume}
             handleStop={handleStop}
+            stageEligibility={stageEligibility}
+            isDeviceHistoryLoading={isDeviceHistoryLoading}
           />
         ) : (
           <BasicInformation
