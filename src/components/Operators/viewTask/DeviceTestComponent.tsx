@@ -742,6 +742,7 @@ export default function DeviceTestComponent({
       const response = await searchByJigFields({
         jigFields: capturedFields,
         processId: processData?._id,
+        stageName: stageData?.name,
       });
       if (response && response.data) {
         const device = response.data;
