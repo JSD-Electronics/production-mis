@@ -68,6 +68,7 @@ import { toast } from "react-toastify";
 import JigSection from "./components/JigSection";
 import JigIdentificationSection from "./components/JigIdentificationSection";
 import CartonDetailsPopup from "./components/CartonDetailsPopup";
+import type { StageEligibilityResult } from "./stageEligibility";
 
 interface Cart {
   cartonSerial: string;
@@ -146,8 +147,12 @@ interface DeviceTestComponentProps {
   handlePrintCartonSticker: (elementId?: string) => void | Promise<void>;
   historyFilterDate: string;
   setHistoryFilterDate: (date: string) => void;
+  historySerialQuery: string;
+  setHistorySerialQuery: (val: string) => void;
   handlePauseResume: () => void;
   handleStop: () => void;
+  stageEligibility: StageEligibilityResult;
+  isDeviceHistoryLoading: boolean;
 }
 
 export default function DeviceTestComponent({
@@ -217,8 +222,12 @@ export default function DeviceTestComponent({
   handlePrintCartonSticker,
   historyFilterDate,
   setHistoryFilterDate,
+  historySerialQuery,
+  setHistorySerialQuery,
   handlePauseResume,
   handleStop,
+  stageEligibility,
+  isDeviceHistoryLoading,
 }: DeviceTestComponentProps) {
   const isCommon = assignedTaskDetails?.stageType === "common";
   const currentStageName =
@@ -311,17 +320,22 @@ export default function DeviceTestComponent({
   const [todaySummary, setTodaySummary] = useState<any>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSopOpen, setIsSopOpen] = useState(true);
-  const [historySerialQuery, setHistorySerialQuery] = useState("");
+  
   const [attemptCounts, setAttemptCounts] = useState<Record<string, number>>({});
 
   const formatHistoryTime = (row: any) => {
     const createdAt = row?.deviceInfo?.createdAt || row?.createdAt;
     if (createdAt) {
       try {
-        return new Date(createdAt).toLocaleTimeString([], {
+        const d = new Date(createdAt);
+        const now = new Date();
+        const isToday = d.toDateString() === now.toDateString();
+        return d.toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
           second: "2-digit",
+          hour12: true,
+          ...(isToday ? {} : { month: "short", day: "numeric" }),
         });
       } catch {
         // fall through
@@ -417,6 +431,7 @@ export default function DeviceTestComponent({
   const [loadingCartonDevices, setLoadingCartonDevices] = useState(false);
   const [isCartonsLoading, setIsCartonsLoading] = useState(false);
   const [showNGModal, setShowNGModal] = useState(false);
+  const lastEligibilityToastRef = React.useRef<string>("");
 
   const selectedCartonObj = React.useMemo(() => {
     if (!selectedCarton) return null;
@@ -424,6 +439,39 @@ export default function DeviceTestComponent({
     return list.find((c: any) => c?.cartonSerial === selectedCarton) || null;
   }, [selectedCarton, cartonDetails]);
   const isSelectedCartonVerified = Boolean((selectedCartonObj as any)?.isStickerVerified);
+
+  useEffect(() => {
+    if (!searchResult) {
+      lastEligibilityToastRef.current = "";
+      if (setIsPassNGButtonShow) setIsPassNGButtonShow(false);
+      return;
+    }
+
+    if (isDeviceHistoryLoading) {
+      if (setIsPassNGButtonShow) setIsPassNGButtonShow(false);
+      return;
+    }
+
+    if (!stageEligibility?.isEligible) {
+      if (setIsPassNGButtonShow) setIsPassNGButtonShow(false);
+      const toastKey = `${searchResult}:${stageEligibility?.message || ""}`;
+      if (lastEligibilityToastRef.current !== toastKey) {
+        toast.error(
+          stageEligibility?.message || "Previous stage must be passed before testing this device.",
+        );
+        lastEligibilityToastRef.current = toastKey;
+      }
+      return;
+    }
+
+    lastEligibilityToastRef.current = "";
+    const hasPrinter = processAssignUserStage?.subSteps?.some(
+      (s: any) => s.isPrinterEnable && !s?.disabled,
+    );
+    if (setIsPassNGButtonShow) {
+      setIsPassNGButtonShow(!hasPrinter);
+    }
+  }, [searchResult, isDeviceHistoryLoading, stageEligibility, processAssignUserStage, setIsPassNGButtonShow]);
 
   const cartonLabelData = React.useMemo(() => {
     if (!selectedCarton) return null;
@@ -638,6 +686,7 @@ export default function DeviceTestComponent({
 
   useEffect(() => {
     if (!searchResult) return;
+    if (isDeviceHistoryLoading || !stageEligibility?.isEligible) return;
 
     const stageData = Array.isArray(processAssignUserStage)
       ? processAssignUserStage[0]
@@ -684,7 +733,7 @@ export default function DeviceTestComponent({
       setNgDescription("");
       setShowNGModal(true);
     }
-  }, [attemptCounts, searchResult, showNGModal, ngReason, processAssignUserStage, assignUserStage, assignedTaskDetails]);
+  }, [attemptCounts, searchResult, showNGModal, ngReason, processAssignUserStage, assignUserStage, assignedTaskDetails, isDeviceHistoryLoading, stageEligibility]);
 
   const handleJigIdentification = async (capturedFields: any) => {
     setIsJigSearching(true);
@@ -707,16 +756,7 @@ export default function DeviceTestComponent({
         if (setIsStickerPrinted) setIsStickerPrinted(false);
         if (setIsVerifiedSticker) setIsVerifiedSticker(false);
         if (setIsDevicePassed) setIsDevicePassed(false);
-
-        const stageData = Array.isArray(processAssignUserStage)
-          ? processAssignUserStage[0]
-          : processAssignUserStage;
-        const hasPrinter = stageData?.subSteps?.some(
-          (s: any) => s.isPrinterEnable && !s?.disabled,
-        );
-        if (setIsPassNGButtonShow) {
-          setIsPassNGButtonShow(!hasPrinter);
-        }
+        if (setIsPassNGButtonShow) setIsPassNGButtonShow(false);
 
         toast.success(`Device Identified: ${serial}`);
       }
@@ -1748,7 +1788,7 @@ export default function DeviceTestComponent({
     if (!raw) return "N/A";
     const parsed = new Date(raw);
     if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toLocaleTimeString([], {
+      return parsed.toLocaleTimeString([], { hour12: true,
         hour12: false,
         hour: "2-digit",
         minute: "2-digit",
@@ -2639,10 +2679,27 @@ export default function DeviceTestComponent({
                               </div>
                             </div>
 
+                            {!stageEligibility?.isEligible && (
+                              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-amber-900">
+                                <div className="flex items-start gap-3">
+                                  <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                                  <div>
+                                    <p className="text-xs font-black uppercase tracking-widest text-amber-700">
+                                      Stage Gate Active
+                                    </p>
+                                    <p className="mt-1 text-sm font-semibold">
+                                      {stageEligibility?.message}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
                             <div className="flex flex-col sm:flex-row gap-4">
                               <button
                                 onClick={() => handleUpdateStatus("Pass")}
-                                className="flex-1 py-4 sm:py-5 rounded-2xl bg-emerald-600 text-white font-black text-sm uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-95 flex items-center justify-center gap-2"
+                                disabled={!stageEligibility?.isEligible || isDeviceHistoryLoading}
+                                className="flex-1 py-4 sm:py-5 rounded-2xl bg-emerald-600 text-white font-black text-sm uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                               >
                                 <CheckCircle className="h-5 w-5" /> Pass & Verify
                               </button>
@@ -2651,7 +2708,8 @@ export default function DeviceTestComponent({
                                   setNgDescription("");
                                   setShowNGModal(true);
                                 }}
-                                className="flex-1 py-4 sm:py-5 rounded-2xl bg-white border-2 border-slate-200 text-slate-800 font-black text-sm uppercase tracking-widest hover:border-rose-500 hover:text-rose-500 transition-all active:scale-95 flex items-center justify-center gap-2"
+                                disabled={!stageEligibility?.isEligible || isDeviceHistoryLoading}
+                                className="flex-1 py-4 sm:py-5 rounded-2xl bg-white border-2 border-slate-200 text-slate-800 font-black text-sm uppercase tracking-widest hover:border-rose-500 hover:text-rose-500 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
                               >
                                 <XCircle className="h-5 w-5" /> Reject NG
                               </button>
@@ -2958,10 +3016,26 @@ export default function DeviceTestComponent({
                 </Modal>
               )}
               <div className="my-3 w-full">
+                {searchResult && !stageEligibility?.isEligible && (
+                  <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-amber-900">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-widest text-amber-700">
+                          Previous Stage Required
+                        </p>
+                        <p className="mt-1 text-sm font-semibold">
+                          {stageEligibility?.message}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {/* CASE 3: Unified Sequential Flow (Jig, Manual, Printing, Packaging) */}
                 {testSteps.length > 0 &&
                   searchResult &&
                   !isdevicePassed &&
+                  stageEligibility?.isEligible &&
                   !shouldHideJigInterface && (
                     <div className="py-6">
                       <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-2">
@@ -4384,7 +4458,7 @@ export default function DeviceTestComponent({
                                                   <span className="text-[12px] font-mono text-slate-500">
                                                   {new Date(
                                                     row?.createdAt,
-                                                  ).toLocaleTimeString([], {
+                                                  ).toLocaleTimeString([], { hour12: true,
                                                     hour: "2-digit",
                                                     minute: "2-digit",
                                                   })}
@@ -4550,7 +4624,7 @@ export default function DeviceTestComponent({
                   Devices
                 </h4>
                 <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
-                  {checkedDevice.length} Today
+                  {checkedDevice.length} {historyFilterDate ? "Today" : "Total"}
                 </span>
               </div>
               <div className="max-h-[60vh] overflow-y-auto">
