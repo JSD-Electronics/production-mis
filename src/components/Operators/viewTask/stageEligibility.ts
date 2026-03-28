@@ -31,14 +31,17 @@ export const resolvePreviousStageEligibility = ({
   currentStageName,
   serialNo,
   deviceHistory,
+  deviceCurrentStage,
 }: {
   processStages?: any[];
   currentStageName?: string;
   serialNo?: string;
   deviceHistory?: any[];
+  deviceCurrentStage?: string;
 }): StageEligibilityResult => {
   const normalizedCurrentStage = String(currentStageName || "").trim();
   const normalizedSerial = normalize(serialNo);
+  const normalizedDeviceCurrentStage = String(deviceCurrentStage || "").trim();
   const stages = Array.isArray(processStages) ? processStages : [];
   const currentStageIndex = stages.findIndex(
     (stage: any) =>
@@ -61,6 +64,22 @@ export const resolvePreviousStageEligibility = ({
       currentStageName: normalizedCurrentStage,
       previousStageName: "",
       isFirstStage: true,
+      isEligible: true,
+      message: "",
+      previousStageRecord: null,
+    };
+  }
+
+  // If the device is already sitting in the current stage WIP queue,
+  // allow the operator to continue even when older history is incomplete.
+  if (
+    normalizedDeviceCurrentStage &&
+    normalize(normalizedDeviceCurrentStage) === normalize(normalizedCurrentStage)
+  ) {
+    return {
+      currentStageName: normalizedCurrentStage,
+      previousStageName: "",
+      isFirstStage: false,
       isEligible: true,
       message: "",
       previousStageRecord: null,

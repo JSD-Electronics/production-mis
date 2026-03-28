@@ -52,7 +52,7 @@ export default function ProcessCartonList({
               className="flex items-center gap-2 rounded-lg bg-[#0FADCF] px-4 py-2 text-sm font-semibold text-white shadow hover:bg-[#0c8ba6]"
               onClick={handleShiftToPDI}
             >
-              Shift To PDI
+              Handover to Production Manager
             </button>
           </div>
         )}

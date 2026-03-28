@@ -1663,6 +1663,22 @@ export const shiftToPDI = async (cartons) => {
     throw error;
   }
 };
+export const markPdiCartonNg = async (payload) => {
+  try {
+    const response = await api.post(`/cartons/pdi-ng`, payload);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+export const getCartonHistory = async (cartonSerial) => {
+  try {
+    const response = await api.get(`/cartons/${cartonSerial}/history`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
 export const shiftToNextCommonStage = async (processId, formData) => {
   try {
     let response = await api.post(`/cartons/${processId}/shift`, formData);
@@ -2121,6 +2137,19 @@ export const getMesProductionDashboard = async (params = {}) => {
   } catch (error) {
     console.error("Error fetching MES production dashboard:", error);
     throw error;
+  }
+};
+
+export const fetchOrderConfirmation = async (orderConfirmationNo) => {
+  try {
+    const response = await api.get(`/process/orderconfirmation/${orderConfirmationNo}`);
+    if (response.status === 200) {
+      return response.data;
+    } else {
+      console.error("Error:", response.data.message);
+    }
+  } catch (error) {
+    console.error("Fetch error:", error);
   }
 };
 

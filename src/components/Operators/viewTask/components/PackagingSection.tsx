@@ -192,7 +192,11 @@ export default function PackagingSection({
           <div className="mt-6 flex justify-center">
             <StickerGenerator
               stickerData={subStep.packagingData}
-              deviceData={deviceList.filter((d: any) => d.serialNo === searchResult)}
+              deviceData={deviceList.filter((d: any) => d.serialNo === searchResult).map((d: any) => ({
+                ...d,
+                productName: processData?.customerName || d.productName || "N/A",
+                modelName: processData?.modelName || d.modelName || "N/A"
+              }))}
             />
           </div>
           <div className="mt-6 flex justify-center gap-4">

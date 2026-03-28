@@ -31,6 +31,8 @@ import {
 interface OCData {
   _id: string;
   orderConfirmationNo: string;
+  customerName?: string;
+  modelName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -49,6 +51,8 @@ const ViewOrderNumber = () => {
 
   // Form State
   const [ocNumber, setOcNumber] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [modelName, setModelName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Fetch Logic
@@ -82,9 +86,13 @@ const ViewOrderNumber = () => {
     if (row) {
       setEditingId(row._id);
       setOcNumber(row.orderConfirmationNo);
+      setCustomerName(row.customerName || "");
+      setModelName(row.modelName || "");
     } else {
       setEditingId(null);
       setOcNumber("");
+      setCustomerName("");
+      setModelName("");
     }
     setIsModalOpen(true);
   };
@@ -99,6 +107,8 @@ const ViewOrderNumber = () => {
       const formData = new FormData();
       if (editingId) formData.append("id", editingId);
       formData.append("orderConfirmationNo", ocNumber);
+      formData.append("customerName", customerName);
+      formData.append("modelName", modelName);
 
       const result = await createOrderConfirmationNumbers(formData);
 
@@ -170,6 +180,24 @@ const ViewOrderNumber = () => {
             </span>
           </div>
         </div>
+      ),
+    },
+    {
+      name: "Customer Name",
+      sortable: true,
+      cell: (row) => (
+        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+          {row.customerName || "-"}
+        </span>
+      ),
+    },
+    {
+      name: "Model Name",
+      sortable: true,
+      cell: (row) => (
+        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+          {row.modelName || "-"}
+        </span>
       ),
     },
     {
@@ -356,7 +384,7 @@ const ViewOrderNumber = () => {
         title={editingId ? "Edit Order Confirmation" : "New Order Confirmation"}
         submitOption={true}
       >
-        <div className="pt-4">
+        <div className="pt-4 space-y-4">
           <div className="space-y-2">
             <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">OC Number</label>
             <div className="relative">
@@ -366,6 +394,34 @@ const ViewOrderNumber = () => {
                 value={ocNumber}
                 onChange={(e) => setOcNumber(e.target.value)}
                 placeholder="e.g. OC-2024-001"
+                className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Customer Name</label>
+            <div className="relative">
+              <Plus className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
+              <input
+                type="text"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="Enter Customer Name"
+                className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Model Name</label>
+            <div className="relative">
+              <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
+              <input
+                type="text"
+                value={modelName}
+                onChange={(e) => setModelName(e.target.value)}
+                placeholder="Enter Model Name"
                 className="w-full rounded-2xl border-2 border-gray-50 bg-gray-50/50 py-3 pl-10 pr-4 text-sm font-bold text-gray-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10 dark:border-strokedark dark:bg-form-input dark:text-white"
               />
             </div>
