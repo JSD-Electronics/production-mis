@@ -213,6 +213,18 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       ).trim(),
     [assignUserStage],
   );
+  const isCommonStageView = useMemo(
+    () =>
+      assignedTaskDetails?.stageType === "common" ||
+      (Array.isArray(processData?.commonStages)
+        ? processData.commonStages.some(
+            (stage: any) =>
+              String(stage?.stageName || stage?.name || "").trim().toLowerCase() ===
+              String(currentAssignedStageName || "").trim().toLowerCase(),
+          )
+        : false),
+    [assignedTaskDetails?.stageType, processData?.commonStages, currentAssignedStageName],
+  );
 
   const selectedDevice = useMemo(
     () =>
@@ -234,6 +246,10 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           selectedDevice?.serial_no ||
           searchResult,
         deviceHistory,
+        deviceCurrentStage:
+          selectedDevice?.currentStage ||
+          selectedDevice?.stageName ||
+          "",
       }),
     [processData?.stages, currentAssignedStageName, selectedDevice, searchResult, deviceHistory],
   );
@@ -1014,6 +1030,10 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         currentStageName: stageData?.name || stageData?.stageName || stageData?.stage || "",
         serialNo: targetSerial,
         deviceHistory,
+        deviceCurrentStage:
+          deviceInfo?.[0]?.currentStage ||
+          selectedDevice?.currentStage ||
+          "",
       });
 
       if (!eligibility.isEligible) {
@@ -1655,6 +1675,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       toast.success("Packaging verified successfully!");
       setIsVerifiedPackaging(true);
       setIsVerifyPackagingModal(false);
+      setSerialNumber("");
     } else {
       toast.error("Serial number does not match. Try again.");
     }
@@ -1703,6 +1724,10 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         const newCartonData = await createCarton(formData);
         const newCarton: any = {
           id: newCartonData.id,
+          cartonSerial:
+            newCartonData?.newCartonModel?.cartonSerial ||
+            newCartonData?.cartonSerial ||
+            "",
           devices: [device],
           maxCapacity: packageData.maxCapacity,
           cartonSize: {
@@ -1714,7 +1739,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           status: "partial",
         };
 
-        setCartons((prev: any[]) => [...prev, newCarton]);
+        setCartons([newCarton]);
         // Log cart creation + first device add as an operator event
         safeLogOperatorEvent(
           "PACKAGING_ADD_TO_CART",
@@ -1823,6 +1848,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         </button>
       </div>
       {/* Stats */}
+      {!isCommonStageView && (
       <div className="mt-4 grid grid-cols-1 gap-4 px-6 md:grid-cols-4">
         <div className="rounded-xl border-l-4 border-blue-500 bg-blue-50 p-5 shadow">
           <h3 className="text-lg font-bold text-blue-700">UPH Target</h3>
@@ -1891,6 +1917,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           </div>
         </div>
       </div>
+      )}
 
       {/* Reference Videos section */}
       {(() => {
@@ -2059,6 +2086,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             setSerialNumber={setSerialNumber}
             handleUpdateStatus={handleUpdateStatus}
             processData={processData}
+            planingAndScheduling={getPlaningAndScheduling}
             setCartons={setCartons}
             cartons={cartons}
             setIsCartonBarCodePrinted={setIsCartonBarCodePrinted}

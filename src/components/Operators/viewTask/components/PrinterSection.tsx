@@ -2,6 +2,7 @@
 import StickerGenerator from "../../viewTask-old/StickerGenerator";
 
 interface PrinterSectionProps {
+  processData?: any;
   subStep: any;
   deviceList: any[];
   searchResult: any;
@@ -15,6 +16,7 @@ interface PrinterSectionProps {
 }
 
 export default function PrinterSection({
+  processData,
   subStep,
   deviceList,
   searchResult,
@@ -51,7 +53,11 @@ export default function PrinterSection({
                 stickerData={field}
                 deviceData={deviceList.filter(
                   (d: any) => d.serialNo === searchResult
-                )}
+                ).map((d: any) => ({
+                  ...d,
+                  productName: processData?.customerName || d.productName || "N/A",
+                  modelName: processData?.modelName || d.modelName || "N/A"
+                }))}
               />
             </div>
           ))
@@ -61,7 +67,11 @@ export default function PrinterSection({
               stickerData={subStep.stickerData}
               deviceData={deviceList.filter(
                 (d: any) => d.serialNo === searchResult
-              )}
+              ).map((d: any) => ({
+                ...d,
+                productName: processData?.customerName || d.productName || "N/A",
+                modelName: processData?.modelName || d.modelName || "N/A"
+              }))}
             />
           </div>
         )}

@@ -14,14 +14,16 @@ import {
   getPDICartonByProcessId,
   getCartonsIntoStore,
   keepCartonInStore,
+  saveCartonWeight,
+  markPdiCartonNg,
   updateStageBySerialNo,
   searchByJigFields,
-  closeLooseCarton,
   getDeviceTestRecordsByProcessId,
   updateMarkAsComplete,
   createProcessLogs,
   registerDeviceAttempt,
   verifyCartonSticker,
+  fetchOrderConfirmation,
 } from "@/lib/api";
 import {
   Zap,
@@ -39,6 +41,7 @@ import {
   PlusCircle,
   Barcode,
   Package,
+  Scale,
   Weight,
   Layers,
   ClipboardCheck,
@@ -120,6 +123,7 @@ interface DeviceTestComponentProps {
   setSerialNumber: any;
   handleUpdateStatus: any;
   processData: any;
+  planingAndScheduling?: any;
   setCartons: (val: any) => void;
   cartons: any;
   isVerifiedSticker: any;
@@ -198,6 +202,7 @@ export default function DeviceTestComponent({
   setSerialNumber,
   handleUpdateStatus,
   processData,
+  planingAndScheduling,
   setCartons,
   cartons,
   setIsCartonBarCodePrinted,
@@ -229,14 +234,23 @@ export default function DeviceTestComponent({
   stageEligibility,
   isDeviceHistoryLoading,
 }: DeviceTestComponentProps) {
-  const isCommon = assignedTaskDetails?.stageType === "common";
   const currentStageName =
     (Array.isArray(assignUserStage) ? assignUserStage?.[0]?.name : null) ||
     assignUserStage?.stage ||
     assignUserStage?.name ||
     "";
+  const isCommon =
+    assignedTaskDetails?.stageType === "common" ||
+    (Array.isArray(processData?.commonStages)
+      ? processData.commonStages.some(
+          (stage: any) =>
+            String(stage?.stageName || stage?.name || "").trim().toLowerCase() ===
+            String(currentStageName || "").trim().toLowerCase(),
+        )
+      : false);
   const isPDIStage = currentStageName === "PDI";
   const isFGToStoreStage = currentStageName === "FG to Store";
+  const isPDIWeightVerificationStage = isPDIStage;
 
   const cartonStickerTemplate = React.useMemo(() => {
     const fromProcess = processAssignUserStage?.subSteps?.find(
@@ -263,7 +277,18 @@ export default function DeviceTestComponent({
     const candidate = fromProcess || fromAssign || fromAnyStage || null;
     return Array.isArray(candidate?.fields) ? candidate : null;
   }, [processAssignUserStage, assignUserStage, processData?.stages]);
-
+  const [orderConfirmationData, setOrderConfirmationData] = useState<any>(null);
+  const fetchOrderConfirmationData = async () => {
+    console.log("processData?.orderConfirmationN ==>", processData.orderConfirmationNo);
+    const data = await fetchOrderConfirmation(processData?.orderConfirmationNo);
+    console.log("Order Confirmation Data:", data);
+    if (data) {
+      setOrderConfirmationData(data);
+    }
+  };
+  useEffect(() => {
+    fetchOrderConfirmationData();
+  }, [processData?.orderConfirmationNo]);
   const getDeviceModelText = (device: any) =>
     device?.modelName || device?.model || device?.productModel || "N/A";
 
@@ -303,12 +328,6 @@ export default function DeviceTestComponent({
       setMultiScanValues([]);
     }
   }, [expectedScanTypes.length]);
-  useEffect(() => {
-    if (processData?._id) {
-      fetchExistingCartonsByProcessID();
-      fetchProcessCartons();
-    }
-  }, [processData?._id]);
 
   // Keep next-qrcode for other parts of the page, but carton sticker uses qrcode.react (SVG)
   // for stable DOM printing without canvas cloning issues.
@@ -320,7 +339,7 @@ export default function DeviceTestComponent({
   const [todaySummary, setTodaySummary] = useState<any>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSopOpen, setIsSopOpen] = useState(true);
-  
+
   const [attemptCounts, setAttemptCounts] = useState<Record<string, number>>({});
 
   const formatHistoryTime = (row: any) => {
@@ -430,8 +449,111 @@ export default function DeviceTestComponent({
   const [cartonDevices, setCartonDevices] = useState<any[]>([]);
   const [loadingCartonDevices, setLoadingCartonDevices] = useState(false);
   const [isCartonsLoading, setIsCartonsLoading] = useState(false);
+  const processCartonsCacheRef = React.useRef<Map<string, any>>(new Map());
+  const processCartonsPromiseRef = React.useRef<Map<string, Promise<any>>>(
+    new Map(),
+  );
+  const existingCartonsCacheRef = React.useRef<Map<string, any[]>>(new Map());
+  const [pdiCartonWeight, setPdiCartonWeight] = useState<string>("");
+  const [pdiWeightVerifiedByCarton, setPdiWeightVerifiedByCarton] = useState<Record<string, boolean>>({});
+  const [isReverifyingWeightByCarton, setIsReverifyingWeightByCarton] = useState<Record<string, boolean>>({});
+  const [isVerifyingPdiWeight, setIsVerifyingPdiWeight] = useState(false);
+  const [isPdiCartonNgModalOpen, setIsPdiCartonNgModalOpen] = useState(false);
+  const [pdiCartonNgReason, setPdiCartonNgReason] = useState("WEIGHT_MISMATCH");
+  const [pdiCartonNgNotes, setPdiCartonNgNotes] = useState("");
+  const [isSubmittingPdiCartonNg, setIsSubmittingPdiCartonNg] = useState(false);
   const [showNGModal, setShowNGModal] = useState(false);
   const lastEligibilityToastRef = React.useRef<string>("");
+
+  const PDI_WEIGHT_PRECISION_SCALE = 1000;
+  const PDI_CARTON_NG_REASONS = [
+    { value: "WEIGHT_MISMATCH", label: "Weight Verification Mismatched" },
+    { value: "CARTON_DAMAGED", label: "Carton Damaged" },
+  ] as const;
+  const normalizePdiWeightValue = (weightValue?: string | number | null) => {
+    if (weightValue === undefined || weightValue === null) return null;
+    const sanitizedWeight = String(weightValue)
+      .trim()
+      .replace(",", ".")
+      .replace(/[^0-9.]/g, "");
+    if (!sanitizedWeight) return null;
+    const parsedWeight = Number.parseFloat(sanitizedWeight);
+    if (Number.isNaN(parsedWeight) || parsedWeight <= 0) return null;
+    return {
+      raw: sanitizedWeight,
+      numeric: parsedWeight,
+      scaled: Math.round(parsedWeight * PDI_WEIGHT_PRECISION_SCALE),
+      display: sanitizedWeight,
+    };
+  };
+
+  const maskCartonSerialForDisplay = React.useCallback((value?: string | null) => {
+    const serial = String(value || "").trim();
+    if (!serial) return "N/A";
+    const prefixMatch = serial.match(/^([A-Za-z-]+)/);
+    const prefix = prefixMatch?.[1] || "";
+    const remainder = serial.slice(prefix.length);
+    if (remainder.length <= 4) return serial;
+    const visibleStart = remainder.slice(0, 4);
+    const visibleEnd = remainder.slice(-2);
+    const hidden = "*".repeat(Math.max(remainder.length - 6, 3));
+    return `${prefix}${visibleStart}${hidden}${visibleEnd}`;
+  }, []);
+
+  const getConfiguredPdiWeight = React.useCallback(() => {
+    return normalizePdiWeightValue(cartonStickerTemplate?.cartonWeight);
+  }, [cartonStickerTemplate?.cartonWeight]);
+
+  const getConfiguredPdiCapacity = React.useCallback(() => {
+    const parsed = Number(
+      cartonStickerTemplate?.maxCapacity ?? cartonStickerTemplate?.cartonCapacity ?? 0,
+    );
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }, [cartonStickerTemplate?.cartonCapacity, cartonStickerTemplate?.maxCapacity]);
+
+  const isPdiCartonUsingConfiguredWeight = React.useCallback(
+    (carton: any) => {
+      if (!carton) return true;
+      const status = String(carton?.status || "").toLowerCase();
+      const looseCartonAction = String(carton?.looseCartonAction || "").toLowerCase();
+      const configuredCapacity = getConfiguredPdiCapacity();
+      const cartonCapacity = Number(
+        carton?.packagingData?.maxCapacity ??
+          carton?.maxCapacity ??
+          carton?.devices?.length ??
+          0,
+      );
+      const looksLikePartialDerivedByCapacity =
+        configuredCapacity > 0 &&
+        Number.isFinite(cartonCapacity) &&
+        cartonCapacity > 0 &&
+        cartonCapacity < configuredCapacity;
+
+      return !(
+        status === "partial" ||
+        carton?.isLooseCarton ||
+        looseCartonAction === "assign-new" ||
+        !!carton?.sourceCartonSerial ||
+        Number(carton?.reassignedQuantity || 0) > 0 ||
+        looksLikePartialDerivedByCapacity
+      );
+    },
+    [getConfiguredPdiCapacity],
+  );
+
+  const isPdiWeightMatchedForCarton = React.useCallback(
+    (carton: any, weightValue?: string | number | null) => {
+      const normalizedWeight = normalizePdiWeightValue(weightValue);
+      if (!normalizedWeight) return false;
+      const expectedWeight = getConfiguredPdiWeight();
+      if (!expectedWeight?.scaled) return true;
+      if (isPdiCartonUsingConfiguredWeight(carton)) {
+        return normalizedWeight.scaled === expectedWeight.scaled;
+      }
+      return normalizedWeight.scaled <= expectedWeight.scaled;
+    },
+    [getConfiguredPdiWeight, isPdiCartonUsingConfiguredWeight],
+  );
 
   const selectedCartonObj = React.useMemo(() => {
     if (!selectedCarton) return null;
@@ -439,6 +561,79 @@ export default function DeviceTestComponent({
     return list.find((c: any) => c?.cartonSerial === selectedCarton) || null;
   }, [selectedCarton, cartonDetails]);
   const isSelectedCartonVerified = Boolean((selectedCartonObj as any)?.isStickerVerified);
+  const persistedSelectedCartonWeightVerified = Boolean(
+    (selectedCartonObj as any)?.isWeightVerified ||
+      (selectedCartonObj as any)?.isStickerPrinted ||
+      (selectedCartonObj as any)?.isStickerVerified,
+  );
+  const isSelectedCartonReverifying = Boolean(
+    selectedCarton ? isReverifyingWeightByCarton[selectedCarton] : false,
+  );
+  const selectedCartonWeightVerificationState =
+    selectedCarton != null ? pdiWeightVerifiedByCarton[selectedCarton] : undefined;
+  const isSelectedCartonWeightVerified = Boolean(
+    !isSelectedCartonReverifying &&
+      (selectedCartonWeightVerificationState ?? persistedSelectedCartonWeightVerified) &&
+      isPdiWeightMatchedForCarton(
+        selectedCartonObj,
+        pdiCartonWeight || selectedCartonObj?.weightCarton,
+      ),
+  );
+
+  useEffect(() => {
+    if (!selectedCarton) {
+      setPdiCartonWeight("");
+      return;
+    }
+    const preset = String(selectedCartonObj?.weightCarton ?? "").trim();
+    setPdiCartonWeight(preset);
+  }, [selectedCarton, selectedCartonObj?.weightCarton]);
+
+  useEffect(() => {
+    if (!Array.isArray(cartonDetails) || cartonDetails.length === 0) return;
+    setPdiWeightVerifiedByCarton((prev) => {
+      const next = { ...prev };
+      cartonDetails.forEach((carton: any) => {
+        if (!(carton?.cartonSerial in next)) {
+          next[carton.cartonSerial] = Boolean(
+            carton?.isWeightVerified || carton?.isStickerPrinted || carton?.isStickerVerified,
+          );
+        }
+      });
+      return next;
+    });
+  }, [cartonDetails]);
+
+  const handleStartPdiWeightReverify = React.useCallback(() => {
+    if (!selectedCarton) return;
+    const preset = String(selectedCartonObj?.weightCarton ?? "").trim();
+    setPdiCartonWeight(preset);
+    setIsReverifyingWeightByCarton((prev) => ({
+      ...prev,
+      [selectedCarton]: true,
+    }));
+    setPdiWeightVerifiedByCarton((prev) => ({
+      ...prev,
+      [selectedCarton]: false,
+    }));
+  }, [selectedCarton, selectedCartonObj?.weightCarton]);
+
+  const handleCancelPdiWeightReverify = React.useCallback(() => {
+    if (!selectedCarton) return;
+    const preset = String(selectedCartonObj?.weightCarton ?? "").trim();
+    setPdiCartonWeight(preset);
+    setIsReverifyingWeightByCarton((prev) => {
+      const next = { ...prev };
+      delete next[selectedCarton];
+      return next;
+    });
+    setPdiWeightVerifiedByCarton((prev) => {
+      const next = { ...prev };
+      delete next[selectedCarton];
+      return next;
+    });
+  }, [selectedCarton, selectedCartonObj?.weightCarton]);
+
 
   useEffect(() => {
     if (!searchResult) {
@@ -485,15 +680,13 @@ export default function DeviceTestComponent({
     const d = size?.depth ?? p?.cartonDepth;
     const dimensionsCm =
       w != null && h != null && d != null ? `${w}*${h}*${d}CM` : "N/A";
-
+    console.log("processData -->", processData)
     const processName =
-      processData?.processName ||
-      processData?.name ||
-      processData?.processCode ||
+      processData?.customerName ||
       "N/A";
 
     const modelName =
-      product?.selectedProduct?.name || product?.name || product?.modelName || "N/A";
+      processData?.modelName || "N/A";
 
     return {
       cartonSerial: selectedCarton,
@@ -506,8 +699,10 @@ export default function DeviceTestComponent({
       dimensionsCm,
       weightCarton: carton?.weightCarton ?? p?.cartonWeight ?? "",
       createdAt: carton?.createdAt || new Date().toISOString(),
+      customerName: orderConfirmationData?.customerName || processData?.customerName || "N/A",
+      model: orderConfirmationData?.modelName || "N/A",
     };
-  }, [selectedCarton, selectedCartonObj, cartonDevices, processData, product]);
+  }, [selectedCarton, selectedCartonObj, cartonDevices, processData, product, orderConfirmationData]);
 
   // Carton sticker is a fixed physical label: 80mm x 40mm.
   const cartonStickerMm = { w: 80, h: 40 };
@@ -524,7 +719,7 @@ export default function DeviceTestComponent({
     );
     const subSteps =
       (Array.isArray(processAssignUserStage?.subSteps) &&
-      processAssignUserStage.subSteps.length > 0
+        processAssignUserStage.subSteps.length > 0
         ? processAssignUserStage.subSteps
         : Array.isArray(productStage?.subSteps)
           ? productStage.subSteps
@@ -563,10 +758,13 @@ export default function DeviceTestComponent({
   const [isCartonDevicesModalOpen, setIsCartonDevicesModalOpen] =
     useState(false);
   const [isVerifyCartonModal, setIsVerifyCartonModal] = useState(false);
+  const [isCartonFullModalOpen, setIsCartonFullModalOpen] = useState(false);
   const [selectedLogs, setSelectedLogs] = useState<any[]>([]);
   const [selectedLogsTitle, setSelectedLogsTitle] =
     useState("Detailed Step Logs");
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
+  const [reopenCartonHistoryAfterLogs, setReopenCartonHistoryAfterLogs] =
+    useState(false);
   const [isCartonDeviceHistoryOpen, setIsCartonDeviceHistoryOpen] =
     useState(false);
   const [cartonDeviceHistorySerial, setCartonDeviceHistorySerial] =
@@ -576,9 +774,15 @@ export default function DeviceTestComponent({
   );
   const [isCartonDeviceHistoryLoading, setIsCartonDeviceHistoryLoading] =
     useState(false);
+  const [isPackagingDecisionPending, setIsPackagingDecisionPending] =
+    useState(false);
+  const [isPackagingPreApproved, setIsPackagingPreApproved] = useState(false);
   // Cache process-level records to avoid refetching the full dataset on each history click.
   const processTestRecordsRef = React.useRef<any[] | null>(null);
   const processTestRecordsPromiseRef = React.useRef<Promise<any[]> | null>(null);
+  const processTestRecordsBySerialRef = React.useRef<Map<string, any[]>>(
+    new Map(),
+  );
   const [isCartonPopupOpen, setIsCartonPopupOpen] = useState(false);
   const [manualFieldValues, setManualFieldValues] = useState<
     Record<string, string>
@@ -623,6 +827,47 @@ export default function DeviceTestComponent({
   const [generatedCommand, setGeneratedCommand] = useState<string>("");
   const [isJigSearching, setIsJigSearching] = useState(false);
   const [jigSearchError, setJigSearchError] = useState<string | null>(null);
+  const [verifyCartonScanValue, setVerifyCartonScanValue] = useState("");
+  const lastAcknowledgedFullCartonKeyRef = React.useRef<string>("");
+  const lastObservedPackagingCartonKeyRef = React.useRef<string>("");
+  const lastObservedPackagingCartonWasFullRef = React.useRef<boolean>(false);
+  const [pendingPackagingCarton, setPendingPackagingCarton] = useState<any | null>(null);
+  const pendingCartonFullSubmissionRef = React.useRef<{
+    status: string;
+    deviceDepartment: string;
+    subStepResults?: any;
+    ngDescription?: string;
+  } | null>(null);
+
+  const clearPendingPackagingCarton = React.useCallback(() => {
+    setPendingPackagingCarton(null);
+  }, []);
+
+  useEffect(() => {
+    setIsPackagingDecisionPending(false);
+    setIsPackagingPreApproved(false);
+  }, [searchResult, currentJigStepIndex]);
+
+  useEffect(() => {
+    processTestRecordsRef.current = null;
+    processTestRecordsPromiseRef.current = null;
+    processTestRecordsBySerialRef.current = new Map();
+  }, [processData?._id]);
+
+  useEffect(() => {
+    if (!processData?._id) return;
+    if (Array.isArray(processTestRecordsRef.current)) return;
+    if (processTestRecordsPromiseRef.current) return;
+
+    ensureProcessRecords().catch(() => {
+      // Keep the first foreground open attempt responsible for user-facing errors.
+    });
+  }, [processData?._id]);
+
+  const handlePackagingDecision = (status: "Pass" | "NG") => {
+    setIsPackagingDecisionPending(false);
+    handleStepDecision(status);
+  };
 
   const getPlanIdFromUrl = () => {
     if (typeof window === "undefined") return "";
@@ -649,14 +894,14 @@ export default function DeviceTestComponent({
 
     return String(
       processStage?.stageName ||
-        processStage?.name ||
-        processStage?.stage ||
-        assignedStage?.stageName ||
-        assignedStage?.name ||
-        assignedStage?.stage ||
-        assignedTaskDetails?.stageName ||
-        assignedTaskDetails?.name ||
-        "",
+      processStage?.name ||
+      processStage?.stage ||
+      assignedStage?.stageName ||
+      assignedStage?.name ||
+      assignedStage?.stage ||
+      assignedTaskDetails?.stageName ||
+      assignedTaskDetails?.name ||
+      "",
     ).trim();
   };
   const getAttemptKey = (serialOrDeviceId: string, stageName?: string) =>
@@ -788,9 +1033,74 @@ export default function DeviceTestComponent({
       await verifyCartonSticker(String(selectedCarton));
       toast.success("Carton verified successfully!");
       setIsVerifyCartonModal(false);
+      setVerifyCartonScanValue("");
       fetchProcessCartons();
     } catch (e: any) {
       toast.error(e?.response?.data?.message || e?.message || "Verification failed");
+    }
+  };
+
+  const handleVerifySelectedCartonWeight = async () => {
+    if (!selectedCarton) {
+      toast.error("No carton selected.");
+      return;
+    }
+
+    const normalizedWeight = normalizePdiWeightValue(pdiCartonWeight);
+    if (!normalizedWeight) {
+      toast.error("Please enter a valid carton weight.");
+      return;
+    }
+
+    if (!isPdiWeightMatchedForCarton(selectedCartonObj, normalizedWeight.numeric)) {
+      if (isPDIWeightVerificationStage) {
+        openPdiWeightMismatchNgModal();
+        return;
+      }
+      toast.error(
+        isPdiCartonUsingConfiguredWeight(selectedCartonObj)
+          ? "Weight mismatch! Please enter the correct carton weight."
+          : "Partial carton weight cannot exceed the configured carton weight.",
+      );
+      return;
+    }
+
+    try {
+      setIsVerifyingPdiWeight(true);
+      await saveCartonWeight({
+        cartonSerial: selectedCarton,
+        weight: normalizedWeight.numeric,
+      });
+      setPdiWeightVerifiedByCarton((prev) => ({
+        ...prev,
+        [selectedCarton]: true,
+      }));
+      setIsReverifyingWeightByCarton((prev) => {
+        const next = { ...prev };
+        delete next[selectedCarton];
+        return next;
+      });
+      toast.success("Carton weight verified successfully!");
+      fetchProcessCartons();
+    } catch (e: any) {
+      const errorMessage =
+        e?.response?.data?.message || e?.message || "Failed to verify carton weight.";
+      const errorStatus = Number(e?.response?.status || e?.status || 0);
+      const normalizedErrorMessage = String(errorMessage || "").toLowerCase();
+      const isWeightMismatchError =
+        errorStatus === 400 &&
+        (normalizedErrorMessage.includes("weight mismatch") ||
+          normalizedErrorMessage.includes("correct carton weight") ||
+          normalizedErrorMessage.includes("cannot exceed the configured carton weight"));
+
+      if (isPDIWeightVerificationStage && isWeightMismatchError) {
+        openPdiWeightMismatchNgModal();
+        return;
+      }
+
+      toast.error(e?.response?.data?.message || e?.message || "Failed to verify carton weight.");
+    } finally {
+      setIsVerifyingPdiWeight(false);
     }
   };
 
@@ -808,6 +1118,259 @@ export default function DeviceTestComponent({
       ) || []
     );
   }, [subStepsString]);
+
+  const packagingSubStep = React.useMemo(
+    () => testSteps.find((step: any) => step?.isPackagingStatus),
+    [testSteps],
+  );
+
+  const normalizeCartonList = React.useCallback((source: any, options?: { excludeMoved?: boolean }) => {
+    const list = Array.isArray(source) ? source : [];
+
+    return [...list]
+      .filter((carton: any) => {
+        if (!carton) return false;
+        if (!options?.excludeMoved) return true;
+
+        const status = String(carton?.status || "").toLowerCase();
+        return (
+          !status.includes("store") &&
+          !status.includes("fg") &&
+          !status.includes("shipped")
+        );
+      })
+      .sort((a: any, b: any) => {
+        const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+
+        if (aTime !== bTime) return bTime - aTime;
+
+        const aSerial = String(a?.cartonSerial || a?.id || "");
+        const bSerial = String(b?.cartonSerial || b?.id || "");
+        return bSerial.localeCompare(aSerial);
+      });
+  }, []);
+
+  const processPackagingCartons = React.useMemo(() => {
+    const processCartonList = Array.isArray(processCartons)
+      ? processCartons
+      : Array.isArray(processCartons?.cartonDetails)
+        ? processCartons.cartonDetails
+        : [];
+
+    return normalizeCartonList(processCartonList, { excludeMoved: true });
+  }, [normalizeCartonList, processCartons]);
+
+  const localPackagingCartons = React.useMemo(
+    () => normalizeCartonList(cartons, { excludeMoved: true }),
+    [cartons, normalizeCartonList],
+  );
+
+  const persistedOpenPackagingCarton = React.useMemo(() => {
+    if (localPackagingCartons.length === 0) return null;
+    return localPackagingCartons[0] || null;
+  }, [localPackagingCartons]);
+
+  const buildEffectivePackagingCarton = React.useCallback(
+    (baseCarton: any) => {
+      if (!pendingPackagingCarton) return baseCarton;
+
+      const pendingSerial = String(pendingPackagingCarton?.deviceSerial || "").trim();
+      const packagingData = pendingPackagingCarton?.packagingData || {};
+
+      if (!pendingSerial) return baseCarton;
+
+      const baseDevices = Array.isArray(baseCarton?.devices) ? [...baseCarton.devices] : [];
+      const hasPendingDevice = baseDevices.some(
+        (device: any) =>
+          String(device?.serialNo || device?.serial_no || device || "").trim() === pendingSerial,
+      );
+      const persistedCount = Number(baseCarton?.deviceCount ?? baseDevices.length ?? 0);
+      const pendingDevices = hasPendingDevice ? [] : [pendingSerial];
+      const effectiveCount = persistedCount + pendingDevices.length;
+
+      if (baseCarton) {
+        return {
+          ...baseCarton,
+          devices: baseDevices,
+          deviceCount: persistedCount,
+          persistedDevices: baseDevices,
+          persistedDeviceCount: persistedCount,
+          pendingDevices,
+          effectiveDeviceCount: effectiveCount,
+        };
+      }
+
+      return {
+        cartonSerial: pendingPackagingCarton?.existingCartonSerial || pendingPackagingCarton?.draftCartonKey || "PENDING-CARTON",
+        id: pendingPackagingCarton?.existingCartonId || pendingPackagingCarton?.draftCartonKey || "pending-carton",
+        devices: [],
+        deviceCount: 0,
+        persistedDevices: [],
+        persistedDeviceCount: 0,
+        maxCapacity: Number(
+          packagingData?.maxCapacity ?? packagingSubStep?.packagingData?.maxCapacity ?? 0,
+        ),
+        cartonSize: {
+          width: packagingData?.cartonWidth,
+          height: packagingData?.cartonHeight,
+          depth: packagingData?.cartonDepth,
+        },
+        weightCarton: packagingData?.cartonWeight,
+        status: "partial",
+        isPendingDraft: true,
+        pendingDevices: [pendingSerial],
+        effectiveDeviceCount: 1,
+      };
+    },
+    [packagingSubStep?.packagingData?.maxCapacity, pendingPackagingCarton],
+  );
+
+  const activePackagingCarton = React.useMemo(() => {
+    const baseCarton =
+      processPackagingCartons[0] || localPackagingCartons[0] || null;
+    return buildEffectivePackagingCarton(baseCarton);
+  }, [buildEffectivePackagingCarton, localPackagingCartons, processPackagingCartons]);
+
+  const currentOpenPackagingCarton = React.useMemo(() => {
+    return buildEffectivePackagingCarton(persistedOpenPackagingCarton);
+  }, [buildEffectivePackagingCarton, persistedOpenPackagingCarton]);
+
+  const activePackagingCartonDeviceCount = React.useMemo(() => {
+    const rawCount =
+      activePackagingCarton?.persistedDeviceCount ??
+      activePackagingCarton?.deviceCount ??
+      activePackagingCarton?.persistedDevices?.length ??
+      activePackagingCarton?.devices?.length ??
+      0;
+    const parsed = Number(rawCount);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+  }, [
+    activePackagingCarton?.persistedDeviceCount,
+    activePackagingCarton?.deviceCount,
+    activePackagingCarton?.persistedDevices,
+    activePackagingCarton?.devices,
+  ]);
+
+  const currentOpenPackagingCartonPersistedCount = React.useMemo(() => {
+    const rawCount =
+      currentOpenPackagingCarton?.persistedDeviceCount ??
+      currentOpenPackagingCarton?.deviceCount ??
+      currentOpenPackagingCarton?.persistedDevices?.length ??
+      currentOpenPackagingCarton?.devices?.length ??
+      0;
+    const parsed = Number(rawCount);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+  }, [
+    currentOpenPackagingCarton?.persistedDeviceCount,
+    currentOpenPackagingCarton?.deviceCount,
+    currentOpenPackagingCarton?.persistedDevices,
+    currentOpenPackagingCarton?.devices,
+  ]);
+
+  const activePackagingCartonCapacity = React.useMemo(() => {
+    const rawCapacity =
+      activePackagingCarton?.maxCapacity ??
+      packagingSubStep?.packagingData?.maxCapacity ??
+      0;
+    const parsed = Number(rawCapacity);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }, [activePackagingCarton?.maxCapacity, packagingSubStep?.packagingData?.maxCapacity]);
+
+  const isActivePackagingCartonFull = React.useMemo(() => {
+    if (!activePackagingCarton) return false;
+    const status = String(activePackagingCarton?.status || "").toLowerCase();
+    return (
+      (activePackagingCartonCapacity > 0 &&
+        activePackagingCartonDeviceCount >= activePackagingCartonCapacity) ||
+      activePackagingCarton?.isLooseCarton ||
+      status === "full"
+    );
+  }, [activePackagingCarton, activePackagingCartonCapacity, activePackagingCartonDeviceCount]);
+
+  const isPackagingFlowActive = Boolean(packagingSubStep);
+
+  const getActivePackagingCartonKey = React.useCallback(
+    () =>
+      `${String(
+        activePackagingCarton?.cartonSerial ||
+        activePackagingCarton?.id ||
+        "",
+      ).trim()}::${activePackagingCartonCapacity}::${activePackagingCartonDeviceCount}`,
+    [
+      activePackagingCarton?.cartonSerial,
+      activePackagingCarton?.id,
+      activePackagingCartonCapacity,
+      activePackagingCartonDeviceCount,
+    ],
+  );
+
+  useEffect(() => {
+    if (!isPackagingFlowActive || !activePackagingCarton) {
+      lastObservedPackagingCartonKeyRef.current = "";
+      lastObservedPackagingCartonWasFullRef.current = false;
+      return;
+    }
+
+    const cartonKey = getActivePackagingCartonKey();
+    if (!cartonKey || cartonKey.startsWith("::")) return;
+
+    const previousKey = lastObservedPackagingCartonKeyRef.current;
+    const previousWasFull = lastObservedPackagingCartonWasFullRef.current;
+    const isNewCarton = previousKey !== cartonKey;
+    const shouldOpen =
+      isActivePackagingCartonFull &&
+      lastAcknowledgedFullCartonKeyRef.current !== cartonKey &&
+      (isNewCarton || !previousWasFull);
+
+    lastObservedPackagingCartonKeyRef.current = cartonKey;
+    lastObservedPackagingCartonWasFullRef.current = isActivePackagingCartonFull;
+
+    if (shouldOpen) {
+      setIsCartonFullModalOpen(true);
+    }
+  }, [
+    activePackagingCarton,
+    getActivePackagingCartonKey,
+    isActivePackagingCartonFull,
+    isPackagingFlowActive,
+  ]);
+
+  useEffect(() => {
+    if (isVerifiedPackaging) {
+      setIsPackagingDecisionPending(false);
+      handleStepDecision("Pass");
+    }
+  }, [isVerifiedPackaging]);
+
+  const acknowledgeCartonFull = (options?: { openCartonPopup?: boolean }) => {
+    const cartonKey = getActivePackagingCartonKey();
+    lastAcknowledgedFullCartonKeyRef.current = cartonKey;
+    setIsCartonFullModalOpen(false);
+    const pendingSubmission = pendingCartonFullSubmissionRef.current;
+    if (pendingSubmission) {
+      pendingCartonFullSubmissionRef.current = null;
+      setCartons([]);
+      setIsAddedToCart(false);
+      setIsVerifiedPackaging(false);
+      setIsPackagingPreApproved(false);
+      setTimeout(() => {
+        handleUpdateStatus(
+          pendingSubmission.status,
+          pendingSubmission.deviceDepartment,
+          pendingSubmission.subStepResults,
+          pendingSubmission.ngDescription,
+        );
+        if (options?.openCartonPopup) {
+          setIsCartonPopupOpen(true);
+        }
+      }, 0);
+      return;
+    }
+    if (options?.openCartonPopup) {
+      setIsCartonPopupOpen(true);
+    }
+  };
 
   const validateCustomField = (cf: any, valRaw: string) => {
     const fname = cf?.fieldName || cf?.jigName || "";
@@ -1062,7 +1625,9 @@ export default function DeviceTestComponent({
       );
 
       if (finalStatus === "Pass") {
-        handleUpdateStatus("Pass", "", { ...newResults, totalProcessTime });
+        const passPayload = { ...newResults, totalProcessTime };
+        pendingCartonFullSubmissionRef.current = null;
+        handleUpdateStatus("Pass", "", passPayload);
       } else {
         setNgDescription("");
         setShowNGModal(true);
@@ -1106,8 +1671,9 @@ export default function DeviceTestComponent({
       setNgDescription("");
       timerStartedRef.current = null;
       timerDecisionTriggeredRef.current = null;
+      clearPendingPackagingCarton();
     }
-  }, [searchResult, activeSessionSerial]);
+  }, [clearPendingPackagingCarton, searchResult, activeSessionSerial]);
 
   // Handle step-level resets (timer results when moving between steps)
   useEffect(() => {
@@ -1117,8 +1683,9 @@ export default function DeviceTestComponent({
       if (setIsVerifiedSticker) setIsVerifiedSticker(false);
       if (setIsAddedToCart) setIsAddedToCart(false);
       if (setIsVerifiedPackaging) setIsVerifiedPackaging(false);
+      clearPendingPackagingCarton();
     }
-  }, [currentJigStepIndex, activeSessionSerial]);
+  }, [clearPendingPackagingCarton, currentJigStepIndex, activeSessionSerial]);
 
   // Robust NG Timeout Timer
   useEffect(() => {
@@ -1194,30 +1761,6 @@ export default function DeviceTestComponent({
     }
   };
 
-  const handleCloseLooseCarton = async (cartonSerial: string) => {
-    try {
-      const confirmed = window.confirm("Are you sure you want to close this partial carton?");
-      if (!confirmed) return;
-      await closeLooseCarton({
-        cartonSerial,
-        action: "existing",
-      });
-      toast.success("Loose carton closed successfully!");
-      setCartons((prev: any[]) => {
-        const copy = [...prev];
-        const last = copy[copy.length - 1];
-        if (last && last.cartonSerial === cartonSerial) {
-          last.status = "full";
-          last.isLooseCarton = true;
-        }
-        return copy;
-      });
-    } catch (e: any) {
-      toast.error(e.message || "Failed to close loose carton");
-      console.error(e);
-    }
-  };
-
   const handleCommonGenerateQRCode = async (carton: any) => {
     try {
       if (!carton) {
@@ -1264,9 +1807,58 @@ export default function DeviceTestComponent({
       console.error("Error generating QR Code:", error);
     }
   };
-  const fetchProcessCartons = async () => {
-    setIsCartonsLoading(true);
-    try {
+  const getProcessCartonsCacheKey = React.useCallback(() => {
+    return `${String(processData?._id || "")}::${String(assignUserStage?.stage || "")}`;
+  }, [assignUserStage?.stage, processData?._id]);
+
+  const applyProcessCartonsPayload = React.useCallback((payload: any) => {
+    if (!payload) return;
+    setCartonSerial(Array.isArray(payload.serials) ? payload.serials : []);
+    setCartonDetails(Array.isArray(payload.activeDetails) ? payload.activeDetails : []);
+    setProcessCartons(payload.rawResult ?? []);
+  }, [setProcessCartons]);
+
+  const normalizeProcessCartonsPayload = React.useCallback((result: any) => {
+    const details =
+      result?.cartonDetails || (Array.isArray(result) ? result : result ? [result] : []);
+    const activeDetails = normalizeCartonList(details, { excludeMoved: true });
+
+    return {
+      rawResult: result,
+      activeDetails,
+      serials: activeDetails.map((c: any) => c.cartonSerial),
+    };
+  }, [normalizeCartonList]);
+
+  const fetchProcessCartons = async (options?: { force?: boolean; background?: boolean }) => {
+    const force = options?.force === true;
+    const background = options?.background === true;
+    if (!processData?._id) return null;
+
+    const cacheKey = getProcessCartonsCacheKey();
+    const cached = processCartonsCacheRef.current.get(cacheKey);
+    if (cached && !force) {
+      applyProcessCartonsPayload(cached);
+      if (background) return cached;
+    }
+
+    const pending = processCartonsPromiseRef.current.get(cacheKey);
+    if (pending) {
+      if (!cached || !background) setIsCartonsLoading(true);
+      try {
+        const payload = await pending;
+        applyProcessCartonsPayload(payload);
+        return payload;
+      } finally {
+        setIsCartonsLoading(false);
+      }
+    }
+
+    if (!cached || !background) {
+      setIsCartonsLoading(true);
+    }
+
+    const promise = (async () => {
       let result;
       const currentStageName = assignUserStage?.stage || "";
 
@@ -1278,49 +1870,113 @@ export default function DeviceTestComponent({
         result = await fetchCartons(processData._id);
       }
 
-      if (result) {
-        const details =
-          result.cartonDetails || (Array.isArray(result) ? result : [result]);
+      const payload = normalizeProcessCartonsPayload(result);
+      processCartonsCacheRef.current.set(cacheKey, payload);
+      return payload;
+    })();
 
-        // Filter out cartons that are shifted to FG/Store
-        const activeDetails = details.filter((c: any) => {
-          const status = String(c.status || "").toLowerCase();
-          return (
-            !status.includes("store") &&
-            !status.includes("fg") &&
-            !status.includes("shipped")
-          );
-        });
-
-        const serials = activeDetails.map((c: any) => c.cartonSerial);
-
-        setCartonSerial(serials);
-        setCartonDetails(activeDetails);
-      }
-      setProcessCartons(result);
+    processCartonsPromiseRef.current.set(cacheKey, promise);
+    try {
+      const payload = await promise;
+      applyProcessCartonsPayload(payload);
+      return payload;
     } finally {
+      processCartonsPromiseRef.current.delete(cacheKey);
       setIsCartonsLoading(false);
     }
   };
+
+  const openPdiCartonNgModal = () => {
+    if (!selectedCarton) {
+      toast.error("No carton selected.");
+      return;
+    }
+    setPdiCartonNgReason(
+      String((selectedCartonObj as any)?.lastPdiNgReasonCode || "WEIGHT_MISMATCH"),
+    );
+    setPdiCartonNgNotes("");
+    setIsPdiCartonNgModalOpen(true);
+  };
+
+  const openPdiWeightMismatchNgModal = () => {
+    setPdiCartonNgReason("WEIGHT_MISMATCH");
+    setPdiCartonNgNotes("Weight verification mismatched during PDI re-verification.");
+    window.setTimeout(() => {
+      setIsPdiCartonNgModalOpen(true);
+    }, 0);
+  };
+
+  const closePdiCartonNgModal = () => {
+    if (isSubmittingPdiCartonNg) return;
+    setIsPdiCartonNgModalOpen(false);
+    setPdiCartonNgReason("WEIGHT_MISMATCH");
+    setPdiCartonNgNotes("");
+  };
+
+  const handleSubmitPdiCartonNg = async () => {
+    if (!selectedCarton) {
+      toast.error("No carton selected.");
+      return;
+    }
+
+    try {
+      setIsSubmittingPdiCartonNg(true);
+      const response = await markPdiCartonNg({
+        cartonSerial: selectedCarton,
+        reasonCode: pdiCartonNgReason,
+        notes: pdiCartonNgNotes,
+      });
+      toast.success(response?.message || "Carton returned to packaging successfully.");
+      setIsPdiCartonNgModalOpen(false);
+      setPdiCartonNgReason("WEIGHT_MISMATCH");
+      setPdiCartonNgNotes("");
+      setSelectedCarton(null);
+      setCartonDevices([]);
+      fetchProcessCartons({ force: true });
+    } catch (e: any) {
+      toast.error(
+        e?.response?.data?.message ||
+        e?.message ||
+        "Failed to mark carton NG.",
+      );
+    } finally {
+      setIsSubmittingPdiCartonNg(false);
+    }
+  };
+
   const fetchExistingCartonsByProcessID = async () => {
     try {
-      setCartons([]);
+      if (!processData?._id) return;
+      const cached = existingCartonsCacheRef.current.get(String(processData._id));
+      if (cached) {
+        setCartons(cached);
+      }
       const result = await fetchCartonByProcessID(processData._id);
       const cartons = Array.isArray(result)
         ? result
         : Array.isArray(result.data)
           ? result.data
           : [result];
-      const transformed = cartons.map((carton: any) => ({
+      const transformed = normalizeCartonList(cartons, { excludeMoved: true }).map((carton: any) => ({
         ...carton,
         devices: carton.devices?.map((d: any) => d.serialNo) || [],
       }));
 
+      existingCartonsCacheRef.current.set(String(processData._id), transformed);
       setCartons(transformed);
     } catch (error) {
       console.error("Error fetching cartons:", error);
     }
   };
+
+  useEffect(() => {
+    if (!processData?._id) return;
+
+    fetchExistingCartonsByProcessID();
+    fetchProcessCartons({
+      background: processCartonsCacheRef.current.has(getProcessCartonsCacheKey()),
+    });
+  }, [getProcessCartonsCacheKey, processData?._id]);
 
   const handleAddToCart = async (packagingData: any) => {
     if (!searchResult) {
@@ -1338,10 +1994,18 @@ export default function DeviceTestComponent({
     }
 
     try {
-      const response = await createCarton({
-        cartonSerial: `CARTON-${Date.now()}`,
-        processId: processData._id,
-        devices: [selectedDevice._id],
+      setPendingPackagingCarton({
+        deviceId: selectedDevice._id,
+        deviceSerial: selectedDevice.serialNo,
+        draftCartonKey: `CARTON-${Date.now()}`,
+        existingCartonSerial:
+          persistedOpenPackagingCarton && !persistedOpenPackagingCarton?.isPendingDraft
+            ? persistedOpenPackagingCarton.cartonSerial
+            : null,
+        existingCartonId:
+          persistedOpenPackagingCarton && !persistedOpenPackagingCarton?.isPendingDraft
+            ? persistedOpenPackagingCarton.id || persistedOpenPackagingCarton._id || null
+            : null,
         packagingData: {
           cartonWidth: packagingData.packagingData.cartonWidth,
           cartonHeight: packagingData.packagingData.cartonHeight,
@@ -1350,19 +2014,15 @@ export default function DeviceTestComponent({
           maxCapacity: packagingData.packagingData.maxCapacity,
         },
       });
-      if (response?.carton?.status === "partial") {
-        setIsCartonBarCodePrinted(false);
-      }
+      setIsCartonBarCodePrinted(false);
       setSerialNumber("");
       setIsAddedToCart(true);
-      fetchExistingCartonsByProcessID();
-      fetchProcessCartons();
     } catch (error) {
       console.error("Failed to create carton on backend:", error);
       alert(
         (error as any)?.message ||
           (error as any)?.response?.data?.message ||
-          "This device is already assigned to a carton.",
+        "This device is already assigned to a carton.",
       );
     }
   };
@@ -1440,6 +2100,67 @@ export default function DeviceTestComponent({
     return options;
   };
 
+  const persistPendingPackagingCarton = async () => {
+    if (!pendingPackagingCarton) return null;
+
+    const packagingData = pendingPackagingCarton?.packagingData || {};
+
+    return createCarton({
+      cartonSerial: pendingPackagingCarton?.draftCartonKey || `CARTON-${Date.now()}`,
+      processId: processData._id,
+      devices: [pendingPackagingCarton.deviceId],
+      packagingData: {
+        cartonWidth: packagingData.cartonWidth,
+        cartonHeight: packagingData.cartonHeight,
+        cartonDepth: packagingData.cartonDepth,
+        cartonWeight: packagingData.cartonWeight,
+        maxCapacity: packagingData.maxCapacity,
+      },
+    });
+  };
+
+  const handleVerifyPackagingSubmission = async () => {
+    const matchedDevice = deviceList.find(
+      (d: any) => d.serialNo?.toLowerCase() === String(serialNumber || "").toLowerCase(),
+    );
+
+    if (!matchedDevice || matchedDevice.serialNo !== searchResult) {
+      toast.error("Serial number does not match. Try again.");
+      return;
+    }
+
+    try {
+      if (pendingPackagingCarton) {
+        const response = await persistPendingPackagingCarton();
+        if (response?.carton?.status === "partial") {
+          setIsCartonBarCodePrinted(false);
+        }
+        clearPendingPackagingCarton();
+        fetchExistingCartonsByProcessID();
+        fetchProcessCartons();
+      }
+
+      toast.success("Packaging verified successfully!");
+      setIsVerifiedPackaging(true);
+      closeVerifyPackagingModal();
+      setSerialNumber("");
+    } catch (error: any) {
+      toast.error(
+        error?.message ||
+          error?.response?.data?.message ||
+          "Failed to save verified carton assignment.",
+      );
+    }
+  };
+
+  const handleClosePendingPackagingModal = () => {
+    clearPendingPackagingCarton();
+    if (setIsAddedToCart) setIsAddedToCart(false);
+    if (setIsVerifiedPackaging) setIsVerifiedPackaging(false);
+    setSerialNumber("");
+    closeVerifyPackagingModal();
+  };
+
   const handleNG = (_dept: string | null, description: string) => {
     const desc = String(description || "").trim();
     if (!desc) return;
@@ -1460,6 +2181,7 @@ export default function DeviceTestComponent({
     };
     setJigResults(finalResults);
     setJigDecision("NG");
+    clearPendingPackagingCarton();
     handleUpdateStatus("NG", selectAssignDeviceDepartment, finalResults, desc);
     setNgDescription("");
     setShowNGModal(false);
@@ -1486,12 +2208,16 @@ export default function DeviceTestComponent({
     // Reset the scanned device
     setSearchQuery("");
     setSearchResult(null);
+    setIsCartonFullModalOpen(false);
+    pendingCartonFullSubmissionRef.current = null;
+    setIsPackagingPreApproved(false);
     setIsPassNGButtonShow(false);
     if (setIsStickerPrinted) setIsStickerPrinted(false);
     if (setIsVerifiedSticker) setIsVerifiedSticker(false);
     if (setIsAddedToCart) setIsAddedToCart(false);
     if (setIsVerifiedPackaging) setIsVerifiedPackaging(false);
     if (setIsDevicePassed) setIsDevicePassed(false);
+    clearPendingPackagingCarton();
     // Reset all jig / test state
     setCurrentJigStepIndex(0);
     setJigResults({});
@@ -1554,6 +2280,46 @@ export default function DeviceTestComponent({
     }
   };
 
+  const buildCartonDeviceHistoryIndex = (records: any[] = []) => {
+    const historyBySerial = new Map<string, any[]>();
+
+    for (const record of records) {
+      const serial = String(record?.serialNo || "").trim();
+      if (!serial) continue;
+
+      const normalizedRow = {
+        _id: record?._id,
+        serialNo: record?.serialNo,
+        stageName: record?.stageName || record?.name || "N/A",
+        status: record?.status || "N/A",
+        assignedDeviceTo:
+          record?.assignedDeviceTo || record?.assignedDeviceToDepartment || "",
+        operator: record?.operatorName || record?.operator || record?.operatorId || "",
+        createdAt: record?.createdAt || record?.updatedAt,
+        logs: Array.isArray(record?.logs) ? record.logs : [],
+      };
+
+      const existingRows = historyBySerial.get(serial);
+      if (existingRows) {
+        existingRows.push(normalizedRow);
+      } else {
+        historyBySerial.set(serial, [normalizedRow]);
+      }
+    }
+
+    historyBySerial.forEach((rows, serial) => {
+      rows.sort((a: any, b: any) => {
+        const at = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bt = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bt - at;
+      });
+      historyBySerial.set(serial, rows);
+    });
+
+    processTestRecordsBySerialRef.current = historyBySerial;
+    return historyBySerial;
+  };
+
   const ensureProcessRecords = async () => {
     if (Array.isArray(processTestRecordsRef.current)) {
       return processTestRecordsRef.current;
@@ -1568,6 +2334,7 @@ export default function DeviceTestComponent({
         ? recordResult.deviceTestRecords
         : [];
       processTestRecordsRef.current = all;
+      buildCartonDeviceHistoryIndex(all);
       return all;
     })();
 
@@ -1582,44 +2349,33 @@ export default function DeviceTestComponent({
   const openCartonDeviceHistory = async (serialNo: string) => {
     if (!serialNo) return;
 
+    const targetSerial = String(serialNo).trim();
+    const cachedRows =
+      processTestRecordsBySerialRef.current.get(targetSerial) || null;
+
     // Open first so any global "outside click" handlers don't immediately close it
     // due to the same click event that triggered open.
-    setCartonDeviceHistorySerial(String(serialNo));
-    setCartonDeviceHistoryRows([]);
+    setCartonDeviceHistorySerial(targetSerial);
+    setCartonDeviceHistoryRows(cachedRows || []);
     setIsCartonDeviceHistoryOpen(true);
 
-    if (!processData?._id) return;
+    if (!processData?._id) {
+      setIsCartonDeviceHistoryLoading(false);
+      return;
+    }
+    if (cachedRows) {
+      setIsCartonDeviceHistoryLoading(false);
+      return;
+    }
 
     setIsCartonDeviceHistoryLoading(true);
     try {
       // Yield one frame so the modal paints immediately, even if the request/processing is heavy.
       await new Promise((r) => requestAnimationFrame(() => r(null)));
 
-      const allRecords = await ensureProcessRecords();
-      const targetSerial = String(serialNo);
-
-      // Fast filter without mapping the full array first.
-      const rows: any[] = [];
-      for (const r of allRecords) {
-        if (String(r?.serialNo || "") !== targetSerial) continue;
-        rows.push({
-          _id: r?._id,
-          serialNo: r?.serialNo,
-          stageName: r?.stageName || r?.name || "N/A",
-          status: r?.status || "N/A",
-          assignedDeviceTo: r?.assignedDeviceTo || r?.assignedDeviceToDepartment || "",
-          operator: r?.operatorName || r?.operator || r?.operatorId || "",
-          createdAt: r?.createdAt || r?.updatedAt,
-          logs: Array.isArray(r?.logs) ? r.logs : [],
-        });
-      }
-
-      rows.sort((a: any, b: any) => {
-        const at = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bt = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return bt - at;
-      });
-
+      await ensureProcessRecords();
+      const rows = processTestRecordsBySerialRef.current.get(targetSerial) || [];
+      processTestRecordsBySerialRef.current.set(targetSerial, rows);
       setCartonDeviceHistoryRows(rows);
     } catch (e: any) {
       toast.error(e?.message || "Unable to load device history");
@@ -1753,14 +2509,14 @@ export default function DeviceTestComponent({
 
         const terminalLogs = Array.isArray(logGroup?.logData?.terminalLogs)
           ? logGroup.logData.terminalLogs
-              .map((log: any) => {
-                const timestamp =
-                  log?.displayTimestamp || safeTime(log?.timestamp);
-                const type = log?.type || "log";
-                const message = log?.message || "";
-                return `[${timestamp}] [${type}] ${message}`;
-              })
-              .join("\n")
+            .map((log: any) => {
+              const timestamp =
+                log?.displayTimestamp || safeTime(log?.timestamp);
+              const type = log?.type || "log";
+              const message = log?.message || "";
+              return `[${timestamp}] [${type}] ${message}`;
+            })
+            .join("\n")
           : "No terminal logs available for this step.";
 
         return `${header}\n\n${terminalLogs}`;
@@ -1775,8 +2531,8 @@ export default function DeviceTestComponent({
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "") || "logs"}-${new Date()
-      .toISOString()
-      .replace(/[:.]/g, "-")}.txt`;
+        .toISOString()
+        .replace(/[:.]/g, "-")}.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1789,7 +2545,8 @@ export default function DeviceTestComponent({
     if (!raw) return "N/A";
     const parsed = new Date(raw);
     if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toLocaleTimeString([], { hour12: true,
+      return parsed.toLocaleTimeString([], {
+        hour12: true,
         hour12: false,
         hour: "2-digit",
         minute: "2-digit",
@@ -1803,6 +2560,16 @@ export default function DeviceTestComponent({
   const handleShiftToNextStage = async (cartonSerial: any) => {
     if (!cartonSerial) {
       alert("No carton selected.");
+      return;
+    }
+    if (isPDIWeightVerificationStage && !isSelectedCartonWeightVerified) {
+      toast.error("Verify carton weight before shifting to the next stage.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `Are you sure you want to shift carton ${String(cartonSerial)} to the next stage?`,
+    );
+    if (!confirmed) {
       return;
     }
     try {
@@ -2146,46 +2913,27 @@ export default function DeviceTestComponent({
                       />
                     </div>
                   </div>
-
-                  {/* Quick Access */}
-                  {(cartonSerial || []).length > 0 && (
-                    <div className="mt-4 flex flex-wrap items-center gap-2">
-                      <span className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
-                        Quick Access:
-                      </span>
-                      {(cartonSerial || []).slice(0, 6).map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => handleSearchCarton(c)}
-                          className="px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-100 text-xs font-bold text-indigo-700 hover:bg-indigo-100 active:scale-[0.99] transition"
-                        >
-                          {c}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 {/* 3. Detailed Results Section */}
                 <div className="relative">
                   {/* IF CARTON SELECTED */}
                   {selectedCarton && (
-                    <div className="animate-in fade-in zoom-in-95 duration-500 grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] gap-6 lg:gap-8">
+                    <div className="animate-in fade-in zoom-in-95 duration-500 grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-4 xl:gap-5">
                       {/* Left: Carton Identity Card */}
-                      <div className="space-y-6 lg:sticky lg:top-6 self-start">
-                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                          <div className="p-5 sm:p-6">
+                      <div className="space-y-3 xl:sticky xl:top-4 self-start">
+                        <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_20px_45px_-30px_rgba(15,23,42,0.45)]">
+                          <div className="border-b border-slate-100 bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_55%,#f8fafc_100%)] p-4 sm:p-5">
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex items-start gap-3 min-w-0">
-                                <span className="shrink-0 h-10 w-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center">
-                                  <Box className="h-5 w-5" />
+                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-700 shadow-sm">
+                                  <Box className="h-4.5 w-4.5" />
                                 </span>
                                 <div className="min-w-0">
-                                  <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
+                                  <div className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-500">
                                     Carton Identity
                                   </div>
-                                  <div className="mt-1 text-[18px] sm:text-[20px] font-extrabold text-slate-900 break-words leading-snug">
+                                  <div className="mt-1.5 text-[18px] font-black leading-[1.05] tracking-tight text-slate-950 break-words">
                                     {selectedCarton}
                                   </div>
                                 </div>
@@ -2203,41 +2951,225 @@ export default function DeviceTestComponent({
                               </span>
                             </div>
 
-                            <div className="mt-5 grid grid-cols-2 gap-3">
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                                <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500">Devices</div>
-                                <div className="mt-1 text-lg sm:text-xl font-extrabold text-slate-900">
+                            <div className="mt-4 grid grid-cols-2 gap-2.5">
+                              <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
+                                <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Devices</div>
+                                <div className="mt-1 text-lg font-black text-slate-950">
                                   {cartonDevices.length}
-                                  <span className="ml-1 text-xs font-bold text-slate-500">pcs</span>
+                                  <span className="ml-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">pcs</span>
                                 </div>
                               </div>
-                              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-                                <div className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500">Stage</div>
-                                <div className="mt-1 text-base font-extrabold text-slate-900 truncate">
+                              <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
+                                <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Stage</div>
+                                <div className="mt-1 text-sm font-black text-slate-950 truncate">
                                   {String(assignUserStage?.stage || "N/A")}
                                 </div>
                               </div>
                             </div>
 
+                            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                              <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-700">
+                                Sticker Reference
+                              </div>
+                              <div className="mt-2.5 space-y-2">
+                                <div className="rounded-xl bg-white px-3 py-2 shadow-sm">
+                                  <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
+                                    OC No
+                                  </div>
+                                  <div className="mt-0.5 text-xs font-black text-slate-900 break-words">
+                                    {String(processData?.orderConfirmationNo || orderConfirmationData?.orderConfirmationNo || "N/A")}
+                                  </div>
+                                </div>
+                                <div className="rounded-xl bg-white px-3 py-2 shadow-sm">
+                                  <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
+                                    Customer Name
+                                  </div>
+                                  <div className="mt-0.5 text-xs font-black text-slate-900 break-words">
+                                    {String(orderConfirmationData?.customerName || processData?.customerName || "N/A")}
+                                  </div>
+                                </div>
+                                <div className="rounded-xl bg-white px-3 py-2 shadow-sm">
+                                  <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
+                                    Model Name
+                                  </div>
+                                  <div className="mt-0.5 text-xs font-black text-slate-900 break-words">
+                                    {String(orderConfirmationData?.modelName || processData?.modelName || "N/A")}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {(Boolean((selectedCartonObj as any)?.isReturnedFromPdi) ||
+                              Number((selectedCartonObj as any)?.cartonReworkCount || 0) > 0) && (
+                              <div className="mt-3 rounded-2xl border border-amber-200 bg-[linear-gradient(180deg,#fffbeb_0%,#fff7ed_100%)] p-3 shadow-sm">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-amber-700">
+                                      Carton Rework Status
+                                    </div>
+                                    <div className="mt-1 text-[11px] font-semibold leading-relaxed text-amber-900">
+                                      This carton has already been returned from PDI and must be re-verified in packaging before moving forward again.
+                                    </div>
+                                  </div>
+                                  <span className="inline-flex items-center rounded-full bg-amber-500 px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white">
+                                    Rework Cycle {Number((selectedCartonObj as any)?.cartonReworkCount || 0)}
+                                  </span>
+                                </div>
+                                <div className="mt-3 grid gap-2 text-[11px] font-semibold text-amber-900 sm:grid-cols-2">
+                                  <div className="rounded-xl bg-white/80 px-3 py-2 shadow-sm">
+                                    Latest NG Reason: {String((selectedCartonObj as any)?.lastPdiNgReasonText || "N/A")}
+                                  </div>
+                                  <div className="rounded-xl bg-white/80 px-3 py-2 shadow-sm">
+                                    Returned At: {(selectedCartonObj as any)?.returnedFromPdiAt
+                                      ? new Date((selectedCartonObj as any).returnedFromPdiAt).toLocaleString("en-IN")
+                                      : "N/A"}
+                                  </div>
+                                  {String((selectedCartonObj as any)?.lastPdiNgNotes || "").trim() && (
+                                    <div className="rounded-xl bg-white/80 px-3 py-2 shadow-sm sm:col-span-2">
+                                      Note: {String((selectedCartonObj as any)?.lastPdiNgNotes || "").trim()}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {isPDIWeightVerificationStage && (
+                              <div className="mt-3 rounded-2xl border border-emerald-200 bg-[linear-gradient(180deg,#f0fdf4_0%,#ecfdf5_100%)] p-3 shadow-sm">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                      <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-emerald-700">
+                                        Carton Weight Verification
+                                      </div>
+                                      <div className="mt-1 text-[11px] font-semibold leading-relaxed text-emerald-900">
+                                      {isPdiCartonUsingConfiguredWeight(selectedCartonObj)
+                                        ? "Verify the exact configured carton weight before moving this carton to the next stage."
+                                        : "Verify a valid carton weight that does not exceed the configured carton weight before moving this carton to the next stage."}
+                                      </div>
+                                    </div>
+                                  <span
+                                    className={
+                                      "inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] " +
+                                      (isSelectedCartonWeightVerified
+                                        ? "bg-emerald-600 text-white"
+                                        : "bg-amber-100 text-amber-700")
+                                    }
+                                  >
+                                    {isSelectedCartonWeightVerified ? "Weight Verified" : "Pending"}
+                                  </span>
+                                </div>
+
+                                {!isSelectedCartonWeightVerified ? (
+                                  <div className="mt-3 flex flex-col gap-2.5">
+                                    <div className="relative flex-1">
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        value={pdiCartonWeight}
+                                        onChange={(e) => {
+                                          setPdiCartonWeight(e.target.value);
+                                          if (selectedCarton && isSelectedCartonReverifying) {
+                                            setPdiWeightVerifiedByCarton((prev) => ({
+                                              ...prev,
+                                              [selectedCarton]: false,
+                                            }));
+                                          }
+                                        }}
+                                        placeholder="Enter carton weight"
+                                        className="w-full rounded-2xl border border-emerald-200 bg-white px-4 py-3 pr-14 text-sm font-bold text-slate-900 shadow-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                                      />
+                                      <div className="absolute right-4 top-3 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">
+                                        KG
+                                      </div>
+                                    </div>
+                                    <div className="text-[11px] font-semibold text-emerald-800">
+                                      {isPdiCartonUsingConfiguredWeight(selectedCartonObj)
+                                        ? "Must match configured carton weight"
+                                        : "Must not exceed configured carton weight"}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={handleVerifySelectedCartonWeight}
+                                      disabled={!pdiCartonWeight || isVerifyingPdiWeight}
+                                      className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-white transition ${!pdiCartonWeight || isVerifyingPdiWeight
+                                        ? "cursor-not-allowed bg-slate-300"
+                                        : "bg-emerald-600 shadow-lg shadow-emerald-200 hover:bg-emerald-700"
+                                        }`}
+                                    >
+                                      <Scale className="h-4 w-4" />
+                                      {isVerifyingPdiWeight ? "Verifying..." : "Verify Weight"}
+                                    </button>
+                                    {isSelectedCartonReverifying && (
+                                      <button
+                                        type="button"
+                                        onClick={handleCancelPdiWeightReverify}
+                                        disabled={isVerifyingPdiWeight}
+                                        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                      >
+                                        Cancel Re-verify
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="mt-3 rounded-2xl border border-emerald-200 bg-white px-4 py-3 shadow-sm">
+                                    <div className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-emerald-700">
+                                      Verified Weight
+                                    </div>
+                                    <div className="mt-1 text-lg font-black text-slate-950">
+                                      {pdiCartonWeight}
+                                      <span className="ml-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                                        KG
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={handleStartPdiWeightReverify}
+                                      className="mt-3 inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-emerald-700 transition hover:bg-emerald-100"
+                                    >
+                                      <Scale className="h-4 w-4" />
+                                      Re-verify Weight
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
                           </div>
 
-                          <div className="px-5 sm:px-6 py-5 border-t border-slate-100 bg-slate-50/40">
+                          <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-4 sm:px-5">
                             <div className="space-y-3">
                               {isPDIStage || isFGToStoreStage ? (
                                 !generatedCartonSticker[selectedCarton] ? (
-                                  <button
-                                    onClick={() =>
-                                      setGeneratedCartonSticker((prev) => ({
-                                        ...prev,
-                                        [selectedCarton]: true,
-                                      }))
-                                    }
-                                    className="w-full h-12 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-[0.18em] shadow-sm hover:bg-indigo-700 active:scale-[0.99] transition"
-                                  >
-                                    Generate Sticker
-                                  </button>
+                                  <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                                    <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
+                                      Sticker Tools
+                                    </div>
+                                    <div className="mt-1 text-[11px] font-semibold leading-relaxed text-slate-500">
+                                      Optional. Use this only when the carton sticker needs to be generated again or reprinted.
+                                    </div>
+                                    <button
+                                      onClick={() =>
+                                        setGeneratedCartonSticker((prev) => ({
+                                          ...prev,
+                                          [selectedCarton]: true,
+                                        }))
+                                      }
+                                      className="mt-3 h-11 w-full rounded-2xl border border-indigo-200 bg-indigo-50 text-[11px] font-black uppercase tracking-[0.18em] text-indigo-700 shadow-sm transition hover:bg-indigo-100 active:scale-[0.99]"
+                                    >
+                                      Open Sticker Tools
+                                    </button>
+                                  </div>
                                 ) : (
-                                  <div className="space-y-4">
+
+
+                                  <div className="space-y-3">
+                                    <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+                                      <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
+                                        Sticker Tools
+                                      </div>
+                                      <div className="mt-1 text-[11px] font-semibold leading-relaxed text-slate-500">
+                                        Optional reprint area for damaged, unclear, or incorrect carton stickers.
+                                      </div>
+                                    </div>
                                     <div
                                       id={`carton-sticker-print-${selectedCarton}`}
                                       aria-hidden="true"
@@ -2252,6 +3184,7 @@ export default function DeviceTestComponent({
                                         background: "#fff",
                                       }}
                                     >
+                                      {console.log("cartonLabelData ==>", cartonLabelData)}
                                       <div
                                         data-sticker-width={cartonStickerPx.w}
                                         data-sticker-height={cartonStickerPx.h}
@@ -2302,7 +3235,7 @@ export default function DeviceTestComponent({
                                               textOverflow: "ellipsis",
                                             }}
                                           >
-                                            {String(cartonLabelData?.modelName || "N/A").toUpperCase()}
+                                            {String(cartonLabelData?.customerName || "N/A").toUpperCase()}
                                           </div>
 
                                           {/* Body */}
@@ -2328,7 +3261,7 @@ export default function DeviceTestComponent({
                                                 if (weight !== "N/A" && !/kg/i.test(weight)) weight = `${weight} KG`;
 
                                                 const rows: Array<[string, string]> = [
-                                                  ["MODEL:", String(cartonLabelData?.modelName || "N/A")],
+                                                  ["MODEL:", String(cartonLabelData?.model || "N/A")],
                                                   ["DIMENSIONS:", String(cartonLabelData?.dimensionsCm || "N/A")],
                                                   ["QUANTITY:", qty],
                                                   ["WEIGHT:", weight],
@@ -2459,20 +3392,20 @@ export default function DeviceTestComponent({
                                         </div>
                                       </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="flex flex-col gap-2.5">
                                       <button
                                         onClick={() =>
                                           handlePrintCartonSticker(
                                             `carton-sticker-print-${selectedCarton}`,
                                           )
                                         }
-                                        className="h-11 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-[0.18em] hover:bg-slate-800 active:scale-[0.99] transition flex items-center justify-center gap-2"
+                                        className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 text-[11px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-slate-800 active:scale-[0.99]"
                                       >
-                                        <Printer className="h-4 w-4" /> Print
+                                        <Printer className="h-4 w-4" /> Regenerate
                                       </button>
                                       <button
                                         onClick={() => setIsVerifyCartonModal(true)}
-                                        className="h-11 rounded-xl bg-indigo-600 text-white text-xs font-black uppercase tracking-[0.18em] hover:bg-indigo-700 active:scale-[0.99] transition flex items-center justify-center gap-2"
+                                        className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-4 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 active:scale-[0.99]"
                                       >
                                         <ClipboardCheck className="h-4 w-4" /> Verify
                                       </button>
@@ -2531,18 +3464,18 @@ export default function DeviceTestComponent({
 
                       {/* Right: Device Content Table */}
                       <div className="flex flex-col min-w-0">
-                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1">
-                          <div className="px-5 sm:px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-4">
+                        <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_20px_45px_-30px_rgba(15,23,42,0.45)]">
+                          <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50/80 px-4 py-3.5 sm:px-5">
                             <h3 className="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
-                              <List className="h-6 w-6 text-indigo-500" />
+                              <List className="h-5 w-5 text-indigo-500" />
                               Carton Contents
                             </h3>
-                            <div className="px-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 text-[10px] font-bold text-slate-600 uppercase tracking-[0.14em] whitespace-nowrap">
+                            <div className="whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 shadow-sm">
                               {cartonDevices.length} Units Manifested
                             </div>
                           </div>
 
-                          <div className="flex-1 overflow-auto">
+                          <div className="overflow-auto">
                             <table className="min-w-[640px] w-full text-left">
                               <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur border-b border-slate-200">
                                 <tr className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500">
@@ -2555,7 +3488,7 @@ export default function DeviceTestComponent({
                               <tbody className="divide-y divide-slate-100">
                                 {cartonDevices.length === 0 ? (
                                   <tr>
-                                    <td colSpan={4} className="px-6 py-10 text-center text-sm text-slate-400">
+                                    <td colSpan={4} className="px-6 py-8 text-center text-sm text-slate-400">
                                       No devices found in this carton.
                                     </td>
                                   </tr>
@@ -2563,7 +3496,7 @@ export default function DeviceTestComponent({
                                   cartonDevices.map((device: any) => (
                                     <tr
                                       key={device._id}
-                                      className="hover:bg-slate-50/70 transition-colors"
+                                      className="transition-colors hover:bg-indigo-50/40"
                                     >
                                       <td className="px-5 sm:px-6 py-3">
                                         <span className="text-sm font-semibold text-slate-900">
@@ -2582,11 +3515,11 @@ export default function DeviceTestComponent({
                                       </td>
                                       <td className="px-4 sm:px-5 py-3">
                                         <span
-                                          className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${device.status === "Pass"
-                                              ? "bg-emerald-100 text-emerald-700"
-                                              : device.status === "NG"
-                                                ? "bg-rose-100 text-rose-700"
-                                                : "bg-slate-100 text-slate-600"
+                                          className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-tighter ${device.status === "Pass"
+                                            ? "bg-emerald-100 text-emerald-700"
+                                            : device.status === "NG"
+                                              ? "bg-rose-100 text-rose-700"
+                                              : "bg-slate-100 text-slate-600"
                                             }`}
                                         >
                                           {device.status || "Pending"}
@@ -2614,18 +3547,31 @@ export default function DeviceTestComponent({
                             </table>
                           </div>
 
-                          <div className="p-4 sm:p-6 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-end gap-3">
+                          <div className="flex flex-col justify-end gap-3 border-t border-slate-100 bg-slate-50/70 p-4 sm:flex-row sm:p-4">
                             {assignUserStage?.stage === "FG to Store" && (
                               <button
                                 onClick={() => handleKeepInStore(selectedCarton)}
-                                className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 rounded-2xl bg-emerald-600 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-200 hover:bg-emerald-700 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
+                                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-emerald-200 transition-all hover:bg-emerald-700 hover:-translate-y-0.5 sm:w-auto sm:px-8 sm:py-4"
                               >
                                 <Box className="h-4 w-4" /> Keep In Store
                               </button>
                             )}
+                            {isPDIStage && (
+                              <button
+                                type="button"
+                                onClick={openPdiCartonNgModal}
+                                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-rose-600 px-6 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-rose-200 transition-all hover:bg-rose-700 hover:-translate-y-0.5 sm:w-auto sm:px-8 sm:py-4"
+                              >
+                                <XCircle className="h-4 w-4" /> Mark Carton NG
+                              </button>
+                            )}
                             <button
                               onClick={() => handleShiftToNextStage(selectedCarton)}
-                              className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 rounded-2xl bg-indigo-600 text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-200 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
+                              disabled={isPDIWeightVerificationStage && !isSelectedCartonWeightVerified}
+                              className={`flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg transition-all sm:w-auto sm:px-8 sm:py-4 ${isPDIWeightVerificationStage && !isSelectedCartonWeightVerified
+                                ? "cursor-not-allowed bg-slate-300 shadow-none"
+                                : "bg-indigo-600 shadow-indigo-200 hover:bg-indigo-700 hover:-translate-y-0.5"
+                                }`}
                             >
                               <ArrowRightCircle className="h-4 w-4" /> Shift to Next Stage
                             </button>
@@ -2748,40 +3694,49 @@ export default function DeviceTestComponent({
                   {!selectedCarton && !searchResult && (
                     <div className="animate-in fade-in duration-700">
                       <div className="bg-white rounded-3xl border border-dashed border-slate-200 p-6 sm:p-10 lg:p-20 flex flex-col items-center justify-center text-center">
-                        <div className="h-24 w-24 rounded-full bg-slate-50 flex items-center justify-center mb-6 animate-pulse">
-                          <ScanLine className="h-12 w-12 text-slate-300" />
-                        </div>
-                        <h3 className="text-xl font-black text-slate-800 mb-2">Ready to Process</h3>
-                        <p className="text-slate-400 text-sm max-w-sm">Scan a carton serial or a device identification number to begin processing items in this stage.</p>
+                        {isCartonsLoading && cartonDetails.length === 0 ? (
+                          <div className="w-full max-w-3xl animate-pulse">
+                            <div className="mx-auto mb-6 h-24 w-24 rounded-full bg-slate-100" />
+                            <div className="mx-auto h-7 w-56 rounded-full bg-slate-100" />
+                            <div className="mx-auto mt-3 h-4 w-80 max-w-full rounded-full bg-slate-100" />
+                            <div className="mx-auto mt-2 h-4 w-64 max-w-full rounded-full bg-slate-100" />
 
-                        <div className="mt-12 w-full max-w-2xl">
-                          <div className="flex items-center justify-between mb-4 px-2">
-                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Items Pending This Stage</span>
-                            <button className="text-[10px] font-black uppercase tracking-widest text-indigo-600 hover:underline">View All</button>
-                          </div>
-                          <div className="grid grid-cols-1 gap-3">
-                            {cartonDetails.slice(0, 3).map((c: any) => (
-                              <div key={c._id} className="flex items-center justify-between p-5 rounded-2xl bg-white border border-slate-100 hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-50/50 transition-all cursor-pointer group" onClick={() => handleSearchCarton(c.cartonSerial)}>
-                                <div className="flex items-center gap-4">
-                                  <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center group-hover:bg-indigo-600 transition-colors">
-                                    <Box className="h-5 w-5 text-indigo-600 group-hover:text-white transition-colors" />
-                                  </div>
-                                  <div className="text-left">
-                                    <span className="block text-xs font-black text-slate-800">{c.cartonSerial}</span>
-                                    <span className="text-[10px] font-bold text-slate-400">{c.devices.length} Devices Manifested</span>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <span className="px-3 py-1 rounded-full bg-slate-100 text-[9px] font-black uppercase text-slate-500 tracking-tighter">Pending</span>
-                                  <ArrowRightCircle className="h-5 w-5 text-slate-200 group-hover:text-indigo-500 transition-colors" />
-                                </div>
+                            <div className="mt-12">
+                              <div className="mb-4 flex items-center justify-between gap-4 px-2">
+                                <div className="h-3 w-40 rounded-full bg-slate-100" />
+                                <div className="h-3 w-16 rounded-full bg-slate-100" />
                               </div>
-                            ))}
-                            {cartonDetails.length === 0 && (
-                              <div className="p-10 text-center italic text-slate-400 text-xs">No pending items found in this stage.</div>
-                            )}
+                              <div className="grid grid-cols-1 gap-3">
+                                {[0, 1, 2].map((index) => (
+                                  <div
+                                    key={index}
+                                    className="flex items-center justify-between rounded-2xl border border-slate-100 bg-white p-5"
+                                  >
+                                    <div className="flex items-center gap-4">
+                                      <div className="h-10 w-10 rounded-xl bg-slate-100" />
+                                      <div className="space-y-2 text-left">
+                                        <div className="h-3 w-40 rounded-full bg-slate-100" />
+                                        <div className="h-3 w-28 rounded-full bg-slate-100" />
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-6 w-16 rounded-full bg-slate-100" />
+                                      <div className="h-5 w-5 rounded-full bg-slate-100" />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           </div>
-                        </div>
+                        ) : (
+                          <>
+                            <div className="h-24 w-24 rounded-full bg-slate-50 flex items-center justify-center mb-6 animate-pulse">
+                              <ScanLine className="h-12 w-12 text-slate-300" />
+                            </div>
+                            <h3 className="text-xl font-black text-slate-800 mb-2">Ready to Process</h3>
+                            <p className="text-slate-400 text-sm max-w-sm">Scan a carton serial or a device identification number to begin processing items in this stage.</p>
+                          </>
+                        )}
                       </div>
                     </div>
                   )}
@@ -2861,41 +3816,66 @@ export default function DeviceTestComponent({
           {/* Verify Carton Modal */}
           <Modal
             isOpen={isVerifyCartonModal}
-            onClose={() => setIsVerifyCartonModal(false)}
+            onClose={() => {
+              setIsVerifyCartonModal(false);
+              setVerifyCartonScanValue("");
+            }}
             title="Verify Carton Sticker"
-            submitOption={false}
-            onSubmit={() => { }}
+            submitOption={true}
+            submitText="Submit"
+            submitDisabled={!verifyCartonScanValue.trim()}
+            onSubmit={() => handleVerifyCarton(verifyCartonScanValue)}
+            maxWidth="max-w-2xl"
           >
-            <div className="space-y-6 p-6">
-              <div className="flex flex-col items-center justify-center space-y-4 text-center">
-                <div className="rounded-full bg-blue-50 p-4 text-blue-600">
-                  <ScanLine className="h-8 w-8" />
+            <div className="space-y-5">
+              <div className="rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_100%)] p-6 shadow-sm">
+                <div className="flex flex-col items-center justify-center space-y-4 text-center">
+                  <div className="rounded-full bg-blue-50 p-4 text-blue-600 shadow-sm">
+                    <ScanLine className="h-8 w-8" />
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-black tracking-tight text-slate-900">
+                      Scan Carton Label
+                    </h4>
+                    <p className="mt-1 text-sm font-medium text-slate-500">
+                      Match the scanned carton serial with the printed sticker before submission.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-lg font-bold text-gray-900">
-                    Scan Carton Label
-                  </h4>
-                  <p className="text-sm text-gray-500">
-                    Please scan the carton serial from the printed label to verify.
-                  </p>
-                </div>
-              </div>
 
-              <input
-                autoFocus
-                placeholder="Scan Carton Serial..."
-                className="font-mono placeholder:font-sans w-full rounded-xl border-2 border-gray-200 px-4 py-4 text-center text-lg outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleVerifyCarton(e.currentTarget.value);
-                    e.currentTarget.value = "";
-                  }
-                }}
-              />
-              <div className="text-center">
-                <span className="text-xs font-medium text-gray-400">
-                  Verified cartons can be processed for shipping or PDI.
-                </span>
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
+                    Expected Carton Serial
+                  </div>
+                  <div className="break-words text-lg font-black text-slate-950">
+                    {maskCartonSerialForDisplay(selectedCarton)}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
+                    Scan / Enter Carton Serial
+                  </label>
+                  <input
+                    autoFocus
+                    value={verifyCartonScanValue}
+                    onChange={(e) => setVerifyCartonScanValue(e.target.value)}
+                    placeholder="Scan carton serial..."
+                    className="font-mono placeholder:font-sans w-full rounded-2xl border-2 border-slate-200 bg-slate-50 px-4 py-4 text-center text-lg font-black text-slate-900 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleVerifyCarton(verifyCartonScanValue);
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="rounded-2xl bg-slate-50 px-4 py-3 text-center">
+                  <span className="text-xs font-semibold text-slate-500">
+                    After successful verification, this carton can be moved forward in the workflow.
+                  </span>
+                </div>
               </div>
             </div>
           </Modal>
@@ -3065,7 +4045,7 @@ export default function DeviceTestComponent({
                                           %
                                         </span>
                                       </div>
-                                    <div className="h-2.5 w-full overflow-hidden rounded-full border border-gray-200 bg-gray-100">
+                                      <div className="h-2.5 w-full overflow-hidden rounded-full border border-gray-200 bg-gray-100">
                                         <div
                                           className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
                                           style={{
@@ -3518,7 +4498,11 @@ export default function DeviceTestComponent({
                                                             searchResult ||
                                                             "",
                                                           ).trim(),
-                                                      )}
+                                                      ).map((d: any) => ({
+                                                        ...d,
+                                                        productName: processData?.customerName || d.productName || "N/A",
+                                                        modelName: processData?.modelName || product?.selectedProduct?.name || product?.name || "N/A"
+                                                      }))}
                                                     />
                                                   </div>
                                                 ),
@@ -3734,9 +4718,7 @@ export default function DeviceTestComponent({
                                                   >
                                                     <List className="h-4 w-4" />
                                                     View Devices (
-                                                    {cartons[
-                                                      cartons.length - 1
-                                                    ]?.devices?.length || 0}
+                                                    {currentOpenPackagingCartonPersistedCount}
                                                     )
                                                   </button>
                                                 )}
@@ -3804,9 +4786,7 @@ export default function DeviceTestComponent({
 
                                                   {(() => {
                                                     const activeCarton =
-                                                      cartons[
-                                                      cartons.length - 1
-                                                      ];
+                                                      currentOpenPackagingCarton;
                                                     const capacity =
                                                       currentSubStep
                                                         ?.packagingData
@@ -3814,116 +4794,73 @@ export default function DeviceTestComponent({
                                                       activeCarton?.maxCapacity ||
                                                       0;
                                                     const isFull =
-                                                      activeCarton &&
-                                                      (activeCarton.devices?.length >= capacity ||
-                                                        activeCarton.isLooseCarton ||
-                                                        activeCarton.status === "full");
+                                                      Boolean(activeCarton) &&
+                                                      (Number(activeCarton?.persistedDeviceCount || activeCarton?.deviceCount || activeCarton?.persistedDevices?.length || activeCarton?.devices?.length || 0) >= Number(capacity || 0) ||
+                                                        activeCarton?.isLooseCarton ||
+                                                        String(activeCarton?.status || "").toLowerCase() === "full");
 
                                                     if (isFull) {
-                                                      const cartonDeviceData =
-                                                        [
-                                                          {
-                                                            serialNo:
-                                                              activeCarton.cartonSerial,
-                                                            cartonSerial:
-                                                              activeCarton.cartonSerial,
-                                                            deviceCount:
-                                                              activeCarton
-                                                                .devices
-                                                                ?.length || 0,
-                                                            maxCapacity:
-                                                              capacity,
-                                                            productName:
-                                                              product?.name,
-                                                            weight:
-                                                              activeCarton.weightCarton ||
-                                                              currentSubStep
-                                                                ?.packagingData
-                                                                ?.cartonWeight,
-                                                            createdAt:
-                                                              activeCarton.createdAt ||
-                                                              new Date().toISOString(),
-                                                          },
-                                                        ];
-
                                                       return (
-                                                        <div
-                                                          className={`mt-6 rounded-2xl border-2 border-dashed p-6 transition-all ${isCartonBarcodePrinted ? "border-green-200 bg-green-50/50" : "border-primary/20 bg-primary/5"}`}
-                                                        >
-                                                          <div className="mb-4 flex items-center justify-between">
-                                                            <div className="flex items-center gap-2">
-                                                              <Printer
-                                                                className={`h-6 w-6 ${isCartonBarcodePrinted ? "text-green-600" : "text-primary"}`}
-                                                              />
-                                                              <div>
-                                                                <h4 className="text-lg font-bold text-gray-900">
-                                                                  Carton
-                                                                  Sticker
-                                                                </h4>
-                                                                {isCartonBarcodePrinted && (
-                                                                  <span className="text-[10px] font-black uppercase tracking-wider text-green-600">
-                                                                    Already
-                                                                    Printed
-                                                                  </span>
-                                                                )}
-                                                              </div>
-                                                            </div>
-                                                            <button
-                                                              onClick={() => handlePrintCartonSticker()}
-                                                              className={`flex items-center gap-2 rounded-xl px-5 py-2.5 font-bold text-white shadow-lg transition-all active:scale-95 ${isCartonBarcodePrinted ? "bg-green-600 hover:bg-green-700" : "bg-primary hover:bg-primary/90"}`}
-                                                            >
-                                                              <Printer className="h-5 w-5" />
-                                                              {isCartonBarcodePrinted
-                                                                ? "Reprint Sticker"
-                                                                : "Print Sticker"}
-                                                            </button>
-                                                          </div>
-                                                          <div
-                                                            id="carton-sticker-preview"
-                                                            className="flex justify-center overflow-hidden rounded-xl border bg-white p-4 shadow-inner"
-                                                          >
-                                                            <StickerGenerator
-                                                              stickerData={
-                                                                currentSubStep?.packagingData
-                                                              }
-                                                              deviceData={
-                                                                cartonDeviceData
-                                                              }
-                                                            />
-                                                          </div>
-                                                          <p
-                                                            className={`mt-3 text-center text-xs font-medium ${isCartonBarcodePrinted ? "text-green-600/60" : "text-primary/60"}`}
-                                                          >
-                                                            Carton Full
-                                                            Capacity (
-                                                            {capacity}/
-                                                            {capacity})
+                                                        <div className="mt-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-center">
+                                                          <p className="text-sm font-bold text-green-800">
+                                                            Carton is full ({capacity}/{capacity})
                                                           </p>
-                                                        </div>
-                                                      );
-                                                    } else if (activeCarton && activeCarton.devices?.length > 0) {
-                                                      return (
-                                                        <div className="mt-4 flex flex-col sm:flex-row items-center justify-between rounded-lg border border-orange-200 bg-orange-50 p-4">
-                                                          <div>
-                                                            <p className="font-bold text-orange-800 flex items-center gap-2">
-                                                              <AlertTriangle className="h-4 w-4" />
-                                                              Partial Carton ({activeCarton.devices.length}/{capacity})
-                                                            </p>
-                                                            <p className="text-xs text-orange-600 mt-1">This carton is not full. You can choose to close it early.</p>
-                                                          </div>
-                                                          <button
-                                                            className="mt-3 sm:mt-0 flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-orange-700 transition-colors"
-                                                            onClick={() => handleCloseLooseCarton(activeCarton.cartonSerial)}
-                                                          >
-                                                            <Package className="h-4 w-4" />
-                                                            Close Loose Carton
-                                                          </button>
+                                                          <p className="mt-1 text-xs font-medium text-green-700">
+                                                            Start a new carton for the next device.
+                                                          </p>
                                                         </div>
                                                       );
                                                     }
                                                     return null;
                                                   })()}
-                                                  {!isAddedToCart ? (
+                                                  {!isPackagingPreApproved ? (
+                                                    <div className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-950/5">
+                                                      <div className="flex items-start gap-4 border-b border-orange-100 bg-orange-50/50 px-6 py-5 text-left">
+                                                        <div className="shrink-0 rounded-lg bg-orange-100 p-2 text-orange-600 shadow-sm">
+                                                          <ClipboardCheck className="h-6 w-6" />
+                                                        </div>
+                                                        <div>
+                                                          <div className="flex items-center gap-3">
+                                                            <h5 className="text-lg font-bold text-gray-900">
+                                                              Manual Verification
+                                                            </h5>
+                                                            <span className="rounded border border-orange-200 bg-orange-100 px-2 py-0.5 text-[10px] font-bold uppercase text-orange-700">
+                                                              Required
+                                                            </span>
+                                                          </div>
+                                                          <p className="mt-1 text-sm leading-relaxed text-gray-600">
+                                                            First confirm whether this device should pass or be marked NG before adding it to the carton.
+                                                          </p>
+                                                        </div>
+                                                      </div>
+                                                      <div className="p-6">
+                                                        <div className="flex flex-col gap-4 pt-4 sm:flex-row">
+                                                          <button
+                                                            onClick={() =>
+                                                              setIsPackagingPreApproved(true)
+                                                            }
+                                                            disabled={!!jigDecision}
+                                                            className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none" : "bg-success hover:bg-green-600"}`}
+                                                          >
+                                                            <CheckCircle className="h-5 w-5" />{" "}
+                                                            Confirm Pass
+                                                          </button>
+                                                          <button
+                                                            onClick={() =>
+                                                              handleStepDecision(
+                                                                "NG",
+                                                              )
+                                                            }
+                                                            disabled={!!jigDecision}
+                                                            className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none" : "bg-danger hover:bg-red-600"}`}
+                                                          >
+                                                            <XCircle className="h-5 w-5" />{" "}
+                                                            Mark NG
+                                                          </button>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  ) : !isAddedToCart ? (
                                                     <div className="mt-6 flex justify-center gap-4">
                                                       <button
                                                         className="flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-white shadow hover:bg-green-700"
@@ -3936,70 +4873,94 @@ export default function DeviceTestComponent({
                                                         <PlusCircle className="h-5 w-5" />{" "}
                                                         Add To Cart
                                                       </button>
-                                                      <button
-                                                        className="flex items-center gap-2 rounded-lg bg-danger px-5 py-2.5 text-white shadow hover:bg-danger"
-                                                        onClick={() =>
-                                                          handleStepDecision(
-                                                            "NG",
-                                                          )
-                                                        }
-                                                      >
-                                                        <XCircle className="h-5 w-5" />{" "}
-                                                        NG
-                                                      </button>
                                                     </div>
-                                                  ) : !isVerifiedPackaging ? (
-                                                    <div className="mt-6 flex flex-col items-center gap-4 rounded-xl border border-blue-100 bg-blue-50 p-6">
-                                                      <ScanLine className="h-8 w-8 text-blue-600" />
-                                                      <p className="text-sm font-bold text-blue-800">
-                                                        Please Verify Device
-                                                        in Carton
-                                                      </p>
-                                                      <button
-                                                        className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-2 font-bold text-white"
-                                                        onClick={
-                                                          handleVerifyPackaging
-                                                        }
-                                                      >
-                                                        Start Verification
-                                                      </button>
-                                                      <Modal
-                                                        isOpen={
-                                                          isVerifyPackagingModal
-                                                        }
-                                                        onSubmit={
-                                                          handleVerifyPackagingModal
-                                                        }
-                                                        onClose={
-                                                          closeVerifyPackagingModal
-                                                        }
-                                                        title="Verify Packaging"
-                                                      >
-                                                        <div className="space-y-4">
-                                                          <label className="mb-2 block text-sm font-bold text-gray-700">
-                                                            Enter / Scan
-                                                            Serial Number
-                                                          </label>
-                                                          <input
-                                                            type="text"
-                                                            value={
-                                                              serialNumber ||
-                                                              ""
+                                                  ) : !isPackagingDecisionPending ? (
+                                                    (() => {
+                                                      const activeCarton =
+                                                        currentOpenPackagingCarton;
+                                                      const capacity =
+                                                        currentSubStep
+                                                          ?.packagingData
+                                                          ?.maxCapacity ||
+                                                        activeCarton?.maxCapacity ||
+                                                        0;
+                                                      const isFull =
+                                                        Boolean(activeCarton) &&
+                                                        (Number(activeCarton?.devices?.length || 0) >= Number(capacity || 0) ||
+                                                          activeCarton?.isLooseCarton ||
+                                                          String(activeCarton?.status || "").toLowerCase() === "full");
+
+                                                      if (isFull) {
+                                                        return (
+                                                          <div className="mt-6 flex flex-col items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
+                                                            <CheckCircle className="h-8 w-8 text-emerald-600" />
+                                                            <p className="text-sm font-bold text-emerald-800">
+                                                              Carton is full
+                                                            </p>
+                                                            <p className="text-xs font-medium text-emerald-700">
+                                                              Place a new carton for the next device.
+                                                            </p>
+                                                          </div>
+                                                        );
+                                                      }
+
+                                                      return (
+                                                        <div className="mt-6 flex flex-col items-center gap-4 rounded-xl border border-blue-100 bg-blue-50 p-6">
+                                                          <ScanLine className="h-8 w-8 text-blue-600" />
+                                                          <p className="text-sm font-bold text-blue-800">
+                                                            Please Verify Device
+                                                            in Carton
+                                                          </p>
+                                                          <button
+                                                            className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-2 font-bold text-white"
+                                                            onClick={
+                                                              handleVerifyPackaging
                                                             }
-                                                            autoComplete="off"
-                                                            onChange={(e) =>
-                                                              setSerialNumber(
-                                                                e.target
-                                                                  .value,
-                                                              )
+                                                          >
+                                                            Start Verification
+                                                          </button>
+                                                          <Modal
+                                                            isOpen={
+                                                              isVerifyPackagingModal
                                                             }
-                                                            placeholder="Scan device serial..."
-                                                            className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3.5 text-base font-medium outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
-                                                            autoFocus
-                                                          />
+                                                            onSubmit={handleVerifyPackagingSubmission}
+                                                            onClose={handleClosePendingPackagingModal}
+                                                            title="Verify Packaging"
+                                                          >
+                                                            <div className="space-y-4">
+                                                              <label className="mb-2 block text-sm font-bold text-gray-700">
+                                                                Enter / Scan
+                                                                Serial Number
+                                                              </label>
+                                                              <input
+                                                                type="text"
+                                                                value={
+                                                                  serialNumber ||
+                                                                  ""
+                                                                }
+                                                                autoComplete="off"
+                                                                onChange={(e) =>
+                                                                  setSerialNumber(
+                                                                    e.target
+                                                                      .value,
+                                                                  )
+                                                                }
+                                                                onKeyDown={(e) => {
+                                                                  if (e.key === "Enter") {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    handleVerifyPackagingSubmission();
+                                                                  }
+                                                                }}
+                                                                placeholder="Scan device serial..."
+                                                                className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3.5 text-base font-medium outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+                                                                autoFocus
+                                                              />
+                                                            </div>
+                                                          </Modal>
                                                         </div>
-                                                      </Modal>
-                                                    </div>
+                                                      );
+                                                    })()
                                                   ) : (
                                                     <div id="manual-verification-anchor" className="mt-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-950/5">
                                                       <div className="flex items-start gap-4 border-b border-orange-100 bg-orange-50/50 px-6 py-5 text-left">
@@ -4029,7 +4990,7 @@ export default function DeviceTestComponent({
                                                         <div className="flex flex-col gap-4 pt-4 sm:flex-row">
                                                           <button
                                                             onClick={() =>
-                                                              handleStepDecision(
+                                                              handlePackagingDecision(
                                                                 "Pass",
                                                               )
                                                             }
@@ -4043,7 +5004,7 @@ export default function DeviceTestComponent({
                                                           </button>
                                                           <button
                                                             onClick={() =>
-                                                              handleStepDecision(
+                                                              handlePackagingDecision(
                                                                 "NG",
                                                               )
                                                             }
@@ -4082,7 +5043,11 @@ export default function DeviceTestComponent({
                                                             (d: any) =>
                                                               d.serialNo ===
                                                               searchResult,
-                                                          )}
+                                                          ).map((d: any) => ({
+                                                            ...d,
+                                                            productName: processData?.customerName || d.productName || "N/A",
+                                                            modelName: processData?.modelName || product?.selectedProduct?.name || product?.name || "N/A"
+                                                          }))}
                                                         />
                                                       </div>
                                                       <div className="mt-6 flex justify-center">
@@ -4434,51 +5399,52 @@ export default function DeviceTestComponent({
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-slate-100">
-                                      {(() => {
-                                        const cartonList = Array.isArray(
-                                          processCartons,
-                                        )
-                                          ? processCartons
-                                          : processCartons?.cartonDetails || [];
-                                        return cartonList.length > 0 ? (
-                                          cartonList.map(
-                                            (row: any, rowIndex: number) => (
-                                              <tr
-                                                key={rowIndex}
-                                                className="transition-colors hover:bg-slate-50/70"
-                                              >
-                                                <td className="px-5 sm:px-6 py-3 text-sm font-semibold text-slate-900">
-                                                  {row?.cartonSerial}
-                                                </td>
-                                                <td className="px-4 sm:px-5 py-3">
-                                                  <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-tighter text-slate-600">
-                                                    {String(row?.status || "N/A")}
-                                                  </span>
-                                                </td>
-                                                <td className="px-4 sm:px-5 py-3 text-right">
-                                                  <span className="text-[12px] font-mono text-slate-500">
-                                                  {new Date(
-                                                    row?.createdAt,
-                                                  ).toLocaleTimeString([], { hour12: true,
-                                                    hour: "2-digit",
-                                                    minute: "2-digit",
-                                                  })}
-                                                  </span>
-                                                </td>
-                                              </tr>
-                                            ),
+                                        {(() => {
+                                          const cartonList = Array.isArray(
+                                            processCartons,
                                           )
-                                        ) : (
-                                          <tr>
-                                            <td
-                                              colSpan={3}
-                                              className="p-8 text-center text-sm text-slate-400"
-                                            >
-                                              No cartons found
-                                            </td>
-                                          </tr>
-                                        );
-                                      })()}
+                                            ? processCartons
+                                            : processCartons?.cartonDetails || [];
+                                          return cartonList.length > 0 ? (
+                                            cartonList.map(
+                                              (row: any, rowIndex: number) => (
+                                                <tr
+                                                  key={rowIndex}
+                                                  className="transition-colors hover:bg-slate-50/70"
+                                                >
+                                                  <td className="px-5 sm:px-6 py-3 text-sm font-semibold text-slate-900">
+                                                    {row?.cartonSerial}
+                                                  </td>
+                                                  <td className="px-4 sm:px-5 py-3">
+                                                    <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-tighter text-slate-600">
+                                                      {String(row?.status || "N/A")}
+                                                    </span>
+                                                  </td>
+                                                  <td className="px-4 sm:px-5 py-3 text-right">
+                                                    <span className="text-[12px] font-mono text-slate-500">
+                                                      {new Date(
+                                                        row?.createdAt,
+                                                      ).toLocaleTimeString([], {
+                                                        hour12: true,
+                                                        hour: "2-digit",
+                                                        minute: "2-digit",
+                                                      })}
+                                                    </span>
+                                                  </td>
+                                                </tr>
+                                              ),
+                                            )
+                                          ) : (
+                                            <tr>
+                                              <td
+                                                colSpan={3}
+                                                className="p-8 text-center text-sm text-slate-400"
+                                              >
+                                                No cartons found
+                                              </td>
+                                            </tr>
+                                          );
+                                        })()}
                                       </tbody>
                                     </table>
                                   </div>
@@ -4691,6 +5657,54 @@ export default function DeviceTestComponent({
         </div>
       </div>
       <Modal
+        isOpen={isPdiCartonNgModalOpen}
+        onClose={closePdiCartonNgModal}
+        title="Mark Carton NG"
+        onSubmit={handleSubmitPdiCartonNg}
+        submitText={isSubmittingPdiCartonNg ? "Submitting..." : "Return To Packaging"}
+        submitDisabled={!pdiCartonNgReason || isSubmittingPdiCartonNg}
+        maxWidth="max-w-2xl"
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900">
+            This will fail the selected carton in PDI, return it to the previous packaging stage, and reset weight and sticker verification so packaging can rework the same carton serial.
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
+              NG Reason
+            </label>
+            <select
+              value={pdiCartonNgReason}
+              onChange={(e) => setPdiCartonNgReason(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
+            >
+              {PDI_CARTON_NG_REASONS.map((reason) => (
+                <option key={reason.value} value={reason.value}>
+                  {reason.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">
+              Notes
+            </label>
+            <textarea
+              value={pdiCartonNgNotes}
+              onChange={(e) => setPdiCartonNgNotes(e.target.value)}
+              rows={4}
+              placeholder="Add any carton damage details or rework instructions for packaging."
+              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-rose-400 focus:ring-4 focus:ring-rose-100"
+            />
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+            <div>Carton Serial: <span className="font-black text-slate-900">{selectedCarton || "N/A"}</span></div>
+            <div className="mt-1">Same carton serial will be reused after packaging re-verifies and reprints the sticker.</div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         isOpen={isCartonDevicesModalOpen}
         onClose={() => setIsCartonDevicesModalOpen(false)}
         title="Devices in Current Carton"
@@ -4706,23 +5720,41 @@ export default function DeviceTestComponent({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {cartons &&
-                cartons.length > 0 &&
-                Array.isArray(cartons[cartons.length - 1]?.devices) ? (
-                cartons[cartons.length - 1].devices.map(
-                  (device: any, idx: number) => (
-                    <tr key={idx} className="hover:bg-gray-50/50">
+              {currentOpenPackagingCarton &&
+              ((Array.isArray(currentOpenPackagingCarton?.persistedDevices) &&
+                currentOpenPackagingCarton.persistedDevices.length > 0) ||
+                (Array.isArray(currentOpenPackagingCarton?.pendingDevices) &&
+                  currentOpenPackagingCarton.pendingDevices.length > 0)) ? (
+                <>
+                  {(currentOpenPackagingCarton?.persistedDevices || []).map(
+                    (device: any, idx: number) => (
+                      <tr key={`persisted-${device?.serialNo || device || idx}`} className="hover:bg-gray-50/50">
+                        <td className="px-4 py-3 font-medium text-gray-900">
+                          {device?.serialNo || device || "N/A"}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="whitespace-nowrap rounded bg-green-100 px-2 py-1 text-xs font-bold text-green-700">
+                            In Carton
+                          </span>
+                        </td>
+                      </tr>
+                    ),
+                  )}
+                  {(currentOpenPackagingCarton?.pendingDevices || []).map(
+                    (device: any, idx: number) => (
+                      <tr key={`pending-${device?.serialNo || device || idx}`} className="hover:bg-gray-50/50">
                       <td className="px-4 py-3 font-medium text-gray-900">
                         {device?.serialNo || device || "N/A"}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className="whitespace-nowrap rounded bg-green-100 px-2 py-1 text-xs font-bold text-green-700">
-                          In Carton
+                        <span className="whitespace-nowrap rounded bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">
+                          Pending Verification
                         </span>
                       </td>
                     </tr>
                   ),
-                )
+                  )}
+                </>
               ) : (
                 <tr>
                   <td
@@ -4739,11 +5771,60 @@ export default function DeviceTestComponent({
       </Modal>
 
       <Modal
+        isOpen={isCartonFullModalOpen}
+        onClose={acknowledgeCartonFull}
+        title="Carton Capacity Full"
+        onSubmit={acknowledgeCartonFull}
+        submitText="Continue"
+        closeOption={false}
+        extraActions={
+          <button
+            type="button"
+            onClick={() => acknowledgeCartonFull({ openCartonPopup: true })}
+            className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100"
+          >
+            Open Carton Workflow
+          </button>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div>
+                <p className="text-sm font-black text-amber-900">
+                  Carton capacity is full.
+                </p>
+                <p className="mt-1 text-sm font-medium leading-relaxed text-amber-800">
+                  Please add a new carton before continuing with the next device.
+                </p>
+                {activePackagingCarton?.cartonSerial && (
+                  <p className="mt-3 text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
+                    {String(activePackagingCarton.cartonSerial)} is currently full
+                  </p>
+                )}
+                <p className="mt-3 text-xs font-semibold text-amber-700">
+                  Use "Open Carton Workflow" if you want to verify, print, or move cartons right away.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         isOpen={isLogsModalOpen}
-        onClose={() => setIsLogsModalOpen(false)}
+        onClose={() => {
+          setIsLogsModalOpen(false);
+          if (reopenCartonHistoryAfterLogs) {
+            setIsCartonDeviceHistoryOpen(true);
+            setReopenCartonHistoryAfterLogs(false);
+          }
+        }}
         title={selectedLogsTitle}
         submitOption={false}
         onSubmit={() => { }}
+        maxWidth="max-w-5xl"
       >
         <div className="rounded-b-xl bg-gray-900 p-4">
           <div className="mb-3 flex items-center justify-end">
@@ -4752,8 +5833,8 @@ export default function DeviceTestComponent({
               onClick={downloadSelectedLogs}
               disabled={selectedLogs.length === 0}
               className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-black uppercase tracking-[0.14em] transition ${selectedLogs.length > 0
-                  ? "bg-slate-800 text-slate-100 hover:bg-slate-700"
-                  : "cursor-not-allowed bg-slate-800/60 text-slate-500"
+                ? "bg-slate-800 text-slate-100 hover:bg-slate-700"
+                : "cursor-not-allowed bg-slate-800/60 text-slate-500"
                 }`}
             >
               <FileText className="h-4 w-4" />
@@ -4761,69 +5842,69 @@ export default function DeviceTestComponent({
             </button>
           </div>
           <div className="font-mono max-h-[70vh] overflow-y-auto text-xs">
-          {selectedLogs.map((logGroup: any, gIndex: number) => (
-            <div key={gIndex} className="mb-6 last:mb-0">
-              <div className="mb-2 flex items-center gap-2 border-b border-gray-700 pb-1">
-                <span className="font-bold uppercase tracking-widest text-blue-400">
-                  {logGroup.stepName}
-                </span>
-                <span
-                  className={`rounded px-1.5 py-0.5 text-[10px] ${logGroup.status === "Pass" ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300"}`}
-                >
-                  {logGroup.status}
-                </span>
-                <span className="ml-auto text-[10px] text-gray-500">
-                  {new Date(logGroup.createdAt).toLocaleTimeString()}
-                </span>
-              </div>
+            {selectedLogs.map((logGroup: any, gIndex: number) => (
+              <div key={gIndex} className="mb-6 last:mb-0">
+                <div className="mb-2 flex items-center gap-2 border-b border-gray-700 pb-1">
+                  <span className="font-bold uppercase tracking-widest text-blue-400">
+                    {logGroup.stepName}
+                  </span>
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] ${logGroup.status === "Pass" ? "bg-green-900 text-green-300" : "bg-red-900 text-red-300"}`}
+                  >
+                    {logGroup.status}
+                  </span>
+                  <span className="ml-auto text-[10px] text-gray-500">
+                    {new Date(logGroup.createdAt).toLocaleTimeString()}
+                  </span>
+                </div>
 
-              {logGroup.logData?.terminalLogs?.length > 0 ? (
-                <div className="space-y-1">
-                  {logGroup.logData.terminalLogs.map(
-                    (log: any, lIndex: number) => (
-                      <div key={lIndex} className="flex gap-2">
-                        <span className="shrink-0 text-gray-600">
-                          [
-                          {formatHistoryLogTime(log)}
-                          ]
-                        </span>
-                        <span
-                          className={`
+                {logGroup.logData?.terminalLogs?.length > 0 ? (
+                  <div className="space-y-1">
+                    {logGroup.logData.terminalLogs.map(
+                      (log: any, lIndex: number) => (
+                        <div key={lIndex} className="flex gap-2">
+                          <span className="shrink-0 text-gray-600">
+                            [
+                            {formatHistoryLogTime(log)}
+                            ]
+                          </span>
+                          <span
+                            className={`
                         ${log.type === "error"
-                              ? "text-red-400"
-                              : log.type === "success"
-                                ? "text-green-400"
-                                : log.type === "info"
-                                  ? "text-blue-300"
-                                  : "text-gray-300"
-                            }
+                                ? "text-red-400"
+                                : log.type === "success"
+                                  ? "text-green-400"
+                                  : log.type === "info"
+                                    ? "text-blue-300"
+                                    : "text-gray-300"
+                              }
                       `}
-                        >
-                          {log.message}
-                        </span>
-                      </div>
-                    ),
-                  )}
-                </div>
-              ) : (
-                <div className="italic text-gray-500">
-                  No terminal logs available for this step.
-                </div>
-              )}
+                          >
+                            {log.message}
+                          </span>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                ) : (
+                  <div className="italic text-gray-500">
+                    No terminal logs available for this step.
+                  </div>
+                )}
 
-              {logGroup.logData?.reason && (
-                <div className="mt-2 rounded border border-red-900/30 bg-red-900/20 p-2 text-red-300">
-                  <span className="font-bold">Failure Reason:</span>{" "}
-                  {logGroup.logData.reason}
-                </div>
-              )}
-            </div>
-          ))}
-          {selectedLogs.length === 0 && (
-            <div className="py-10 text-center italic text-gray-500">
-              No logs found for this record.
-            </div>
-          )}
+                {logGroup.logData?.reason && (
+                  <div className="mt-2 rounded border border-red-900/30 bg-red-900/20 p-2 text-red-300">
+                    <span className="font-bold">Failure Reason:</span>{" "}
+                    {logGroup.logData.reason}
+                  </div>
+                )}
+              </div>
+            ))}
+            {selectedLogs.length === 0 && (
+              <div className="py-10 text-center italic text-gray-500">
+                No logs found for this record.
+              </div>
+            )}
           </div>
         </div>
       </Modal>
@@ -4834,13 +5915,33 @@ export default function DeviceTestComponent({
         title={`Device History - ${cartonDeviceHistorySerial || ""}`}
         submitOption={false}
         onSubmit={() => { }}
+        maxWidth="max-w-5xl"
       >
-        <div className="max-h-[72vh] overflow-hidden">
+        <div className="space-y-4">
+          <div className="rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_100%)] px-5 py-4 shadow-sm">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
+                  Device History
+                </div>
+                <div className="mt-1 text-lg font-black tracking-tight text-slate-950">
+                  {cartonDeviceHistorySerial || "N/A"}
+                </div>
+              </div>
+              <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 shadow-sm">
+                {cartonDeviceHistoryRows.length} Records
+              </div>
+            </div>
+          </div>
+
+          <div className="max-h-[68vh] overflow-hidden">
           {isCartonDeviceHistoryLoading ? (
-            <div className="p-10 text-center text-sm font-medium text-slate-500">Loading...</div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm font-medium text-slate-500 shadow-sm">
+              Loading device history...
+            </div>
           ) : (
-            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-              <div className="max-h-[64vh] overflow-auto">
+            <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
+              <div className="max-h-[60vh] overflow-auto">
                 <table className="min-w-[780px] w-full text-left text-sm table-fixed">
                   <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur border-b border-slate-200">
                     <tr className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500">
@@ -4872,10 +5973,10 @@ export default function DeviceTestComponent({
                           <td className="px-4 py-3">
                             <span
                               className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${r.status === "Pass" || r.status === "Completed"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : r.status === "NG"
-                                    ? "bg-rose-100 text-rose-700"
-                                    : "bg-slate-100 text-slate-600"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : r.status === "NG"
+                                  ? "bg-rose-100 text-rose-700"
+                                  : "bg-slate-100 text-slate-600"
                                 }`}
                             >
                               {r.status}
@@ -4900,11 +6001,13 @@ export default function DeviceTestComponent({
                                   `${r.stageName || "Detailed Step"} Logs`,
                                 );
                                 setSelectedLogs(r.logs || []);
+                                setReopenCartonHistoryAfterLogs(true);
+                                setIsCartonDeviceHistoryOpen(false);
                                 setIsLogsModalOpen(true);
                               }}
                               className={`inline-flex items-center justify-center h-9 px-3 rounded-lg text-xs font-black uppercase tracking-[0.12em] transition ${r.logs && r.logs.length > 0
-                                  ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
-                                  : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                                ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                                : "bg-slate-100 text-slate-400 cursor-not-allowed"
                                 }`}
                             >
                               Logs
@@ -4918,6 +6021,7 @@ export default function DeviceTestComponent({
               </div>
             </div>
           )}
+          </div>
         </div>
       </Modal>
 
@@ -4929,7 +6033,7 @@ export default function DeviceTestComponent({
             ? processCartons
             : processCartons?.cartonDetails || []
         }
-        processData={processData}
+        processData={{ ...processData, customerName: planingAndScheduling?.customerName, modelName: planingAndScheduling?.modelName }}
         product={product}
         assignUserStage={assignUserStage}
         onUpdate={() => {
