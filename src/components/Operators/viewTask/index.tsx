@@ -107,6 +107,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const [overallTotalCompleted, setOverallTotalCompleted] = useState(0);
   const [overallTotalNg, setOverallTotalNg] = useState(0);
   const [wipKits, setWipKits] = useState(0);
+  const [lineIssueKits, setLineIssueKits] = useState(0);
+  const [kitsShortage, setKitsShortage] = useState(0);
   const [deviceList, setDeviceList] = useState<any[]>([]);
   const [choosenDevice, setChoosenDevice] = useState("");
   const [checkedDevice, setCheckedDevice] = useState<any[]>([]);
@@ -366,6 +368,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     }
   }, [getPlaningAndScheduling, assignUserStage, processData]);
 
+  useEffect(() => {
+    const queueWip = Array.isArray(deviceList) ? deviceList.length : 0;
+    const issuedForSeat = queueWip + overallTotalCompleted + overallTotalNg;
+
+    setWipKits(queueWip);
+    setLineIssueKits(issuedForSeat);
+    setKitsShortage(0);
+  }, [deviceList, overallTotalCompleted, overallTotalNg]);
+
   // ── Shared sync function (used by interval + manual button) ─────────────────
   const runSync = async () => {
     setIsSyncing(true);
@@ -384,7 +395,10 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             setPlaningAndScheduling(freshPlan);
             const isCommon = assignedTaskDetails?.stageType === "common";
             const stageField = isCommon ? "assignedCustomStages" : "assignedStages";
-            const assignedStages = JSON.parse(freshPlan[stageField] || "{}");
+              const assignedStages = normalizeAssignedStagesPayload(
+                JSON.parse(freshPlan[stageField] || "{}"),
+                processData?.stages || [],
+              );
             const seatKey = operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber;
             const seatStages = Array.isArray(assignedStages[seatKey])
               ? assignedStages[seatKey]
@@ -450,6 +464,92 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const closeVerifyStickerModal = () => {
     setIsVerifyStickerModal(!isVerifyStickerModal);
   };
+  const filterDevicesForCurrentSeat = React.useCallback(
+    ({
+      devices = [],
+      latestRecords = [],
+      operatorStageName = "",
+      processId = "",
+      processStages = [],
+      normalizedAssignedStages = {},
+    }: {
+      devices?: any[];
+      latestRecords?: any[];
+      operatorStageName?: string;
+      processId?: string;
+      processStages?: any[];
+      normalizedAssignedStages?: Record<string, any>;
+    }) => {
+      const trimmedStageName = String(operatorStageName || "").trim();
+      const firstStageName = String(processStages?.[0]?.stageName || "").trim();
+      const seatKey = operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber;
+      const currentSeatStage = getSeatStageEntry(normalizedAssignedStages, seatKey);
+      const parallelSeats = getParallelSeatEntries({
+        assignedStages: normalizedAssignedStages,
+        stageName: trimmedStageName,
+        lineIndex: currentSeatStage?.lineIndex,
+        parallelGroupKey: currentSeatStage?.parallelGroupKey,
+      });
+
+      const latestRecordMap = new Map<string, any>();
+      (Array.isArray(latestRecords) ? latestRecords : []).forEach((record: any) => {
+        const serial = String(
+          record?.serialNo ||
+          record?.serial ||
+          record?.device?.serialNo ||
+          record?.deviceInfo?.serialNo ||
+          "",
+        ).trim();
+        if (!serial) return;
+        latestRecordMap.set(serial, record);
+      });
+
+      return (Array.isArray(devices) ? devices : []).filter((device: any) => {
+        const deviceProcessId = String(device?.processID || device?.processId || "");
+        const deviceStatus = String(device?.status || "").trim().toLowerCase();
+        const deviceCurrentStage = String(device?.currentStage || "").trim();
+        const deviceSerial = String(device?.serialNo || device?.serial_no || "").trim();
+        const latestPlanRecord = deviceSerial ? latestRecordMap.get(deviceSerial) : null;
+
+        const stageMatches =
+          deviceCurrentStage === trimmedStageName ||
+          (!deviceCurrentStage && trimmedStageName && trimmedStageName === firstStageName);
+
+        if (!(deviceProcessId === String(processId) && deviceStatus !== "ng" && stageMatches)) {
+          return false;
+        }
+
+        // For downstream stages, only count devices that already belong to this plan.
+        if (trimmedStageName !== firstStageName && !latestPlanRecord) {
+          return false;
+        }
+
+        if (
+          latestPlanRecord?.assignedSeatKey &&
+          String(latestPlanRecord.assignedSeatKey) !== String(seatKey)
+        ) {
+          return false;
+        }
+
+        if (parallelSeats.length <= 1) {
+          return true;
+        }
+
+        const latestAssignment = getSeatAssignmentForDevice({
+          records: latestRecords,
+          serialNo: deviceSerial,
+          currentStageName: trimmedStageName,
+        });
+
+        if (!latestAssignment?.assignedSeatKey) {
+          return false;
+        }
+
+        return String(latestAssignment.assignedSeatKey) === String(seatKey);
+      });
+    },
+    [assignedTaskDetails?.stageType, operatorSeatInfo?.rowNumber, operatorSeatInfo?.seatNumber],
+  );
   const getOverallProgress = async (id: any) => {
     try {
       if (!getPlaningAndScheduling) return;
@@ -457,13 +557,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       if (!processId) return;
 
       // 1. Fetch latest records per device/stage for this plan
-      let allRecords: any[] = [];
-      try {
-        const recordResult = await getLatestDeviceTestsByPlanId(id, processId);
-        allRecords = recordResult?.deviceTestRecords || [];
-      } catch (e) {
-        const recordResult = await getDeviceTestRecordsByProcessId(processId);
-        const rawRecords = recordResult?.deviceTestRecords || [];
+      const productId = selectedProduct?._id || selectedProduct?.product?._id;
+      const [latestRecordResult, fallbackRecordResult, deviceResult] = await Promise.all([
+        getLatestDeviceTestsByPlanId(id, processId).catch(() => null),
+        getDeviceTestRecordsByProcessId(processId).catch(() => null),
+        productId ? getDeviceByProductId(productId).catch(() => null) : Promise.resolve(null),
+      ]);
+      let allRecords: any[] = latestRecordResult?.deviceTestRecords || [];
+      if (!Array.isArray(allRecords) || allRecords.length === 0) {
+        const rawRecords = fallbackRecordResult?.deviceTestRecords || [];
         allRecords = rawRecords.filter(
           (record: any) => String(record?.planId) === String(id),
         );
@@ -472,15 +574,26 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       // 2. Identify current stages assigned to this seat
       const isCommon = assignedTaskDetails?.stageType === "common";
       const stageField = isCommon ? "assignedCustomStages" : "assignedStages";
-      const assignedStages = JSON.parse(getPlaningAndScheduling?.[stageField] || "{}");
-      const seatKey = operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber;
+        const assignedStages = normalizeAssignedStagesPayload(
+          JSON.parse(getPlaningAndScheduling?.[stageField] || "{}"),
+          processData?.stages || [],
+        );
+        const seatKey = operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber;
 
-      const seatStages = Array.isArray(assignedStages?.[seatKey])
-        ? assignedStages[seatKey]
-        : (assignedStages?.[seatKey] ? [assignedStages[seatKey]] : []);
+        const seatStages = Array.isArray(assignedStages?.[seatKey])
+          ? assignedStages[seatKey]
+          : (assignedStages?.[seatKey] ? [assignedStages[seatKey]] : []);
 
-      const targetStageNames = new Set(seatStages.map((s: any) => (s.name || s.stageName)?.trim()).filter(Boolean));
-      if (targetStageNames.size === 0) return;
+        const targetStageNames = new Set(seatStages.map((s: any) => (s.name || s.stageName)?.trim()).filter(Boolean));
+        if (targetStageNames.size === 0) {
+          setWipKits(0);
+          setLineIssueKits(0);
+          setKitsShortage(0);
+          setOverallTotalCompleted(0);
+          setOverallTotalNg(0);
+          setOverallTotalAttempts(0);
+          return;
+        }
 
       // 3. Filter records for CURRENT stage (GLOBAL across all operators/plans in this process instance)
       let globalPass = 0;
@@ -514,31 +627,29 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       setOverallTotalNg(globalNg);
       setOverallTotalAttempts(globalTested);
 
-      // 4. Calculate WIP globally for these stages
-      const stages = (processData?.stages || []).map((s: any) => s.stageName);
-      const currentStageName = Array.from(targetStageNames)[0] as string;
-      const currentStageIdx = stages.indexOf(currentStageName);
-
-      const issuedKits = parseInt(getPlaningAndScheduling?.assignedIssuedKits || "0", 10) || 0;
-      if (issuedKits > 0) {
-        const totalDone = globalPass + globalNg;
-        setWipKits(Math.max(issuedKits - totalDone, 0));
-      } else {
-        // Fallback: calculate total WIP based on totalUPHA for the assigned stages
-        let totalWipFromUPHA = 0;
-        Object.values(assignedStages).forEach((seatS: any) => {
-          const arr = Array.isArray(seatS) ? seatS : [seatS];
-          arr.forEach((s: any) => {
-            if (targetStageNames.has((s.name || s.stageName)?.trim())) {
-              totalWipFromUPHA += (s.totalUPHA || 0);
-            }
-          });
+        // 4. Calculate WIP for the current seat only.
+        const seatFilteredDevices = filterDevicesForCurrentSeat({
+          devices: deviceResult?.data || [],
+          latestRecords: allRecords,
+          operatorStageName: Array.from(targetStageNames)[0] as string,
+          processId,
+          processStages: processData?.stages || [],
+          normalizedAssignedStages: assignedStages,
         });
-        setWipKits(totalWipFromUPHA);
-      }
-      setOverallTotalCompleted(globalPass);
-      setOverallTotalNg(globalNg);
-      setOverallTotalAttempts(globalTested);
+        const seatProcessedTotal = seatStages.reduce((sum: number, stageEntry: any) => {
+          const passed = Number(stageEntry?.passedDevice || 0);
+          const ng = Number(stageEntry?.ngDevice || 0);
+          return sum + (Number.isFinite(passed) ? passed : 0) + (Number.isFinite(ng) ? ng : 0);
+        }, 0);
+        const effectiveSeatWip = seatFilteredDevices.length;
+        const seatIssuedTotal = effectiveSeatWip + seatProcessedTotal;
+
+        setWipKits(effectiveSeatWip);
+        setLineIssueKits(seatIssuedTotal);
+        setKitsShortage(Math.max(seatIssuedTotal - effectiveSeatWip - seatProcessedTotal, 0));
+        setOverallTotalCompleted(globalPass);
+        setOverallTotalNg(globalNg);
+        setOverallTotalAttempts(globalTested);
     } catch (error: any) {
       console.error("Error fetching process-wide progress:", error);
     }
@@ -627,58 +738,24 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           ? assignStageToUser?.[0]?.name || assignStageToUser?.[0]?.stageName || ""
           : assignStageToUser?.name || assignStageToUser?.stageName || "",
       ).trim();
-      const firstStageName = String(processStages?.[0]?.stageName || "").trim();
-      const seatKey = operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber;
       const isCommon = assignedTaskDetails?.stageType === "common";
       const stageField = isCommon ? "assignedCustomStages" : "assignedStages";
       const normalizedAssignedStages = normalizeAssignedStagesPayload(
         JSON.parse(getPlaningAndScheduling?.[stageField] || "{}"),
         processStages || processData?.stages || [],
       );
-      const currentSeatStage = getSeatStageEntry(normalizedAssignedStages, seatKey);
-      const parallelSeats = getParallelSeatEntries({
-        assignedStages: normalizedAssignedStages,
-        stageName: operatorStageName,
-        lineIndex: currentSeatStage?.lineIndex,
-        parallelGroupKey: currentSeatStage?.parallelGroupKey,
-      });
       const latestRecords = latestRecordResult?.deviceTestRecords || [];
-      const requiresExactSeatRouting = parallelSeats.length > 1;
-
-      // Only show devices that belong to this process and are currently at the
-      // operator's assigned stage. This prevents already-passed devices from
-      // reappearing in the current stage search.
-      const filteredDeviceList = (result?.data || []).filter((device: any) => {
-        const deviceProcessId = String(device?.processID || device?.processId || "");
-        const deviceStatus = String(device?.status || "").trim().toLowerCase();
-        const deviceCurrentStage = String(device?.currentStage || "").trim();
-
-        const stageMatches =
-          deviceCurrentStage === operatorStageName ||
-          (!deviceCurrentStage && operatorStageName && operatorStageName === firstStageName);
-
-        if (!(deviceProcessId === String(pId) && deviceStatus !== "ng" && stageMatches)) {
-          return false;
-        }
-
-        if (!requiresExactSeatRouting) {
-          return true;
-        }
-
-        const latestAssignment = getSeatAssignmentForDevice({
-          records: latestRecords,
-          serialNo: device?.serialNo || device?.serial_no,
-          currentStageName: operatorStageName,
-        });
-
-        if (!latestAssignment?.assignedSeatKey) {
-          return true;
-        }
-
-        return String(latestAssignment.assignedSeatKey) === String(seatKey);
+      const filteredDeviceList = filterDevicesForCurrentSeat({
+        devices: result?.data || [],
+        latestRecords,
+        operatorStageName,
+        processId: pId,
+        processStages,
+        normalizedAssignedStages,
       });
 
       setDeviceList(filteredDeviceList);
+      setWipKits(filteredDeviceList.length);
     } catch (error) {
       console.error("Error Fetching Devices:", error);
     }
@@ -1976,21 +2053,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         <div className="rounded-xl border-l-4 border-blue-500 bg-blue-50 p-5 shadow">
           <h3 className="text-lg font-bold text-blue-700">UPH Target</h3>
           <div className="mt-2 space-y-1 text-sm text-blue-900">
-            <p>
-              <b>WIP Kits:</b> {wipKits}
-            </p>
-            <p>
-              <b>Line issue kit:</b>{" "}
-              {getPlaningAndScheduling?.assignedIssuedKits}
-            </p>
-            <p>
-              <b>Kits Shortage:</b>{" "}
-              {Math.max(
-                0,
-                parseInt(getPlaningAndScheduling?.processQuantity) -
-                getPlaningAndScheduling?.assignedIssuedKits,
-              )}
-            </p>
+              <p>
+                <b>WIP Kits:</b> {wipKits}
+              </p>
+              <p>
+                <b>Line issue kit:</b> {lineIssueKits}
+              </p>
+              <p>
+                <b>Kits Shortage:</b> {kitsShortage}
+              </p>
           </div>
         </div>
         <div className="rounded-xl border-l-4 border-green-500 bg-green-50 p-5 shadow">
