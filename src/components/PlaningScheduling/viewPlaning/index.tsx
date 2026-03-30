@@ -976,12 +976,33 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
             }
           }
 
+          let onlyProcessDevices: any[] = [];
           if (deviceResult) {
             const allDevices = deviceResult?.data || [];
-            const onlyProcessDevices = allDevices.filter(
+            onlyProcessDevices = allDevices.filter(
               (d: any) => String(d.processID) === String(singleProcess?._id),
             );
             setProcessDevices(onlyProcessDevices);
+          }
+
+          const recalculatedAssignedStages = allocateStagesToSeats(
+            processData?.product,
+            room,
+            Number(result?.repeatCount || 1),
+            reservedSeats,
+            currentAssignedStages,
+            singleProcess,
+            Number(result?.assignedIssuedKits || 0),
+            deviceTests,
+            latestTests,
+            onlyProcessDevices,
+          );
+
+          if (recalculatedAssignedStages) {
+            setAssignedStages({
+              ...(recalculatedAssignedStages || {}),
+              ...(reservedSeats || {}),
+            });
           }
 
           const stageHeaders =
@@ -1435,40 +1456,142 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     selectedProcess = {},
     assignedIssuedKits = 0,
     deviceTests = [],
+    latestDeviceTests = [],
+    processDevices = [],
   ) => {
+    const normalizeStageName = (value: any) => String(value || "").trim();
+    const normalizeStageKey = (value: any) =>
+      normalizeStageName(value).toLowerCase().replace(/\s+/g, " ");
+    const getSeatSortValue = (seatKey: string) =>
+      String(seatKey || "")
+        .split("-")
+        .map((part) => Number(part));
+    const getRecordTime = (record: any) => {
+      const raw =
+        record?.updatedAt ||
+        record?.createdAt ||
+        record?.endTime ||
+        record?.time ||
+        0;
+      const parsed = new Date(raw).getTime();
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
 
+    const stages = selectedProcess?.stages || [];
+    const normalizedAssignedStages = normalizeAssignedStagesPayload(
+      assignedStages,
+      stages,
+    );
+    const assignedSeatsKeys = Object.keys(normalizedAssignedStages);
+    const seatEntries = assignedSeatsKeys
+      .map((seatKey) => {
+        const seatStages = Array.isArray(normalizedAssignedStages?.[seatKey])
+          ? normalizedAssignedStages[seatKey]
+          : normalizedAssignedStages?.[seatKey]
+            ? [normalizedAssignedStages[seatKey]]
+            : [];
+        const stageEntry =
+          seatStages.find((stage: any) => !stage?.reserved) || seatStages[0] || null;
+        return { seatKey, stageEntry };
+      })
+      .filter(({ stageEntry }) => !!stageEntry)
+      .sort((left, right) => {
+        const [leftRow, leftSeat] = getSeatSortValue(left.seatKey);
+        const [rightRow, rightSeat] = getSeatSortValue(right.seatKey);
+        if (leftRow !== rightRow) return leftRow - rightRow;
+        return leftSeat - rightSeat;
+      });
 
-    const stagePassCount = deviceTests.reduce((acc, record) => {
-      const stage = record.stageName?.trim();
-      if (record.status === "Pass") {
-        acc[stage] = (acc[stage] || 0) + 1;
-      }
-      return acc;
-    }, {});
+    const testResultsBySeatAndStage: Record<string, { passed: number; ng: number }> = {};
+    (Array.isArray(deviceTests) ? deviceTests : []).forEach((record: any) => {
+      const stageName = normalizeStageName(record?.stageName);
+      const seatKey = String(record?.seatNumber ?? record?.coordinates ?? "").trim();
+      if (!stageName || !seatKey) return;
 
-    const stageNGCount = deviceTests.reduce((acc, record) => {
-      const stage = record.stageName?.trim();
-      if (
-        (record.status === "NG" || record.status === "Fail") &&
-        assignedStages[record.seatNumber]
-      ) {
-        acc[stage] = (acc[stage] || 0) + 1;
-      }
-      return acc;
-    }, {});
-    const testResultsBySeatAndStage = {};
-    deviceTests.forEach((record) => {
-
-      const key = `${record.seatNumber}:${record.stageName?.trim()}`;
+      const key = `${seatKey}:${normalizeStageKey(stageName)}`;
       if (!testResultsBySeatAndStage[key]) {
         testResultsBySeatAndStage[key] = { passed: 0, ng: 0 };
       }
-      if (record.status === "Pass") testResultsBySeatAndStage[key].passed++;
-      else if (record.status === "NG" || record.status === "Fail")
+
+      if (record.status === "Pass") {
+        testResultsBySeatAndStage[key].passed++;
+      } else if (record.status === "NG" || record.status === "Fail") {
         testResultsBySeatAndStage[key].ng++;
+      }
     });
-    const assignedSeatsKeys = Object.keys(assignedStages);
-    const stages = selectedProcess?.stages || [];
+
+    const latestRecordBySerial = new Map<string, any>();
+    const latestRecordsSource =
+      Array.isArray(latestDeviceTests) && latestDeviceTests.length > 0
+        ? latestDeviceTests
+        : deviceTests;
+    (Array.isArray(latestRecordsSource) ? latestRecordsSource : []).forEach((record: any) => {
+      const serial = String(
+        record?.serialNo ||
+        record?.serial ||
+        record?.device?.serialNo ||
+        record?.deviceInfo?.serialNo ||
+        "",
+      ).trim();
+      if (!serial) return;
+
+      const existing = latestRecordBySerial.get(serial);
+      if (!existing || getRecordTime(record) >= getRecordTime(existing)) {
+        latestRecordBySerial.set(serial, record);
+      }
+    });
+
+    const seatsByStageName = seatEntries.reduce((acc: Record<string, any[]>, entry: any) => {
+      const stageKey = normalizeStageKey(
+        entry?.stageEntry?.stageName || entry?.stageEntry?.name || entry?.stageEntry?.stage,
+      );
+      if (!stageKey) return acc;
+      if (!acc[stageKey]) acc[stageKey] = [];
+      acc[stageKey].push(entry);
+      return acc;
+    }, {});
+
+    const waitingBySeatAndStage: Record<string, number> = {};
+    (Array.isArray(processDevices) ? processDevices : []).forEach((device: any) => {
+      const stageName = normalizeStageName(device?.currentStage);
+      const stageKey = normalizeStageKey(stageName);
+      const status = String(device?.status || "").trim().toLowerCase();
+      if (!stageKey || status === "pass" || status === "completed") return;
+
+      const serial = String(device?.serialNo || device?.serial || "").trim();
+      const latestRecord = serial ? latestRecordBySerial.get(serial) : null;
+      let routedSeatKey = String(
+        latestRecord?.assignedSeatKey ||
+        latestRecord?.currentSeatKey ||
+        latestRecord?.seatNumber ||
+        latestRecord?.coordinates ||
+        "",
+      ).trim();
+
+      const candidateSeats = seatsByStageName[stageKey] || [];
+      if (!routedSeatKey && candidateSeats.length === 1) {
+        routedSeatKey = candidateSeats[0].seatKey;
+      }
+
+      if (!routedSeatKey) return;
+
+      const waitingKey = `${routedSeatKey}:${stageKey}`;
+      waitingBySeatAndStage[waitingKey] =
+        (waitingBySeatAndStage[waitingKey] || 0) + 1;
+    });
+
+    const seatsByLineAndSequence = seatEntries.reduce(
+      (acc: Record<string, any[]>, entry: any) => {
+        const lineIndex = Number(entry?.stageEntry?.lineIndex ?? -1);
+        const sequenceIndex = Number(entry?.stageEntry?.sequenceIndex ?? -1);
+        const groupKey = `${lineIndex}:${sequenceIndex}`;
+        if (!acc[groupKey]) acc[groupKey] = [];
+        acc[groupKey].push(entry);
+        return acc;
+      },
+      {},
+    );
+
     const newAssignedStages: any = {};
     const totalSeatsAvailable = selectedRoom?.lines?.reduce(
       (total: number, row: any) => total + row?.seats?.length,
@@ -1502,44 +1625,80 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
           assignedSeatsKeys.includes(seatKey) &&
           seatIndex < stages.length * repeatCount
         ) {
-          const currentStageIndex = seatIndex % stages.length;
-          const currentStage = stages[currentStageIndex];
-          const trimmedStageName = currentStage.stageName?.trim();
-          const hasJigStepType = currentStage.subSteps?.some(
-            (step: any) => step.stepType === "jig",
+          const stageEntry =
+            seatEntries.find((entry: any) => entry.seatKey === seatKey)?.stageEntry || null;
+          const currentStageIndex = Number(stageEntry?.sequenceIndex ?? (seatIndex % stages.length));
+          const currentStage = stageEntry || stages[currentStageIndex];
+          const trimmedStageName = normalizeStageName(
+            currentStage?.stageName || currentStage?.name,
           );
-          let totalUPHA = 0;
-          if (currentStageIndex === 0) {
-            totalUPHA = assignedIssuedKits / repeatCount;
-          } else {
-            const prevSeatIndex = seatIndex - 1;
-            const seatsPerRow = row.seats.length;
-            const prevRow = Math.floor(prevSeatIndex / seatsPerRow);
-            const prevCol = prevSeatIndex % seatsPerRow;
-            const prevSeatKey = `${prevRow}-${prevCol}`;
-            const prevStageName =
-              stages[currentStageIndex - 1]?.stageName?.trim();
-            const prevTestKey = `${prevSeatKey}:${prevStageName}`;
-            totalUPHA = testResultsBySeatAndStage[prevTestKey]?.passed || 0;
-          }
-
-          const testKey = `${seatKey}:${trimmedStageName}`;
+          const stageKey = normalizeStageKey(trimmedStageName);
+          const testKey = `${seatKey}:${stageKey}`;
           const passedDevice = testResultsBySeatAndStage[testKey]?.passed || 0;
           const ngDevice = testResultsBySeatAndStage[testKey]?.ng || 0;
-          const remainingDevices = Math.max(
-            totalUPHA - (passedDevice + ngDevice),
-            0,
-          );
+          const directWaitingDevices = waitingBySeatAndStage[testKey];
+
+          let remainingDevices = Number.isFinite(directWaitingDevices)
+            ? directWaitingDevices
+            : 0;
+
+          if (!Number.isFinite(directWaitingDevices)) {
+            const lineIndex = Number(stageEntry?.lineIndex ?? rowIndex);
+            const currentGroupKey = `${lineIndex}:${currentStageIndex}`;
+            const currentGroup = seatsByLineAndSequence[currentGroupKey] || [];
+
+            let groupInput = 0;
+            if (currentStageIndex === 0) {
+              groupInput = Number(assignedIssuedKits || 0);
+            } else {
+              const previousGroup = seatsByLineAndSequence[`${lineIndex}:${currentStageIndex - 1}`] || [];
+              groupInput = previousGroup.reduce((sum: number, entry: any) => {
+                const previousStageName = normalizeStageName(
+                  entry?.stageEntry?.stageName || entry?.stageEntry?.name,
+                );
+                const previousKey = `${entry.seatKey}:${normalizeStageKey(previousStageName)}`;
+                return sum + Number(testResultsBySeatAndStage[previousKey]?.passed || 0);
+              }, 0);
+            }
+
+            const groupProcessed = currentGroup.reduce((sum: number, entry: any) => {
+              const entryStageName = normalizeStageName(
+                entry?.stageEntry?.stageName || entry?.stageEntry?.name,
+              );
+              const entryKey = `${entry.seatKey}:${normalizeStageKey(entryStageName)}`;
+              return (
+                sum +
+                Number(testResultsBySeatAndStage[entryKey]?.passed || 0) +
+                Number(testResultsBySeatAndStage[entryKey]?.ng || 0)
+              );
+            }, 0);
+
+            const groupRemaining = Math.max(groupInput - groupProcessed, 0);
+            if (currentGroup.length > 1) {
+              const groupIndex = currentGroup.findIndex(
+                (entry: any) => entry.seatKey === seatKey,
+              );
+              const baseShare = Math.floor(groupRemaining / currentGroup.length);
+              const remainder = groupRemaining % currentGroup.length;
+              remainingDevices =
+                baseShare + (groupIndex >= 0 && groupIndex < remainder ? 1 : 0);
+            } else {
+              remainingDevices = groupRemaining;
+            }
+          }
 
           newAssignedStages[seatKey] = [
             {
-              name: currentStage.stageName,
-              requiredSkill: currentStage.stageName,
-              upha: currentStage.upha,
-              totalUPHA: remainingDevices,
+              ...currentStage,
+              name: currentStage?.stageName || currentStage?.name,
+              requiredSkill: currentStage?.requiredSkill || currentStage?.stageName || currentStage?.name,
+              upha: currentStage?.upha,
+              totalUPHA: Math.max(Number(remainingDevices || 0), 0),
               passedDevice,
               ngDevice,
-              hasJigStepType,
+              hasJigStepType: currentStage?.hasJigStepType || currentStage?.subSteps?.some(
+                (step: any) => step.stepType === "jig",
+              ),
             },
           ];
           seatIndex++;
