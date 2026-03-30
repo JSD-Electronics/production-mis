@@ -27,6 +27,7 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 import Modal from "@/components/Modal/page";
 import { Clock, Calendar, Coffee, UserPlus } from "lucide-react";
 import { FaClock, FaCogs, FaLayerGroup, FaClipboardList, FaBox } from "react-icons/fa";
+import { normalizeAssignedStagesPayload } from "@/lib/parallelStageRouting";
 
 const ADDPlanSchedule = () => {
   const router = useRouter();
@@ -200,7 +201,12 @@ const ADDPlanSchedule = () => {
     calculateTimeDifference(Shift);
     setRepeatCount(selectedClonePlaning?.repeatCount);
     setStartDate(formatDate(selectedClonePlaning?.startDate));
-    setAssignedStages(JSON.parse(selectedClonePlaning?.assignedStages));
+    setAssignedStages(
+      normalizeAssignedStagesPayload(
+        JSON.parse(selectedClonePlaning?.assignedStages),
+        singleProcess?.stages || [],
+      ),
+    );
     setAssignedOperators(JSON.parse(selectedClonePlaning?.assignedOperators));
     setEstimatedEndDate(formatDate(selectedClonePlaning?.estimatedEndDate));
     setTotalTimeEstimation(selectedClonePlaning?.totalTimeEstimation);
@@ -874,7 +880,7 @@ const ADDPlanSchedule = () => {
   const handlePlaningDraft = async () => {
     try {
       const formData = new FormData();
-      const filteredData = Object.fromEntries(
+      const filteredData = normalizeAssignedStagesPayload(Object.fromEntries(
         Object.entries(assignedStages)
           .map(([key, value]) => [
             key,
@@ -883,7 +889,7 @@ const ADDPlanSchedule = () => {
             ),
           ])
           .filter(([_, value]) => value.length > 0), // Remove keys with empty arrays
-      );
+      ), selectedProduct?.product?.stages || selectedProduct?.stages || []);
       formData.append("processName", processName);
       formData.append("selectedProcess", selectedProcess?._id || "");
       formData.append("selectedRoom", selectedRoom?._id || "");
@@ -926,7 +932,7 @@ const ADDPlanSchedule = () => {
       const formData = new FormData();
       let requiredKits = parseInt(selectedProcess?.quantity || "0");
       let isFirstElement = true;
-      const filteredData = Object.fromEntries(
+      const filteredData = normalizeAssignedStagesPayload(Object.fromEntries(
         Object.entries(assignedStages)
           .map(([key, value]) => [
             key,
@@ -943,7 +949,7 @@ const ADDPlanSchedule = () => {
               }),
           ])
           .filter(([_, value]) => value.length > 0),
-      );
+      ), selectedProduct?.product?.stages || selectedProduct?.stages || []);
       const assignStageKeys = Object.keys(filteredData);
       const filteredJigs = Object.keys(assignedJigs)
         .filter((key) => assignStageKeys.includes(key))

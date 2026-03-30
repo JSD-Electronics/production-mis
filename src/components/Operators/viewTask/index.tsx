@@ -40,6 +40,13 @@ import { calculateTimeDifference } from "@/lib/common";
 import SearchableInput from "@/components/SearchableInput/SearchableInput";
 import { RefreshCw, Video, ExternalLink, Coffee } from "lucide-react";
 import { resolvePreviousStageEligibility } from "./stageEligibility";
+import {
+  chooseNextStageSeatAssignment,
+  getParallelSeatEntries,
+  getSeatAssignmentForDevice,
+  getSeatStageEntry,
+  normalizeAssignedStagesPayload,
+} from "@/lib/parallelStageRouting";
 
 // Utility: safely read current user from localStorage
 const getCurrentUser = () => {
@@ -225,6 +232,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         : false),
     [assignedTaskDetails?.stageType, processData?.commonStages, currentAssignedStageName],
   );
+
+  const getNormalizedPlanAssignedStages = (planData: any = getPlaningAndScheduling) => {
+    const isCommon = assignedTaskDetails?.stageType === "common";
+    const stageField = isCommon ? "assignedCustomStages" : "assignedStages";
+    return normalizeAssignedStagesPayload(
+      JSON.parse(planData?.[stageField] || "{}"),
+      processData?.stages || [],
+    );
+  };
 
   const selectedDevice = useMemo(
     () =>
@@ -599,13 +615,35 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     processStages: any[] = [],
   ) => {
     try {
-      const result = await getDeviceByProductId(id);
+      const [result, latestRecordResult] = await Promise.all([
+        getDeviceByProductId(id),
+        getLatestDeviceTestsByPlanId(
+          window.location.pathname.split("/").pop(),
+          pId,
+        ).catch(() => null),
+      ]);
       const operatorStageName = String(
         Array.isArray(assignStageToUser)
           ? assignStageToUser?.[0]?.name || assignStageToUser?.[0]?.stageName || ""
           : assignStageToUser?.name || assignStageToUser?.stageName || "",
       ).trim();
       const firstStageName = String(processStages?.[0]?.stageName || "").trim();
+      const seatKey = operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber;
+      const isCommon = assignedTaskDetails?.stageType === "common";
+      const stageField = isCommon ? "assignedCustomStages" : "assignedStages";
+      const normalizedAssignedStages = normalizeAssignedStagesPayload(
+        JSON.parse(getPlaningAndScheduling?.[stageField] || "{}"),
+        processStages || processData?.stages || [],
+      );
+      const currentSeatStage = getSeatStageEntry(normalizedAssignedStages, seatKey);
+      const parallelSeats = getParallelSeatEntries({
+        assignedStages: normalizedAssignedStages,
+        stageName: operatorStageName,
+        lineIndex: currentSeatStage?.lineIndex,
+        parallelGroupKey: currentSeatStage?.parallelGroupKey,
+      });
+      const latestRecords = latestRecordResult?.deviceTestRecords || [];
+      const requiresExactSeatRouting = parallelSeats.length > 1;
 
       // Only show devices that belong to this process and are currently at the
       // operator's assigned stage. This prevents already-passed devices from
@@ -619,7 +657,25 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           deviceCurrentStage === operatorStageName ||
           (!deviceCurrentStage && operatorStageName && operatorStageName === firstStageName);
 
-        return deviceProcessId === String(pId) && deviceStatus !== "ng" && stageMatches;
+        if (!(deviceProcessId === String(pId) && deviceStatus !== "ng" && stageMatches)) {
+          return false;
+        }
+
+        if (!requiresExactSeatRouting) {
+          return true;
+        }
+
+        const latestAssignment = getSeatAssignmentForDevice({
+          records: latestRecords,
+          serialNo: device?.serialNo || device?.serial_no,
+          currentStageName: operatorStageName,
+        });
+
+        if (!latestAssignment?.assignedSeatKey) {
+          return true;
+        }
+
+        return String(latestAssignment.assignedSeatKey) === String(seatKey);
       });
 
       setDeviceList(filteredDeviceList);
@@ -912,7 +968,10 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         assignStage = JSON.parse(result?.assignedCustomStages || "{}");
       } else {
         assignOperator = JSON.parse(result?.assignedOperators || "{}");
-        assignStage = JSON.parse(result?.assignedStages || "{}");
+        assignStage = normalizeAssignedStagesPayload(
+          JSON.parse(result?.assignedStages || "{}"),
+          processData?.stages || [],
+        );
       }
 
       const currentUserId = user?._id;
@@ -1010,21 +1069,25 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     }
     isSubmitting.current = true;
     try {
-      // const stageData = Array.isArray(processAssignUserStage)
-      //   ? processAssignUserStage[0]
-      //   : processAssignUserStage;
       let deviceInfo = deviceList.filter((device: any) => device.serialNo === searchResult);
       const deviceId = deviceInfo?.[0]?._id || "";
-      // Find current stage index
       const stageData = Array.isArray(assignUserStage)
         ? assignUserStage[0]
         : assignUserStage;
+      const currentSeatKey = `${operatorSeatInfo?.rowNumber}-${operatorSeatInfo?.seatNumber}`;
+      const normalizedAssignedStages = getNormalizedPlanAssignedStages();
+      const currentSeatStage = getSeatStageEntry(normalizedAssignedStages, currentSeatKey) || stageData;
 
       const targetSerial =
         deviceInfo?.[0]?.serialNo ||
         selectedDevice?.serialNo ||
         searchResult ||
         "";
+      const latestPlanRecordsResult = await getLatestDeviceTestsByPlanId(
+        window.location.pathname.split("/").pop(),
+        selectedProcess || processData?._id,
+      ).catch(() => null);
+      const latestPlanRecords = latestPlanRecordsResult?.deviceTestRecords || [];
       const eligibility = resolvePreviousStageEligibility({
         processStages: processData?.stages,
         currentStageName: stageData?.name || stageData?.stageName || stageData?.stage || "",
@@ -1042,8 +1105,42 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         return;
       }
 
+      const currentStageName = String(
+        stageData?.stageName || stageData?.name || stageData?.stage || "",
+      ).trim();
+      const currentParallelSeats = getParallelSeatEntries({
+        assignedStages: normalizedAssignedStages,
+        stageName: currentStageName,
+        lineIndex: currentSeatStage?.lineIndex,
+        parallelGroupKey: currentSeatStage?.parallelGroupKey,
+      });
+      if (currentParallelSeats.length > 1) {
+        const latestSeatAssignment = getSeatAssignmentForDevice({
+          records: latestPlanRecords.length > 0 ? latestPlanRecords : deviceHistory,
+          serialNo: targetSerial,
+          currentStageName,
+        });
+
+        if (
+          latestSeatAssignment?.assignedSeatKey &&
+          String(latestSeatAssignment.assignedSeatKey) !== String(currentSeatKey)
+        ) {
+          toast.error(
+            `This device is assigned to seat ${latestSeatAssignment.assignedSeatKey} for ${currentStageName}.`,
+          );
+          isSubmitting.current = false;
+          return;
+        }
+      }
+
+      let nextSeatRouting = {
+        nextLogicalStage: "",
+        assignedSeatKey: "",
+        assignedStageInstanceId: "",
+        assignedParallelGroupKey: "",
+      };
+
       if (status === "Pass") {
-        // setIsPassNGButtonShow(false);
         setIsStickerPrinted(false);
         setIsVerifiedSticker(false);
         setIsAddedToCart(false);
@@ -1051,29 +1148,47 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         setIsDevicePassed(true);
         let formData1 = new FormData();
 
-        // Find current stage index
-        const currentIndex = processData?.stages?.findIndex((stage: any) => stage.stageName === stageData?.name);
+        const currentIndex = processData?.stages?.findIndex(
+          (stage: any) =>
+            String(stage?.stageName || "").trim() === currentStageName,
+        );
 
         if (currentIndex !== -1) {
-          const nextStage =
-            currentIndex < processData?.stages?.length - 1
-              ? processData?.stages[currentIndex + 1]
-              : null;
-          if (nextStage) {
-            formData1.append("currentStage", nextStage?.stageName);
+          nextSeatRouting = chooseNextStageSeatAssignment({
+            assignedStages: normalizedAssignedStages,
+            currentSeatKey,
+            currentStageName,
+            processStages: processData?.stages || [],
+            commonStages: processData?.commonStages || [],
+            latestRecords: latestPlanRecords,
+          });
+
+          if (nextSeatRouting.nextLogicalStage) {
+            formData1.append("currentStage", nextSeatRouting.nextLogicalStage);
           } else {
-            const commonStages = processData?.commonStages || [];
-            if (commonStages.length > 0) {
-              formData1.append("currentStage", String(commonStages[0].stageName || ""));
-              formData1.append(
-                "commonStages",
-                JSON.stringify((commonStages || []).map((cs: any) => cs.stageName)),
-              );
-            } else {
-              formData1.append("currentStage", assignUserStage?.name);
-            }
+            formData1.append("currentStage", currentStageName);
           }
         }
+
+        formData1.append("currentLogicalStage", currentStageName);
+        formData1.append("currentSeatKey", currentSeatKey);
+        formData1.append("stageInstanceId", currentSeatStage?.stageInstanceId || "");
+        formData1.append("parallelGroupKey", currentSeatStage?.parallelGroupKey || "");
+        formData1.append("nextLogicalStage", nextSeatRouting.nextLogicalStage || "");
+        formData1.append("assignedSeatKey", nextSeatRouting.assignedSeatKey || "");
+        formData1.append("assignedStageInstanceId", nextSeatRouting.assignedStageInstanceId || "");
+        formData1.append("assignedParallelGroupKey", nextSeatRouting.assignedParallelGroupKey || "");
+
+        if (!nextSeatRouting.nextLogicalStage) {
+          const commonStages = processData?.commonStages || [];
+          if (commonStages.length > 0) {
+            formData1.append(
+              "commonStages",
+              JSON.stringify((commonStages || []).map((cs: any) => cs.stageName)),
+            );
+          }
+        }
+
         // Update device stage
         if (deviceId) {
           await updateStageByDeviceId(deviceId, formData1);
@@ -1157,8 +1272,16 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         productId: selectedProduct?.product?._id || "",
         operatorId: userDetails?._id || "",
         serialNo: deviceInfo?.[0]?.serialNo || "",
-        seatNumber: operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber,
-        stageName: stageData?.name ?? "",
+        seatNumber: currentSeatKey,
+        stageName: currentStageName,
+        currentLogicalStage: currentStageName,
+        currentSeatKey,
+        stageInstanceId: currentSeatStage?.stageInstanceId || "",
+        parallelGroupKey: currentSeatStage?.parallelGroupKey || "",
+        nextLogicalStage: nextSeatRouting.nextLogicalStage || "",
+        assignedSeatKey: nextSeatRouting.assignedSeatKey || "",
+        assignedStageInstanceId: nextSeatRouting.assignedStageInstanceId || "",
+        assignedParallelGroupKey: nextSeatRouting.assignedParallelGroupKey || "",
         status: status,
         timeConsumed: deviceDisplay,
         totalBreakTime: String(totalBreakTime),

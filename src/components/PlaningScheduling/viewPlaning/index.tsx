@@ -38,6 +38,7 @@ import {
   FiTrash2,
 } from "react-icons/fi";
 import { FiUsers, FiActivity, FiCheckCircle, FiXCircle, FiSearch, FiFilter, FiRefreshCcw, FiEye, FiGrid, FiList } from "react-icons/fi";
+import { normalizeAssignedStagesPayload } from "@/lib/parallelStageRouting";
 import { formatDate } from "@/lib/common";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -98,6 +99,16 @@ const DraggableGridItem = ({
   readOnly?: boolean;
 }) => {
   const isReadOnly = Boolean(readOnly);
+  const getStageCardStatus = (stage: any) => {
+    if (stage?.reserved) return "Reserved";
+    const remaining = Math.max(Number(stage?.totalUPHA || 0), 0);
+    const processed =
+      Math.max(Number(stage?.passedDevice || 0), 0) +
+      Math.max(Number(stage?.ngDevice || 0), 0);
+    if (remaining > 0) return "Active";
+    if (processed > 0) return "Completed";
+    return "Downtime";
+  };
   const [isModalOpen, setIsModalOpen] = useState(false);
   const capCounts = (pass: number, ng: number) => {
     const cap = parseInt(selectedProcess?.quantity, 10) || 0;
@@ -188,14 +199,7 @@ const DraggableGridItem = ({
           assignedStages[coordinates].length > 0 &&
           assignedStages[coordinates]
             .filter((stage: any) => {
-              const status =
-                stage?.reserved
-                  ? "Reserved"
-                  : selectedProcess?.quantity > stage?.totalUPHA
-                    ? stage?.totalUPHA > 0
-                      ? "Active"
-                      : "Downtime"
-                    : "Completed";
+              const status = getStageCardStatus(stage);
               return seatStatusFilter === "all" ? true : seatStatusFilter === status;
             })
             .map((stage: any, stageIndex: number) => (
@@ -229,18 +233,16 @@ const DraggableGridItem = ({
                             Status :{" "}
                             <span
                               className={
-                                selectedProcess?.quantity > stage?.totalUPHA
-                                  ? stage?.totalUPHA > 0
-                                    ? "font-semibold text-orange-500"
-                                    : "font-semibold text-danger"
-                                  : "font-semibold text-green-600"
+                                getStageCardStatus(stage) === "Active"
+                                  ? "font-semibold text-orange-500"
+                                  : getStageCardStatus(stage) === "Completed"
+                                    ? "font-semibold text-green-600"
+                                    : getStageCardStatus(stage) === "Reserved"
+                                      ? "font-semibold text-red-600"
+                                      : "font-semibold text-danger"
                               }
                             >
-                              {selectedProcess?.quantity > stage?.totalUPHA
-                                ? stage?.totalUPHA > 0
-                                  ? "Active"
-                                  : "Downtime"
-                                : "Completed"}
+                              {getStageCardStatus(stage)}
                             </span>
                           </p>
                         </div>
@@ -391,6 +393,16 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     const cappedNg = Math.min(ng, remaining);
     return { pass: cappedPass, ng: cappedNg };
   };
+  const getStageCardStatus = (stage: any) => {
+    if (stage?.reserved) return "Reserved";
+    const remaining = Math.max(Number(stage?.totalUPHA || 0), 0);
+    const processed =
+      Math.max(Number(stage?.passedDevice || 0), 0) +
+      Math.max(Number(stage?.ngDevice || 0), 0);
+    if (remaining > 0) return "Active";
+    if (processed > 0) return "Completed";
+    return "Downtime";
+  };
   const filteredDeviceTests = React.useMemo(() => {
     const start =
       modalFilterDateStart
@@ -447,12 +459,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     selectedProcessStageEntries.forEach(([, arr]) => {
       const s = arr[0];
       if (!s) return;
-      const status =
-        selectedProcess?.quantity > s?.totalUPHA
-          ? s?.totalUPHA > 0
-            ? "Active"
-            : "Downtime"
-          : "Completed";
+      const status = getStageCardStatus(s);
       if (status === "Active") active += 1;
       else if (status === "Downtime") downtime += 1;
       else completed += 1;
@@ -888,7 +895,10 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       setEndTime(result?.ProcessShiftMappings?.endTime);
       setStartTime(result?.ProcessShiftMappings?.startTime);
       setTotalConsumedkits(singleProcess?.consumedKits || 0);
-      const currentAssignedStages = safeParse(result?.assignedStages, {});
+      const currentAssignedStages = normalizeAssignedStagesPayload(
+        safeParse(result?.assignedStages, {}),
+        singleProcess?.stages || [],
+      );
       const currentAssignedOperators = safeParse(result?.assignedOperators, {});
       const currentAssignedJigs = safeParse(result?.assignedJigs, {});
       let reservedSeats = await checkSeatAvailability(
@@ -1674,24 +1684,10 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     const s = arr[0];
     let status = "Empty";
     if (s?.reserved) status = "Reserved";
-    else {
-      status =
-        selectedProcess?.quantity > s?.totalUPHA
-          ? s?.totalUPHA > 0
-            ? "Active"
-            : "Downtime"
-          : "Completed";
-    }
+    else status = getStageCardStatus(s);
     if (seatStatusFilter !== "all") {
       const anyMatch = arr.some((stage: any) => {
-        const st =
-          stage?.reserved
-            ? "Reserved"
-            : selectedProcess?.quantity > stage?.totalUPHA
-              ? stage?.totalUPHA > 0
-                ? "Active"
-                : "Downtime"
-              : "Completed";
+        const st = getStageCardStatus(stage);
         return st === seatStatusFilter;
       });
       if (!anyMatch) return false;
@@ -2614,30 +2610,14 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                                                 {assignedStages[key] &&
                                                   assignedStages[key].length > 0 &&
                                                   assignedStages[key].filter((stage: any) => {
-                                                    const status =
-                                                      stage?.reserved
-                                                        ? "Reserved"
-                                                        : selectedProcess?.quantity >
-                                                          stage?.totalUPHA
-                                                          ? stage?.totalUPHA > 0
-                                                            ? "Active"
-                                                            : "Downtime"
-                                                          : "Completed";
+                                                    const status = getStageCardStatus(stage);
                                                     return seatStatusFilter === "all"
                                                       ? true
                                                       : seatStatusFilter === status;
                                                   }).length > 0 ? (
                                                   assignedStages[key]
                                                     .filter((stage: any) => {
-                                                      const status =
-                                                        stage?.reserved
-                                                          ? "Reserved"
-                                                          : selectedProcess?.quantity >
-                                                            stage?.totalUPHA
-                                                            ? stage?.totalUPHA > 0
-                                                              ? "Active"
-                                                              : "Downtime"
-                                                            : "Completed";
+                                                      const status = getStageCardStatus(stage);
                                                       return seatStatusFilter === "all"
                                                         ? true
                                                         : seatStatusFilter === status;
@@ -2675,20 +2655,16 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                                                           <strong>Status:</strong>{" "}
                                                           <span
                                                             className={
-                                                              selectedProcess?.quantity >
-                                                                stage?.totalUPHA
-                                                                ? stage?.totalUPHA > 0
-                                                                  ? "font-semibold text-orange-500"
-                                                                  : "text-red-500 font-semibold"
-                                                                : "font-semibold text-green-600"
+                                                              getStageCardStatus(stage) === "Active"
+                                                                ? "font-semibold text-orange-500"
+                                                                : getStageCardStatus(stage) === "Completed"
+                                                                  ? "font-semibold text-green-600"
+                                                                  : getStageCardStatus(stage) === "Reserved"
+                                                                    ? "font-semibold text-red-600"
+                                                                    : "text-red-500 font-semibold"
                                                             }
                                                           >
-                                                            {selectedProcess?.quantity >
-                                                              stage?.totalUPHA
-                                                              ? stage?.totalUPHA > 0
-                                                                ? "Active"
-                                                                : "Downtime"
-                                                              : "Completed"}
+                                                            {getStageCardStatus(stage)}
                                                           </span>
                                                         </p>
                                                       </div>
