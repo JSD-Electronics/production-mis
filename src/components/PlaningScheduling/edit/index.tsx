@@ -35,6 +35,7 @@ import Modal from "@/components/Modal/page";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import { Clock, Calendar, Coffee, UserPlus, Settings, Wrench } from "lucide-react";
 import { FaClock, FaCogs, FaLayerGroup, FaClipboardList, FaBox } from "react-icons/fa";
+import { normalizeAssignedStagesPayload } from "@/lib/parallelStageRouting";
 
 const EditPlanSchedule = () => {
   const router = useRouter();
@@ -105,6 +106,7 @@ const EditPlanSchedule = () => {
 
   const safeParse = (val: any, fallback: any) => {
     if (!val) return fallback;
+    if (val === "undefined" || val === "null") return fallback;
     try {
       return typeof val === "string" ? JSON.parse(val) : val;
     } catch {
@@ -217,12 +219,16 @@ const EditPlanSchedule = () => {
     calculateTimeDifference(Shift);
     setRepeatCount(result?.repeatCount);
     setStartDate(formatDate(result?.startDate));
-    const currentAssignedStages = safeParse(result?.assignedStages, {});
+    const currentAssignedStages = normalizeAssignedStagesPayload(
+      safeParse(result?.assignedStages, {}),
+      singleProcess?.stages || [],
+    );
     const currentAssignedOperators = safeParse(result?.assignedOperators, {});
     const currentAssignedJigs = safeParse(result?.assignedJigs, {});
     setAssignedStages(currentAssignedStages);
     setAssignedOperators(currentAssignedOperators);
     setAssignedJigs(currentAssignedJigs);
+    setAssignedCustomStages(safeParse(result?.assignedCustomStages, []));
     setAssignedCustomOperators(safeParse(result?.assignedCustomStagesOp, []));
     setEstimatedEndDate(formatDate(result?.estimatedEndDate));
     setTotalTimeEstimation(result?.totalTimeEstimation);
@@ -315,12 +321,8 @@ const EditPlanSchedule = () => {
       let assignedStagesObject = result.plans.reduce((acc: any, plan: any) => {
         try {
           if (plan._id != id) {
-            let assignedJigs = plan?.assignedJigs
-              ? JSON.parse(plan?.assignedJigs)
-              : {};
-            let assignedOperator = plan?.assignedOperators
-              ? JSON.parse(plan?.assignedOperators)
-              : {};
+            let assignedJigs = safeParse(plan?.assignedJigs, {});
+            let assignedOperator = safeParse(plan?.assignedOperators, {});
             setAssignedOperators((prev) => ({
               ...prev,
               ...assignedOperator,
@@ -330,7 +332,7 @@ const EditPlanSchedule = () => {
               ...prev,
               ...assignedJigs,
             }));
-            const parsedStages = JSON.parse(plan.assignedStages || "{}");
+            const parsedStages = safeParse(plan?.assignedStages, {});
             Object.keys(parsedStages).forEach((seatKey) => {
               if (!acc[seatKey]) {
                 acc[seatKey] = [];
@@ -481,7 +483,16 @@ const EditPlanSchedule = () => {
   const handleDrop = (rowIndex: any, seatIndex: any) => {
     return (event) => {
       event.preventDefault();
-      const droppedData = JSON.parse(event.dataTransfer.getData("text/plain"));
+      const droppedRaw = event.dataTransfer.getData("text/plain");
+      if (!droppedRaw) {
+        return false;
+      }
+      let droppedData;
+      try {
+        droppedData = JSON.parse(droppedRaw);
+      } catch {
+        return false;
+      }
       const data = droppedData;
       if (assignedOperators[`${rowIndex}-${seatIndex}`]) {
         let assign = assignedOperators[`${rowIndex}-${seatIndex}`][0];
@@ -546,7 +557,12 @@ const EditPlanSchedule = () => {
     const seatCountPerStage = {};
 
     for (let key in updatedStages) {
-      updatedStages[key].forEach((stageName) => {
+      const stagesForSeat = Array.isArray(updatedStages[key])
+        ? updatedStages[key]
+        : updatedStages[key]
+          ? [updatedStages[key]]
+          : [];
+      stagesForSeat.forEach((stageName) => {
         uniqueAssignedStages.add(stageName.name);
         seatCountPerStage[stageName.name] =
           (seatCountPerStage[stageName.name] || 0) + 1;
@@ -825,7 +841,7 @@ const EditPlanSchedule = () => {
       const formData = new FormData();
       const userDetails = JSON.parse(localStorage.getItem("userDetails"));
       let seatIndexCounter = 0;
-      const filteredData = Object.fromEntries(
+      const filteredData = normalizeAssignedStagesPayload(Object.fromEntries(
         Object.entries(assignedStages)
           .map(([key, value]) => [
             key,
@@ -838,7 +854,7 @@ const EditPlanSchedule = () => {
               }),
           ])
           .filter(([_, value]) => value.length > 0),
-      );
+      ), selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || []);
       const assignStageKeys = Object.keys(filteredData);
       const filteredJigs = Object.keys(assignedJigs)
         .filter((key) => assignStageKeys.includes(key))
