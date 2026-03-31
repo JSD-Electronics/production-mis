@@ -38,7 +38,11 @@ import {
   FiTrash2,
 } from "react-icons/fi";
 import { FiUsers, FiActivity, FiCheckCircle, FiXCircle, FiSearch, FiFilter, FiRefreshCcw, FiEye, FiGrid, FiList } from "react-icons/fi";
-import { normalizeAssignedStagesPayload } from "@/lib/parallelStageRouting";
+import {
+  getSeatStageEntry,
+  normalizeAssignedStagesPayload,
+  sanitizeCurrentPlanAssignedStages,
+} from "@/lib/parallelStageRouting";
 import { formatDate } from "@/lib/common";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -374,6 +378,37 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   const [seatStatusFilter, setSeatStatusFilter] = useState("all");
   const [showOccupiedOnly, setShowOccupiedOnly] = useState(true);
   const [seatSearch, setSeatSearch] = useState("");
+  const normalizeStageKey = (value: any) =>
+    String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+
+  const commonStageInsights = React.useMemo(() => {
+    const liveStageMap: Record<string, any> = {};
+    (assignedCustomStages || []).forEach((stage: any, index: number) => {
+      const key = normalizeStageKey(stage?.stage || stage?.stageName);
+      if (!key) return;
+      liveStageMap[key] = {
+        ...stage,
+        operators: assignedCustomOperators?.[index] || [],
+      };
+    });
+
+    return (selectedProcess?.commonStages || []).map((stage: any) => {
+      const liveStage =
+        liveStageMap[normalizeStageKey(stage?.stageName || stage?.stage)] || null;
+
+      return {
+        ...stage,
+        upha: liveStage?.upha ?? stage?.upha ?? "100",
+        achievedUph: liveStage?.achievedUph ?? stage?.achievedUph ?? "0",
+        wip: liveStage?.wip ?? stage?.wip ?? "0",
+        pass: liveStage?.pass ?? stage?.pass ?? "0",
+        ng: liveStage?.ng ?? stage?.ng ?? "0",
+        operators: liveStage?.operators || [],
+      };
+    });
+  }, [assignedCustomOperators, assignedCustomStages, selectedProcess?.commonStages]);
   const [lastRefreshed, setLastRefreshed] = useState("");
   const [allDeviceTests, setAllDeviceTests] = useState([]);
   const [processDevices, setProcessDevices] = useState<any[]>([]);
@@ -402,6 +437,17 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     if (remaining > 0) return "Active";
     if (processed > 0) return "Completed";
     return "Downtime";
+  };
+  const mergeReservedSeats = (baseStages: Record<string, any> = {}, reservedSeats: Record<string, any> = {}) => {
+    const merged = { ...(baseStages || {}) };
+    Object.entries(reservedSeats || {}).forEach(([seatKey, seatValue]) => {
+      const existingSeat = merged[seatKey];
+      const hasOwnAllocation = Array.isArray(existingSeat) ? existingSeat.length > 0 : Boolean(existingSeat);
+      if (!hasOwnAllocation) {
+        merged[seatKey] = seatValue;
+      }
+    });
+    return merged;
   };
   const filteredDeviceTests = React.useMemo(() => {
     const start =
@@ -445,19 +491,28 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       return currentStage === stageKey && status !== "pass";
     });
   }, [processDevices, selectedStageNameForDevices]);
+  const normalizedAssignedStageMap = React.useMemo(
+    () =>
+      normalizeAssignedStagesPayload(
+        assignedStages || {},
+        selectedProcess?.stages || [],
+      ),
+    [assignedStages, selectedProcess?.stages],
+  );
   const selectedProcessStageEntries = React.useMemo(() => {
-    return Object.entries(assignedStages || {}).filter(([, stages]) => {
-      if (!Array.isArray(stages) || stages.length === 0) return false;
-      return !stages[0]?.reserved;
+    return Object.entries(normalizedAssignedStageMap || {}).filter(([seatKey]) => {
+      return Boolean(getSeatStageEntry(normalizedAssignedStageMap, seatKey)?.reserved === false);
     });
-  }, [assignedStages]);
+  }, [normalizedAssignedStageMap]);
   const occupancyStats = React.useMemo(() => {
     let active = 0;
     let downtime = 0;
     let completed = 0;
 
     selectedProcessStageEntries.forEach(([, arr]) => {
-      const s = arr[0];
+      const s =
+        arr.find((stage: any) => !stage?.reserved) ||
+        arr[0];
       if (!s) return;
       const status = getStageCardStatus(s);
       if (status === "Active") active += 1;
@@ -518,6 +573,11 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     const avg = parseInt(lastStageOverallSummary) || 0;
     return { required, issued, consumed, pending, wip, avg };
   }, [selectedProcess, lastStageOverallSummary]);
+  const hasCurrentPlanSeatAllocations = React.useMemo(() => {
+    return Object.keys(normalizedAssignedStageMap || {}).some((seatKey) => {
+      return Boolean(getSeatStageEntry(normalizedAssignedStageMap, seatKey)?.reserved === false);
+    });
+  }, [normalizedAssignedStageMap]);
   const uphStats = React.useMemo(() => {
     const pass = (completedKitsUPH || []).reduce(
       (acc, row) => acc + (parseInt(row?.Pass) || 0),
@@ -720,9 +780,10 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       setLoading(false);
     }
   };
-  const assignedStageKeys = Object.keys(assignedStages || {}).filter(
-    (key) => assignedStages[key][0].name !== "Reserved",
-  );
+  const assignedStageKeys = Object.keys(normalizedAssignedStageMap || {}).filter((key) => {
+    const seatEntry = getSeatStageEntry(normalizedAssignedStageMap, key);
+    return Boolean(seatEntry && !seatEntry?.reserved);
+  });
   const stages = selectedProcess?.stages || [];
   const stageLength = stages.length;
   const rows = [];
@@ -896,7 +957,11 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       setStartTime(result?.ProcessShiftMappings?.startTime);
       setTotalConsumedkits(singleProcess?.consumedKits || 0);
       const currentAssignedStages = normalizeAssignedStagesPayload(
-        safeParse(result?.assignedStages, {}),
+        sanitizeCurrentPlanAssignedStages(
+          safeParse(result?.assignedStages, {}),
+          singleProcess?.stages || [],
+          singleProcess,
+        ),
         singleProcess?.stages || [],
       );
       const currentAssignedOperators = safeParse(result?.assignedOperators, {});
@@ -906,11 +971,11 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         Shift,
         formatDate(result?.startDate),
         formatDate(result?.estimatedEndDate),
+        String(id || result?._id || ""),
       );
-      setAssignedStages({
-        ...(currentAssignedStages || {}),
-        ...(reservedSeats || {}),
-      });
+      setAssignedStages(
+        mergeReservedSeats(currentAssignedStages || {}, reservedSeats || {}),
+      );
       setAssignedOperators((prev) => ({
         ...prev,
         ...(currentAssignedOperators || {}),
@@ -999,10 +1064,12 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
           );
 
           if (recalculatedAssignedStages) {
-            setAssignedStages({
-              ...(recalculatedAssignedStages || {}),
-              ...(reservedSeats || {}),
-            });
+            setAssignedStages(
+              mergeReservedSeats(
+                recalculatedAssignedStages || {},
+                reservedSeats || {},
+              ),
+            );
           }
 
           const stageHeaders =
@@ -1156,8 +1223,12 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     selectedShift: any,
     startDate: any,
     expectedEndDate: any,
+    currentPlanId?: string,
   ) => {
     try {
+      if (!selectedRoom?._id || !selectedShift?._id || !startDate || !expectedEndDate) {
+        return {};
+      }
       const shiftDataChange = JSON.stringify({
         startTime,
         endTime,
@@ -1169,10 +1240,13 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         startDate,
         expectedEndDate,
         shiftDataChange,
+        { silentNotFound: true },
       );
-      let assignedStagesObject = result.plans.reduce((acc: any, plan: any) => {
+      const plans = Array.isArray(result?.plans) ? result.plans : [];
+      const activePlanId = String(currentPlanId || resolvedPlaningId || id || "");
+      let assignedStagesObject = plans.reduce((acc: any, plan: any) => {
         try {
-          if (plan._id != id) {
+          if (String(plan?._id || "") !== activePlanId) {
             let assignedJigs = plan?.assignedJigs
               ? JSON.parse(plan?.assignedJigs)
               : {};
@@ -1836,11 +1910,23 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   };
   const seatMatches = (rowIndex, seatIndex, seat) => {
     const coordinates = `${rowIndex}-${seatIndex}`;
-    const arr = assignedStages[coordinates];
+    const arr = normalizedAssignedStageMap[coordinates];
     const occupied = arr && arr.length > 0;
     if (showOccupiedOnly && !occupied) return false;
     if (!occupied) return false;
-    const s = arr[0];
+    const onlyReserved = Array.isArray(arr) && arr.length > 0 && arr.every((stage: any) => stage?.reserved);
+    if (
+      onlyReserved &&
+      hasCurrentPlanSeatAllocations &&
+      showOccupiedOnly &&
+      seatStatusFilter === "all" &&
+      !seatSearch
+    ) {
+      return false;
+    }
+    const s =
+      arr.find((stage: any) => !stage?.reserved) ||
+      arr[0];
     let status = "Empty";
     if (s?.reserved) status = "Reserved";
     else status = getStageCardStatus(s);
@@ -2670,7 +2756,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                                                 handleDragOver={handleDragOver}
                                                 handleRemoveStage={handleRemoveStage}
                                                 item={seat}
-                                                assignedStages={assignedStages}
+                                                assignedStages={normalizedAssignedStageMap}
                                                 coordinates={`${rowIndex}-${seatIndex}`}
                                                 moveItem={moveItem}
                                                 operators={operators}
@@ -2703,7 +2789,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                               <div className=" bg-gray-50 dark:bg-gray-800 mt-6 h-90 overflow-x-auto rounded-md rounded-xl border border-primary p-2 p-4 pt-3 shadow">
                                 {/* Common Stages */}
                                 <div className="mb-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                                  {selectedProcess?.commonStages.map(
+                                  {commonStageInsights.map(
                                     (stage, index) => (
                                       <div
                                         key={index}
@@ -2724,6 +2810,11 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                                           <p className="text-red-600 dark:text-red-400">
                                             NG: {stage?.ng || "0"}
                                           </p>
+                                          {stage?.operators?.length ? (
+                                            <p>Operators: {stage.operators.map((op: any) => op?.name || op?.operatorName || "").filter(Boolean).join(", ")}</p>
+                                          ) : (
+                                            <p>Operators:</p>
+                                          )}
                                           <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-600 dark:bg-orange-700 dark:text-orange-300">
                                             Active
                                           </span>
@@ -2766,15 +2857,15 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                                                 key={colIndex}
                                                 className="px-4 py-3 align-top"
                                               >
-                                                {assignedStages[key] &&
-                                                  assignedStages[key].length > 0 &&
-                                                  assignedStages[key].filter((stage: any) => {
+                                                {normalizedAssignedStageMap[key] &&
+                                                  normalizedAssignedStageMap[key].length > 0 &&
+                                                  normalizedAssignedStageMap[key].filter((stage: any) => {
                                                     const status = getStageCardStatus(stage);
                                                     return seatStatusFilter === "all"
                                                       ? true
                                                       : seatStatusFilter === status;
                                                   }).length > 0 ? (
-                                                  assignedStages[key]
+                                                  normalizedAssignedStageMap[key]
                                                     .filter((stage: any) => {
                                                       const status = getStageCardStatus(stage);
                                                       return seatStatusFilter === "all"

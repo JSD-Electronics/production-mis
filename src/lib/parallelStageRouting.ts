@@ -104,6 +104,94 @@ export const normalizeAssignedStagesPayload = (
   );
 };
 
+export const sanitizeCurrentPlanAssignedStages = ({
+  assignedStages = {},
+  processStages = [],
+  currentProcess = null,
+}: {
+  assignedStages?: Record<string, any>;
+  processStages?: any[];
+  currentProcess?: any;
+}) => {
+  const stageMap = new Map<string, any>();
+  (Array.isArray(processStages) ? processStages : []).forEach((stage: any) => {
+    const key = normalizeKey(stage?.stageName || stage?.name);
+    if (key && !stageMap.has(key)) {
+      stageMap.set(key, stage);
+    }
+  });
+
+  return Object.entries(assignedStages || {}).reduce(
+    (acc: Record<string, any[]>, [seatKey, seatValue]) => {
+      const seatItems = Array.isArray(seatValue)
+        ? seatValue
+        : seatValue
+          ? [seatValue]
+          : [];
+
+      const normalizedSeatItems = seatItems
+        .map((item: any) => {
+          const itemStageName = normalizeValue(item?.stageName || item?.name || item?.stage);
+          const matchingStage = stageMap.get(normalizeKey(itemStageName));
+          const belongsToCurrentProcess =
+            normalizeValue(item?.pId) === normalizeValue(currentProcess?.processID) ||
+            normalizeValue(item?.processName) === normalizeValue(currentProcess?.name);
+
+          if (!item?.reserved || !belongsToCurrentProcess || !matchingStage) {
+            return item;
+          }
+
+          return {
+            ...item,
+            reserved: false,
+            name: matchingStage?.stageName || itemStageName,
+            stageName: matchingStage?.stageName || itemStageName,
+            requiredSkill:
+              item?.requiredSkill ||
+              matchingStage?.requiredSkill ||
+              matchingStage?.stageName ||
+              itemStageName,
+            managedBy: item?.managedBy || matchingStage?.managedBy,
+            upha: item?.upha || matchingStage?.upha,
+            hasJigStepType:
+              item?.hasJigStepType ||
+              matchingStage?.hasJigStepType ||
+              (Array.isArray(matchingStage?.subSteps)
+                ? matchingStage.subSteps.some((step: any) => step?.stepType === "jig")
+                : false),
+          };
+        })
+        .filter(Boolean);
+
+      if (normalizedSeatItems.length > 0) {
+        acc[seatKey] = normalizedSeatItems;
+      }
+
+      return acc;
+    },
+    {},
+  );
+};
+
+export const stripReservedSeatEntries = (
+  assignedStages: Record<string, any> = {},
+) =>
+  Object.fromEntries(
+    Object.entries(assignedStages || {})
+      .map(([seatKey, seatValue]) => {
+        const seatItems = Array.isArray(seatValue)
+          ? seatValue
+          : seatValue
+            ? [seatValue]
+            : [];
+        const filtered = seatItems.filter(
+          (item: any) => !(item?.reserved === true || item?.name === "Reserved"),
+        );
+        return [seatKey, filtered];
+      })
+      .filter(([, seatItems]) => Array.isArray(seatItems) && seatItems.length > 0),
+  );
+
 export const getSeatStageEntry = (
   assignedStages: Record<string, any> = {},
   seatKey: string,

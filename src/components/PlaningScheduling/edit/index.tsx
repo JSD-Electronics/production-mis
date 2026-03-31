@@ -35,7 +35,11 @@ import Modal from "@/components/Modal/page";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import { Clock, Calendar, Coffee, UserPlus, Settings, Wrench } from "lucide-react";
 import { FaClock, FaCogs, FaLayerGroup, FaClipboardList, FaBox } from "react-icons/fa";
-import { normalizeAssignedStagesPayload } from "@/lib/parallelStageRouting";
+import {
+  normalizeAssignedStagesPayload,
+  sanitizeCurrentPlanAssignedStages,
+  stripReservedSeatEntries,
+} from "@/lib/parallelStageRouting";
 
 const EditPlanSchedule = () => {
   const router = useRouter();
@@ -220,7 +224,11 @@ const EditPlanSchedule = () => {
     setRepeatCount(result?.repeatCount);
     setStartDate(formatDate(result?.startDate));
     const currentAssignedStages = normalizeAssignedStagesPayload(
-      safeParse(result?.assignedStages, {}),
+      sanitizeCurrentPlanAssignedStages({
+        assignedStages: safeParse(result?.assignedStages, {}),
+        processStages: singleProcess?.stages || [],
+        currentProcess: singleProcess,
+      }),
       singleProcess?.stages || [],
     );
     const currentAssignedOperators = safeParse(result?.assignedOperators, {});
@@ -303,6 +311,9 @@ const EditPlanSchedule = () => {
     startDate: any,
     expectedEndDate: any,
   ) => {
+    if (!selectedRoom?._id || !selectedShift?._id || !startDate || !expectedEndDate) {
+      return {};
+    }
     let startTime = selectedShift?.intervals[0]?.startTime;
     let endTime = selectedShift?.intervals[0]?.endTime;
     try {
@@ -317,10 +328,12 @@ const EditPlanSchedule = () => {
         startDate,
         expectedEndDate,
         shiftDataChange,
+        { silentNotFound: true },
       );
-      let assignedStagesObject = result.plans.reduce((acc: any, plan: any) => {
+      const activePlanId = String(id || "");
+      let assignedStagesObject = (Array.isArray(result?.plans) ? result.plans : []).reduce((acc: any, plan: any) => {
         try {
-          if (plan._id != id) {
+          if (String(plan?._id || "") !== activePlanId) {
             let assignedJigs = safeParse(plan?.assignedJigs, {});
             let assignedOperator = safeParse(plan?.assignedOperators, {});
             setAssignedOperators((prev) => ({
@@ -841,20 +854,15 @@ const EditPlanSchedule = () => {
       const formData = new FormData();
       const userDetails = JSON.parse(localStorage.getItem("userDetails"));
       let seatIndexCounter = 0;
-      const filteredData = normalizeAssignedStagesPayload(Object.fromEntries(
-        Object.entries(assignedStages)
-          .map(([key, value]) => [
-            key,
-            value
-              .filter(
-                (item) => !(item.name === "Reserved" && item.reserved === true),
-              )
-              .map((item) => {
-                return { ...item };
-              }),
-          ])
-          .filter(([_, value]) => value.length > 0),
-      ), selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || []);
+      const filteredData = normalizeAssignedStagesPayload(
+        sanitizeCurrentPlanAssignedStages({
+          assignedStages: stripReservedSeatEntries(assignedStages),
+          processStages:
+            selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+          currentProcess: selectedProcess,
+        }),
+        selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+      );
       const assignStageKeys = Object.keys(filteredData);
       const filteredJigs = Object.keys(assignedJigs)
         .filter((key) => assignStageKeys.includes(key))
