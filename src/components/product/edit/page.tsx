@@ -105,70 +105,6 @@ interface CommonStage {
   videoLinks: string[];
 }
 
-const normalizeStickerField = (field: any, index: number) => ({
-  id: field?.id || Date.now() + index,
-  name: field?.name || field?.fieldName || "",
-  type: field?.type || "text",
-  value: field?.value ?? "",
-  slug: field?.slug || "",
-  x: Number(field?.x ?? 0),
-  y: Number(field?.y ?? 0),
-  width: Number(field?.width ?? 80),
-  height: Number(field?.height ?? 20),
-  lineColor: field?.lineColor || "#222222",
-  background: field?.background || "transparent",
-  displayValue: field?.displayValue !== false,
-  margin: Number(field?.margin ?? 4),
-  fontSize: Number(field?.fontSize ?? 12),
-  textMargin: Number(field?.textMargin ?? 2),
-  barWidth: field?.barWidth != null ? Number(field.barWidth) : undefined,
-  barWidthMm:
-    field?.barWidthMm != null ? Number(field.barWidthMm) : undefined,
-  barHeight: field?.barHeight != null ? Number(field.barHeight) : undefined,
-  barHeightMm:
-    field?.barHeightMm != null ? Number(field.barHeightMm) : undefined,
-  barDensity:
-    field?.barDensity != null ? Number(field.barDensity) : undefined,
-  format: field?.format || undefined,
-  codeSet: field?.codeSet || undefined,
-  textEncoding: field?.textEncoding || undefined,
-  includeCheckDigit: !!field?.includeCheckDigit,
-  hibc: !!field?.hibc,
-  gs1_128: !!field?.gs1_128,
-  locked: !!field?.locked,
-  valueFontBold: !!field?.valueFontBold,
-  styles: {
-    ...(field?.styles || {}),
-  },
-  tableData: Array.isArray(field?.tableData) ? field.tableData : undefined,
-});
-
-const normalizePrinterFields = (printerFields: any[] = []) =>
-  (Array.isArray(printerFields) ? printerFields : []).map((printerField: any) => ({
-    ...printerField,
-    isExpanded: printerField?.isExpanded !== false,
-    dimensions: {
-      width: Number(printerField?.dimensions?.width ?? 189),
-      height: Number(printerField?.dimensions?.height ?? 94),
-    },
-    fields: Array.isArray(printerField?.fields)
-      ? printerField.fields.map((field: any, index: number) =>
-          normalizeStickerField(field, index),
-        )
-      : [],
-  }));
-
-const normalizeStagesForPersistence = (stageList: any[] = []) =>
-  (Array.isArray(stageList) ? stageList : []).map((stage: any) => ({
-    ...stage,
-    subSteps: (Array.isArray(stage?.subSteps) ? stage.subSteps : []).map(
-      (subStep: any) => ({
-        ...subStep,
-        printerFields: normalizePrinterFields(subStep?.printerFields || []),
-      }),
-    ),
-  }));
-
 const EditProduct = () => {
   const [errors, setErrors] = useState<any>({ name: false, stages: [] });
   const [name, setName] = useState("");
@@ -457,7 +393,6 @@ const EditProduct = () => {
               dragId: step.dragId || `step-${sIdx}-${stIdx}-${Date.now()}`,
               ngTimeout: step.ngTimeout || 0,
               jigFields: jigFields,
-              printerFields: normalizePrinterFields(step.printerFields || []),
             };
           }),
         }));
@@ -542,7 +477,7 @@ const EditProduct = () => {
       } else {
         formData.append("sopFile", sopFile);
       }
-      formData.append("stages", JSON.stringify(normalizeStagesForPersistence(stages)));
+      formData.append("stages", JSON.stringify(stages));
       formData.append("commonStages", JSON.stringify(commonStages));
       try {
         const result = await updateProduct(formData, id);
@@ -1513,10 +1448,7 @@ const EditProduct = () => {
         managedBy: "",
       }));
 
-      formData.append(
-        "stages",
-        JSON.stringify(normalizeStagesForPersistence(cleanedStages)),
-      );
+      formData.append("stages", JSON.stringify(cleanedStages));
       formData.append("commonStages", JSON.stringify(cleanedCommonStages));
       formData.append("isCloning", "true");
 
