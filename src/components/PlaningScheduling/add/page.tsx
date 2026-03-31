@@ -27,7 +27,11 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 import Modal from "@/components/Modal/page";
 import { Clock, Calendar, Coffee, UserPlus } from "lucide-react";
 import { FaClock, FaCogs, FaLayerGroup, FaClipboardList, FaBox } from "react-icons/fa";
-import { normalizeAssignedStagesPayload } from "@/lib/parallelStageRouting";
+import {
+  normalizeAssignedStagesPayload,
+  sanitizeCurrentPlanAssignedStages,
+  stripReservedSeatEntries,
+} from "@/lib/parallelStageRouting";
 
 const ADDPlanSchedule = () => {
   const router = useRouter();
@@ -203,7 +207,11 @@ const ADDPlanSchedule = () => {
     setStartDate(formatDate(selectedClonePlaning?.startDate));
     setAssignedStages(
       normalizeAssignedStagesPayload(
-        JSON.parse(selectedClonePlaning?.assignedStages),
+        sanitizeCurrentPlanAssignedStages({
+          assignedStages: JSON.parse(selectedClonePlaning?.assignedStages || "{}"),
+          processStages: singleProcess?.stages || [],
+          currentProcess: singleProcess,
+        }),
         singleProcess?.stages || [],
       ),
     );
@@ -244,6 +252,9 @@ const ADDPlanSchedule = () => {
     startDate: any,
     expectedEndDate: any,
   ) => {
+    if (!selectedRoom?._id || !selectedShift?._id || !startDate || !expectedEndDate) {
+      return {};
+    }
     try {
       const shiftDataChange = JSON.stringify({
         startTime: selectedShift.startTime,
@@ -256,8 +267,9 @@ const ADDPlanSchedule = () => {
         startDate,
         expectedEndDate,
         shiftDataChange,
+        { silentNotFound: true },
       );
-      let assignedStagesObject = result.plans.reduce((acc: any, plan: any) => {
+      let assignedStagesObject = (Array.isArray(result?.plans) ? result.plans : []).reduce((acc: any, plan: any) => {
         try {
           let assignedJigs = plan?.assignedJigs
             ? JSON.parse(plan?.assignedJigs)
@@ -880,16 +892,14 @@ const ADDPlanSchedule = () => {
   const handlePlaningDraft = async () => {
     try {
       const formData = new FormData();
-      const filteredData = normalizeAssignedStagesPayload(Object.fromEntries(
-        Object.entries(assignedStages)
-          .map(([key, value]) => [
-            key,
-            value.filter(
-              (item) => !(item.name === "Reserved" && item.reserved === true),
-            ),
-          ])
-          .filter(([_, value]) => value.length > 0), // Remove keys with empty arrays
-      ), selectedProduct?.product?.stages || selectedProduct?.stages || []);
+      const filteredData = normalizeAssignedStagesPayload(
+        sanitizeCurrentPlanAssignedStages({
+          assignedStages: stripReservedSeatEntries(assignedStages),
+          processStages: selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+          currentProcess: selectedProcess,
+        }),
+        selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+      );
       formData.append("processName", processName);
       formData.append("selectedProcess", selectedProcess?._id || "");
       formData.append("selectedRoom", selectedRoom?._id || "");
@@ -932,24 +942,30 @@ const ADDPlanSchedule = () => {
       const formData = new FormData();
       let requiredKits = parseInt(selectedProcess?.quantity || "0");
       let isFirstElement = true;
-      const filteredData = normalizeAssignedStagesPayload(Object.fromEntries(
-        Object.entries(assignedStages)
-          .map(([key, value]) => [
-            key,
-            value
-              .filter(
-                (item) => !(item.name === "Reserved" && item.reserved === true),
-              )
-              .map((item) => {
+      const filteredData = normalizeAssignedStagesPayload(
+        Object.fromEntries(
+          Object.entries(
+            sanitizeCurrentPlanAssignedStages({
+              assignedStages: stripReservedSeatEntries(assignedStages),
+              processStages:
+                selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+              currentProcess: selectedProcess,
+            }),
+          )
+            .map(([key, value]: [string, any]) => [
+              key,
+              value.map((item: any) => {
                 if (isFirstElement) {
                   isFirstElement = false;
                   return { ...item, totalUPHA: parseInt(totalUPHA || "0") };
                 }
                 return { ...item, totalUPHA: 0 };
               }),
-          ])
-          .filter(([_, value]) => value.length > 0),
-      ), selectedProduct?.product?.stages || selectedProduct?.stages || []);
+            ])
+            .filter(([_, value]) => Array.isArray(value) && value.length > 0),
+        ),
+        selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+      );
       const assignStageKeys = Object.keys(filteredData);
       const filteredJigs = Object.keys(assignedJigs)
         .filter((key) => assignStageKeys.includes(key))
@@ -1147,19 +1163,26 @@ const ADDPlanSchedule = () => {
     const selected = getSavedPlaning.find((value) => value._id === event);
     setSelectedClonePlaning(selected);
   };
+  const getAssignedOperatorIds = () =>
+    Object.values(assignedOperators || {})
+      .flatMap((operatorsForSeat: any) =>
+        Array.isArray(operatorsForSeat) ? operatorsForSeat : [operatorsForSeat],
+      )
+      .filter((operator: any) => operator && typeof operator === "object" && operator._id)
+      .map((operator: any) => String(operator._id));
+
   const openCustomStagesModal = (stage, index) => {
-    const requiredSkill = stage.requiredSkill?.toLowerCase().trim();
-    const requiredUserType = stage.managedBy;
-    const assignedOperatorIds = Object.values(assignedOperators)
-      .flat()
-      .map((operator) => operator._id);
+    const requiredSkill = String(stage?.requiredSkill || "").toLowerCase().trim();
+    const requiredUserType = String(stage?.managedBy || "").trim();
+    const assignedOperatorIds = getAssignedOperatorIds();
     const compatibleOperators = operators.filter((operator) => {
-      const normalizedSkills = operator.skills.map((skill) =>
-        skill.toLowerCase().trim(),
+      const normalizedSkills = (operator?.skills || []).map((skill) =>
+        String(skill || "").toLowerCase().trim(),
       );
       return (
         normalizedSkills.includes(requiredSkill) &&
-        !assignedOperatorIds.includes(operator._id)
+        (!requiredUserType || requiredUserType === String(operator?.userType || "")) &&
+        !assignedOperatorIds.includes(String(operator?._id || ""))
       );
     });
     setCustomStagesIndexVal(index);
@@ -1168,6 +1191,7 @@ const ADDPlanSchedule = () => {
   };
   const handleOperator = (event) => {
     const operator = operators.find((val) => val._id === event);
+    if (!operator) return;
     const key = `${customStagesIndexVal}`;
     const newAssignedOperators = { ...assignedCustomOperators };
 
@@ -1183,9 +1207,9 @@ const ADDPlanSchedule = () => {
     setAssignedCustomOperators(newAssignedOperators);
   };
   const isOperatorAssignedToAnySeat = (operatorName: any) => {
-    return Object.values(assignedOperators).some((operatorsForSeat) =>
-      operatorsForSeat?.some(
-        (assignedOperator) => assignedOperator.name === operatorName,
+    return Object.values(assignedOperators || {}).some((operatorsForSeat: any) =>
+      (Array.isArray(operatorsForSeat) ? operatorsForSeat : [operatorsForSeat]).some(
+        (assignedOperator: any) => assignedOperator?.name === operatorName,
       ),
     );
   };

@@ -85,6 +85,70 @@ interface CommonStage {
   upha: string;
 }
 
+const normalizeStickerField = (field: any, index: number) => ({
+  id: field?.id || Date.now() + index,
+  name: field?.name || field?.fieldName || "",
+  type: field?.type || "text",
+  value: field?.value ?? "",
+  slug: field?.slug || "",
+  x: Number(field?.x ?? 0),
+  y: Number(field?.y ?? 0),
+  width: Number(field?.width ?? 80),
+  height: Number(field?.height ?? 20),
+  lineColor: field?.lineColor || "#222222",
+  background: field?.background || "transparent",
+  displayValue: field?.displayValue !== false,
+  margin: Number(field?.margin ?? 4),
+  fontSize: Number(field?.fontSize ?? 12),
+  textMargin: Number(field?.textMargin ?? 2),
+  barWidth: field?.barWidth != null ? Number(field.barWidth) : undefined,
+  barWidthMm:
+    field?.barWidthMm != null ? Number(field.barWidthMm) : undefined,
+  barHeight: field?.barHeight != null ? Number(field.barHeight) : undefined,
+  barHeightMm:
+    field?.barHeightMm != null ? Number(field.barHeightMm) : undefined,
+  barDensity:
+    field?.barDensity != null ? Number(field.barDensity) : undefined,
+  format: field?.format || undefined,
+  codeSet: field?.codeSet || undefined,
+  textEncoding: field?.textEncoding || undefined,
+  includeCheckDigit: !!field?.includeCheckDigit,
+  hibc: !!field?.hibc,
+  gs1_128: !!field?.gs1_128,
+  locked: !!field?.locked,
+  valueFontBold: !!field?.valueFontBold,
+  styles: {
+    ...(field?.styles || {}),
+  },
+  tableData: Array.isArray(field?.tableData) ? field.tableData : undefined,
+});
+
+const normalizePrinterFields = (printerFields: any[] = []) =>
+  (Array.isArray(printerFields) ? printerFields : []).map((printerField: any) => ({
+    ...printerField,
+    isExpanded: printerField?.isExpanded !== false,
+    dimensions: {
+      width: Number(printerField?.dimensions?.width ?? 189),
+      height: Number(printerField?.dimensions?.height ?? 94),
+    },
+    fields: Array.isArray(printerField?.fields)
+      ? printerField.fields.map((field: any, index: number) =>
+          normalizeStickerField(field, index),
+        )
+      : [],
+  }));
+
+const normalizeStagesForPersistence = (stageList: any[] = []) =>
+  (Array.isArray(stageList) ? stageList : []).map((stage: any) => ({
+    ...stage,
+    subSteps: (Array.isArray(stage?.subSteps) ? stage.subSteps : []).map(
+      (subStep: any) => ({
+        ...subStep,
+        printerFields: normalizePrinterFields(subStep?.printerFields || []),
+      }),
+    ),
+  }));
+
 const AddProduct = () => {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(true);
@@ -386,7 +450,7 @@ const AddProduct = () => {
               rangeFrom: step.stepFields?.rangeFrom || "",
               rangeTo: step.stepFields?.rangeTo || "",
             },
-            printerFields: step.printerFields || [],
+            printerFields: normalizePrinterFields(step.printerFields || []),
             jigFields: step.jigFields || [],
             ngStatusData: step.ngStatusData || [],
             packagingData: step.packagingData || {
@@ -485,7 +549,7 @@ const AddProduct = () => {
     setIsDraftSubmitting(asDraft);
     const formData = new FormData();
     formData.append("name", name);
-    formData.append("Products", JSON.stringify(stages));
+    formData.append("Products", JSON.stringify(normalizeStagesForPersistence(stages)));
     formData.append("commonStages", JSON.stringify(commonStages));
     formData.append("isDraft", String(asDraft));
     formData.append("status", asDraft ? "draft" : "active");
