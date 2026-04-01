@@ -102,10 +102,9 @@ const allocateStagesToSeats = (
                 return;
             }
 
-            if (
-                assignedSeatsKeys.includes(seatKey) &&
-                seatIndex < stages.length * repeatCount
-            ) {
+            // Drive rendering by the actual saved assignments; don't truncate when
+            // a single stage is intentionally mapped to multiple seats.
+            if (assignedSeatsKeys.includes(seatKey)) {
                 const currentStageIndex = seatIndex % stages.length;
                 const currentStage = stages[currentStageIndex];
                 const trimmedStageName = currentStage.stageName?.trim();
