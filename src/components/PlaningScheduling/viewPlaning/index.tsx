@@ -1599,8 +1599,6 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       let routedSeatKey = String(
         latestRecord?.assignedSeatKey ||
         latestRecord?.currentSeatKey ||
-        latestRecord?.seatNumber ||
-        latestRecord?.coordinates ||
         "",
       ).trim();
 
@@ -1632,16 +1630,16 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       (total: number, row: any) => total + row?.seats?.length,
       0,
     );
-    const totalRequiredSeats = stages.length * repeatCount;
+    // IMPORTANT:
+    // Rendering must be driven by the actual saved seat assignments.
+    // Users can map a single stage to multiple seats (parallel seats), which can exceed
+    // `stages.length * repeatCount`. The previous cap truncated valid seats.
     let seatIndex = 0;
 
     selectedRoom.lines?.forEach((row: any, rowIndex: number) => {
       row.seats.forEach((_: any, seatPosition: number) => {
         const seatKey = `${rowIndex}-${seatPosition}`;
-        if (
-          assignedSeatsKeys.includes(seatKey) &&
-          seatIndex < stages.length * repeatCount
-        ) {
+        if (assignedSeatsKeys.includes(seatKey)) {
           const stageEntry =
             seatEntries.find((entry: any) => entry.seatKey === seatKey)?.stageEntry || null;
           const currentStageIndex = Number(stageEntry?.sequenceIndex ?? (seatIndex % stages.length));
