@@ -135,11 +135,18 @@ const allocateStagesToSeats = (
                     0,
                 );
 
+                const stageTitle =
+                    currentStage?.stageName ||
+                    currentStage?.name ||
+                    currentStage?.stage ||
+                    currentStage?.requiredSkill ||
+                    "";
+
                 newAssignedStages[seatKey] = [
                     {
-                        name: currentStage.stageName,
-                        requiredSkill: currentStage.stageName,
-                        upha: currentStage.upha,
+                        name: stageTitle,
+                        requiredSkill: currentStage?.requiredSkill || stageTitle,
+                        upha: currentStage?.upha,
                         totalUPHA: remainingDevices,
                         passedDevice,
                         ngDevice,
