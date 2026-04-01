@@ -206,8 +206,15 @@ const DraggableGridItem = ({
               <div key={stageIndex}>
                 <div className="flex items-center justify-between">
                   <strong className="text-gray-900 text-xs">
-                    {stage.name}
-                    {stage.name === "Reserved" ? (
+                    {stage?.name ||
+                      stage?.stageName ||
+                      stage?.stage ||
+                      stage?.requiredSkill ||
+                      "Common Stage"}
+                    {(stage?.name ||
+                      stage?.stageName ||
+                      stage?.stage ||
+                      stage?.requiredSkill) === "Reserved" ? (
                       <>
                         <p>Process Name : {stage?.processName}</p>
                         <p>Process Id : {stage?.pId}</p>
@@ -319,6 +326,31 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     } catch {
       return fallback;
     }
+  };
+  const normalizeCustomOperatorsPayload = (val: any) => {
+    const parsed = safeParse(val, []);
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && typeof parsed === "object") {
+      return Object.keys(parsed)
+        .sort((a, b) => Number(a) - Number(b))
+        .map((k) => (Array.isArray(parsed[k]) ? parsed[k] : parsed[k] ? [parsed[k]] : []));
+    }
+    return [];
+  };
+  const resolveOperatorDisplay = (op: any) => {
+    if (!op) return null;
+    if (typeof op === "string") {
+      const found = (operators || []).find((o: any) => String(o?._id) === String(op));
+      return found || { _id: op, name: op };
+    }
+    const id = op?._id || op?.id || op?.operatorId || op?.userId;
+    const name = op?.name;
+    if (name) return op;
+    if (id) {
+      const found = (operators || []).find((o: any) => String(o?._id) === String(id));
+      return found || { ...op, _id: id, name: String(id) };
+    }
+    return op;
   };
   const buildCustomStagesFromCommonStages = (commonStages: any[] = []) =>
     (commonStages || []).map((val: any) => ({
@@ -872,7 +904,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         setAssignedCustomStages(safeParse(result?.assignedCustomStages, []));
       }
       if (result?.assignedCustomStagesOp) {
-        setAssignedCustomOperators(safeParse(result?.assignedCustomStagesOp, []));
+        setAssignedCustomOperators(normalizeCustomOperatorsPayload(result?.assignedCustomStagesOp));
       }
       setAssignedJigs(safeParse(result?.assignedJigs, {}));
       setEstimatedEndDate(formatDate(result?.estimatedEndDate));
@@ -895,21 +927,33 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       setEndTime(result?.ProcessShiftMappings?.endTime);
       setStartTime(result?.ProcessShiftMappings?.startTime);
       setTotalConsumedkits(singleProcess?.consumedKits || 0);
+      // Parse the plan's own stored data
       const currentAssignedStages = normalizeAssignedStagesPayload(
         safeParse(result?.assignedStages, {}),
         singleProcess?.stages || [],
       );
       const currentAssignedOperators = safeParse(result?.assignedOperators, {});
       const currentAssignedJigs = safeParse(result?.assignedJigs, {});
-      let reservedSeats = await checkSeatAvailability(
-        room,
-        Shift,
-        formatDate(result?.startDate),
-        formatDate(result?.estimatedEndDate),
-      );
+      // Strip any stale `reserved: true` flags that may have been saved to the DB
+      // from a previous version of the code that merged cross-process reserved seats.
+      const cleanAssignedStages: Record<string, any[]> = {};
+      Object.keys(currentAssignedStages || {}).forEach((seatKey) => {
+        const entries = Array.isArray(currentAssignedStages[seatKey])
+          ? currentAssignedStages[seatKey]
+          : currentAssignedStages[seatKey]
+            ? [currentAssignedStages[seatKey]]
+            : [];
+        // Only keep seats that belong to this process (not reserved from another plan)
+        const ownEntries = entries.filter((e: any) => !e?.reserved);
+        if (ownEntries.length > 0) {
+          cleanAssignedStages[seatKey] = ownEntries;
+        }
+      });
+      // We do NOT use cross-process reservedSeats on the view page.
+      // Pass an empty object to allocateStagesToSeats.
+      const reservedSeats: Record<string, any[]> = {};
       setAssignedStages({
-        ...(currentAssignedStages || {}),
-        ...(reservedSeats || {}),
+        ...(cleanAssignedStages || {}),
       });
       setAssignedOperators((prev) => ({
         ...prev,
@@ -990,7 +1034,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
             room,
             Number(result?.repeatCount || 1),
             reservedSeats,
-            currentAssignedStages,
+            cleanAssignedStages,
             singleProcess,
             Number(result?.assignedIssuedKits || 0),
             deviceTests,
@@ -1001,7 +1045,6 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
           if (recalculatedAssignedStages) {
             setAssignedStages({
               ...(recalculatedAssignedStages || {}),
-              ...(reservedSeats || {}),
             });
           }
 
@@ -1128,12 +1171,13 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
               }),
             };
 
+            const hoursDivisor = totalHours > 0 ? totalHours : 1;
             const avgRow = {
               hour: "Avg UPH",
               values: totalRow.values.map((val) => ({
                 stage: val.stage,
-                Pass: val.Pass ? (val.Pass / totalHours).toFixed(2) : "0",
-                NG: val.NG ? (val.NG / totalHours).toFixed(2) : "0",
+                Pass: val.Pass ? (val.Pass / hoursDivisor).toFixed(2) : "0",
+                NG: val.NG ? (val.NG / hoursDivisor).toFixed(2) : "0",
               })),
             };
             tableData.push(totalRow);
@@ -1179,15 +1223,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
             let assignedOperator = plan?.assignedOperators
               ? JSON.parse(plan?.assignedOperators)
               : {};
-            setAssignedOperators((prev) => ({
-              ...prev,
-              ...assignedOperator,
-            }));
 
-            setAssignedJigs((prev) => ({
-              ...prev,
-              ...assignedJigs,
-            }));
             const parsedStages = JSON.parse(plan.assignedStages);
             Object.keys(parsedStages).forEach((seatKey) => {
               if (!acc[seatKey]) {
@@ -1580,11 +1616,10 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         (waitingBySeatAndStage[waitingKey] || 0) + 1;
     });
 
-    const seatsByLineAndSequence = seatEntries.reduce(
+    const seatsBySequence = seatEntries.reduce(
       (acc: Record<string, any[]>, entry: any) => {
-        const lineIndex = Number(entry?.stageEntry?.lineIndex ?? -1);
         const sequenceIndex = Number(entry?.stageEntry?.sequenceIndex ?? -1);
-        const groupKey = `${lineIndex}:${sequenceIndex}`;
+        const groupKey = `${sequenceIndex}`;
         if (!acc[groupKey]) acc[groupKey] = [];
         acc[groupKey].push(entry);
         return acc;
@@ -1597,30 +1632,12 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       (total: number, row: any) => total + row?.seats?.length,
       0,
     );
-    const totalRequiredSeats =
-      Object.keys(reservedSeats).length + stages.length * repeatCount;
-    if (totalRequiredSeats > totalSeatsAvailable) {
-      alert(
-        "Insufficient seats available to assign all stages. Please adjust the allocation.",
-      );
-      return false;
-    }
+    const totalRequiredSeats = stages.length * repeatCount;
     let seatIndex = 0;
 
     selectedRoom.lines?.forEach((row: any, rowIndex: number) => {
       row.seats.forEach((_: any, seatPosition: number) => {
         const seatKey = `${rowIndex}-${seatPosition}`;
-        if (reservedSeats[seatKey]) {
-          newAssignedStages[seatKey] = [
-            {
-              name: "Reserved",
-              processName: selectedProcess.name,
-              pId: selectedProcess.processID,
-              reserved: true,
-            },
-          ];
-          return;
-        }
         if (
           assignedSeatsKeys.includes(seatKey) &&
           seatIndex < stages.length * repeatCount
@@ -1643,15 +1660,14 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
             : 0;
 
           if (!Number.isFinite(directWaitingDevices)) {
-            const lineIndex = Number(stageEntry?.lineIndex ?? rowIndex);
-            const currentGroupKey = `${lineIndex}:${currentStageIndex}`;
-            const currentGroup = seatsByLineAndSequence[currentGroupKey] || [];
+            const currentGroupKey = `${currentStageIndex}`;
+            const currentGroup = seatsBySequence[currentGroupKey] || [];
 
             let groupInput = 0;
             if (currentStageIndex === 0) {
               groupInput = Number(assignedIssuedKits || 0);
             } else {
-              const previousGroup = seatsByLineAndSequence[`${lineIndex}:${currentStageIndex - 1}`] || [];
+              const previousGroup = seatsBySequence[`${currentStageIndex - 1}`] || [];
               groupInput = previousGroup.reduce((sum: number, entry: any) => {
                 const previousStageName = normalizeStageName(
                   entry?.stageEntry?.stageName || entry?.stageEntry?.name,
@@ -1690,8 +1706,20 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
           newAssignedStages[seatKey] = [
             {
               ...currentStage,
-              name: currentStage?.stageName || currentStage?.name,
-              requiredSkill: currentStage?.requiredSkill || currentStage?.stageName || currentStage?.name,
+              // Stage definitions coming from different endpoints may use different field names.
+              // The UI expects `stage.name`, so we normalize it with a safe fallback chain.
+              name:
+                currentStage?.stageName ||
+                currentStage?.name ||
+                currentStage?.stage ||
+                currentStage?.requiredSkill ||
+                "",
+              requiredSkill:
+                currentStage?.requiredSkill ||
+                currentStage?.stageName ||
+                currentStage?.name ||
+                currentStage?.stage ||
+                "",
               upha: currentStage?.upha,
               totalUPHA: Math.max(Number(remainingDevices || 0), 0),
               passedDevice,
@@ -2022,12 +2050,13 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         return { stage, Pass: totalPass, NG: totalNG };
       }),
     };
+    const hoursDivisor = totalHours > 0 ? totalHours : 1;
     const avgRow = {
       hour: "Avg UPH",
       values: totalRow.values.map((val) => ({
         stage: val.stage,
-        Pass: val.Pass ? (val.Pass / totalHours).toFixed(2) : "0",
-        NG: val.NG ? (val.NG / totalHours).toFixed(2) : "0",
+        Pass: val.Pass ? (val.Pass / hoursDivisor).toFixed(2) : "0",
+        NG: val.NG ? (val.NG / hoursDivisor).toFixed(2) : "0",
       })),
     };
     tableData.push(totalRow);
@@ -2592,7 +2621,11 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                                       >
                                         <div className="mb-3 flex items-center justify-between">
                                           <p className="text-gray-900 text-base font-semibold dark:text-white">
-                                            {stage?.stage}
+                                            {stage?.stage ||
+                                              stage?.stageName ||
+                                              stage?.name ||
+                                              stage?.requiredSkill ||
+                                              "Common Stage"}
                                           </p>
                                           <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-600 dark:bg-orange-700 dark:text-orange-300">
                                             Active
@@ -2626,13 +2659,15 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                                           <div className="text-gray-600 dark:text-gray-300 mt-3 text-xs">
                                             <strong>Operators:</strong>
                                             <div className="mt-1 flex flex-wrap gap-1">
-                                              {assignedCustomOperators[index].map(
-                                                (op, i) => (
+                                              {assignedCustomOperators[index]
+                                                .map(resolveOperatorDisplay)
+                                                .filter(Boolean)
+                                                .map((op: any, i: number) => (
                                                   <span
-                                                    key={i}
+                                                    key={op?._id || op?.id || `${index}-${i}`}
                                                     className="bg-gray-200 dark:bg-gray-700 inline-block rounded-full px-2 py-0.5 text-xs font-medium"
                                                   >
-                                                    {op.name}
+                                                    {op?.name || "Operator"}
                                                   </span>
                                                 ),
                                               )}
@@ -2646,32 +2681,48 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                                 {/* Room Layout */}
                                 {selectedRoom &&
                                   selectedRoom.lines
-                                    .filter((row, rowIndex) =>
-                                      row.seats?.some((seat, seatIndex) =>
-                                        seatMatches(rowIndex, seatIndex, seat),
+                                    .map((row, originalRowIndex) => ({
+                                      row,
+                                      originalRowIndex,
+                                    }))
+                                    .filter(({ row, originalRowIndex }) =>
+                                      row.seats?.some((seat, originalSeatIndex) =>
+                                        seatMatches(
+                                          originalRowIndex,
+                                          originalSeatIndex,
+                                          seat,
+                                        ),
                                       ),
                                     )
-                                    .map((row, rowIndex) => (
-                                      <div key={rowIndex} className="space-y-2">
+                                    .map(({ row, originalRowIndex }) => (
+                                      <div key={originalRowIndex} className="space-y-2">
                                         <h4 className="text-gray-800 mt-3 text-sm font-bold dark:text-white">
                                           {row.rowName}
                                         </h4>
                                         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                                           {row.seats
-                                            ?.filter((seat, seatIndex) =>
-                                              seatMatches(rowIndex, seatIndex, seat),
+                                            ?.map((seat, originalSeatIndex) => ({
+                                              seat,
+                                              originalSeatIndex,
+                                            }))
+                                            .filter(({ seat, originalSeatIndex }) =>
+                                              seatMatches(
+                                                originalRowIndex,
+                                                originalSeatIndex,
+                                                seat,
+                                              ),
                                             )
-                                            .map((seat, seatIndex) => (
+                                            .map(({ seat, originalSeatIndex }) => (
                                               <DraggableGridItem
-                                                key={`${rowIndex}-${seatIndex}`}
-                                                rowIndex={rowIndex}
-                                                seatIndex={seatIndex}
+                                                key={`${originalRowIndex}-${originalSeatIndex}`}
+                                                rowIndex={originalRowIndex}
+                                                seatIndex={originalSeatIndex}
                                                 handleDrop={handleDrop}
                                                 handleDragOver={handleDragOver}
                                                 handleRemoveStage={handleRemoveStage}
                                                 item={seat}
                                                 assignedStages={assignedStages}
-                                                coordinates={`${rowIndex}-${seatIndex}`}
+                                                coordinates={`${originalRowIndex}-${originalSeatIndex}`}
                                                 moveItem={moveItem}
                                                 operators={operators}
                                                 assignedOperators={assignedOperators}
@@ -2703,14 +2754,14 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                               <div className=" bg-gray-50 dark:bg-gray-800 mt-6 h-90 overflow-x-auto rounded-md rounded-xl border border-primary p-2 p-4 pt-3 shadow">
                                 {/* Common Stages */}
                                 <div className="mb-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                                  {selectedProcess?.commonStages.map(
-                                    (stage, index) => (
+                                  {(Array.isArray(assignedCustomStages) ? assignedCustomStages : []).map(
+                                    (stage: any, index: number) => (
                                       <div
                                         key={index}
                                         className="rounded-xl border border-green-400 bg-green-50 p-4 shadow hover:shadow-md dark:border-green-600 dark:bg-green-900"
                                       >
                                         <p className="text-gray-900 mb-2 text-base font-semibold dark:text-white">
-                                          {stage?.stageName}
+                                          {stage?.stage || stage?.stageName || "Common Stage"}
                                         </p>
                                         <div className="text-gray-700 dark:text-gray-200 space-y-1 text-xs">
                                           <p>UPH Target: {stage?.upha || "100"}</p>
