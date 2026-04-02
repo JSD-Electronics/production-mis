@@ -317,7 +317,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             return existing._id;
           }
         } catch (error) {
-          // Non-fatal – we'll try to create a new one
+          // Non-fatal Ã¢â‚¬â€œ we'll try to create a new one
           console.error("Failed to fetch active operator session:", error);
         }
 
@@ -1375,10 +1375,13 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           setTotalCompleted((prev) => prev + 1);
         }
 
-        // Refresh the entire planning and progress state from server to ensure accuracy
-        const refreshedTask = await loadBootstrap();
+        // Refresh only the compact task summary after pass/NG instead of reloading the full bootstrap payload.
+        const refreshedTask = await refreshTaskSummary();
         if (refreshedTask) {
-          applyTaskBootstrapData(refreshedTask);
+          applyTaskBootstrapData({
+            ...(taskBootstrapData || {}),
+            ...refreshedTask,
+          });
         }
 
         // Robustly remove the device from the searchable list
@@ -2011,7 +2014,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
               }`}
           />
           {isSyncing
-            ? "Syncing…"
+            ? "SyncingÃ¢â‚¬Â¦"
             : lastSyncTime
               ? `Last sync: ${lastSyncTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
               : "Sync Now"}
