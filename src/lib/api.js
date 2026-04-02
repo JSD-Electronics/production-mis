@@ -1569,8 +1569,14 @@ export const bulkCreateEsimMaster = async (data) => {
   }
 };
 
-export const viewEsimMasters = async () =>
-  fetchList("/esim-master/view", "Error Fetching ESIM Masters");
+export const viewEsimMasters = async (params = {}) => {
+  try {
+    const response = await api.get("/esim-master/view", { params });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Error Fetching ESIM Masters" };
+  }
+};
 
 export const updateProcessStatus = async (id, formData) => {
   try {
@@ -1968,9 +1974,7 @@ export const deleteMultipleOrderConfirmationNumbers = async (ids) => {
   }
 };
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Operator work tracking (sessions + breaks + event logs)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const startOperatorWorkSession = async (data) => {
   try {
