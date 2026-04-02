@@ -1,7 +1,10 @@
 "use client";
 import React, { ComponentType, useEffect, useState } from "react";
-import { getUseTypeByType, getAllMenus } from "../../../lib/api";
 import { CenteredSkeleton } from "@/components/common/Skeletons";
+import {
+  getPortalAccessData,
+  normalizeRoutePath,
+} from "@/lib/portalAccessCache";
 
 interface UserRoles {
   [key: string]: { [key: string]: boolean };
@@ -22,37 +25,24 @@ const withAuth = (WrappedComponent: ComponentType<any>) => {
     const [hasAccess, setHasAccess] = useState<boolean | null>(null);
 
     useEffect(() => {
-      const fetchUserRoles = async () => {
-        const userDetails = JSON.parse(
-          localStorage.getItem("userDetails") || "{}",
-        );
-        if (!userDetails || !userDetails.userType) {
+      const loadPortalAccess = async () => {
+        const userDetails = JSON.parse(localStorage.getItem("userDetails") || "{}");
+        if (!userDetails?.userType) {
           window.location.href = "/not-authorized";
           return;
         }
 
-        setUserType(userDetails.userType);
-
         try {
-          const result = await getUseTypeByType();
-          const roles = result.userType[0]?.roles || {};
-          setUserRoles(roles);
+          const portalAccess = await getPortalAccessData(userDetails.userType);
+          setUserType(portalAccess.userType);
+          setUserRoles(portalAccess.permissions || {});
+          setMenuGroups((portalAccess.menus || []) as MenuItem[]);
         } catch (error) {
-          console.error("Failed to fetch user roles:", error);
+          console.error("Failed to bootstrap portal access:", error);
         }
       };
 
-      const fetchMenus = async () => {
-        try {
-          const result = await getAllMenus();
-          const menus = result.getMenu[0]?.menus || [];
-          setMenuGroups(menus);
-        } catch (error) {
-          console.error("Failed to fetch menus:", error);
-        }
-      };
-
-      Promise.all([fetchUserRoles(), fetchMenus()])
+      loadPortalAccess()
         .then(() => {
           setLoading(false);
         })
@@ -72,10 +62,10 @@ const withAuth = (WrappedComponent: ComponentType<any>) => {
         return;
       }
 
-      const currentPath = window.location.pathname;
+      const currentPath = normalizeRoutePath(window.location.pathname);
 
       const checkAccess = (menuItem: MenuItem): boolean => {
-        if (menuItem.route === currentPath) {
+        if (normalizeRoutePath(menuItem.route) === currentPath) {
           const transformedLabel = menuItem.label
             .replace(/\s+/g, "_")
             .toLowerCase();

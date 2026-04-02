@@ -549,28 +549,33 @@ const ViewProcessInventory = () => {
               <Package size={16} className="text-primary" />
               Resource Allocation Summary
             </h4>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-4 rounded-xl border border-gray-100 p-4 text-sm dark:border-strokedark">
-              <div className="flex justify-between border-b pb-2 dark:border-strokedark">
-                <span className="text-gray-500">Target Kits:</span>
-                <span className="font-bold">{inventoryDetails?.processQuantity || 0}</span>
-              </div>
-              <div className="flex justify-between border-b pb-2 dark:border-strokedark">
-                <span className="text-gray-500">Issued Kits:</span>
-                <span className="font-bold text-emerald-600">{inventoryDetails?.issuedKits || 0}</span>
-              </div>
-              <div className="flex justify-between border-b pb-2 dark:border-strokedark">
-                <span className="text-gray-500">Kits Shortage:</span>
-                <span className="font-bold text-rose-500">
-                  {Math.abs((inventoryDetails?.processQuantity || 0) - (inventoryDetails?.issuedKits || 0))}
-                </span>
-              </div>
-              <div className="flex justify-between border-b pb-2 dark:border-strokedark">
-                <span className="text-gray-500">Surplus Kits:</span>
-                <span className="font-bold text-blue-500">
-                  {((inventoryDetails?.issuedKits || 0) > (inventoryDetails?.processQuantity || 0)) ? Math.abs((inventoryDetails?.inventoryQuantity || 0) - (inventoryDetails?.processQuantity || 0)) : 0}
-                </span>
-              </div>
-            </div>
+            {(() => {
+              const targetKits = Number(inventoryDetails?.processQuantity || 0);
+              const issuedKits = Number(inventoryDetails?.issuedKits || 0);
+              const kitsShortage = Math.max(targetKits - issuedKits, 0);
+              const surplusKits = Math.max(issuedKits - targetKits, 0);
+
+              return (
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4 rounded-xl border border-gray-100 p-4 text-sm dark:border-strokedark">
+                  <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                    <span className="text-gray-500">Target Kits:</span>
+                    <span className="font-bold">{targetKits}</span>
+                  </div>
+                  <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                    <span className="text-gray-500">Issued Kits:</span>
+                    <span className="font-bold text-emerald-600">{issuedKits}</span>
+                  </div>
+                  <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                    <span className="text-gray-500">Kits Shortage:</span>
+                    <span className="font-bold text-rose-500">{kitsShortage}</span>
+                  </div>
+                  <div className="flex justify-between border-b pb-2 dark:border-strokedark">
+                    <span className="text-gray-500">Surplus Kits:</span>
+                    <span className="font-bold text-blue-500">{surplusKits}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Carton Information */}

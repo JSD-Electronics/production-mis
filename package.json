@@ -3,16 +3,16 @@
     "version": "1.3.5",
     "private": true,
   "scripts": {
-    "dev": "next dev",
-    "clean:next": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\"",
-    "build": "next build",
-    "build:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next build",
-    "build:slim": "set NEXT_DISABLE_WEBPACK_CACHE=1&& next build",
-    "postbuild": "node -e \"require('fs').rmSync('.next/cache',{recursive:true,force:true})\"",
-    "start": "next start",
+    "dev": "set NEXT_TELEMETRY_DISABLED=1&& set NEXTJS_DIST_DIR=.next-dev&& next dev",
+    "clean:next": "node -e \"['.next','.next-dev','.next-build'].forEach((dir)=>require('fs').rmSync(dir,{recursive:true,force:true}))\"",
+    "build": "set NEXT_TELEMETRY_DISABLED=1&& set NODE_OPTIONS=--max-old-space-size=4096&& set NEXTJS_DIST_DIR=.next-build&& next build",
+    "build:clean": "npm run clean:next && npm run build",
+    "build:slim": "set NEXT_DISABLE_WEBPACK_CACHE=1&& set NEXTJS_DIST_DIR=.next-build&& next build",
+    "postbuild": "node -e \"['.next/cache','.next-dev/cache','.next-build/cache'].forEach((dir)=>require('fs').rmSync(dir,{recursive:true,force:true}))\"",
+    "start": "set NEXTJS_DIST_DIR=.next-build&& next start",
     "lint": "next lint",
-    "build:legacy": "next build",
-    "build:fast": "set NEXT_TELEMETRY_DISABLED=1&& set NODE_OPTIONS=--max-old-space-size=4096&& next build"
+    "build:legacy": "set NEXTJS_DIST_DIR=.next-build&& next build",
+    "build:fast": "set NEXT_TELEMETRY_DISABLED=1&& set NODE_OPTIONS=--max-old-space-size=4096&& set NEXTJS_DIST_DIR=.next-build&& next build"
   },
     "dependencies": {
         "@fortawesome/fontawesome-svg-core": "^6.6.0",

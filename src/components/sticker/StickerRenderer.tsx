@@ -1,8 +1,8 @@
 import React from "react";
 import Barcode from "react-barcode";
 import { QRCodeSVG } from "qrcode.react";
-import { mmToPx } from "@/lib/sticker/units";
 import { resolveStickerValue } from "@/lib/sticker/resolveStickerValue";
+import { getBarcodeLayout } from "@/lib/sticker/barcodeLayout";
 
 type StickerRendererProps = {
   template: any;
@@ -27,7 +27,6 @@ const getDimensionsPx = (template: any) => {
 };
 
 const normalizeField = (field: any) => {
-  // Support older data that stored typography on `styles`.
   const styles = field?.styles && typeof field.styles === "object" ? field.styles : {};
   const fontSize =
     field?.fontSize ??
@@ -55,8 +54,8 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
     const s = String(slugLike || "").toLowerCase();
     if (!s) return "N/A";
     if (s.includes("imei")) return "868329082416730";
-    if (s.includes("ccid")) return "89911024059647563056F";
-    if (s.includes("serial") || s === "sn" || s.includes("s/n")) return "SN-2024-0001";
+    if (s.includes("ccid")) return "89911024059647563056";
+    if (s.includes("serial") || s === "sn" || s.includes("s/n")) return "GAGN14A261400635";
     return "N/A";
   };
 
@@ -74,7 +73,6 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
         padding: "0",
         boxSizing: "border-box",
         overflow: "hidden",
-        // Match the app + designer default (Inter) and keep a sane fallback stack for print windows.
         fontFamily: "Inter, Roboto, Helvetica, Arial, sans-serif",
         color: "black",
       }}
@@ -84,20 +82,45 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
         const fieldValue = resolveStickerValue(field, device);
         const align = field?.styles?.textAlign || "center";
         const fontSize = Number(field?.fontSize ?? 14) || 14;
-
+        const rawFieldWidth = Math.max(1, Number(field?.width || 100));
+        const rawFieldHeight = Math.max(1, Number(field?.height || 30));
         const key = field?._id || field?.id || `${field?.name || "field"}-${field?.x}-${field?.y}`;
+
+        const rawBarcodeValue = String(fieldValue ?? "").trim();
+        const sampleBarcodeValue = getSampleValueForSlug(field?.slug || field?.name);
+        const barcodeValue = rawBarcodeValue || sampleBarcodeValue;
+        const barcodeLayout =
+          field?.type === "barcode"
+            ? getBarcodeLayout({
+                value: barcodeValue,
+                field,
+                templateWidth: width,
+                templateHeight: height,
+              })
+            : null;
+
+        const fieldWidth = barcodeLayout?.renderWidth ?? rawFieldWidth;
+        const fieldHeight = barcodeLayout?.renderHeight ?? rawFieldHeight;
+        const barcodeMessage =
+          barcodeLayout?.message && barcodeLayout?.recommendation
+            ? `${barcodeLayout.message} ${barcodeLayout.recommendation}`
+            : barcodeLayout?.message;
 
         return (
           <div
             key={key}
+            data-barcode-valid={barcodeLayout ? String(barcodeLayout.isValid) : undefined}
+            data-barcode-message={barcodeMessage || undefined}
+            data-barcode-field={field?.name || field?.slug || undefined}
+            data-barcode-format={barcodeLayout?.format || undefined}
             style={{
               position: "absolute",
               display: "flex",
               alignItems: "center",
               top: `${field?.y ?? 0}px`,
               left: `${field?.x ?? 0}px`,
-              width: `${field?.width || 100}px`,
-              height: `${field?.height || 30}px`,
+              width: `${fieldWidth}px`,
+              height: `${fieldHeight}px`,
               justifyContent:
                 align === "left"
                   ? "flex-start"
@@ -120,119 +143,73 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
                   background: "transparent",
                   padding: "0",
                   boxSizing: "border-box",
-                  // Don't clip the barcode quiet-zone; scanners need margin on both sides.
-                  overflow: "hidden",
+                  overflow: "visible",
                 }}
               >
-                {(() => {
-                  const raw = String(fieldValue ?? "").trim();
-                  const sample = getSampleValueForSlug(field?.slug || field?.name);
-                  // If device data isn't present (product designer / simulator), show meaningful sample values.
-                  const barcodeValue = raw
-                    ? raw
-                    : sample;
-                  const estimatedModules = barcodeValue.length * 11 + 35;
-                  const targetWidth = field?.width;
-
-                  const explicitBarWidth =
-                    field?.barWidthMm != null
-                      ? mmToPx(Number(field.barWidthMm))
-                      : field?.barWidth;
-
-                  const marginPx = Number(field?.margin ?? 4) || 0;
-                  const usableWidth = targetWidth
-                    ? Math.max(1, Number(targetWidth) - marginPx * 2)
-                    : undefined;
-
-                  // IMPORTANT: If an explicit X dimension is configured (barWidthMm/barWidth),
-                  // always respect it so all barcodes render with the same bar thickness.
-                  // Auto-fit is only used when no explicit bar width is provided.
-                  const computedBarWidth =
-                    explicitBarWidth != null
-                      ? Math.max(0.5, Number(explicitBarWidth))
-                      : usableWidth
-                        ? Math.max(0.5, usableWidth / estimatedModules)
-                        : 1;
-
-                  const showValue = field?.displayValue !== false;
-                  const desiredFontSize = Number(field?.fontSize ?? 12);
-                  const desiredTextMargin = Number(field?.textMargin ?? 2);
-                  const valueFontOptions = field?.valueFontBold ? "bold" : undefined;
-
-                  // Height behavior:
-                  // 1) If Show Value is enabled and there is space, keep the value font size exactly as configured,
-                  //    and reduce the bar height to make room (so font respects properties on resize).
-                  // 2) Only if there is NOT enough space, auto-shrink the value font or hide it.
-
-                  const explicitBarHeight =
-                    field?.barHeightMm != null ? mmToPx(Number(field.barHeightMm)) : undefined;
-
-                  const usableHeight =
-                    field?.height != null ? Math.max(1, Number(field.height) - marginPx * 2) : 1;
-
-                  const minFontSize = 6;
-                  const minTextMargin = 0;
-
-                  let renderShowValue = Boolean(showValue);
-                  let valueFontSize = desiredFontSize;
-                  let valueTextMargin = desiredTextMargin;
-
-                  const desiredValueSpace = renderShowValue
-                    ? Math.max(0, valueFontSize + valueTextMargin)
-                    : 0;
-
-                  const maxBarHeightWithValue = Math.max(1, usableHeight - desiredValueSpace);
-
-                  // Try to honor configured font size by shrinking bar height first.
-                  let computedBarHeight = Math.max(
-                    1,
-                    Math.min(Number(explicitBarHeight ?? maxBarHeightWithValue), maxBarHeightWithValue),
-                  );
-
-                  // If even after shrinking bars we still can't fit the value, auto-adjust the typography.
-                  if (renderShowValue && usableHeight - computedBarHeight < minFontSize) {
-                    const availableForValue = Math.max(0, usableHeight - computedBarHeight);
-                    if (availableForValue < minFontSize) {
-                      renderShowValue = false;
-                    } else {
-                      valueTextMargin = Math.min(
-                        valueTextMargin,
-                        Math.max(minTextMargin, availableForValue - minFontSize),
-                      );
-                      valueFontSize = Math.min(
-                        valueFontSize,
-                        Math.max(minFontSize, availableForValue - valueTextMargin),
-                      );
-                      if (valueFontSize < minFontSize) renderShowValue = false;
-                    }
-
-                    // Recompute bar height if value got disabled.
-                    if (!renderShowValue) {
-                      computedBarHeight = Math.max(
-                        1,
-                        Math.min(Number(explicitBarHeight ?? usableHeight), usableHeight),
-                      );
-                    }
-                  }
-
-                  return (
-                    <Barcode
-                      value={barcodeValue}
-                      renderer="svg"
-                      width={computedBarWidth}
-                      height={computedBarHeight}
-                      displayValue={renderShowValue}
-                      format={field?.format || "CODE128"}
-                      lineColor={field?.lineColor || "#222222"}
-                      background={field?.background || "transparent"}
-                      // Default quiet-zone for scan reliability (can be overridden per field)
-                      margin={marginPx}
-                      fontSize={valueFontSize}
-                      textMargin={valueTextMargin}
-                      fontOptions={valueFontOptions}
-                    />
-                  );
-                })()}
+                {barcodeLayout?.isValid ? (
+                  <Barcode
+                    value={barcodeValue}
+                    renderer="svg"
+                    width={barcodeLayout.barWidth}
+                    height={barcodeLayout.barHeight}
+                    displayValue={barcodeLayout.displayValue}
+                    format={barcodeLayout.format}
+                    lineColor={field?.lineColor || "#222222"}
+                    background={field?.background || "transparent"}
+                    margin={barcodeLayout.marginPx}
+                    fontSize={barcodeLayout.fontSize}
+                    textMargin={barcodeLayout.textMargin}
+                    fontOptions={barcodeLayout.fontOptions}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      border: "1px solid #b91c1c",
+                      color: "#991b1b",
+                      background: "#fef2f2",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "center",
+                      alignItems: "flex-start",
+                      padding: "4px 6px",
+                      boxSizing: "border-box",
+                      gap: "3px",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div style={{ fontSize: "10px", fontWeight: 700 }}>
+                      {String(field?.name || field?.slug || "Barcode")}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        lineHeight: 1.25,
+                        whiteSpace: "normal",
+                      }}
+                    >
+                      {barcodeLayout?.message}
+                    </div>
+                    {barcodeLayout?.recommendation ? (
+                      <div style={{ fontSize: "9px", lineHeight: 1.2 }}>
+                        {barcodeLayout.recommendation}
+                      </div>
+                    ) : null}
+                    <div
+                      style={{
+                        fontSize: "9px",
+                        opacity: 0.85,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        width: "100%",
+                      }}
+                    >
+                      {barcodeValue}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : field?.type === "qrcode" ? (
               <div
@@ -323,3 +300,4 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
     </div>
   );
 }
+

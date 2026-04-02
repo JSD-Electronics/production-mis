@@ -1,30 +1,53 @@
 "use client";
-import React, { useEffect, useState } from "react";
-import AdminDashboard from "./AdminDashboard";
-import OperatorDashboard from "./OperatorDashboard";
-import ManagerDashboard from "./ManagerDashboard";
-import QCDashboard from "./QCDashboard";
-import StoreDashboard from "./StoreDashboard";
-import DefaultDashboard from "./E-commerce"; // Fallback to current e-commerce view
+import React, { useMemo } from "react";
+import dynamic from "next/dynamic";
+import { normalizeUserType, readStoredUserDetails } from "@/lib/portalAccessCache";
+
+const DashboardLoader = () => (
+  <div className="space-y-6 animate-pulse">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {[0, 1, 2].map((item) => (
+        <div key={item} className="h-28 rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark" />
+      ))}
+    </div>
+    <div className="h-80 rounded-xl border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark" />
+  </div>
+);
+
+const AdminDashboard = dynamic(() => import("./AdminDashboard"), {
+  ssr: false,
+  loading: () => <DashboardLoader />,
+});
+const OperatorDashboard = dynamic(() => import("./OperatorDashboard"), {
+  ssr: false,
+  loading: () => <DashboardLoader />,
+});
+const ManagerDashboard = dynamic(() => import("./ManagerDashboard"), {
+  ssr: false,
+  loading: () => <DashboardLoader />,
+});
+const QCDashboard = dynamic(() => import("./QCDashboard"), {
+  ssr: false,
+  loading: () => <DashboardLoader />,
+});
+const StoreDashboard = dynamic(() => import("./StoreDashboard"), {
+  ssr: false,
+  loading: () => <DashboardLoader />,
+});
+const DefaultDashboard = dynamic(() => import("./E-commerce"), {
+  ssr: false,
+  loading: () => <DashboardLoader />,
+});
 
 const DashboardSwitcher = () => {
-  const [userType, setUserType] = useState<string | null>(null);
-
-  useEffect(() => {
-    const raw = localStorage.getItem("userDetails");
-    if (raw) {
-      try {
-        const user = JSON.parse(raw);
-        // Normalize: lowercase, replace spaces/hyphens with underscores
-        const role = (user.userType || "").toLowerCase().trim().replace(/[\s-]+/g, "_");
-        setUserType(role);
-      } catch (e) {
-        console.error("Error parsing userDetails:", e);
-      }
-    }
+  const userType = useMemo(() => {
+    const user = readStoredUserDetails();
+    return normalizeUserType(user?.userType || "");
   }, []);
 
-  if (userType === null) return null;
+  if (!userType) {
+    return <DashboardLoader />;
+  }
 
   switch (userType) {
     case "admin":

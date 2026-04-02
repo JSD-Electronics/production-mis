@@ -26,6 +26,7 @@ import {
   createReport,
   getOverallProgressByOperatorId,
   getOperatorTaskByUserID,
+  getOperatorTaskDevice,
   createCarton,
   updatePlaningAndScheduling,
   // Operator work tracking
@@ -40,6 +41,7 @@ import { calculateTimeDifference } from "@/lib/common";
 import SearchableInput from "@/components/SearchableInput/SearchableInput";
 import { RefreshCw, Video, ExternalLink, Coffee } from "lucide-react";
 import { resolvePreviousStageEligibility } from "./stageEligibility";
+import useOperatorTaskBootstrap from "./hooks/useOperatorTaskBootstrap";
 import {
   chooseNextStageSeatAssignment,
   getParallelSeatEntries,
@@ -193,6 +195,27 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [operatorSessionId, setOperatorSessionId] = useState<string | null>(null);
+  const [taskPlanId, setTaskPlanId] = useState("");
+  const [currentUserId, setCurrentUserId] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const pathname = window.location.pathname;
+    setTaskPlanId(pathname.split("/").pop() || "");
+    const user = getCurrentUser();
+    setCurrentUserId(String(user?._id || ""));
+  }, []);
+
+  const {
+    data: taskBootstrapData,
+    loadBootstrap,
+    refreshNow: refreshTaskSummary,
+  } = useOperatorTaskBootstrap({
+    planId: taskPlanId,
+    operatorId: currentUserId,
+    enabled: Boolean(taskPlanId && currentUserId),
+    pollMs: 30000,
+  });
 
   const overtimeStats = useMemo(() => {
     const summary = getPlaningAndScheduling?.overtimeSummary || {};
@@ -343,30 +366,79 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     },
     [ensureOperatorSession],
   );
+  const applyTaskBootstrapData = React.useCallback((payload: any) => {
+    if (!payload) return;
+
+    const planData = payload?.plan || {};
+    const processPayload = payload?.process || {};
+    const productPayload = payload?.product || {};
+    const shiftPayload = payload?.shift || {};
+    const counters = payload?.counters || {};
+    const normalizedProduct = productPayload?._id
+      ? {
+          ...productPayload,
+          product: productPayload,
+          processID:
+            productPayload?.processID ||
+            processPayload?.processID ||
+            processPayload?._id ||
+            planData?.selectedProcess ||
+            "",
+        }
+      : {};
+
+    setPlaningAndScheduling({
+      ...planData,
+      overtimeSummary: payload?.overtimeSummary || planData?.overtimeSummary || {},
+    });
+    setAssignedTaskDetails(payload?.assignedTaskDetails || null);
+    setAssignUserStage(payload?.assignUserStage || null);
+    setProcessAssignUserStage(payload?.processAssignUserStage || {});
+    setProcessData(processPayload || {});
+    setProcessStatus(
+      processPayload?.status || planData?.processStatus || planData?.status || "",
+    );
+    setSelectedProcess(
+      String(payload?.selectedProcess || processPayload?._id || planData?.selectedProcess || ""),
+    );
+    setSelectedProduct(normalizedProduct);
+    setProduct(normalizedProduct);
+    setShift(shiftPayload || {});
+    setProcessStageName(Array.isArray(payload?.processStagesName) ? payload.processStagesName : []);
+    setDeviceList(Array.isArray(payload?.compactQueue) ? payload.compactQueue : []);
+    setOperatorSeatInfo(payload?.operatorSeatInfo || null);
+    setWipKits(Number(counters?.wipKits || 0));
+    setLineIssueKits(Number(counters?.lineIssueKits || 0));
+    setKitsShortage(Number(counters?.kitsShortage || 0));
+    setOverallTotalCompleted(Number(counters?.overallTotalCompleted || 0));
+    setOverallTotalNg(Number(counters?.overallTotalNg || 0));
+    setOverallTotalAttempts(Number(counters?.overallTotalAttempts || 0));
+    setTotalAttempts(Number(counters?.totalAttempts || 0));
+    setTotalCompleted(Number(counters?.totalCompleted || 0));
+    setTotalNg(Number(counters?.totalNg || 0));
+
+    const downTimePayload = payload?.downTime || {};
+    setIsDownTimeAvailable(Boolean(downTimePayload?.enabled));
+    setDownTimeVal(downTimePayload?.value || {});
+
+    if (shiftPayload?.startTime || shiftPayload?.endTime) {
+      setTimeDifference(calculateTimeDifference(shiftPayload?.startTime, shiftPayload?.endTime));
+    }
+
+    setLastSyncTime(new Date());
+  }, []);
+
 
   useEffect(() => {
-    const pathname = window.location.pathname;
-    const id = pathname.split("/").pop();
-    // prefetch using helper
     getDeviceTestEntry();
-
-    // Fetch planning data with background polling for status updates
-    getPlaningAndSchedulingByID(id);
-    const intervalId = setInterval(() => {
-      getPlaningAndSchedulingByID(id);
-    }, 15000); // Check every 15 seconds
-
-    return () => clearInterval(intervalId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyFilterDate, historySerialQuery]);
 
   useEffect(() => {
-    const pathname = window.location.pathname;
-    const id = pathname.split("/").pop();
-    if (getPlaningAndScheduling && assignUserStage && processData) {
-      getOverallProgress(id);
+    if (taskBootstrapData) {
+      applyTaskBootstrapData(taskBootstrapData);
     }
-  }, [getPlaningAndScheduling, assignUserStage, processData]);
+  }, [taskBootstrapData, applyTaskBootstrapData]);
 
   useEffect(() => {
     const queueWip = Array.isArray(deviceList) ? deviceList.length : 0;
@@ -377,72 +449,19 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     setKitsShortage(0);
   }, [deviceList, overallTotalCompleted, overallTotalNg]);
 
-  // ── Shared sync function (used by interval + manual button) ─────────────────
   const runSync = async () => {
     setIsSyncing(true);
     try {
-      const pathname = window.location.pathname;
-      const id = pathname.split("/").pop();
-
-      // 1. Today's per-operator counts
       await getDeviceTestEntry();
-
-      // 2. Seat-wise overall counts from fresh planning data
-      if (id) {
-        try {
-          const freshPlan = await getPlaningAndSchedulingById(id);
-          if (freshPlan) {
-            setPlaningAndScheduling(freshPlan);
-            const isCommon = assignedTaskDetails?.stageType === "common";
-            const stageField = isCommon ? "assignedCustomStages" : "assignedStages";
-              const assignedStages = normalizeAssignedStagesPayload(
-                JSON.parse(freshPlan[stageField] || "{}"),
-                processData?.stages || [],
-              );
-            const seatKey = operatorSeatInfo?.rowNumber + "-" + operatorSeatInfo?.seatNumber;
-            const seatStages = Array.isArray(assignedStages[seatKey])
-              ? assignedStages[seatKey]
-              : assignedStages[seatKey] ? [assignedStages[seatKey]] : [];
-
-            // Counts are now handled globally in getOverallProgress which is triggered by setPlaningAndScheduling
-          }
-        } catch (e) { /* ignore */ }
+      const refreshed = await refreshTaskSummary();
+      if (refreshed) {
+        applyTaskBootstrapData(refreshed);
       }
-
-      await getOverallProgress(id);
-
-      // 3. Refresh the searchable device list
-      if (selectedProduct?._id && assignUserStage && selectedProcess) {
-        try {
-          await getDevices(
-            selectedProduct._id || selectedProduct?.product?._id,
-            assignUserStage,
-            selectedProcess,
-            processData?.stages || [],
-          );
-        } catch (e) { /* ignore */ }
-      }
-
       setLastSyncTime(new Date());
     } finally {
       setIsSyncing(false);
     }
   };
-
-  // ── Auto-refresh counts every 30 s ─────────────────────────────────────────
-  const autoRefreshIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    const startPolling = () => {
-      if (autoRefreshIdRef.current) clearInterval(autoRefreshIdRef.current);
-      autoRefreshIdRef.current = setInterval(runSync, 30_000);
-    };
-    startPolling();
-    return () => {
-      if (autoRefreshIdRef.current) clearInterval(autoRefreshIdRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignedTaskDetails, operatorSeatInfo, selectedProduct, selectedProcess]);
-
   const closeScanModal = () => {
     setScanModalOpen(false);
   };
@@ -658,14 +677,25 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const getDeviceById = async (id: any) => {
     setIsDeviceHistoryLoading(true);
     try {
-      let result = await getDeviceTestByDeviceId(id);
+      if (taskPlanId && currentUserId) {
+        const optimized = await getOperatorTaskDevice(taskPlanId, currentUserId, { deviceId: id });
+        const history = Array.isArray(optimized?.data?.history)
+          ? optimized.data.history
+          : Array.isArray(optimized?.history)
+            ? optimized.history
+            : [];
+        setDeviceHistory(history);
+        return history;
+      }
+
+      const result = await getDeviceTestByDeviceId(id);
       if (result && result.status == 200) {
         setDeviceHistory(result.data);
         return result.data;
-      } else {
-        setDeviceHistory([]);
-        return [];
       }
+
+      setDeviceHistory([]);
+      return [];
     } catch (error) {
       setDeviceHistory([]);
       return [];
@@ -1033,77 +1063,14 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   };
   const getPlaningAndSchedulingByID = async (id: any) => {
     try {
-      const result = await getPlaningAndSchedulingById(id);
-      const user = getCurrentUser();
-      const assignedTaskDetails = await getAssignedTask(user?._id);
-      setAssignedTaskDetails(assignedTaskDetails);
-
-      let assignOperator: any = {};
-      let assignStage: any = {};
-      if (assignedTaskDetails?.stageType === "common") {
-        assignOperator = JSON.parse(result?.assignedCustomStagesOp || "{}");
-        assignStage = JSON.parse(result?.assignedCustomStages || "{}");
-      } else {
-        assignOperator = JSON.parse(result?.assignedOperators || "{}");
-        assignStage = normalizeAssignedStagesPayload(
-          JSON.parse(result?.assignedStages || "{}"),
-          processData?.stages || [],
-        );
+      const payload = await loadBootstrap();
+      if (payload) {
+        applyTaskBootstrapData(payload);
       }
-
-      const currentUserId = user?._id;
-      const keys = Object.keys(assignOperator || {});
-      let seatDetails: string | undefined;
-
-      // Robust seat identification: search through all operators at each seat
-      for (const seatKey of keys) {
-        const operators = assignOperator[seatKey];
-        if (Array.isArray(operators) && operators.some((op: any) => op._id === currentUserId)) {
-          seatDetails = seatKey;
-          break;
-        }
-      }
-
-      if (seatDetails) {
-        const seatInfo = seatDetails.split("-");
-        setOperatorSeatInfo({
-          rowNumber: seatInfo[0],
-          seatNumber: seatInfo[1],
-        });
-
-        if (assignStage[seatDetails]) {
-          const seatStages = assignStage[seatDetails];
-          setAssignUserStage(seatStages);
-
-          setSelectedProcess(result?.selectedProcess);
-          fetchProcessByID(result?.selectedProcess, seatStages);
-        }
-      }
-
-      const currentStatus = result?.processStatus || result?.status;
-      const dt =
-        typeof result?.downTime === "string"
-          ? JSON.parse(result.downTime)
-          : result.downTime;
-      const downtimeEnd = dt?.to ? new Date(dt.to).getTime() : null;
-      const nowMs = Date.now();
-      const stillInDowntime =
-        currentStatus === "down_time_hold" &&
-        (downtimeEnd == null || Number.isNaN(downtimeEnd) || downtimeEnd > nowMs);
-
-      if (stillInDowntime) {
-        setIsDownTimeAvailable(true);
-        setDownTimeVal(dt || {});
-      } else {
-        setIsDownTimeAvailable(false);
-        // Keep details for UI context, but overlay is not shown once downtime expires.
-        if (dt) setDownTimeVal(dt);
-      }
-
-      getShiftByID(result?.selectedShift);
-      setPlaningAndScheduling(result);
+      return payload;
     } catch (error: any) {
       console.error("Error fetching planning data:", error);
+      return null;
     }
   };
   useEffect(() => {
@@ -1409,8 +1376,10 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         }
 
         // Refresh the entire planning and progress state from server to ensure accuracy
-        getPlaningAndSchedulingByID(id);
-        getOverallProgress(id);
+        const refreshedTask = await loadBootstrap();
+        if (refreshedTask) {
+          applyTaskBootstrapData(refreshedTask);
+        }
 
         // Robustly remove the device from the searchable list
         // This ensures that for Pass AND NG (assigned to QC, TRC, etc.), the device is removed.
@@ -1475,7 +1444,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         title: "Print Carton Sticker",
         selector: ".actual-sticker-container",
       });
-      if (!res.ok) toast.error("Unable to print sticker");
+      if (!res.ok) toast.error(res.message || "Unable to print sticker");
       else setIsCartonBarCodePrinted(true);
       return;
     }
@@ -1573,15 +1542,16 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             toast.error(
               res.reason === "popup-blocked"
                 ? "Please allow popups to print stickers"
-                : "Sticker preview not found",
+                : res.message || "Sticker preview not found",
             );
+            return;
           }
+          setIsStickerPrinted(true);
         })
         .catch(() => {
           toast.error("Failed to print sticker");
         });
       setIsPassNGButtonShow(false);
-      setIsStickerPrinted(!isStickerPrinted);
     };
     tryPrint(0);
   };

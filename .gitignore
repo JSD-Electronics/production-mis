@@ -11,7 +11,9 @@ package-lock.json
 /coverage
 
 # next.js
-/.next/
+.next
+.next-build
+.next-dev
 /.next-local/
 /out/
 

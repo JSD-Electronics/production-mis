@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -62,17 +62,28 @@ const TaskComponent = () => {
     setSeatDetails({});
     setSelectedRecievedId("");
     setAssignTaskDetails(data);
+    setSelectedProcessId(data.processId || "");
 
-    data.kitRecievedSeatDetails?.forEach((value: any) => {
-      if (
-        data?.seatDetails?.rowNumber === value?.rowNumber &&
-        data?.seatDetails?.seatNumber === value?.seatNumber
-      ) {
-        setSelectedProcessId(data.processId);
-        setSeatDetails(value);
-        setSelectedRecievedId(data.kitRecievedConfirmationId);
-      }
+    const assignedRow = String(data?.seatDetails?.rowNumber || "").trim();
+    const assignedSeat = String(data?.seatDetails?.seatNumber || "").trim();
+    const availableSeatDetails = Array.isArray(data?.kitRecievedSeatDetails)
+      ? data.kitRecievedSeatDetails
+      : [];
+
+    const matchedSeat = availableSeatDetails.find((value: any) => {
+      const rowNumber = String(value?.rowNumber || "").trim();
+      const seatNumber = String(value?.seatNumber || "").trim();
+      return rowNumber === assignedRow && seatNumber === assignedSeat;
     });
+
+    const resolvedSeat = matchedSeat || availableSeatDetails[0] || data?.seatDetails || {};
+
+    setSeatDetails({
+      ...resolvedSeat,
+      assignedKitsToOperator:
+        resolvedSeat?.assignedKitsToOperator || data?.assignedKitsToOperator || 0,
+    });
+    setSelectedRecievedId(data.kitRecievedConfirmationId || "");
     setOperatorAssignedKitModel(true);
   };
 
@@ -105,8 +116,20 @@ const TaskComponent = () => {
     }
   };
 
-  const handleViewProcess = (id: any) => {
-    router.push(`/operators/task/${id}`);
+  const handleViewProcess = (task: any) => {
+    const resolvedPlanId =
+      task?.planId ||
+      task?.planDetails?._id ||
+      task?.planDetails?.id ||
+      task?.assignPlanId ||
+      "";
+
+    if (!resolvedPlanId) {
+      toast.error("Task plan id is missing for this assignment");
+      return;
+    }
+
+    router.push(`/operators/task/${resolvedPlanId}`);
   };
 
   // Memoized Calculations
@@ -241,7 +264,7 @@ const TaskComponent = () => {
           <div className="flex items-center gap-2">
             {canView ? (
               <button
-                onClick={() => handleViewProcess(row.planId)}
+                onClick={() => handleViewProcess(row)}
                 className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary transition hover:bg-primary hover:text-white"
                 title="Open Task"
               >
@@ -377,25 +400,40 @@ const TaskComponent = () => {
               <div>
                 <p className="text-xs font-bold text-primary uppercase tracking-wider">Assigned Workstation</p>
                 <h4 className="text-lg font-bold text-gray-900 dark:text-white">
-                  Row {seatDetails?.rowNumber} • Seat {seatDetails?.seatNumber}
+                  Row {seatDetails?.rowNumber} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Seat {seatDetails?.seatNumber}
                 </h4>
               </div>
             </div>
           )}
 
           {/* Allocation Info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="rounded-xl border border-gray-100 p-4 dark:border-strokedark">
-              <p className="text-xs font-bold text-gray-400 uppercase">Received Kits</p>
-              <p className="mt-1 text-2xl font-black text-emerald-600">{seatDetails?.issuedKits || 0}</p>
-            </div>
-            <div className="rounded-xl border border-gray-100 p-4 dark:border-strokedark">
-              <p className="text-xs font-bold text-gray-400 uppercase">Shortage</p>
-              <p className="mt-1 text-2xl font-black text-rose-600">
-                {Math.max(0, (assignTaskDetails.requiredKits || 0) - (seatDetails?.issuedKits || 0))}
-              </p>
-            </div>
-          </div>
+          {(() => {
+            const assignedKits = Number(
+              seatDetails?.assignedKitsToOperator ||
+              assignTaskDetails?.assignedKitsToOperator ||
+              seatDetails?.issuedKits ||
+              0,
+            );
+            const receivedKits = Number(seatDetails?.issuedKits || 0);
+            const shortageKits = Math.max(assignedKits - receivedKits, 0);
+            const surplusKits = Math.max(receivedKits - assignedKits, 0);
+
+            return (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-xl border border-gray-100 p-4 dark:border-strokedark">
+                  <p className="text-xs font-bold text-gray-400 uppercase">Received Kits</p>
+                  <p className="mt-1 text-2xl font-black text-emerald-600">{receivedKits}</p>
+                </div>
+                <div className="rounded-xl border border-gray-100 p-4 dark:border-strokedark">
+                  <p className="text-xs font-bold text-gray-400 uppercase">Shortage</p>
+                  <p className="mt-1 text-2xl font-black text-rose-600">{shortageKits}</p>
+                  {surplusKits > 0 && (
+                    <p className="mt-1 text-xs font-bold uppercase text-blue-500">Surplus: {surplusKits}</p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="flex items-center justify-center gap-3 pt-4 border-t dark:border-strokedark">
             <button
@@ -422,6 +460,8 @@ const TaskComponent = () => {
 };
 
 export default TaskComponent;
+
+
 
 
 

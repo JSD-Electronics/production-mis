@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import SidebarDropdown from "@/components/Sidebar/SidebarDropdown";
 import { usePathname } from "next/navigation";
@@ -36,13 +36,60 @@ const SidebarItem = ({
   };
 
   const SvgIcon = ({ svgString }: { svgString: string }) => {
-    const decoded = svgString
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#x2F;/g, "/")
-      .replace(/&amp;/g, "&");
-    return <div dangerouslySetInnerHTML={{ __html: decoded }} />;
+    const decoded = useMemo(
+      () =>
+        (svgString || "")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/&#x2F;/g, "/")
+          .replace(/&amp;/g, "&"),
+      [svgString],
+    );
+    const [safeSvg, setSafeSvg] = useState<string | null>(null);
+
+    useEffect(() => {
+      if (!decoded || typeof window === "undefined") {
+        setSafeSvg(null);
+        return;
+      }
+
+      try {
+        const parser = new window.DOMParser();
+        const doc = parser.parseFromString(decoded, "image/svg+xml");
+        const svg = doc.querySelector("svg");
+        const parserError = doc.querySelector("parsererror");
+
+        if (!svg || parserError) {
+          setSafeSvg(null);
+          return;
+        }
+
+        const pathNodes = Array.from(svg.querySelectorAll("path"));
+        const allPathsValid = pathNodes.every((node) => {
+          const d = node.getAttribute("d") || "";
+          if (!d.trim()) return true;
+          try {
+            const pathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            pathEl.setAttribute("d", d);
+            pathEl.getTotalLength();
+            return true;
+          } catch {
+            return false;
+          }
+        });
+
+        setSafeSvg(allPathsValid ? svg.outerHTML : null);
+      } catch {
+        setSafeSvg(null);
+      }
+    }, [decoded]);
+
+    if (!safeSvg) {
+      return <span className="inline-block h-[18px] w-[18px]" aria-hidden="true" />;
+    }
+
+    return <div aria-hidden="true" dangerouslySetInnerHTML={{ __html: safeSvg }} />;
   };
 
   const isItemActive = isActive(item);
@@ -57,9 +104,6 @@ const SidebarItem = ({
     timerRef.current = setTimeout(() => setTooltipOpen(false), 120);
   };
 
-  // ─────────────────────────────────────────────────────────────────────
-  //  COLLAPSED mode — icon rail with tooltip / tooltip+submenu flyout
-  // ─────────────────────────────────────────────────────────────────────
   if (collapsed) {
     return (
       <>
@@ -69,7 +113,6 @@ const SidebarItem = ({
             onMouseEnter={openTooltip}
             onMouseLeave={closeTooltip}
           >
-            {/* Icon button */}
             {hasChildren ? (
               <button
                 onClick={(e) => {
@@ -102,29 +145,22 @@ const SidebarItem = ({
               </Link>
             )}
 
-            {/* ── Tooltip / Flyout ── */}
             {(tooltipOpen || (collapsed && pageName === item.label.toLowerCase())) && (
               <div
                 className="absolute left-full top-0 ml-3 z-[10000]"
                 onMouseEnter={openTooltip}
                 onMouseLeave={closeTooltip}
               >
-                {/* A transparent bridge to help move the mouse from sidebar to pop-up */}
                 <div className="absolute -left-3 top-0 h-full w-3" />
-
-                {/* Arrow pointing left */}
                 <span className="absolute -left-[5px] top-4 w-0 h-0 border-y-[5px] border-y-transparent border-r-[5px] border-r-gray-800" />
 
                 {hasChildren ? (
-                  /* ── Submenu tooltip panel ── */
                   <div className="min-w-[180px] rounded-xl overflow-hidden bg-gray-800 shadow-2xl ring-1 ring-white/10 border border-white/5">
-                    {/* Section header */}
                     <div className="px-4 py-2.5 bg-gray-700/50 border-b border-white/10">
                       <span className="text-[11px] font-bold uppercase tracking-widest text-white/70">
                         {item.label}
                       </span>
                     </div>
-                    {/* Child links */}
                     <ul className="py-1.5">
                       {itemChildren.map((child: any, idx: number) => {
                         const childLabel = child?.label
@@ -160,7 +196,6 @@ const SidebarItem = ({
                     </ul>
                   </div>
                 ) : (
-                  /* ── Simple label tooltip ── */
                   <div className="whitespace-nowrap rounded-lg bg-gray-800 px-3.5 py-2 text-xs font-semibold text-white shadow-2xl ring-1 ring-white/10 border border-white/5">
                     {item.label}
                   </div>
@@ -173,9 +208,6 @@ const SidebarItem = ({
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────
-  //  EXPANDED mode — original full layout
-  // ─────────────────────────────────────────────────────────────────────
   return (
     <>
       {hasPermission && (

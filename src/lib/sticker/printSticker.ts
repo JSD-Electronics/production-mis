@@ -4,9 +4,12 @@ type PrintStickerOptions = {
   root: HTMLElement;
   scale?: number;
   title?: string;
-  // If multiple stickers exist under root, print all of them as pages.
   selector?: string;
 };
+
+type PrintStickerResult =
+  | { ok: true }
+  | { ok: false; reason: "no-target" | "popup-blocked" | "invalid-barcode"; message?: string };
 
 const getStickerDimsPx = (el: HTMLElement) => {
   const wAttr = el.getAttribute("data-sticker-width");
@@ -29,28 +32,36 @@ const getStickerDimsMm = (el: HTMLElement, fallbackPx: { widthPx: number; height
 
 export const printStickerElements = async ({
   root,
-  // Scale is kept for backward compatibility; DOM/SVG printing doesn't need it.
-  // If we later add a raster fallback, this value will apply there.
   scale = 6,
   title = "Print Sticker",
   selector = ".actual-sticker-container",
-}: PrintStickerOptions) => {
+}: PrintStickerOptions): Promise<PrintStickerResult> => {
   const nodes = Array.from(root.querySelectorAll(selector)) as HTMLElement[];
   const targets = nodes.length ? nodes : [root];
-  if (!targets.length) return { ok: false as const, reason: "no-target" as const };
+  if (!targets.length) return { ok: false, reason: "no-target" };
 
-  // Assume same size across pages; use first as @page size.
+  const invalidBarcodeNodes = targets.flatMap((target) =>
+    Array.from(target.querySelectorAll('[data-barcode-valid="false"]')) as HTMLElement[],
+  );
+  if (invalidBarcodeNodes.length) {
+    const message = invalidBarcodeNodes
+      .map((node) => node.getAttribute("data-barcode-message"))
+      .find(Boolean);
+    return {
+      ok: false,
+      reason: "invalid-barcode",
+      message: message || "One or more barcodes are too small to print safely.",
+    };
+  }
+
   const firstDims = getStickerDimsPx(targets[0]);
   const firstMm = getStickerDimsMm(targets[0], firstDims);
   const pageWmm = Math.max(10, firstMm.widthMm);
   const pageHmm = Math.max(10, firstMm.heightMm);
 
   const printWindow = window.open("", "_blank");
-  if (!printWindow) return { ok: false as const, reason: "popup-blocked" as const };
+  if (!printWindow) return { ok: false, reason: "popup-blocked" };
 
-  // Vector/DOM printing: keep SVG barcodes crisp and scan-friendly.
-  // All sticker elements are absolutely positioned with inline styles, so we do not
-  // depend on the app's Tailwind CSS existing in the print window.
   const bodyHtml = targets
     .map((el, idx) => {
       const dims = getStickerDimsPx(el);
@@ -81,13 +92,10 @@ export const printStickerElements = async ({
             print-color-adjust: exact;
             overflow: hidden;
           }
-          /* Do not center or scale: print at (0,0) for a true 1:1 output. */
           .page { position: relative; overflow: hidden; }
           .sticker-wrap { position: absolute; left: 0; top: 0; overflow: hidden; }
-          /* If a sticker uses the canonical class, ensure it fills the page exactly. */
           .sticker-wrap > .actual-sticker-container { width: 100% !important; height: 100% !important; }
           svg { shape-rendering: crispEdges; }
-          /* Never print editor chrome/handles/icons. */
           .sticker-lock-icon, .rnd-resize-handle, .react-resizable-handle, .resize-handle, .drag-handle { display: none !important; }
         </style>
       </head>
@@ -103,5 +111,6 @@ export const printStickerElements = async ({
   `);
   printWindow.document.close();
 
-  return { ok: true as const };
+  return { ok: true };
 };
+

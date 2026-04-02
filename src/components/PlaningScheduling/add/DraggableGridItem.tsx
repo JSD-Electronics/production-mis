@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useState } from "react";
 import { useDrag, useDrop } from "react-dnd";
 import Modal from "@/components/Modal/page";
@@ -30,26 +30,46 @@ const DraggableGridItem = ({
   const closeModal = () => setIsModalOpen(false);
 
   const openModal = (stages: any) => {
-    const requiredSkills = stages.map((stage) => {
+    const normalizedStages = (Array.isArray(stages) ? stages : []).filter(
+      (stage: any) => stage && !stage?.reserved,
+    );
 
-      return stage.requiredSkill.toLowerCase().trim();
-    });
-    const assignedOperatorIds = Object.values(assignedOperators)
+    if (normalizedStages.length === 0) {
+      setFilteredOperators([]);
+      setIsModalOpen(true);
+      return;
+    }
+
+    const requiredSkills = normalizedStages
+      .map((stage: any) => String(stage?.requiredSkill || "").toLowerCase().trim())
+      .filter(Boolean);
+    const requiredUserTypes = normalizedStages
+      .map((stage: any) => String(stage?.managedBy || "").toLowerCase().trim())
+      .filter(Boolean);
+
+    const assignedOperatorIds = Object.values(assignedOperators || {})
       .flat()
-      .map((operator) => operator._id);
-    const compatibleOperators = operators.filter((operator) => {
-      const normalizedSkills = operator.skills.map((skill) =>
-        skill.toLowerCase().trim(),
-      );
-      const hasAllSkills = requiredSkills.every((skill) =>
+      .filter((operator: any) => operator && operator._id)
+      .map((operator: any) => String(operator._id));
+
+    const compatibleOperators = (Array.isArray(operators) ? operators : []).filter((operator: any) => {
+      if (!operator?._id) return false;
+
+      const normalizedSkills = (Array.isArray(operator?.skills) ? operator.skills : [])
+        .map((skill: any) => String(skill || "").toLowerCase().trim())
+        .filter(Boolean);
+      const normalizedUserType = String(operator?.userType || "").toLowerCase().trim();
+      const hasAllSkills = requiredSkills.every((skill: string) =>
         normalizedSkills.includes(skill),
       );
-      const hasUserType = stages.map((stage) => {
-        return stage.managedBy == operator.userType;
-      });
-      const isAlreadyAssigned = assignedOperatorIds.includes(operator._id);
-      return hasUserType && hasAllSkills && !isAlreadyAssigned;
+      const hasRequiredUserType =
+        requiredUserTypes.length === 0 ||
+        requiredUserTypes.every((type: string) => type === normalizedUserType);
+      const isAlreadyAssigned = assignedOperatorIds.includes(String(operator._id));
+
+      return hasRequiredUserType && hasAllSkills && !isAlreadyAssigned;
     });
+
     setFilteredOperators(compatibleOperators);
     setIsModalOpen(true);
   };
@@ -492,3 +512,4 @@ const DraggableGridItem = ({
 };
 
 export default DraggableGridItem;
+

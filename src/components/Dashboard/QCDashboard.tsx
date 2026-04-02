@@ -2,7 +2,12 @@
 import React, { useEffect, useState } from "react";
 import CardDataStats from "../CardDataStats";
 import { ClipboardList, AlertTriangle } from "lucide-react";
-import { viewProcess, getNGDevicesByProcessId, getNGReasonDistribution, getDeviceTestTrends } from "@/lib/api";
+import {
+  viewProcess,
+  getNGDevicesByProcessId,
+  getNGReasonDistribution,
+  getDeviceTestTrends,
+} from "@/lib/api";
 import ChartOne from "@/components/Charts/ChartOne";
 import ChartThree from "@/components/Charts/ChartThree";
 
@@ -23,30 +28,30 @@ const QCDashboard = () => {
   useEffect(() => {
     const fetchQCData = async () => {
       try {
-        const resProcesses = await viewProcess();
-        const activeProcesses = resProcesses?.Processes?.filter(
-          (p: any) => p.status === "active"
-        ) || [];
-
-        let totalNG = 0;
-        for (const process of activeProcesses) {
-          try {
-            const resNG = await getNGDevicesByProcessId(process._id);
-            totalNG += resNG?.data?.length || 0;
-          } catch (err) {
-            console.warn(`Could not fetch NG for process ${process._id}`);
-          }
-        }
-
-        setStats({
-          pendingInspections: activeProcesses.length,
-          ngDetectedToday: totalNG,
-        });
-
-        const [dist, trend] = await Promise.all([
+        const [resProcesses, dist, trend] = await Promise.all([
+          viewProcess(),
           getNGReasonDistribution({ days: 30 }),
           getDeviceTestTrends({ days: 7, interval: "day" }),
         ]);
+
+        const activeProcesses =
+          resProcesses?.Processes?.filter((p: any) => p.status === "active") || [];
+
+        const ngResponses = await Promise.all(
+          activeProcesses.map(async (process: any) => {
+            try {
+              const resNG = await getNGDevicesByProcessId(process._id);
+              return resNG?.data?.length || 0;
+            } catch {
+              return 0;
+            }
+          }),
+        );
+
+        setStats({
+          pendingInspections: activeProcesses.length,
+          ngDetectedToday: ngResponses.reduce((sum, count) => sum + count, 0),
+        });
 
         setNgDistribution({
           labels: dist?.labels || [],
