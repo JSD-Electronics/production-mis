@@ -8,7 +8,7 @@ import DarkModeSwitcher from "./DarkModeSwitcher";
 // import DropdownNotification from "./DropdownNotification";
 import DropdownUser from "./DropdownUser";
 import { CONFIG } from "@/config";
-import { getAllMenus, getUseTypeByType } from "@/lib/api";
+import { getPortalAccessData } from "@/lib/portalAccessCache";
 
 const Header = ({
   sidebarOpen,
@@ -24,48 +24,20 @@ const Header = ({
   const [userType, setUserType] = useState("");
 
   useEffect(() => {
-    const raw = localStorage.getItem("userDetails");
-    if (!raw) return;
-    try {
-      const userDetails = JSON.parse(raw);
-      setUserType(userDetails?.userType || "");
-    } catch {}
-  }, []);
-
-  useEffect(() => {
     const load = async () => {
       try {
-        const result = await getAllMenus();
-        const menus = Array.isArray(result?.getMenu?.[0]?.menus)
-          ? result.getMenu[0].menus
-          : [];
-        const flat: { label: string; route: string }[] = [];
-        const walk = (items: any[]) => {
-          (Array.isArray(items) ? items : []).forEach((item) => {
-            if (item?.children?.length) {
-              walk(item.children);
-            } else if (item?.route && item.route !== "#") {
-              flat.push({ label: item.label, route: item.route });
-            }
-          });
-        };
-        walk(menus);
-        setMenuItems(flat);
+        const raw = localStorage.getItem("userDetails");
+        const userDetails = raw ? JSON.parse(raw) : {};
+        const portalAccess = await getPortalAccessData(userDetails?.userType);
+        setUserType(portalAccess.userType || "");
+        setMenuItems(portalAccess.flatMenuItems || []);
+        setPermission(portalAccess.permissions || []);
       } catch {
         setMenuItems([]);
+        setPermission([]);
       }
     };
     load();
-  }, []);
-
-  useEffect(() => {
-    const loadPermissions = async () => {
-      try {
-        const result = await getUseTypeByType();
-        setPermission(result.userType[0].roles || []);
-      } catch {}
-    };
-    loadPermissions();
   }, []);
 
   const filteredMenuItems = useMemo(() => {
@@ -93,9 +65,7 @@ const Header = ({
   return (
     <header className="sticky top-0 z-50 flex w-full items-center bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 shadow-sm ring-1 ring-black/5 dark:bg-boxdark/80">
       <div className="flex flex-grow items-center justify-between px-3 py-2 sm:px-4 md:px-6 lg:px-8">
-        {/* Left Section */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Environment Indicator */}
           {CONFIG.ENVIRONMENT !== "production" && (
             <div className="hidden xsm:block">
               <span className="inline-flex items-center rounded-md bg-yellow-400/10 px-2 py-1 text-xs font-medium text-yellow-600 ring-1 ring-inset ring-yellow-400/20">
@@ -103,7 +73,6 @@ const Header = ({
               </span>
             </div>
           )}
-          {/* Hamburger Button */}
           <button
             aria-controls="sidebar"
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -133,7 +102,6 @@ const Header = ({
             </svg>
           </button>
 
-          {/* Logo (Mobile only) */}
           <Link href="/" className="block flex-shrink-0">
             <Image
               width={28}
@@ -144,7 +112,6 @@ const Header = ({
           </Link>
         </div>
 
-        {/* Search Bar (hidden on mobile) */}
         <div className="hidden max-w-md flex-grow px-4 lg:block">
           <form onSubmit={handleSearchSubmit}>
             <div className="relative">
@@ -194,11 +161,7 @@ const Header = ({
           </form>
         </div>
 
-        {/* Right Section */}
         <div className="flex items-center gap-2 sm:gap-4 list-none">
-          {/* <DarkModeSwitcher /> */}
-          {/* <DropdownNotification /> */}
-          {/* <DropdownMessage /> */}
           <DropdownUser />
         </div>
       </div>

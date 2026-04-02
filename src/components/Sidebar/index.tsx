@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { getUseTypeByType, getAllMenus } from "../../lib/api";
 import Image from "next/image";
 import SidebarItem from "@/components/Sidebar/SidebarItem";
 import ClickOutside from "@/components/ClickOutside";
 import useLocalStorage from "@/hooks/useLocalStorage";
+import { getPortalAccessData } from "@/lib/portalAccessCache";
 
 interface SidebarProps {
   sidebarOpen: boolean;
@@ -14,7 +13,7 @@ interface SidebarProps {
   setSidebarCollapsed: (arg: boolean) => void;
 }
 
-/** Returns true only when the viewport is ≥ 1024px (lg breakpoint) */
+/** Returns true only when the viewport is Ã¢â€°Â¥ 1024px (lg breakpoint) */
 const useIsDesktop = () => {
   const [isDesktop, setIsDesktop] = useState(false);
   useEffect(() => {
@@ -55,112 +54,31 @@ const Sidebar = ({
   const safeMenuGroups = Array.isArray(menuGroups)
     ? menuGroups
     : [{ name: "MENU", menuItems: [] }];
-
   React.useEffect(() => {
     const raw = localStorage.getItem("userDetails");
     if (!raw) return;
+
     const userDetails = JSON.parse(raw);
-    getAccessPermission(userDetails.userType);
-    getMenus(userDetails);
-  }, []);
 
-  const normalizeRoute = (route: any) => {
-    const raw = (route ?? "").toString().trim();
-    if (!raw) return raw;
-    if (raw === "#") return "#";
-    // Backend sometimes returns absolute URLs; convert to SPA-friendly internal paths.
-    if (/^https?:\/\//i.test(raw)) {
+    const bootstrapSidebar = async () => {
       try {
-        const u = new URL(raw);
-        return `${u.pathname}${u.search}${u.hash}` || "/";
-      } catch {
-        return raw;
+        const portalAccess = await getPortalAccessData(userDetails?.userType);
+        setUserType(portalAccess.userType || userDetails?.userType || "");
+        setPermission(portalAccess.permissions || {});
+        setMenuGroups((prev) =>
+          (Array.isArray(prev) ? prev : [{ name: "MENU", menuItems: [] }]).map((group) =>
+            group.name === "MENU"
+              ? { ...group, menuItems: portalAccess.menus || [] }
+              : group,
+          ),
+        );
+      } catch (error) {
+        console.error("Failed to bootstrap sidebar:", error);
       }
-    }
-    // Ensure leading slash for internal routes (Next Link SPA navigation).
-    if (!raw.startsWith("/") && !raw.startsWith("?")) return `/${raw}`;
-    return raw;
-  };
+    };
 
-  const normalizeMenuTree = (node: any): any => {
-    if (!node || typeof node !== "object") return node;
-    const next: any = { ...node };
-    if (typeof next.route !== "undefined") next.route = normalizeRoute(next.route);
-    if (Array.isArray(next.children)) next.children = next.children.map(normalizeMenuTree);
-    return next;
-  };
-
-  const getMenus = async (user: any) => {
-    try {
-      const result = await getAllMenus();
-      const reportsMenu = {
-        icon: `<svg class="fill-current" width="18" height="19" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 5h18v2H3V5zm0 6h18v2H3v-2zm0 6h12v2H3v-2z" fill="#ffffff"/></svg>`,
-        label: "Reports",
-        route: "#",
-        children: [
-          { label: "NG Devices Report", route: "/reports/ng-devices" },
-        ],
-      };
-
-      const fetchedMenus = Array.isArray(result?.getMenu?.[0]?.menus)
-        ? result.getMenu[0].menus
-        : [];
-
-      const menusWithReports = (() => {
-        const menus = [...fetchedMenus];
-        const reportsIndex = menus.findIndex(
-          (m) => String(m?.label || "").toLowerCase() === "reports",
-        );
-
-        if (reportsIndex === -1) {
-          menus.push(reportsMenu);
-          return menus;
-        }
-
-        const existingReports = menus[reportsIndex];
-        const children = Array.isArray(existingReports.children)
-          ? existingReports.children
-          : [];
-        const hasNgReport = children.some(
-          (c) => String(c?.route || "") === "/reports/ng-devices",
-        );
-        if (!hasNgReport) {
-          existingReports.children = [
-            ...children,
-            { label: "NG Devices Report", route: "/reports/ng-devices" },
-          ];
-          menus[reportsIndex] = existingReports;
-        }
-        return menus;
-      })();
-
-      const normalizedMenus = menusWithReports.map(normalizeMenuTree);
-      const sortedMenus = [...normalizedMenus].sort((a, b) => {
-        const aHasChildren = Array.isArray(a?.children) && a.children.length > 0;
-        const bHasChildren = Array.isArray(b?.children) && b.children.length > 0;
-        if (aHasChildren === bHasChildren) return 0;
-        return aHasChildren ? 1 : -1;
-      });
-
-      setMenuGroups((prev) =>
-        (Array.isArray(prev) ? prev : [{ name: "MENU", menuItems: [] }]).map((group) =>
-          group.name === "MENU"
-            ? { ...group, menuItems: sortedMenus }
-            : group,
-        ),
-      );
-    } catch { }
-  };
-
-  const getAccessPermission = async (ut: any) => {
-    try {
-      const result = await getUseTypeByType();
-      setUserType(ut);
-      setPermission(result.userType?.[0]?.roles || {});
-    } catch (error) {
-      console.error("Failed to fetch permissions:", error);
-    }
-  };
+    bootstrapSidebar();
+  }, [setMenuGroups, setPermission, setUserType]);
 
   return (
     <ClickOutside onClick={() => setSidebarOpen(false)}>
@@ -177,7 +95,7 @@ const Sidebar = ({
           w-[88%] sm:w-72 lg:w-72 ${effectiveCollapsed ? "lg:!w-16 overflow-visible" : "overflow-hidden"}
         `}
       >
-        {/* ── HEADER ── */}
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ HEADER Ã¢â€â‚¬Ã¢â€â‚¬ */}
         <div className={`relative flex items-center justify-center ${effectiveCollapsed ? "h-28 flex-col" : "h-16 sm:h-20"}`}>
           {/* Mobile close button */}
           <button
@@ -249,7 +167,7 @@ const Sidebar = ({
           </button>
         </div>
 
-        {/* ── NAV ── */}
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ NAV Ã¢â€â‚¬Ã¢â€â‚¬ */}
         <div
           className={`no-scrollbar flex flex-1 min-w-0 flex-col duration-300 ease-linear ${effectiveCollapsed ? "overflow-visible" : "overflow-y-auto"
             }`}

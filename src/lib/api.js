@@ -785,6 +785,32 @@ export const getOperatorTaskByUserID = async (id) => {
     throw error.response?.data || { message: `Error Fetching Process !!` };
   }
 };
+export const getOperatorTaskBootstrap = async (planId, operatorId) => {
+  try {
+    const response = await api.get(`/operator-task/bootstrap/${planId}/${operatorId}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+export const getOperatorTaskRefresh = async (planId, operatorId) => {
+  try {
+    const response = await api.get(`/operator-task/refresh/${planId}/${operatorId}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+export const getOperatorTaskDevice = async (planId, operatorId, params = {}) => {
+  try {
+    const response = await api.get(`/operator-task/device/${planId}/${operatorId}`, { params });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
 export const getPlaningAndSchedulingByProcessId = async (id) => {
   try {
     let response = await api.get(

@@ -2,7 +2,11 @@
 import React, { useEffect, useState } from "react";
 import CardDataStats from "../CardDataStats";
 import { Activity, CheckCircle, Clock } from "lucide-react";
-import { getDeviceTestEntryByOperatorId, getActiveOperatorWorkSession, getDeviceTestTrends } from "@/lib/api";
+import {
+  getDeviceTestEntryByOperatorId,
+  getActiveOperatorWorkSession,
+  getDeviceTestTrends,
+} from "@/lib/api";
 import ChartTwo from "@/components/Charts/ChartTwo";
 
 const OperatorDashboard = () => {
@@ -24,21 +28,28 @@ const OperatorDashboard = () => {
         if (!raw) return;
         const user = JSON.parse(raw);
         const operatorId = user._id || user.id;
-
         const today = new Date().toISOString().split("T")[0];
-        const resRecords = await getDeviceTestEntryByOperatorId(operatorId, today);
+
+        const [resRecords, resSession, trend] = await Promise.all([
+          getDeviceTestEntryByOperatorId(operatorId, today),
+          getActiveOperatorWorkSession(),
+          getDeviceTestTrends({
+            interval: "hour",
+            hours: 12,
+            operatorId,
+          }),
+        ]);
+
         const recordCount = resRecords?.data?.length || 0;
         setRecentHistory((resRecords?.data || []).slice(0, 8));
 
-        const resSession = await getActiveOperatorWorkSession();
         const session = resSession?.session;
         let activeHours = "0h";
-        if (session && session.startedAt) {
+        if (session?.startedAt) {
           const start = new Date(session.startedAt).getTime();
-          const now = new Date().getTime();
+          const now = Date.now();
           const diffMs = now - start;
-          const hours = (diffMs / (1000 * 60 * 60)).toFixed(1);
-          activeHours = `${hours}h`;
+          activeHours = `${(diffMs / (1000 * 60 * 60)).toFixed(1)}h`;
         }
 
         setStats({
@@ -47,11 +58,6 @@ const OperatorDashboard = () => {
           activeTime: activeHours,
         });
 
-        const trend = await getDeviceTestTrends({
-          interval: "hour",
-          hours: 12,
-          operatorId,
-        });
         setHourlyTrend({
           categories: trend?.categories || [],
           series: trend?.series || [],

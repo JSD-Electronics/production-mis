@@ -5,6 +5,26 @@ import { toast } from "react-toastify";
 
 // --- Types ---
 
+type JigRuntimePhase =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "sending"
+  | "waiting_for_response"
+  | "validating"
+  | "passed"
+  | "pending_ng_timeout"
+  | "failed"
+  | "recovering"
+  | "disconnected";
+
+interface JigRuntimeStatus {
+  phase: JigRuntimePhase;
+  message: string;
+  recoverableWarnings: number;
+  connected: boolean;
+  command?: string;
+}
 interface JigSectionProps {
   subStep: any;
   onDataReceived?: (data: string) => void;
@@ -17,6 +37,7 @@ interface JigSectionProps {
   finalResult?: "Pass" | "NG" | null;
   finalReason?: string | null;
   onStatusUpdate?: (reason: string) => void;
+  onRuntimeStateChange?: (status: JigRuntimeStatus) => void;
   expanded?: boolean;
   generatedCommand?: string;
   setGeneratedCommand?: (cmd: string) => void;
@@ -29,6 +50,7 @@ interface LogEntry {
   displayTimestamp?: string;
   message: string;
   type?: "info" | "success" | "error" | "data";
+  visible?: boolean;
 }
 
 const USB_FILTERS = [
@@ -133,7 +155,7 @@ const parseJigOutput = (text: string) => {
   return [result];
 };
 
-const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisconnect, onDownloadLogs, onConnectionChange, searchQuery, finalResult, finalReason, onStatusUpdate, generatedCommand, setGeneratedCommand, autoConnect, keepConnectedOnComplete }: JigSectionProps) => {
+const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisconnect, onDownloadLogs, onConnectionChange, searchQuery, finalResult, finalReason, onStatusUpdate, onRuntimeStateChange, generatedCommand, setGeneratedCommand, autoConnect, keepConnectedOnComplete }: JigSectionProps) => {
   const [isConnected, setIsConnected] = useState(false);
   const [connectedPortInfo, setConnectedPortInfo] = useState<any>(null);
   const [availablePorts, setAvailablePorts] = useState<any[]>([]);
@@ -162,6 +184,29 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
   const persistentLogsRef = useRef<LogEntry[]>([]);
   const setGeneratedCommandRef = useRef(setGeneratedCommand);
   const keepConnectedOnCompleteRef = useRef(keepConnectedOnComplete);
+  const [runtimeStatus, setRuntimeStatus] = useState<JigRuntimeStatus>({
+    phase: "idle",
+    message: "Ready to connect",
+    recoverableWarnings: 0,
+    connected: false,
+  });
+  const runtimeStatusRef = useRef(runtimeStatus);
+  const hiddenDiagnosticsRef = useRef<LogEntry[]>([]);
+  const sessionTokenRef = useRef(0);
+  const activeValidationTokenRef = useRef<string | null>(null);
+
+  const updateRuntimeStatus = useCallback((partial: Partial<JigRuntimeStatus>) => {
+    setRuntimeStatus((prev) => {
+      const next = { ...prev, ...partial };
+      runtimeStatusRef.current = next;
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    runtimeStatusRef.current = runtimeStatus;
+    if (onRuntimeStateChange) onRuntimeStateChange(runtimeStatus);
+  }, [runtimeStatus, onRuntimeStateChange]);
   useEffect(() => {
     setGeneratedCommandRef.current = setGeneratedCommand;
   }, [setGeneratedCommand]);
@@ -266,14 +311,25 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
     onStatusUpdateRef.current = onStatusUpdate;
   }, [onStatusUpdate]);
 
-  const addLog = useCallback((message: string, type: LogEntry["type"] = "data") => {
-    const newEntry = {
+  const addLog = useCallback((
+    message: string,
+    type: LogEntry["type"] = "data",
+    options: { visible?: boolean; category?: "operator" | "diagnostic" } = {},
+  ) => {
+    const newEntry: LogEntry = {
       timestamp: new Date().toISOString(),
       displayTimestamp: formatTimestamp(),
       message,
       type,
+      visible: options.visible !== false,
     };
     persistentLogsRef.current.push(newEntry);
+    if (options.category === "diagnostic") {
+      hiddenDiagnosticsRef.current.push(newEntry);
+    }
+    if (newEntry.visible === false) {
+      return;
+    }
     setLogs((prev) => {
       const newLogs = [...prev, newEntry];
       return newLogs.length > 100 ? newLogs.slice(-100) : newLogs;
@@ -287,11 +343,19 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
   useEffect(() => {
     const stepId = subStep?._id || subStep?.stepName || subStep?.name || "unknown";
     if (subStep && !finalResult && currentStepIdRef.current !== stepId) {
+      sessionTokenRef.current += 1;
+      activeValidationTokenRef.current = null;
       currentStepIdRef.current = stepId;
       accumulatedDataRef.current = "";
       stepStartTime.current = Date.now();
       currentStepLogStartIndexRef.current = persistentLogsRef.current.length;
       const actionType = subStep.stepFields?.actionType || "Process";
+      updateRuntimeStatus({
+        phase: isConnected ? "connected" : "idle",
+        message: isConnected ? "Waiting for device response" : "Ready to connect",
+        connected: isConnected,
+        command: "",
+      });
       addLog(`--- STARTING STEP: ${stepId} (${actionType}) ---`, "info");
 
       // Also log expected values/ranges if they exist
@@ -311,9 +375,19 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
   useEffect(() => {
     const actionType = subStepRef.current?.stepFields?.actionType;
     if (finalResult === "Pass") {
+      updateRuntimeStatus({
+        phase: "passed",
+        message: "Step completed successfully",
+        connected: isConnected,
+      });
       addLog(`Decision: Pass${actionType ? ` (${actionType})` : ""}`, "success");
     } else if (finalResult === "NG") {
       const msg = finalReason ? `Decision: NG (${finalReason}${actionType ? ` - ${actionType}` : ""})` : `Decision: NG${actionType ? ` (${actionType})` : ""}`;
+      updateRuntimeStatus({
+        phase: "failed",
+        message: msg,
+        connected: false,
+      });
       addLog(msg, "error");
     }
   }, [finalResult, finalReason, addLog]);
@@ -345,6 +419,13 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
     }
     setConnectedPortInfo(null);
     setIsConnected(false);
+    activeValidationTokenRef.current = null;
+    updateRuntimeStatus({
+      phase: isManual ? "disconnected" : "failed",
+      message: isManual ? "Connection stopped" : "Connection lost, reconnect required",
+      connected: false,
+      command: "",
+    });
     addLog(isManual ? "System Stopped Manually" : "System Disconnected", "info");
   }, [addLog]);
 
@@ -390,6 +471,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       const parsedData = parsedArray[0];
       const currentSubStep = subStepRef.current;
       if (!currentSubStep?.jigFields) return;
+      updateRuntimeStatus({ phase: "validating", message: "Validating device response", connected: isConnected });
 
       matchCount = 0;
       let allPassed = true;
@@ -568,6 +650,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                   const errorMsg = validationErrors.join(", ");
                   addLog(`Validation Failed: ${errorMsg}`, "error");
                   // Wait for timeout for NG in ESIM Settings validation
+                  updateRuntimeStatus({ phase: "pending_ng_timeout", message: "Validation failed, waiting for timeout", connected: isConnected });
                   onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { ccid, parsedData, masterData: d }, false);
                 }
               } else {
@@ -688,6 +771,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                 if (switchProfileCompletedRef.current) {
                   addLog(`Validation Failed: ${errorMsg}`, "error");
                   // Delegate NG decision to timeout for Switch Profile validation
+                  updateRuntimeStatus({ phase: "pending_ng_timeout", message: "Validation failed, waiting for timeout", connected: isConnected });
                   onDecisionRef.current?.("NG", `Validation Failed: ${errorMsg}`, { parsedData }, false);
                 }
               }
@@ -766,7 +850,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
           // If we receive data, but lastSentCommandStepRef.current !== currentStepId, it means command hasn't been sent.
           // (Unless it's a step without a command).
 
-          // Simplified check: if step has command and we haven't recorded sending it â†’ wait
+          // Simplified check: if step has command and we haven't recorded sending it -> wait
           // Simplified check: if step has command and we haven't recorded sending it -> wait
           if (stepCommand && lastSentCommandStepRef.current !== currentStepId) {
             if (onStatusUpdateRef.current) onStatusUpdateRef.current("Waiting for auto-command execution...");
@@ -897,10 +981,22 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       const cmd = (command || "").trim();
       if (!cmd) return false;
       if (!isConnected || !portRef.current || !(navigator as any).serial) {
+        updateRuntimeStatus({
+          phase: "failed",
+          message: "Connection lost, reconnect required",
+          connected: false,
+          command: cmd,
+        });
         addLog("Cannot send: not connected", "error");
         return false;
       }
       try {
+        updateRuntimeStatus({
+          phase: "sending",
+          message: "Sending command to jig",
+          connected: true,
+          command: cmd,
+        });
         const encoder = new TextEncoder();
         let suffix = "\r\n";
         if (eol === "LF") suffix = "\n";
@@ -913,9 +1009,21 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
         writer.releaseLock();
         writerRef.current = null;
         addLog(`TX: ${cmd}`, "info");
+        updateRuntimeStatus({
+          phase: "waiting_for_response",
+          message: "Waiting for device response",
+          connected: true,
+          command: cmd,
+        });
 
         return true;
       } catch (e: any) {
+        updateRuntimeStatus({
+          phase: "failed",
+          message: `Command send failed: ${e?.message || e}`,
+          connected: isConnected,
+          command: cmd,
+        });
         addLog(`Send failed: ${e?.message || e}`, "error");
         try {
           if (writerRef.current) writerRef.current.releaseLock();
@@ -956,13 +1064,13 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       command = effectiveGeneratedCommand;
     }
 
-    console.log("Command execution check:", { actionType, command, isConnected, currentStepId, lastSent: lastSentCommandStepRef.current });
-
     const normalizedAction = actionType?.toLowerCase();
     const isSerialCommandStep =
       normalizedAction === "command" ||
       normalizedAction === "through serial" ||
-      normalizedAction === "custom fields";
+      normalizedAction === "custom fields" ||
+      normalizedAction === "store to db" ||
+      normalizedAction === "through jig stages";
     if (
       isConnected &&
       (isSerialCommandStep ||
@@ -983,9 +1091,22 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
         addLog(`Waiting for profile switch to complete...`, "info");
       }
 
+      const commandToken = `${currentStepId}-${sessionTokenRef.current}-${Date.now()}`;
+      activeValidationTokenRef.current = commandToken;
       addLog(`Auto-sending command: ${command}`, 'info');
+      updateRuntimeStatus({
+        phase: "sending",
+        message: "Sending command to jig",
+        connected: true,
+        command,
+      });
       isCommandBusyRef.current = true;
-      sendCommand(command).then(() => {
+      sendCommand(command).then((sent) => {
+        if (!sent) {
+          activeValidationTokenRef.current = null;
+          isCommandBusyRef.current = false;
+          return;
+        }
         matchCount = 0;
         addLog(`Command Executed: ${command}`, 'success');
         console.log("command sent : ==>", command);
@@ -1001,6 +1122,11 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
 
   const startReading = async (port: any) => {
     if (!port?.readable) return;
+    updateRuntimeStatus({
+      phase: "waiting_for_response",
+      message: "Waiting for device response",
+      connected: true,
+    });
     const decoder = new TextDecoder();
     let buffer = "";
 
@@ -1037,6 +1163,11 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
 
               addLog(trimmedLine, "data");
               if (onDataReceived) onDataReceived(trimmedLine);
+              updateRuntimeStatus({
+                phase: "validating",
+                message: "Validating device response",
+                connected: true,
+              });
               processData(trimmedLine);
             }
           }
@@ -1044,16 +1175,49 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       } catch (error: any) {
         if (stopRequestedRef.current) break;
 
-        // FramingErrors and other stream errors close the reader.
-        if (error.name === 'FramingError' || error.name === 'ParityError' || error.name === 'BufferOverrunError') {
-          console.warn(`Serial Stream Error: ${error.name}. Restarting reader...`);
-          addLog(`Stream Error (${error.name}), recovering...`, "info");
-          await new Promise(r => setTimeout(r, 100));
+        const errorName = String(error?.name || "");
+        const errorMessage = String(error?.message || error || "");
+        const isRecoverableReadError =
+          errorName === 'FramingError' ||
+          errorName === 'ParityError' ||
+          errorName === 'BufferOverrunError' ||
+          /break received/i.test(errorMessage) ||
+          /framing/i.test(errorMessage) ||
+          /parity/i.test(errorMessage) ||
+          /overrun/i.test(errorMessage);
+
+        if (isRecoverableReadError) {
+          console.warn(`Serial Stream Error: ${errorName || errorMessage}. Restarting reader...`);
+          updateRuntimeStatus({
+            phase: "recovering",
+            message: "Recovering serial stream",
+            connected: true,
+            recoverableWarnings: runtimeStatusRef.current.recoverableWarnings + 1,
+          });
+          addLog(`Hidden diagnostic: ${errorMessage || errorName}`, "info", {
+            visible: false,
+            category: "diagnostic",
+          });
+          await new Promise(r => setTimeout(r, 150));
+          updateRuntimeStatus({
+            phase: "waiting_for_response",
+            message: "Waiting for device response",
+            connected: true,
+          });
           continue;
         }
 
         console.error("Fatal Read error:", error);
-        addLog(`Fatal Read error: ${error.message || error}`, "error");
+        updateRuntimeStatus({
+          phase: "failed",
+          message: "Connection lost, reconnect required",
+          connected: false,
+        });
+        addLog("Connection lost. Reconnect required.", "error");
+        addLog(`Hidden diagnostic: fatal read error (${errorMessage || errorName})`, "error", {
+          visible: false,
+          category: "diagnostic",
+        });
         break;
       } finally {
         try { reader.releaseLock(); } catch { }
@@ -1067,6 +1231,11 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
   const connectToJig = async (existingPort?: any) => {
     try {
       if (!(navigator as any).serial) {
+        updateRuntimeStatus({
+          phase: "failed",
+          message: "Web Serial API is not supported",
+          connected: false,
+        });
         addLog("Web Serial API is not supported in this browser.", "error");
         return false;
       }
@@ -1074,6 +1243,11 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       if (isConnected || portRef.current) return true;
 
       setIsManualStopped(false); // Clear stop flag on intentional connection
+      updateRuntimeStatus({
+        phase: "connecting",
+        message: "Connecting to jig",
+        connected: false,
+      })
       let port = (existingPort && typeof existingPort.open === "function") ? existingPort : null;
       if (!port) {
         // Filter to show only USB serial ports
@@ -1088,6 +1262,11 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       stopRequestedRef.current = false;
       setConnectedPortInfo(port.getInfo());
       setIsConnected(true);
+      updateRuntimeStatus({
+        phase: "connected",
+        message: "Waiting for device response",
+        connected: true,
+      });
       addLog(`Port Connected ${existingPort ? '(Auto)' : ''} (115200 baud)`, "success");
 
       // Save last used port for auto-reconnect on step changes
@@ -1107,6 +1286,11 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
       else if (error.name === "NotFoundError") msg += "No device selected.";
       else msg += error.message;
 
+      updateRuntimeStatus({
+        phase: "failed",
+        message: msg,
+        connected: false,
+      });
       addLog(msg, "error");
 
       // Only show alert if it was a manual user action (no existingPort passed)
@@ -1282,13 +1466,13 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
             }
           }
 
-          // Case 1: Only one USB device → auto connect
+          // Case 1: Only one USB device -> auto connect
           if (activePorts.length === 1) {
             await openOrReusePort(activePorts[0]);
             return;
           }
 
-          // Case 2: Multiple USB devices → Attempt auto-connect to non-busy one
+          // Case 2: Multiple USB devices -> attempt auto-connect to a non-busy one
           if (activePorts.length > 1) {
 
             addLog(`${activePorts.length} USB devices attached.Checking for available port...`, "info");
@@ -1306,7 +1490,7 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
           }
         }
 
-        // Case 3: No USB devices → force picker (filtered)
+        // Case 3: No USB devices -> force picker (filtered)
         if (usbPorts.length === 0) {
           addLog("No known USB serial devices found. Ready f or manual connection.", "info");
         }

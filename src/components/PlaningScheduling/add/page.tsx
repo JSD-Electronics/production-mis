@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
@@ -1148,20 +1148,27 @@ const ADDPlanSchedule = () => {
     setSelectedClonePlaning(selected);
   };
   const openCustomStagesModal = (stage, index) => {
-    const requiredSkill = stage.requiredSkill?.toLowerCase().trim();
-    const requiredUserType = stage.managedBy;
-    const assignedOperatorIds = Object.values(assignedOperators)
+    const requiredSkill = String(stage?.requiredSkill || "").toLowerCase().trim();
+    const requiredUserType = String(stage?.managedBy || "").toLowerCase().trim();
+    const assignedOperatorIds = Object.values(assignedOperators || {})
       .flat()
-      .map((operator) => operator._id);
-    const compatibleOperators = operators.filter((operator) => {
-      const normalizedSkills = operator.skills.map((skill) =>
-        skill.toLowerCase().trim(),
-      );
-      return (
-        normalizedSkills.includes(requiredSkill) &&
-        !assignedOperatorIds.includes(operator._id)
-      );
+      .filter((operator: any) => operator && operator._id)
+      .map((operator: any) => String(operator._id));
+
+    const compatibleOperators = (Array.isArray(operators) ? operators : []).filter((operator: any) => {
+      if (!operator?._id) return false;
+
+      const normalizedSkills = (Array.isArray(operator?.skills) ? operator.skills : [])
+        .map((skill: any) => String(skill || "").toLowerCase().trim())
+        .filter(Boolean);
+      const normalizedUserType = String(operator?.userType || "").toLowerCase().trim();
+      const hasRequiredSkill = !requiredSkill || normalizedSkills.includes(requiredSkill);
+      const hasRequiredUserType = !requiredUserType || normalizedUserType === requiredUserType;
+      const isAlreadyAssigned = assignedOperatorIds.includes(String(operator._id));
+
+      return hasRequiredSkill && hasRequiredUserType && !isAlreadyAssigned;
     });
+
     setCustomStagesIndexVal(index);
     setCustomStagesCompatibleOperator(compatibleOperators);
     setCustomStagesModalOpen(true);
@@ -1531,7 +1538,7 @@ const ADDPlanSchedule = () => {
                                   disabled={isOperatorAssignedToAnySeat(operator?.name)}
                                 >
                                   {operator.name}
-                                  {isOperatorAssignedToAnySeat(operator?.name) ? " — (Assigné)" : ""}
+                                  {isOperatorAssignedToAnySeat(operator?.name) ? " â€” (AssignÃ©)" : ""}
                                 </option>
                               ))}
                             </select>
@@ -1628,3 +1635,4 @@ const ADDPlanSchedule = () => {
 };
 
 export default ADDPlanSchedule;
+

@@ -1,10 +1,11 @@
-﻿import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Rnd } from "react-rnd";
 import Barcode from "react-barcode";
 import { QRCodeCanvas } from "qrcode.react";
 import { printStickerElements } from "@/lib/sticker/printSticker";
 import { resolveStickerValue } from "@/lib/sticker/resolveStickerValue";
 import StickerRenderer from "@/components/sticker/StickerRenderer";
+import { mmToPx, pxToMm, pxToMmExact } from "@/lib/sticker/units";
 import Modal from "../Modal/page";
 import { useDropzone } from "react-dropzone";
 import Cropper from "react-easy-crop";
@@ -30,9 +31,6 @@ import {
 } from "lucide-react";
 import { Tooltip } from "react-tooltip";
 
-const CONVERSION_FACTOR = 3.78; // 1mm = 3.78px at roughly 96 DPI
-const pxToMm = (px: number) => Math.round(px / CONVERSION_FACTOR);
-const mmToPx = (mm: number) => Math.round(mm * CONVERSION_FACTOR);
 const StickerDesigner = ({
   stages,
   setStages,
@@ -336,8 +334,14 @@ const StickerDesigner = ({
       stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]?.dimensions
         ?.height;
     // Values are stored in PX, convert to MM for display
-    setDimWidthInput(typeof w === "number" ? String(pxToMm(w)) : w ? String(pxToMm(Number(w))) : "100");
-    setDimHeightInput(typeof h === "number" ? String(pxToMm(h)) : h ? String(pxToMm(Number(h))) : "60");
+    const wPx = typeof w === "number" ? w : w ? Number(w) : NaN;
+    const hPx = typeof h === "number" ? h : h ? Number(h) : NaN;
+    setDimWidthInput(
+      Number.isFinite(wPx) && wPx > 0 ? String(pxToMmExact(wPx, 2)) : "100",
+    );
+    setDimHeightInput(
+      Number.isFinite(hPx) && hPx > 0 ? String(pxToMmExact(hPx, 2)) : "60",
+    );
   }, [index, subIndex1, fieldIndex, stages]);
   const handleCloseCustomTextModal = () => {
     setIsCustomTextModal(!isCustomTextModal);
@@ -819,8 +823,12 @@ const StickerDesigner = ({
         selector: ".actual-sticker-container",
       })
         .then((res) => {
-          if (!res.ok && res.reason === "popup-blocked") {
-            alert("Please allow pop-ups to preview the sticker.");
+          if (!res.ok) {
+            alert(
+              res.reason === "popup-blocked"
+                ? "Please allow pop-ups to preview the sticker."
+                : res.message || "Sticker barcode is not safe to print yet.",
+            );
           }
         })
         .finally(() => {
@@ -1772,6 +1780,20 @@ const StickerDesigner = ({
                           if (!Number.isNaN(parsed)) {
                             const mmVal = Math.max(10, parsed);
                             const pxVal = mmToPx(mmVal);
+                            const currentWidth =
+                              stages[index]?.subSteps?.[subIndex1]?.printerFields?.[fieldIndex]
+                                ?.dimensions?.width;
+                            const currentWidthPx =
+                              typeof currentWidth === "number"
+                                ? currentWidth
+                                : currentWidth
+                                  ? Number(currentWidth)
+                                  : NaN;
+                            // Avoid "layout drift": do not write back unless the px value actually changes.
+                            if (Number.isFinite(currentWidthPx) && currentWidthPx === pxVal) {
+                              setDimWidthInput(String(mmVal));
+                              return;
+                            }
                             setStages((prevStages) =>
                               prevStages.map((stage, sIndex) =>
                                 sIndex === index
@@ -1821,6 +1843,20 @@ const StickerDesigner = ({
                           if (!Number.isNaN(parsed)) {
                             const mmVal = Math.max(10, parsed);
                             const pxVal = mmToPx(mmVal);
+                            const currentHeight =
+                              stages[index]?.subSteps?.[subIndex1]?.printerFields?.[fieldIndex]
+                                ?.dimensions?.height;
+                            const currentHeightPx =
+                              typeof currentHeight === "number"
+                                ? currentHeight
+                                : currentHeight
+                                  ? Number(currentHeight)
+                                  : NaN;
+                            // Avoid "layout drift": do not write back unless the px value actually changes.
+                            if (Number.isFinite(currentHeightPx) && currentHeightPx === pxVal) {
+                              setDimHeightInput(String(mmVal));
+                              return;
+                            }
                             setStages((prevStages) =>
                               prevStages.map((stage, sIndex) =>
                                 sIndex === index
@@ -2959,3 +2995,5 @@ const StickerDesigner = ({
 };
 
 export default StickerDesigner;
+
+

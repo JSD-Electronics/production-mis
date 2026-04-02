@@ -390,7 +390,7 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
                     toast.error(
                         res.reason === "popup-blocked"
                             ? "Please allow popups to print stickers"
-                            : "Sticker preview not found",
+                            : res.message || "Sticker preview not found",
                     );
                     return;
                 }
@@ -855,6 +855,5 @@ export default function StageSimulator({ stages, isOpen, onClose, initialStageIn
         </div>
     );
 }
-
 
 

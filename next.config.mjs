@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  distDir: process.env.NEXTJS_DIST_DIR || ".next",
   eslint: {
     ignoreDuringBuilds: true,
   },
