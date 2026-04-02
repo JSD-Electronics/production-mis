@@ -317,7 +317,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             return existing._id;
           }
         } catch (error) {
-          // Non-fatal Ã¢â‚¬â€œ we'll try to create a new one
+          // Non-fatal we'll try to create a new one
           console.error("Failed to fetch active operator session:", error);
         }
 
@@ -2014,7 +2014,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
               }`}
           />
           {isSyncing
-            ? "SyncingÃ¢â‚¬Â¦"
+            ? "Syncing..."
             : lastSyncTime
               ? `Last sync: ${lastSyncTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
               : "Sync Now"}
