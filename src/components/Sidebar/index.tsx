@@ -13,7 +13,7 @@ interface SidebarProps {
   setSidebarCollapsed: (arg: boolean) => void;
 }
 
-/** Returns true only when the viewport is Ã¢â€°Â¥ 1024px (lg breakpoint) */
+/** Returns true only when the viewport is >= 1024px (lg breakpoint) */
 const useIsDesktop = () => {
   const [isDesktop, setIsDesktop] = useState(false);
   useEffect(() => {
@@ -95,7 +95,7 @@ const Sidebar = ({
           w-[88%] sm:w-72 lg:w-72 ${effectiveCollapsed ? "lg:!w-16 overflow-visible" : "overflow-hidden"}
         `}
       >
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ HEADER Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* HEADER */}
         <div className={`relative flex items-center justify-center ${effectiveCollapsed ? "h-28 flex-col" : "h-16 sm:h-20"}`}>
           {/* Mobile close button */}
           <button
@@ -167,7 +167,7 @@ const Sidebar = ({
           </button>
         </div>
 
-        {/* Ã¢â€â‚¬Ã¢â€â‚¬ NAV Ã¢â€â‚¬Ã¢â€â‚¬ */}
+        {/* NAV */}
         <div
           className={`no-scrollbar flex flex-1 min-w-0 flex-col duration-300 ease-linear ${effectiveCollapsed ? "overflow-visible" : "overflow-y-auto"
             }`}
