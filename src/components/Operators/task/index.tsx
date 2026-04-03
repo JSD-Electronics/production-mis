@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -400,7 +400,7 @@ const TaskComponent = () => {
               <div>
                 <p className="text-xs font-bold text-primary uppercase tracking-wider">Assigned Workstation</p>
                 <h4 className="text-lg font-bold text-gray-900 dark:text-white">
-                  Row {seatDetails?.rowNumber} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Seat {seatDetails?.seatNumber}
+                  Row {seatDetails?.rowNumber} - Seat {seatDetails?.seatNumber}
                 </h4>
               </div>
             </div>

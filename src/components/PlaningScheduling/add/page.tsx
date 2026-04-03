@@ -1538,7 +1538,7 @@ const ADDPlanSchedule = () => {
                                   disabled={isOperatorAssignedToAnySeat(operator?.name)}
                                 >
                                   {operator.name}
-                                  {isOperatorAssignedToAnySeat(operator?.name) ? " â€” (AssignÃ©)" : ""}
+                                  {isOperatorAssignedToAnySeat(operator?.name) ? " - (Assigned)" : ""}
                                 </option>
                               ))}
                             </select>

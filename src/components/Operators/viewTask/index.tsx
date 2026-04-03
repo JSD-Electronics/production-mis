@@ -127,6 +127,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const [searchedSerialNo, setSearchedSerialNo] = useState("");
   const [operatorSeatInfo, setOperatorSeatInfo] = useState<any>(null);
   const [isPassNGButtonShow, setIsPassNGButtonShow] = useState(false);
+  const [isStatusSubmitting, setIsStatusSubmitting] = useState(false);
   const [isStickerPrinted, setIsStickerPrinted] = useState(false);
   const [isVerifyStickerModal, setIsVerifyStickerModal] = useState(false);
   const [isDownTimeEnable, setIsDownTimeAvailable] = useState(false);
@@ -1112,6 +1113,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       return;
     }
     isSubmitting.current = true;
+    setIsStatusSubmitting(true);
     try {
       let deviceInfo = deviceList.filter((device: any) => device.serialNo === searchResult);
       const deviceId = deviceInfo?.[0]?._id || "";
@@ -1146,6 +1148,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       if (!eligibility.isEligible) {
         toast.error(eligibility.message || "Previous stage must be passed before testing this device.");
         isSubmitting.current = false;
+      setIsStatusSubmitting(false);
         return;
       }
 
@@ -1332,6 +1335,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         startTime: operatorStartTime,
         endTime: new Date().toISOString(),
         logs: logs,
+        flowVersion: Number(deviceInfo?.[0]?.flowVersion || selectedDevice?.flowVersion || 1),
+        flowStartedAt: deviceInfo?.[0]?.flowStartedAt || selectedDevice?.flowStartedAt || null,
       };
 
       if (status === "NG") {
@@ -1375,23 +1380,13 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           setTotalCompleted((prev) => prev + 1);
         }
 
-        // Refresh only the compact task summary after pass/NG instead of reloading the full bootstrap payload.
-        const refreshedTask = await refreshTaskSummary();
-        if (refreshedTask) {
-          applyTaskBootstrapData({
-            ...(taskBootstrapData || {}),
-            ...refreshedTask,
-          });
-        }
-
-        // Robustly remove the device from the searchable list
-        // This ensures that for Pass AND NG (assigned to QC, TRC, etc.), the device is removed.
         const serialToRemove = deviceInfo?.[0]?.serialNo || searchResult;
         if (serialToRemove) {
           setDeviceList((prev) => prev.filter((device: any) => device.serialNo !== serialToRemove));
+          setWipKits((prev) => Math.max(prev - 1, 0));
         }
 
-        // Reset UI for next device
+        // Reset UI for next device immediately; server reconciliation continues in background.
         setElapsedDevicetime(0);
         setDeviceisplay("00:00:00");
         setSearchQuery("");
@@ -1405,6 +1400,18 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         setIsVerifiedPackaging(false);
 
         toast.success(result.message || `Device ${status} Successfully!!`);
+
+        void refreshTaskSummary()
+          .then((refreshedTask) => {
+            if (refreshedTask) {
+              applyTaskBootstrapData({
+                ...(taskBootstrapData || {}),
+                ...refreshedTask,
+              });
+              setLastSyncTime(new Date());
+            }
+          })
+          .catch(() => null);
         // Log device test submission as an operator event
         safeLogOperatorEvent(
           "DEVICE_TEST_SUBMIT",
@@ -1425,6 +1432,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       toast.error(error?.message || "Error creating device test entry");
     } finally {
       isSubmitting.current = false;
+      setIsStatusSubmitting(false);
     }
   };
   const handlePrintCartonSticker = async (elementId: string = "carton-sticker-preview") => {
@@ -2244,6 +2252,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             isVerifiedSticker={isVerifiedSticker}
             setIsVerifiedSticker={setIsVerifiedSticker}
             isPassNGButtonShow={isPassNGButtonShow}
+            isStatusSubmitting={isStatusSubmitting}
             handlePrintSticker={handlePrintSticker}
             handleVerifySticker={handleVerifySticker}
             isVerifyStickerModal={isVerifyStickerModal}
@@ -2306,4 +2315,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
 };
 
 export default ViewTaskDetailsComponent;
+
+
+
+
 
