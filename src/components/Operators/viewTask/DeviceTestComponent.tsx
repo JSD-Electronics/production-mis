@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import Modal from "@/components/Modal/page";
 import { useQRCode } from "next-qrcode";
 import { QRCodeSVG } from "qrcode.react";
