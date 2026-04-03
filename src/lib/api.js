@@ -2092,6 +2092,7 @@ export const inventoryDashboard = async () => {
 };
 
 export const getDeviceTestHistoryByOperatorId = async (id) => {
+  
   try {
     const response = await api.get(`/getDeviceTestHistoryByOperatorId/${id}`);
     return response.data;
