@@ -21,8 +21,6 @@ import {
   getDeviceTestRecordsByProcessId,
   getLatestDeviceTestsByPlanId,
   getDeviceTestByDeviceId,
-  updateStageByDeviceId,
-  updateStageBySerialNo,
   createReport,
   getOverallProgressByOperatorId,
   getOperatorTaskByUserID,
@@ -43,7 +41,6 @@ import { RefreshCw, Video, ExternalLink, Coffee } from "lucide-react";
 import { resolvePreviousStageEligibility } from "./stageEligibility";
 import useOperatorTaskBootstrap from "./hooks/useOperatorTaskBootstrap";
 import {
-  chooseNextStageSeatAssignment,
   getParallelSeatEntries,
   getSeatAssignmentForDevice,
   getSeatStageEntry,
@@ -59,6 +56,10 @@ const getCurrentUser = () => {
     return null;
   }
 };
+
+const SHOULD_LOG_OPERATOR_SUBMIT_TIMINGS = String(
+  process.env.NEXT_PUBLIC_LOG_OPERATOR_PASS_TIMINGS || "",
+).toLowerCase() === "true";
 
 type Device = any;
 type Carton = any;
@@ -1129,11 +1130,6 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         selectedDevice?.serialNo ||
         searchResult ||
         "";
-      const latestPlanRecordsResult = await getLatestDeviceTestsByPlanId(
-        window.location.pathname.split("/").pop(),
-        selectedProcess || processData?._id,
-      ).catch(() => null);
-      const latestPlanRecords = latestPlanRecordsResult?.deviceTestRecords || [];
       const eligibility = resolvePreviousStageEligibility({
         processStages: processData?.stages,
         currentStageName: stageData?.name || stageData?.stageName || stageData?.stage || "",
@@ -1148,44 +1144,13 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       if (!eligibility.isEligible) {
         toast.error(eligibility.message || "Previous stage must be passed before testing this device.");
         isSubmitting.current = false;
-      setIsStatusSubmitting(false);
+        setIsStatusSubmitting(false);
         return;
       }
 
       const currentStageName = String(
         stageData?.stageName || stageData?.name || stageData?.stage || "",
       ).trim();
-      const currentParallelSeats = getParallelSeatEntries({
-        assignedStages: normalizedAssignedStages,
-        stageName: currentStageName,
-        lineIndex: currentSeatStage?.lineIndex,
-        parallelGroupKey: currentSeatStage?.parallelGroupKey,
-      });
-      if (currentParallelSeats.length > 1) {
-        const latestSeatAssignment = getSeatAssignmentForDevice({
-          records: latestPlanRecords.length > 0 ? latestPlanRecords : deviceHistory,
-          serialNo: targetSerial,
-          currentStageName,
-        });
-
-        if (
-          latestSeatAssignment?.assignedSeatKey &&
-          String(latestSeatAssignment.assignedSeatKey) !== String(currentSeatKey)
-        ) {
-          toast.error(
-            `This device is assigned to seat ${latestSeatAssignment.assignedSeatKey} for ${currentStageName}.`,
-          );
-          isSubmitting.current = false;
-          return;
-        }
-      }
-
-      let nextSeatRouting = {
-        nextLogicalStage: "",
-        assignedSeatKey: "",
-        assignedStageInstanceId: "",
-        assignedParallelGroupKey: "",
-      };
 
       if (status === "Pass") {
         setIsStickerPrinted(false);
@@ -1193,59 +1158,6 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         setIsAddedToCart(false);
         setIsVerifiedPackaging(false);
         setIsDevicePassed(true);
-        let formData1 = new FormData();
-
-        const currentIndex = processData?.stages?.findIndex(
-          (stage: any) =>
-            String(stage?.stageName || "").trim() === currentStageName,
-        );
-
-        if (currentIndex !== -1) {
-          nextSeatRouting = chooseNextStageSeatAssignment({
-            assignedStages: normalizedAssignedStages,
-            currentSeatKey,
-            currentStageName,
-            processStages: processData?.stages || [],
-            commonStages: processData?.commonStages || [],
-            latestRecords: latestPlanRecords,
-          });
-
-          if (nextSeatRouting.nextLogicalStage) {
-            formData1.append("currentStage", nextSeatRouting.nextLogicalStage);
-          } else {
-            formData1.append("currentStage", currentStageName);
-          }
-        }
-
-        formData1.append("currentLogicalStage", currentStageName);
-        formData1.append("currentSeatKey", currentSeatKey);
-        formData1.append("stageInstanceId", currentSeatStage?.stageInstanceId || "");
-        formData1.append("parallelGroupKey", currentSeatStage?.parallelGroupKey || "");
-        formData1.append("nextLogicalStage", nextSeatRouting.nextLogicalStage || "");
-        formData1.append("assignedSeatKey", nextSeatRouting.assignedSeatKey || "");
-        formData1.append("assignedStageInstanceId", nextSeatRouting.assignedStageInstanceId || "");
-        formData1.append("assignedParallelGroupKey", nextSeatRouting.assignedParallelGroupKey || "");
-
-        if (!nextSeatRouting.nextLogicalStage) {
-          const commonStages = processData?.commonStages || [];
-          if (commonStages.length > 0) {
-            formData1.append(
-              "commonStages",
-              JSON.stringify((commonStages || []).map((cs: any) => cs.stageName)),
-            );
-          }
-        }
-
-        // Update device stage
-        if (deviceId) {
-          await updateStageByDeviceId(deviceId, formData1);
-        } else if (searchResult) {
-          await updateStageBySerialNo(searchResult, formData1);
-        } else {
-          toast.error("Device not found. Please re-search the serial.");
-          isSubmitting.current = false;
-          return;
-        }
       }
       // Save device test entry
       const pathname = window.location.pathname;
@@ -1318,17 +1230,21 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         planId: id || "",
         productId: selectedProduct?.product?._id || "",
         operatorId: userDetails?._id || "",
-        serialNo: deviceInfo?.[0]?.serialNo || "",
+        serialNo:
+          deviceInfo?.[0]?.serialNo ||
+          selectedDevice?.serialNo ||
+          searchResult ||
+          "",
         seatNumber: currentSeatKey,
         stageName: currentStageName,
         currentLogicalStage: currentStageName,
         currentSeatKey,
         stageInstanceId: currentSeatStage?.stageInstanceId || "",
         parallelGroupKey: currentSeatStage?.parallelGroupKey || "",
-        nextLogicalStage: nextSeatRouting.nextLogicalStage || "",
-        assignedSeatKey: nextSeatRouting.assignedSeatKey || "",
-        assignedStageInstanceId: nextSeatRouting.assignedStageInstanceId || "",
-        assignedParallelGroupKey: nextSeatRouting.assignedParallelGroupKey || "",
+        deviceCurrentStage:
+          deviceInfo?.[0]?.currentStage ||
+          selectedDevice?.currentStage ||
+          "",
         status: status,
         timeConsumed: deviceDisplay,
         totalBreakTime: String(totalBreakTime),
@@ -1358,29 +1274,44 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         }
       }
 
+      const submitStartedAt =
+        typeof performance !== "undefined" && typeof performance.now === "function"
+          ? performance.now()
+          : Date.now();
       let result = await createDeviceTestEntry(payload);
 
       if (result && (result.status === 200 || result.status === 201)) {
+        const resultType = String(
+          result?.resultType || result?.data?.resultType || "",
+        ).trim().toLowerCase();
+        const actionStatus = String(
+          result?.actionStatus || result?.data?.actionStatus || status || "",
+        ).trim().toUpperCase();
+        const isNgResult = resultType === "ng" || actionStatus === "NG";
+
         // Prepend to show at top of "Recent Activity"
         setCheckedDevice((prev) => [
           {
             deviceInfo: deviceInfo?.[0] || { serialNo: searchResult },
-            stageName: stageData?.name,
-            status,
+            stageName: stageData?.name || currentStageName,
+            status: isNgResult ? "NG" : "Pass",
             timeTaken: deviceDisplay,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
           },
           ...prev,
         ]);
 
         setTotalAttempts((prev) => prev + 1);
-        if (status === "NG") {
+        if (isNgResult) {
           setTotalNg((prev) => prev + 1);
         } else {
           setTotalCompleted((prev) => prev + 1);
         }
 
-        const serialToRemove = deviceInfo?.[0]?.serialNo || searchResult;
+        const serialToRemove =
+          deviceInfo?.[0]?.serialNo ||
+          selectedDevice?.serialNo ||
+          searchResult;
         if (serialToRemove) {
           setDeviceList((prev) => prev.filter((device: any) => device.serialNo !== serialToRemove));
           setWipKits((prev) => Math.max(prev - 1, 0));
@@ -1399,7 +1330,24 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         setIsAddedToCart(false);
         setIsVerifiedPackaging(false);
 
-        toast.success(result.message || `Device ${status} Successfully!!`);
+        toast.success(isNgResult ? "Device marked as NG" : "Device passed successfully");
+
+        if (SHOULD_LOG_OPERATOR_SUBMIT_TIMINGS) {
+          const submitFinishedAt =
+            typeof performance !== "undefined" && typeof performance.now === "function"
+              ? performance.now()
+              : Date.now();
+          console.info(
+            "[operator-submit-timing]",
+            JSON.stringify({
+              actionStatus: isNgResult ? "NG" : "Pass",
+              durationMs: Math.round(submitFinishedAt - submitStartedAt),
+              planId: id || "",
+              processId: selectedProcess || processData?._id || "",
+              serialNo: serialToRemove || "",
+            }),
+          );
+        }
 
         void refreshTaskSummary()
           .then((refreshedTask) => {
