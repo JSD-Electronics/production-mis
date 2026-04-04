@@ -4563,16 +4563,33 @@ export default function DeviceTestComponent({
                                               className="mx-auto flex items-center gap-2 rounded-xl bg-green-600 px-8 py-3.5 font-bold text-white shadow-lg transition-all hover:bg-green-700 active:scale-95"
                                               onClick={() => {
                                                 const types: string[] = [];
+                                                const normalizeVerifyField = (value: any) => {
+                                                  const raw = String(value || "").trim().toLowerCase();
+                                                  if (!raw) return "";
+                                                  if (raw.includes("serial")) return "serial";
+                                                  if (raw.includes("imei")) return "imei";
+                                                  if (raw.includes("ccid")) return "ccid";
+                                                  return raw;
+                                                };
                                                 try {
                                                   currentSubStep?.printerFields?.forEach((pf: any) => {
                                                     (pf?.fields || []).forEach((f: any) => {
-                                                      if (f?.type === "barcode" || f?.type === "qrcode") {
-                                                        const s = String(f?.slug || f?.name || "").toLowerCase();
-                                                        if (s.includes("serial")) types.push("serial");
-                                                        else if (s.includes("imei")) types.push("imei");
-                                                        else if (s.includes("ccid")) types.push("ccid");
-                                                        else types.push("any");
+                                                      if (f?.type !== "barcode" && f?.type !== "qrcode") return;
+                                                      const bindings = Array.isArray(f?.sourceFields)
+                                                        ? f.sourceFields
+                                                            .map((entry: any) =>
+                                                              normalizeVerifyField(
+                                                                entry?.slug || entry?.name || entry?.value,
+                                                              ),
+                                                            )
+                                                            .filter(Boolean)
+                                                        : [];
+                                                      if (bindings.length > 1) {
+                                                        types.push(`combined:${bindings.join(",")}`);
+                                                        return;
                                                       }
+                                                      const single = bindings[0] || normalizeVerifyField(f?.slug || f?.name);
+                                                      types.push(single || "any");
                                                     });
                                                   });
                                                 } catch { }
@@ -5108,22 +5125,39 @@ export default function DeviceTestComponent({
                                                       <button
                                                         className="mx-auto flex items-center gap-2 rounded-xl bg-green-600 px-8 py-3.5 font-bold text-white shadow-lg transition-all hover:bg-green-700 active:scale-95"
                                                         onClick={() => {
-                                                          const types: string[] = [];
-                                                          try {
-                                                            currentSubStep?.printerFields?.forEach((pf: any) => {
-                                                              (pf?.fields || []).forEach((f: any) => {
-                                                                if (f?.type === "barcode" || f?.type === "qrcode") {
-                                                                  const s = String(f?.slug || f?.name || "").toLowerCase();
-                                                                  if (s.includes("serial")) types.push("serial");
-                                                                  else if (s.includes("imei")) types.push("imei");
-                                                                  else if (s.includes("ccid")) types.push("ccid");
-                                                                  else types.push("any");
-                                                                }
-                                                              });
-                                                            });
-                                                          } catch { }
-                                                          handleVerifySticker(types);
-                                                        }}
+                                                const types: string[] = [];
+                                                const normalizeVerifyField = (value: any) => {
+                                                  const raw = String(value || "").trim().toLowerCase();
+                                                  if (!raw) return "";
+                                                  if (raw.includes("serial")) return "serial";
+                                                  if (raw.includes("imei")) return "imei";
+                                                  if (raw.includes("ccid")) return "ccid";
+                                                  return raw;
+                                                };
+                                                try {
+                                                  currentSubStep?.printerFields?.forEach((pf: any) => {
+                                                    (pf?.fields || []).forEach((f: any) => {
+                                                      if (f?.type !== "barcode" && f?.type !== "qrcode") return;
+                                                      const bindings = Array.isArray(f?.sourceFields)
+                                                        ? f.sourceFields
+                                                            .map((entry: any) =>
+                                                              normalizeVerifyField(
+                                                                entry?.slug || entry?.name || entry?.value,
+                                                              ),
+                                                            )
+                                                            .filter(Boolean)
+                                                        : [];
+                                                      if (bindings.length > 1) {
+                                                        types.push(`combined:${bindings.join(",")}`);
+                                                        return;
+                                                      }
+                                                      const single = bindings[0] || normalizeVerifyField(f?.slug || f?.name);
+                                                      types.push(single || "any");
+                                                    });
+                                                  });
+                                                } catch { }
+                                                handleVerifySticker(types);
+                                              }}
                                                       >
                                                         <ScanLine className="h-5 w-5" />
                                                         Start Verification
@@ -6074,6 +6108,8 @@ export default function DeviceTestComponent({
     </>
   );
 }
+
+
 
 
 

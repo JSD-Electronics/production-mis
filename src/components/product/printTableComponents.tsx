@@ -80,6 +80,7 @@ const StickerDesigner = ({
   const [fontSettings, setFontSettings] = useState({ size: 16, weight: 400 });
   const [selectedBarCodeValue, setSelectedBarCodeValue] = useState("");
   const [selectQRValue, setSelectedQRValue] = useState<any>({});
+  const [selectedScanFields, setSelectedScanFields] = useState<any[]>([]);
   const [isDynamicUrlModal, setIsDynamicUrlModal] = useState(false);
   const [dynamicUrlVal, setDynamicUrlVal] = useState("");
   const [isTableModal, setIsTableModal] = useState(false);
@@ -735,6 +736,125 @@ const StickerDesigner = ({
     }
     return patch;
   };
+
+  const normalizeSourceField = useCallback((entry: any) => {
+    if (!entry) return null;
+    if (typeof entry === "string") {
+      const trimmed = entry.trim();
+      return trimmed ? { slug: trimmed, name: trimmed } : null;
+    }
+
+    const slug = String(entry?.slug || entry?.value || entry?.name || "").trim();
+    const name = String(entry?.name || entry?.label || entry?.slug || entry?.value || "").trim();
+
+    if (!slug && !name) return null;
+
+    return {
+      slug: slug || name,
+      name: name || slug,
+    };
+  }, []);
+
+  const getFieldSourceFields = useCallback(
+    (field: any) => {
+      const explicit = Array.isArray(field?.sourceFields)
+        ? field.sourceFields
+            .map((entry: any) => normalizeSourceField(entry))
+            .filter(Boolean)
+        : [];
+
+      if (explicit.length > 0) return explicit;
+
+      const fallback = normalizeSourceField({
+        slug: field?.slug,
+        name: field?.name,
+      });
+
+      return fallback ? [fallback] : [];
+    },
+    [normalizeSourceField],
+  );
+
+  const buildNextSourceFields = useCallback(
+    (field: any, candidate: any) => {
+      const normalizedCandidate = normalizeSourceField(candidate);
+      if (!normalizedCandidate) return getFieldSourceFields(field);
+
+      const existing = getFieldSourceFields(field);
+      const exists = existing.some(
+        (entry: any) =>
+          String(entry?.slug || "").toLowerCase() ===
+            String(normalizedCandidate.slug || "").toLowerCase() ||
+          String(entry?.name || "").toLowerCase() ===
+            String(normalizedCandidate.name || "").toLowerCase(),
+      );
+
+      if (exists) {
+        return existing.filter(
+          (entry: any) =>
+            String(entry?.slug || "").toLowerCase() !==
+              String(normalizedCandidate.slug || "").toLowerCase() &&
+            String(entry?.name || "").toLowerCase() !==
+              String(normalizedCandidate.name || "").toLowerCase(),
+        );
+      }
+
+      return [...existing, normalizedCandidate];
+    },
+    [getFieldSourceFields, normalizeSourceField],
+  );
+
+  const reorderSourceFields = useCallback(
+    (entries: any[], fromIndex: number, direction: number) => {
+      const normalized = Array.isArray(entries)
+        ? entries
+            .map((entry: any) => normalizeSourceField(entry))
+            .filter(Boolean)
+        : [];
+
+      const targetIndex = fromIndex + direction;
+      if (
+        fromIndex < 0 ||
+        fromIndex >= normalized.length ||
+        targetIndex < 0 ||
+        targetIndex >= normalized.length
+      ) {
+        return normalized;
+      }
+
+      const next = [...normalized];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    },
+    [normalizeSourceField],
+  );
+
+  const getSampleValueForSlug = useCallback((slugLike: any) => {
+    const s = String(slugLike || "").toLowerCase();
+    if (!s) return "N/A";
+    if (s.includes("imei")) return "868329082416730";
+    if (s.includes("ccid")) return "89911024059647563056F";
+    if (s.includes("serial") || s === "sn" || s.includes("s/no") || s.includes("s/n")) {
+      return "SN-2024-0001";
+    }
+    return "N/A";
+  }, []);
+
+  const getSampleValueForField = useCallback(
+    (field: any) => {
+      const bindings = getFieldSourceFields(field);
+      if (bindings.length > 0) {
+        return bindings
+          .map((entry: any) => getSampleValueForSlug(entry?.slug || entry?.name))
+          .filter(Boolean)
+          .join(",");
+      }
+      return getSampleValueForSlug(field?.slug || field?.name);
+    },
+    [getFieldSourceFields, getSampleValueForSlug],
+  );
+
   const handleRemoveField = (subFieldIndex: number) => {
     let removedField: any = null;
 
@@ -868,8 +988,11 @@ const StickerDesigner = ({
     ]);
   };
   const openBarCodeValue = (value) => {
-    setFieldType("");
+    setFieldType(value?.type || "");
     setSelectedQRValue(value);
+    setSelectedScanFields(getFieldSourceFields(value));
+    setDisplayBarValue(value?.displayValue !== false);
+    setBarFormat(value?.format || "CODE128");
     setIsModalBarCodeValue(true);
   };
   const [barWidth, setBarWidth] = useState<number | "">("");
@@ -907,145 +1030,93 @@ const StickerDesigner = ({
       setBarCodeError("Please select Barcode or QR Code.");
       return;
     }
-    if (
-      fieldType === "barcode" &&
-      !selectQRValue?.slug &&
-      !selectQRValue?.name
-    ) {
-      setBarCodeError("Please choose a field to bind (e.g., Serial No).");
+
+    const normalizedSourceFields = selectedScanFields
+      .map((entry: any) => normalizeSourceField(entry))
+      .filter(Boolean);
+    const fallbackBinding = normalizeSourceField(selectQRValue);
+    const nextSourceFields =
+      normalizedSourceFields.length > 0
+        ? normalizedSourceFields
+        : fallbackBinding
+          ? [fallbackBinding]
+          : [];
+
+    if ((fieldType === "barcode" || fieldType === "qrcode") && nextSourceFields.length === 0) {
+      setBarCodeError("Please choose at least one global sticker field.");
       return;
     }
+
     setBarCodeError("");
     pushHistory();
     setStages((prevStages) =>
       prevStages.map((stage, sIndex) =>
-        sIndex === index // Match the target stage
+        sIndex === index
           ? {
-            ...stage,
-            subSteps: stage.subSteps.map((subStep, sSubIndex) =>
-              sSubIndex === subIndex1 // Match the target subStep
-                ? {
-                  ...subStep,
-                  printerFields: subStep.printerFields.map(
-                    (printerField, pFieldIndex) =>
-                      pFieldIndex === fieldIndex // Match the target printerField
-                        ? {
-                          ...printerField,
-                          fields: printerField.fields.some(
-                            (field) => field.name === selectQRValue.name,
-                          )
-                            ? printerField.fields.map((field) =>
-                              field.name === selectQRValue.name
-                                ? {
-                                  ...field,
-                                  type: fieldType,
-                                  slug:
-                                    selectQRValue?.slug || field.slug,
-                                  displayValue: displayBarValue,
-                                  barWidth:
-                                    barWidth === ""
-                                      ? undefined
-                                      : Number(barWidth),
-                                  barWidthMm:
-                                    field.barWidthMm ?? 0.25,
-                                  barHeight:
-                                    barHeight === ""
-                                      ? undefined
-                                      : Number(barHeight),
-                                  barHeightMm:
-                                    field.barHeightMm ?? 3.3,
-                                  barDensity:
-                                    field.barDensity ?? 0.636,
-                                  styles: {
-                                    ...field.styles,
-                                    x: 50,
-                                    y: 50,
-                                    width:
-                                      fieldType === "text"
-                                        ? 100
-                                        : 150,
-                                    height: 50,
-                                  },
-                                  format: barFormat,
-                                  codeSet: field.codeSet || "Auto",
-                                  textEncoding:
-                                    field.textEncoding || "US-ASCII",
-                                  includeCheckDigit:
-                                    field.includeCheckDigit || false,
-                                  hibc: field.hibc || false,
-                                  gs1_128: field.gs1_128 || false,
-                                  lineColor: barLineColor,
-                                  background: barBackground,
-                                  margin:
-                                    barMargin === ""
-                                      ? undefined
-                                      : Number(barMargin),
-                                  fontSize:
-                                    barTextSize === ""
-                                      ? undefined
-                                      : Number(barTextSize),
-                                  textMargin:
-                                    barTextMargin === ""
-                                      ? undefined
-                                      : Number(barTextMargin),
-                                }
-                                : field,
-                            )
-                            : [
-                              ...printerField.fields,
-                              {
-                                id: Date.now(),
-                                name: selectQRValue.name,
-                                type: fieldType,
-                                slug: selectQRValue?.slug,
-                                displayValue: displayBarValue,
-                                barWidth:
-                                  barWidth === ""
-                                    ? undefined
-                                    : Number(barWidth),
-                                barWidthMm: 0.25,
-                                barHeight:
-                                  barHeight === ""
-                                    ? undefined
-                                    : Number(barHeight),
-                                barHeightMm: 3.3,
-                                barDensity: 0.636,
-                                format: barFormat,
-                                codeSet: "Auto",
-                                textEncoding: "US-ASCII",
-                                includeCheckDigit: false,
-                                hibc: false,
-                                gs1_128: false,
-                                lineColor: barLineColor,
-                                background: barBackground,
-                                margin:
-                                  barMargin === ""
-                                    ? undefined
-                                    : Number(barMargin),
-                                fontSize:
-                                  barTextSize === ""
-                                    ? undefined
-                                    : Number(barTextSize),
-                                textMargin:
-                                  barTextMargin === ""
-                                    ? undefined
-                                    : Number(barTextMargin),
-                                styles: {
-                                  x: 50,
-                                  y: 50,
-                                  // width:
-                                  //   fieldType === "text" ? 100 : 150,
-                                  // height: 50,
-                                },
-                              },
-                            ],
-                        }
-                        : printerField,
-                  ),
-                }
-                : subStep,
-            ),
-          }
+              ...stage,
+              subSteps: stage.subSteps.map((subStep, sSubIndex) =>
+                sSubIndex === subIndex1
+                  ? {
+                      ...subStep,
+                      printerFields: subStep.printerFields.map(
+                        (printerField, pFieldIndex) =>
+                          pFieldIndex === fieldIndex
+                            ? {
+                                ...printerField,
+                                fields: printerField.fields.map((field) => {
+                                  const isTarget =
+                                    (selectQRValue?.id != null && field?.id === selectQRValue.id) ||
+                                    (selectQRValue?._id != null && field?._id === selectQRValue._id) ||
+                                    field.name === selectQRValue?.name;
+
+                                  if (!isTarget) return field;
+
+                                  return {
+                                    ...field,
+                                    type: fieldType,
+                                    slug: nextSourceFields[0]?.slug || field.slug,
+                                    sourceFields: nextSourceFields,
+                                    displayValue: displayBarValue,
+                                    barWidth:
+                                      barWidth === ""
+                                        ? undefined
+                                        : Number(barWidth),
+                                    barWidthMm: field.barWidthMm ?? 0.25,
+                                    barHeight:
+                                      barHeight === ""
+                                        ? undefined
+                                        : Number(barHeight),
+                                    barHeightMm: field.barHeightMm ?? 3.3,
+                                    barDensity: field.barDensity ?? 0.636,
+                                    format: barFormat,
+                                    codeSet: field.codeSet || "Auto",
+                                    textEncoding: field.textEncoding || "US-ASCII",
+                                    includeCheckDigit: field.includeCheckDigit || false,
+                                    hibc: field.hibc || false,
+                                    gs1_128: field.gs1_128 || false,
+                                    lineColor: barLineColor,
+                                    background: barBackground,
+                                    margin:
+                                      barMargin === ""
+                                        ? undefined
+                                        : Number(barMargin),
+                                    fontSize:
+                                      barTextSize === ""
+                                        ? undefined
+                                        : Number(barTextSize),
+                                    textMargin:
+                                      barTextMargin === ""
+                                        ? undefined
+                                        : Number(barTextMargin),
+                                  };
+                                }),
+                              }
+                            : printerField,
+                      ),
+                    }
+                  : subStep,
+              ),
+            }
           : stage,
       ),
     );
@@ -1324,23 +1395,11 @@ const StickerDesigner = ({
                       {field?.type === "barcode" ? (
                         <div className="flex h-full w-full items-center justify-center overflow-hidden">
                           {(() => {
-                            const getSample = (slugLike: any) => {
-                              const s = String(slugLike || "").toLowerCase();
-                              if (!s) return "N/A";
-                              if (s.includes("imei")) return "868329082416730";
-                              if (s.includes("ccid")) return "89911024059647563056F";
-                              if (s.includes("serial") || s === "sn" || s.includes("s/n"))
-                                return "SN-2024-0001";
-                              return "N/A";
-                            };
-
-                            // In designer preview there is no real device, so resolve using any provided stickerData
-                            // and then fall back to stable sample values.
                             const src = Array.isArray(stickerData)
                               ? stickerData[0]
                               : stickerData;
                             const resolved = src ? String(resolveStickerValue(field, src) ?? "").trim() : "";
-                            const barcodeValue = resolved || getSample(field.slug || field.name);
+                            const barcodeValue = resolved || getSampleValueForField(field);
 
                             const estimatedModules =
                               barcodeValue.length * 11 + 35;
@@ -1443,29 +1502,13 @@ const StickerDesigner = ({
                         <div className="flex h-full w-full items-center justify-center p-0">
                           <QRCodeCanvas
                             value={(function () {
-                              const fallback =
-                                field.slug || field.value || "N/A";
-                              const src = stickerData;
-                              if (src && typeof src === "object") {
-                                const keyCamel = String(field.slug || "")
-                                  .toLowerCase()
-                                  .replace(/_([a-z])/g, (_, p1) =>
-                                    p1.toUpperCase(),
-                                  );
-                                const tryKeys = [field.slug, keyCamel].filter(
-                                  Boolean,
-                                ) as string[];
-                                for (const k of tryKeys) {
-                                  const v = (src as any)[k];
-                                  if (
-                                    v !== undefined &&
-                                    v !== null &&
-                                    v !== ""
-                                  )
-                                    return String(v);
-                                }
-                              }
-                              return String(fallback);
+                              const src = Array.isArray(stickerData)
+                                ? stickerData[0]
+                                : stickerData;
+                              const resolved = src
+                                ? String(resolveStickerValue(field, src) ?? "").trim()
+                                : "";
+                              return resolved || getSampleValueForField(field);
                             })()}
                             size={512}
                             style={{ width: "100%", height: "100%" }}
@@ -2029,8 +2072,11 @@ const StickerDesigner = ({
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setFieldType("");
+                                setFieldType(field?.type || "");
                                 setSelectedQRValue(field);
+                                setSelectedScanFields(getFieldSourceFields(field));
+                                setDisplayBarValue(field?.displayValue !== false);
+                                setBarFormat(field?.format || "CODE128");
                                 setIsModalBarCodeValue(true);
                               }}
                               className="rounded-lg p-1.5 text-primary hover:bg-primary/10"
@@ -2205,6 +2251,136 @@ const StickerDesigner = ({
                           <h6 className="text-xs font-bold text-black dark:text-white">
                             Barcode/QR Settings
                           </h6>
+                          <div className="space-y-2 rounded-xl border border-gray-100 bg-gray-50/60 p-3 dark:border-strokedark dark:bg-meta-4/20">
+                            <div className="flex items-center justify-between">
+                              <label className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                                Scan Fields
+                              </label>
+                              <span className="text-[10px] font-medium text-gray-400">
+                                Comma separated
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              {stickerFields?.map((globalField: any, globalIdx: number) => {
+                                const currentField =
+                                  stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]
+                                    .fields[focusedFieldIndex];
+                                const selectedBindings = getFieldSourceFields(currentField);
+                                const isChecked = selectedBindings.some(
+                                  (entry: any) =>
+                                    String(entry?.slug || "").toLowerCase() ===
+                                      String(globalField?.slug || globalField?.name || "").toLowerCase() ||
+                                    String(entry?.name || "").toLowerCase() ===
+                                      String(globalField?.name || globalField?.slug || "").toLowerCase(),
+                                );
+
+                                return (
+                                  <label
+                                    key={`scan-field-${globalIdx}`}
+                                    className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-[11px] font-medium transition-colors ${
+                                      isChecked
+                                        ? "border-primary bg-primary/5 text-primary"
+                                        : "border-gray-200 bg-white text-gray-600 dark:border-strokedark dark:bg-form-input dark:text-gray-300"
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => {
+                                        const nextBindings = buildNextSourceFields(currentField, {
+                                          name: globalField?.name,
+                                          slug: globalField?.slug,
+                                        });
+                                        handleFieldChange(focusedFieldIndex, {
+                                          sourceFields: nextBindings,
+                                          slug: nextBindings[0]?.slug || currentField?.slug || "",
+                                        });
+                                      }}
+                                      className="h-3 w-3 rounded text-primary focus:ring-primary"
+                                    />
+                                    <span className="truncate">{globalField?.name}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>                            {(() => {
+                              const currentField =
+                                stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]
+                                  .fields[focusedFieldIndex];
+                              const selectedBindings = getFieldSourceFields(currentField);
+                              if (selectedBindings.length <= 1 || focusedFieldIndex === null) return null;
+                              return (
+                                <div className="space-y-2 rounded-lg border border-gray-200 bg-white/80 p-2 dark:border-strokedark dark:bg-form-input/40">
+                                  <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                                    Sequence
+                                  </div>
+                                  {selectedBindings.map((entry: any, entryIndex: number) => {
+                                    const isFirst = entryIndex === 0;
+                                    const isLast = entryIndex === selectedBindings.length - 1;
+                                    return (
+                                      <div
+                                        key={`selected-order-${entry?.slug || entry?.name || entryIndex}`}
+                                        className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-2 py-2 dark:border-strokedark dark:bg-meta-4/20"
+                                      >
+                                        <div className="flex min-w-0 items-center gap-2">
+                                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
+                                            {entryIndex + 1}
+                                          </span>
+                                          <span className="truncate text-[11px] font-medium text-gray-700 dark:text-gray-200">
+                                            {entry?.name || entry?.slug}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            disabled={isFirst}
+                                            onClick={() => {
+                                              const nextBindings = reorderSourceFields(selectedBindings, entryIndex, -1);
+                                              handleFieldChange(focusedFieldIndex, {
+                                                sourceFields: nextBindings,
+                                                slug: nextBindings[0]?.slug || currentField?.slug || "",
+                                              });
+                                            }}
+                                            className="rounded-md border border-gray-200 p-1 text-gray-500 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 dark:border-strokedark"
+                                            title="Move up"
+                                          >
+                                            <ArrowUp size={12} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={isLast}
+                                            onClick={() => {
+                                              const nextBindings = reorderSourceFields(selectedBindings, entryIndex, 1);
+                                              handleFieldChange(focusedFieldIndex, {
+                                                sourceFields: nextBindings,
+                                                slug: nextBindings[0]?.slug || currentField?.slug || "",
+                                              });
+                                            }}
+                                            className="rounded-md border border-gray-200 p-1 text-gray-500 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 dark:border-strokedark"
+                                            title="Move down"
+                                          >
+                                            <ArrowDown size={12} />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
+                            <p className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                              Encoded output: {(() => {
+                                const currentField =
+                                  stages[index]?.subSteps[subIndex1]?.printerFields[fieldIndex]
+                                    .fields[focusedFieldIndex];
+                                const selectedBindings = getFieldSourceFields(currentField);
+                                return selectedBindings.length > 0
+                                  ? selectedBindings
+                                      .map((entry: any) => entry?.name || entry?.slug)
+                                      .join(",")
+                                  : "Select one or more product data fields";
+                              })()}
+                            </p>
+                          </div>
                           {stages[index]?.subSteps[subIndex1]?.printerFields[
                             fieldIndex
                           ].fields[focusedFieldIndex].type === "barcode" && (
@@ -2959,6 +3135,118 @@ const StickerDesigner = ({
               <option value="qrcode">QR Code</option>
             </select>
           </div>
+          {(fieldType === "barcode" || fieldType === "qrcode") && (
+            <div className="space-y-3 rounded-lg border border-gray-100 bg-gray-50/60 p-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-widest text-gray-400">
+                  Scan Fields
+                </label>
+                <span className="text-xs font-medium text-gray-400">
+                  Comma separated
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {stickerFields?.map((globalField: any, globalIdx: number) => {
+                  const isChecked = selectedScanFields.some(
+                    (entry: any) =>
+                      String(entry?.slug || "").toLowerCase() ===
+                        String(globalField?.slug || globalField?.name || "").toLowerCase() ||
+                      String(entry?.name || "").toLowerCase() ===
+                        String(globalField?.name || globalField?.slug || "").toLowerCase(),
+                  );
+
+                  return (
+                    <label
+                      key={`modal-scan-field-${globalIdx}`}
+                      className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                        isChecked
+                          ? "border-primary bg-primary/5 text-primary"
+                          : "border-gray-200 bg-white text-gray-600"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() =>
+                          setSelectedScanFields((prev) =>
+                            buildNextSourceFields(
+                              { sourceFields: prev },
+                              {
+                                name: globalField?.name,
+                                slug: globalField?.slug,
+                              },
+                            ),
+                          )
+                        }
+                        className="rounded text-primary"
+                      />
+                      <span className="truncate">{globalField?.name}</span>
+                    </label>
+                  );
+                })}
+              </div>              {selectedScanFields.length > 1 && (
+                <div className="space-y-2 rounded-lg border border-gray-200 bg-white p-2">
+                  <div className="text-xs font-bold uppercase tracking-widest text-gray-400">
+                    Sequence
+                  </div>
+                  {selectedScanFields.map((entry: any, entryIndex: number) => {
+                    const isFirst = entryIndex === 0;
+                    const isLast = entryIndex === selectedScanFields.length - 1;
+                    return (
+                      <div
+                        key={`modal-selected-order-${entry?.slug || entry?.name || entryIndex}`}
+                        className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-2 py-2"
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
+                            {entryIndex + 1}
+                          </span>
+                          <span className="truncate text-xs font-medium text-gray-700">
+                            {entry?.name || entry?.slug}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={isFirst}
+                            onClick={() =>
+                              setSelectedScanFields((prev) =>
+                                reorderSourceFields(prev, entryIndex, -1),
+                              )
+                            }
+                            className="rounded-md border border-gray-200 p-1 text-gray-500 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                            title="Move up"
+                          >
+                            <ArrowUp size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isLast}
+                            onClick={() =>
+                              setSelectedScanFields((prev) =>
+                                reorderSourceFields(prev, entryIndex, 1),
+                              )
+                            }
+                            className="rounded-md border border-gray-200 p-1 text-gray-500 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                            title="Move down"
+                          >
+                            <ArrowDown size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="text-xs font-medium text-gray-500">
+                Encoded output: {selectedScanFields.length > 0
+                  ? selectedScanFields
+                      .map((entry: any) => entry?.name || entry?.slug)
+                      .join(",")
+                  : "Select one or more product data fields"}
+              </p>
+            </div>
+          )}
           {fieldType === "barcode" && (
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
@@ -2995,5 +3283,7 @@ const StickerDesigner = ({
 };
 
 export default StickerDesigner;
+
+
 
 
