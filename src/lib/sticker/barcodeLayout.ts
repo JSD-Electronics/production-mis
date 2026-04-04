@@ -1,4 +1,4 @@
-import { mmToPx } from "@/lib/sticker/units";
+import { PX_PER_MM } from "@/lib/sticker/units";
 
 export type SupportedBarcodeFormat = "CODE128" | "ITF" | "CODE39";
 
@@ -28,7 +28,7 @@ type BarcodeLayoutInput = {
 
 const DEFAULT_FORMAT: SupportedBarcodeFormat = "CODE128";
 const DEFAULT_MARGIN_PX = 8;
-const DEFAULT_MIN_MODULE_WIDTH_PX = 1.5;
+const DEFAULT_MIN_MODULE_WIDTH_PX = 0.95;
 const DEFAULT_MIN_BAR_HEIGHT_PX = 24;
 const MIN_FONT_SIZE_PX = 6;
 const MAX_AUTO_MODULE_WIDTH_PX = 4;
@@ -39,6 +39,7 @@ const toPositiveNumber = (value: unknown, fallback = 0) => {
 };
 
 const toRounded = (value: number) => Number(value.toFixed(3));
+const mmValueToPx = (mm: unknown) => Number(mm) * PX_PER_MM;
 
 const normalizeFormat = (value: unknown): SupportedBarcodeFormat | null => {
   const format = String(value || "")
@@ -151,7 +152,7 @@ export const getBarcodeLayout = ({
   const label = fieldLabel(field);
   const marginPx = toPositiveNumber(
     field?.quietZoneMm != null
-      ? mmToPx(Number(field.quietZoneMm))
+      ? mmValueToPx(field.quietZoneMm)
       : field?.quietZone ?? field?.margin,
     DEFAULT_MARGIN_PX,
   );
@@ -170,22 +171,22 @@ export const getBarcodeLayout = ({
 
   const minModuleWidthPx = toPositiveNumber(
     field?.minModuleWidthMm != null
-      ? mmToPx(Number(field.minModuleWidthMm))
+      ? mmValueToPx(field.minModuleWidthMm)
       : field?.minModuleWidth,
     DEFAULT_MIN_MODULE_WIDTH_PX,
   );
   const minBarHeightPx = toPositiveNumber(
-    field?.minBarHeightMm != null ? mmToPx(Number(field.minBarHeightMm)) : field?.minBarHeight,
+    field?.minBarHeightMm != null ? mmValueToPx(field.minBarHeightMm) : field?.minBarHeight,
     DEFAULT_MIN_BAR_HEIGHT_PX,
   );
 
   const explicitBarWidth =
     field?.barWidthMm != null
-      ? toPositiveNumber(mmToPx(Number(field.barWidthMm)))
+      ? toPositiveNumber(mmValueToPx(field.barWidthMm))
       : toPositiveNumber(field?.barWidth);
   const explicitBarHeight =
     field?.barHeightMm != null
-      ? toPositiveNumber(mmToPx(Number(field.barHeightMm)))
+      ? toPositiveNumber(mmValueToPx(field.barHeightMm))
       : undefined;
 
   const desiredFontSize = Math.max(

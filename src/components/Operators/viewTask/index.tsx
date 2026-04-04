@@ -7,6 +7,7 @@ import { useQRCode } from "next-qrcode";
 import Barcode from "react-barcode";
 import html2canvas from "html2canvas";
 import { printStickerElements } from "@/lib/sticker/printSticker";
+import { resolveStickerValue } from "@/lib/sticker/resolveStickerValue";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
@@ -1516,12 +1517,33 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   };
   const handleVerifySticker = (types?: string[]) => {
     setSerialNumber("");
+    const normalizeVerifyType = (value: any) => {
+      const raw = String(value || "").trim().toLowerCase();
+      if (!raw) return "";
+      if (raw.startsWith("combined:")) {
+        const combinedParts = raw
+          .slice("combined:".length)
+          .split(",")
+          .map((entry) => String(entry || "").trim().toLowerCase())
+          .filter(Boolean);
+        if (combinedParts.length > 1) {
+          return `combined:${combinedParts.join(",")}`;
+        }
+        return combinedParts[0] || "";
+      }
+      if (raw.includes("serial")) return "serial";
+      if (raw.includes("imei")) return "imei";
+      if (raw.includes("ccid")) return "ccid";
+      return raw;
+    };
+
     try {
-      const uniq = (arr: string[]) =>
-        Array.from(new Set(arr.filter((v) => !!v))).map((v) => String(v).toLowerCase());
-      let derived: string[] = Array.isArray(types) ? [...types] : [];
-      // Fallback: derive from current device data if config scan didn't produce multiple
-      if (!Array.isArray(types) || types.length <= 1) {
+      const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
+      let derived = Array.isArray(types)
+        ? uniq(types.map((value) => normalizeVerifyType(value)).filter(Boolean))
+        : [];
+
+      if (derived.length === 0) {
         const active = deviceList.find(
           (d: any) =>
             String(d?.serialNo || d?.serial_no || "").trim() === String(searchResult || "").trim(),
@@ -1559,15 +1581,18 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         if (hasImei) ordered.push("imei");
         if (hasCcid) ordered.push("ccid");
         if (hasSerial) ordered.push("serial");
-        derived = uniq([...derived, ...ordered]);
-      } else {
-        derived = uniq(derived);
+        derived = uniq(ordered.map((value) => normalizeVerifyType(value)).filter(Boolean));
       }
+
       setExpectedScanTypes(derived);
       setCurrentScanStep(0);
       setPendingOpenVerify(true);
     } catch {
-      setExpectedScanTypes(Array.isArray(types) ? types : []);
+      setExpectedScanTypes(
+        Array.isArray(types)
+          ? types.map((value) => normalizeVerifyType(value)).filter(Boolean)
+          : [],
+      );
       setCurrentScanStep(0);
       setPendingOpenVerify(true);
     }
@@ -1596,6 +1621,30 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     }
 
     const lc = (v: any) => String(v || "").trim().toLowerCase();
+    const normalizeVerifyType = (value: any) => {
+      const raw = String(value || "").trim().toLowerCase();
+      if (!raw) return "";
+      if (raw.startsWith("combined:")) {
+        const parts = raw
+          .slice("combined:".length)
+          .split(",")
+          .map((entry) => String(entry || "").trim().toLowerCase())
+          .filter(Boolean);
+        return parts.length > 1 ? `combined:${parts.join(",")}` : parts[0] || "";
+      }
+      if (raw.includes("serial")) return "serial";
+      if (raw.includes("imei")) return "imei";
+      if (raw.includes("ccid")) return "ccid";
+      return raw;
+    };
+    const normalizeCombinedValue = (value: any) =>
+      String(value || "")
+        .split(",")
+        .map((entry) => String(entry || "").trim())
+        .filter(Boolean)
+        .join(",")
+        .toLowerCase();
+
     const candidates: string[] = [];
     candidates.push(lc(input));
 
@@ -1632,6 +1681,37 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       return "";
     };
 
+    const currentVerifySpec = normalizeVerifyType(
+      expectedScanTypes.length > 0 ? expectedScanTypes[currentScanStep] : "",
+    );
+    const combinedVerifyFields = currentVerifySpec.startsWith("combined:")
+      ? currentVerifySpec
+          .slice("combined:".length)
+          .split(",")
+          .map((entry) => String(entry || "").trim().toLowerCase())
+          .filter(Boolean)
+      : [];
+
+    const getParsedByVerifyField = (fieldName: string) => {
+      const normalized = String(fieldName || "").trim().toLowerCase();
+      if (!normalized) return "";
+      const aliasMap = new Set([normalized, normalized.replace(/[^a-z0-9]/g, "")]);
+      if (normalized.includes("serial")) {
+        ["serial", "serialno", "serial_no"].forEach((alias) => aliasMap.add(alias));
+      }
+      if (normalized.includes("imei")) {
+        ["imei", "imei_no"].forEach((alias) => aliasMap.add(alias));
+      }
+      if (normalized.includes("ccid")) {
+        ["ccid"].forEach((alias) => aliasMap.add(alias));
+      }
+      for (const alias of aliasMap) {
+        const value = getParsed(alias);
+        if (value) return String(value);
+      }
+      return "";
+    };
+
     const serialCandidates = [getParsed("serial_no"), getParsed("serialNo"), getParsed("serial")].filter(Boolean);
     const imeiCandidates = [getParsed("imei"), getParsed("imei_no"), getParsed("IMEI")].filter(Boolean);
     const ccidCandidates = [getParsed("ccid"), getParsed("CCID")].filter(Boolean);
@@ -1639,7 +1719,6 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     imeiCandidates.forEach((v) => candidates.push(lc(v)));
     ccidCandidates.forEach((v) => candidates.push(lc(v)));
 
-    // Decide if this scan specifies an exact field (for multi-code stickers)
     let explicitType: "serial" | "imei" | "ccid" | null = null;
     const presentTypes = [
       serialCandidates.length > 0 ? "serial" : null,
@@ -1680,6 +1759,41 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       return vals;
     };
 
+    const activeStickerDevice =
+      deviceList.find(
+        (d: any) =>
+          lc(d?.serialNo || d?.serial_no || d?.deviceInfo?.serialNo) === lc(searchResult),
+      ) || null;
+
+    const matchesCombinedScan = (d: any): boolean => {
+      if (!d || combinedVerifyFields.length === 0) return false;
+      const expectedCombined = normalizeCombinedValue(
+        resolveStickerValue(
+          {
+            type: "qrcode",
+            sourceFields: combinedVerifyFields.map((slug) => ({ slug, name: slug })),
+          },
+          d,
+        ),
+      );
+      if (!expectedCombined) return false;
+
+      const directCombined = normalizeCombinedValue(input);
+      if (directCombined && directCombined === expectedCombined) {
+        return true;
+      }
+
+      const parsedCombined = combinedVerifyFields
+        .map((slug) => getParsedByVerifyField(slug))
+        .filter((value) => String(value || "").trim() !== "");
+
+      if (parsedCombined.length === combinedVerifyFields.length) {
+        return normalizeCombinedValue(parsedCombined.join(",")) === expectedCombined;
+      }
+
+      return false;
+    };
+
     const matchesExplicit = (d: any): boolean => {
       if (!explicitType) return false;
       const serialVals = [d?.serialNo, d?.serial_no, d?.deviceInfo?.serialNo].map(lc).filter(Boolean);
@@ -1700,20 +1814,19 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       return false;
     };
 
-    // Enforce slug-specific verification even for single barcode
     const inMultiMode = expectedScanTypes.length > 1;
-    const requiredType: "serial" | "imei" | "ccid" | "any" | null = expectedScanTypes.length > 0
-      ? (expectedScanTypes[currentScanStep] as any || "any")
-      : null;
+    const requiredType: "serial" | "imei" | "ccid" | "any" | null =
+      combinedVerifyFields.length > 0
+        ? null
+        : expectedScanTypes.length > 0
+          ? (normalizeVerifyType(expectedScanTypes[currentScanStep]) as any || "any")
+          : null;
 
     const matchesRequiredOnly = (d: any): boolean => {
       if (!requiredType || requiredType === "any") {
-        // fall back to generic logic below
         return false;
       }
-      // If scan provided explicit type but it's not the one required, block
       if (explicitType && explicitType !== requiredType) return false;
-      // Evaluate by required field only
       const sn = [d?.serialNo, d?.serial_no, d?.deviceInfo?.serialNo].map(lc).filter(Boolean);
       const imei = [d?.imeiNo, d?.imei, d?.imei_no, d?.deviceInfo?.imei].map(lc).filter(Boolean);
       const ccid = [d?.ccid].map(lc).filter(Boolean);
@@ -1734,32 +1847,34 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       return false;
     };
 
-    const found = deviceList.find((d: any) => {
-      // Enforce required type if provided by sticker config
-      if (requiredType && requiredType !== "any") {
-        return matchesRequiredOnly(d);
-      }
+    const found = combinedVerifyFields.length > 0
+      ? activeStickerDevice && matchesCombinedScan(activeStickerDevice)
+        ? activeStickerDevice
+        : undefined
+      : deviceList.find((d: any) => {
+          if (requiredType && requiredType !== "any") {
+            return matchesRequiredOnly(d);
+          }
 
-      // If explicit field was identified from scan, enforce exact-field verification
-      if (explicitType) {
-        return matchesExplicit(d);
-      }
+          if (explicitType) {
+            return matchesExplicit(d);
+          }
 
-      const sn = [d?.serialNo, d?.serial_no, d?.deviceInfo?.serialNo].map(lc).filter(Boolean);
-      const imei = [d?.imeiNo, d?.imei, d?.imei_no, d?.deviceInfo?.imei].map(lc).filter(Boolean);
-      const ccid = [d?.ccid].map(lc).filter(Boolean);
-      const anyDirect =
-        sn.some((v) => candidates.includes(v)) ||
-        imei.some((v) => candidates.includes(v)) ||
-        ccid.some((v) => candidates.includes(v));
-      if (anyDirect) return true;
-      const fromCFAny = [
-        ...getCustomFieldValuesByType(d, "serial"),
-        ...getCustomFieldValuesByType(d, "imei"),
-        ...getCustomFieldValuesByType(d, "ccid"),
-      ];
-      return fromCFAny.some((v) => candidates.includes(v));
-    });
+          const sn = [d?.serialNo, d?.serial_no, d?.deviceInfo?.serialNo].map(lc).filter(Boolean);
+          const imei = [d?.imeiNo, d?.imei, d?.imei_no, d?.deviceInfo?.imei].map(lc).filter(Boolean);
+          const ccid = [d?.ccid].map(lc).filter(Boolean);
+          const anyDirect =
+            sn.some((v) => candidates.includes(v)) ||
+            imei.some((v) => candidates.includes(v)) ||
+            ccid.some((v) => candidates.includes(v));
+          if (anyDirect) return true;
+          const fromCFAny = [
+            ...getCustomFieldValuesByType(d, "serial"),
+            ...getCustomFieldValuesByType(d, "imei"),
+            ...getCustomFieldValuesByType(d, "ccid"),
+          ];
+          return fromCFAny.some((v) => candidates.includes(v));
+        });
 
     if (found) {
       if (inMultiMode && currentScanStep < expectedScanTypes.length - 1) {
@@ -1786,7 +1901,13 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         isSubmitting.current = false;
       }
     } else {
-      if (inMultiMode && requiredType && requiredType !== "any") {
+      if (combinedVerifyFields.length > 0) {
+        toast.error(
+          `Sticker verification failed. Please scan the combined code for ${combinedVerifyFields
+            .map((field) => field.toUpperCase())
+            .join(", ")}.`,
+        );
+      } else if (inMultiMode && requiredType && requiredType !== "any") {
         toast.error(`Scan ${currentScanStep + 1} failed. Please scan ${String(requiredType).toUpperCase()}.`);
       } else {
         toast.error("Sticker Verification Failed. Please try again.");
@@ -1794,7 +1915,6 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       isSubmitting.current = false;
     }
   };
-
   const handleVerifyPackagingModal = () => {
     const matchedDevice = deviceList.find(
       (d: any) => d.serialNo?.toLowerCase() === serialNumber.toLowerCase(),
@@ -2263,6 +2383,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
 };
 
 export default ViewTaskDetailsComponent;
+
+
 
 
 

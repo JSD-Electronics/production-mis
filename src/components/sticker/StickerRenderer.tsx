@@ -45,19 +45,67 @@ const normalizeField = (field: any) => {
   };
 };
 
+const normalizeSourceField = (entry: any) => {
+  if (!entry) return null;
+  if (typeof entry === "string") {
+    const trimmed = entry.trim();
+    return trimmed ? { slug: trimmed, name: trimmed } : null;
+  }
+
+  const slug = String(entry?.slug || entry?.value || entry?.name || "").trim();
+  const name = String(entry?.name || entry?.label || entry?.slug || entry?.value || "").trim();
+
+  if (!slug && !name) return null;
+
+  return {
+    slug: slug || name,
+    name: name || slug,
+  };
+};
+
+const getSourceFields = (field: any) => {
+  const explicit = Array.isArray(field?.sourceFields)
+    ? field.sourceFields
+        .map((entry: any) => normalizeSourceField(entry))
+        .filter(Boolean)
+    : [];
+
+  if (explicit.length > 0) return explicit;
+
+  const fallback = normalizeSourceField({
+    slug: field?.slug,
+    name: field?.name,
+  });
+
+  return fallback ? [fallback] : [];
+};
+
+const getSampleValueForSlug = (slugLike: any) => {
+  const s = String(slugLike || "").toLowerCase();
+  if (!s) return "N/A";
+  if (s.includes("imei")) return "868329082416730";
+  if (s.includes("ccid")) return "89911024059647563056";
+  if (s.includes("serial") || s === "sn" || s.includes("s/no") || s.includes("s/n")) {
+    return "GAGN14A261400635";
+  }
+  return "N/A";
+};
+
+const getSampleValueForField = (field: any) => {
+  const bindings = getSourceFields(field);
+  if (bindings.length > 0) {
+    return bindings
+      .map((entry: any) => getSampleValueForSlug(entry?.slug || entry?.name))
+      .filter(Boolean)
+      .join(",");
+  }
+  return getSampleValueForSlug(field?.slug || field?.name);
+};
+
 export default function StickerRenderer({ template, deviceData }: StickerRendererProps) {
   const { width, height } = getDimensionsPx(template);
   const fields = Array.isArray(template?.fields) ? template.fields : [];
   const device = Array.isArray(deviceData) ? (deviceData[0] ?? null) : deviceData ?? null;
-
-  const getSampleValueForSlug = (slugLike: any) => {
-    const s = String(slugLike || "").toLowerCase();
-    if (!s) return "N/A";
-    if (s.includes("imei")) return "868329082416730";
-    if (s.includes("ccid")) return "89911024059647563056";
-    if (s.includes("serial") || s === "sn" || s.includes("s/n")) return "GAGN14A261400635";
-    return "N/A";
-  };
 
   return (
     <div
@@ -87,7 +135,7 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
         const key = field?._id || field?.id || `${field?.name || "field"}-${field?.x}-${field?.y}`;
 
         const rawBarcodeValue = String(fieldValue ?? "").trim();
-        const sampleBarcodeValue = getSampleValueForSlug(field?.slug || field?.name);
+        const sampleBarcodeValue = getSampleValueForField(field);
         const barcodeValue = rawBarcodeValue || sampleBarcodeValue;
         const barcodeLayout =
           field?.type === "barcode"
@@ -105,6 +153,7 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
           barcodeLayout?.message && barcodeLayout?.recommendation
             ? `${barcodeLayout.message} ${barcodeLayout.recommendation}`
             : barcodeLayout?.message;
+        const qrValue = String(fieldValue || getSampleValueForField(field) || "N/A");
 
         return (
           <div
@@ -225,7 +274,7 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
                 }}
               >
                 <QRCodeSVG
-                  value={String(fieldValue || "N/A")}
+                  value={qrValue}
                   size={512}
                   style={{ width: "100%", height: "100%" }}
                   bgColor="transparent"
@@ -300,4 +349,3 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
     </div>
   );
 }
-
