@@ -70,12 +70,87 @@ export default function JigIdentificationSection({
         }
     }, [logs]);
 
+    const isRecoverableSerialBreak = (err: any) => {
+        const name = String(err?.name || "").toLowerCase();
+        const message = String(err?.message || "").toLowerCase();
+        return (
+            name.includes("break") ||
+            message.includes("break received") ||
+            message.includes("framing") ||
+            message.includes("parity") ||
+            message.includes("overrun")
+        );
+    };
+
+    const collectValidatedFields = (parsedData: any, fields: any[]) => {
+        const capturedFields: Record<string, string> = {};
+        let allFound = true;
+
+        for (const field of fields) {
+            const fieldName = field.jigName;
+            let foundValue = undefined;
+
+            if (parsedData[fieldName] && typeof parsedData[fieldName] === "string") {
+                foundValue = parsedData[fieldName];
+            } else {
+                for (const section in parsedData) {
+                    if (
+                        typeof parsedData[section] === "object" &&
+                        parsedData[section][fieldName] &&
+                        typeof parsedData[section][fieldName] === "string"
+                    ) {
+                        foundValue = parsedData[section][fieldName];
+                        break;
+                    }
+                }
+            }
+
+            if (foundValue !== undefined && String(foundValue).trim() !== "" && typeof foundValue === "string") {
+                const trimmedVal = foundValue.trim();
+                let isFieldValid = true;
+                const vtype = field.validationType;
+
+                if (vtype === "length") {
+                    const len = trimmedVal.length;
+                    const from = Number(field.lengthFrom);
+                    const to = Number(field.lengthTo);
+                    if (!isNaN(from) && !isNaN(to) && (len < from || len > to)) {
+                        isFieldValid = false;
+                    }
+                } else if (vtype === "value") {
+                    const expected = (field.value || "").trim();
+                    if (expected && trimmedVal !== expected) {
+                        isFieldValid = false;
+                    }
+                } else if (vtype === "range") {
+                    const num = Number(trimmedVal);
+                    const from = Number(field.rangeFrom);
+                    const to = Number(field.rangeTo);
+                    if (!isNaN(num) && !isNaN(from) && !isNaN(to) && (num < from || num > to)) {
+                        isFieldValid = false;
+                    }
+                }
+
+                if (isFieldValid) {
+                    capturedFields[fieldName] = trimmedVal;
+                } else {
+                    allFound = false;
+                }
+            } else {
+                allFound = false;
+            }
+        }
+
+        return { capturedFields, allFound };
+    };
+
     const connectAndCapture = async () => {
         if (!("serial" in navigator)) {
             toast.error("Web Serial API not supported in this browser");
             return;
         }
 
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
         try {
             setIsConnecting(true);
             stopRequestedRef.current = false;
@@ -104,12 +179,14 @@ export default function JigIdentificationSection({
             addLog('info', 'Initial capture started...');
 
             let accumulatedData = "";
+            let identificationDone = false;
+            let endedByBreak = false;
             const textDecoder = new TextDecoder();
             const reader = port.readable.getReader();
             readerRef.current = reader;
 
             // Timeout if no data received AT ALL within 10s
-            const timeoutId = setTimeout(() => {
+            timeoutId = setTimeout(() => {
                 if (accumulatedData === "" && !stopRequestedRef.current) {
                     stopRequestedRef.current = true;
                     toast.warn("No data received from device. Check connection.");
@@ -118,7 +195,19 @@ export default function JigIdentificationSection({
             }, 10000);
 
             while (true) {
-                const { value, done } = await reader.read();
+                let readResult: { value: Uint8Array | undefined; done: boolean };
+                try {
+                    readResult = await reader.read();
+                } catch (readErr: any) {
+                    if (isRecoverableSerialBreak(readErr)) {
+                        endedByBreak = true;
+                        addLog("info", "Device stream ended (break received). Finalizing capture...");
+                        break;
+                    }
+                    throw readErr;
+                }
+
+                const { value, done } = readResult;
                 if (done || stopRequestedRef.current) {
                     addLog('info', 'Stream reading ended.');
                     break;
@@ -130,89 +219,43 @@ export default function JigIdentificationSection({
                 }
                 accumulatedData += chunk;
 
-                // Check if we have all required fields
                 const parsedData = parseJigOutput(accumulatedData);
-                const capturedFields: Record<string, string> = {};
-                let allFound = true;
-
-                for (const field of jigStageFields) {
-                    const fieldName = field.jigName;
-                    let foundValue = undefined;
-
-                    // Check top level or nested - strictly ensuring it's a string
-                    if (parsedData[fieldName] && typeof parsedData[fieldName] === 'string') {
-                        foundValue = parsedData[fieldName];
-                    } else {
-                        for (const section in parsedData) {
-                            if (typeof parsedData[section] === 'object' && parsedData[section][fieldName] && typeof parsedData[section][fieldName] === 'string') {
-                                foundValue = parsedData[section][fieldName];
-                                break;
-                            }
-                        }
-                    }
-
-                    if (foundValue !== undefined && String(foundValue).trim() !== "" && typeof foundValue === 'string') {
-                        const trimmedVal = foundValue.trim();
-
-                        // Validation Check: Ensure data is complete according to field rules
-                        let isFieldValid = true;
-                        const vtype = field.validationType;
-
-                        if (vtype === "length") {
-                            const len = trimmedVal.length;
-                            const from = Number(field.lengthFrom);
-                            const to = Number(field.lengthTo);
-                            if (!isNaN(from) && !isNaN(to)) {
-                                if (len < from || len > to) isFieldValid = false;
-                            }
-                        } else if (vtype === "value") {
-                            const expected = (field.value || "").trim();
-                            if (expected && trimmedVal !== expected) {
-                                // For value matching, it might be partial if it's arriving in chunks
-                                // but if we expect a specific value, it must match.
-                                if (!expected.startsWith(trimmedVal)) {
-                                    isFieldValid = false;
-                                } else if (trimmedVal !== expected) {
-                                    isFieldValid = false; // Still waiting for full value
-                                }
-                            }
-                        } else if (vtype === "range") {
-                            // Range matching is hard to do partially, so we just check if it's within range
-                            const num = Number(trimmedVal);
-                            const from = Number(field.rangeFrom);
-                            const to = Number(field.rangeTo);
-                            if (!isNaN(num) && !isNaN(from) && !isNaN(to)) {
-                                if (num < from || num > to) isFieldValid = false;
-                            }
-                        }
-
-                        if (isFieldValid) {
-                            capturedFields[fieldName] = trimmedVal;
-                        } else {
-                            allFound = false;
-                        }
-                    } else {
-                        allFound = false;
-                    }
-                }
+                const { capturedFields, allFound } = collectValidatedFields(parsedData, jigStageFields);
 
                 if (allFound && Object.keys(capturedFields).length === jigStageFields.length) {
-                    clearTimeout(timeoutId);
+                    if (timeoutId) clearTimeout(timeoutId);
                     addLog('info', `Identification successful: ${JSON.stringify(capturedFields)}`);
                     await onIdentify(capturedFields);
+                    identificationDone = true;
                     break;
                 }
-
-                // Removed the accumulatedData.length > 5000 break to allow continuous reading
             }
+
+            // Final pass after stream end/break to avoid false failure when device closes immediately after sending.
+            if (!identificationDone && accumulatedData.trim()) {
+                const parsedData = parseJigOutput(accumulatedData);
+                const { capturedFields, allFound } = collectValidatedFields(parsedData, jigStageFields);
+                if (allFound && Object.keys(capturedFields).length === jigStageFields.length) {
+                    addLog('info', `Identification successful: ${JSON.stringify(capturedFields)}`);
+                    await onIdentify(capturedFields);
+                    identificationDone = true;
+                }
+            }
+
+            if (!identificationDone && endedByBreak) {
+                toast.warn("Device stream ended before all required parameters were captured.");
+            }
+
+            if (timeoutId) clearTimeout(timeoutId);
 
         } catch (err: any) {
             console.error("Serial error:", err);
             addLog('error', err.message);
-            if (err.name !== "NotFoundError") {
+            if (err.name !== "NotFoundError" && !isRecoverableSerialBreak(err)) {
                 toast.error("Connection failed: " + err.message);
             }
         } finally {
+            if (timeoutId) clearTimeout(timeoutId);
             setIsConnecting(false);
             addLog('info', 'Connection closed.');
             disconnect();
