@@ -2227,6 +2227,80 @@ export default function DeviceTestComponent({
     setLoadingCartonDevices(false);
     setCartonDevices(data[0].devices);
   };
+
+  const normalizeScanToken = (value: any) =>
+    String(value ?? "")
+      .replace(/[\r\n]+/g, " ")
+      .trim()
+      .toLowerCase();
+
+  const parseFlexibleScanTokens = (input: string) => {
+    const normalizedInput = String(input || "").replace(/[\r\n]+/g, ",");
+    const tokens = normalizedInput
+      .split(",")
+      .map((token) => normalizeScanToken(token))
+      .filter(Boolean);
+    return Array.from(new Set(tokens));
+  };
+
+  const collectDeviceIdentityValues = (device: any) => {
+    const values = new Set<string>();
+    const addValue = (raw: any) => {
+      const token = normalizeScanToken(raw);
+      if (token) values.add(token);
+    };
+
+    addValue(device?.serialNo);
+    addValue(device?.serial_no);
+    addValue(device?.serial);
+    addValue(device?.imeiNo);
+    addValue(device?.imei_no);
+    addValue(device?.imei);
+    addValue(device?.ccid);
+    addValue(device?.iccid);
+
+    const scanCustomFields = (source: any) => {
+      if (!source || typeof source !== "object") return;
+
+      if (Array.isArray(source)) {
+        source.forEach((entry) => scanCustomFields(entry));
+        return;
+      }
+
+      Object.entries(source).forEach(([rawKey, rawValue]) => {
+        const key = normalizeScanToken(rawKey).replace(/\s+/g, "");
+        const isIdentityKey =
+          key.includes("serial") ||
+          key === "sn" ||
+          key === "sno" ||
+          key.includes("imei") ||
+          key.includes("ccid") ||
+          key.includes("iccid");
+
+        if (rawValue && typeof rawValue === "object") {
+          scanCustomFields(rawValue);
+          return;
+        }
+
+        if (isIdentityKey) {
+          addValue(rawValue);
+        }
+      });
+    };
+
+    scanCustomFields(device?.customFields);
+    scanCustomFields(device?.custom_fields);
+
+    return values;
+  };
+
+  const doesScanMatchDevice = (scanInput: string, device: any) => {
+    const tokens = parseFlexibleScanTokens(scanInput);
+    if (!tokens.length || !device) return false;
+    const candidateValues = collectDeviceIdentityValues(device);
+    return tokens.every((token) => candidateValues.has(token));
+  };
+
   const getNGAssignOptions = () => {
     const options: any[] = [];
 
@@ -2284,12 +2358,46 @@ export default function DeviceTestComponent({
   };
 
   const handleVerifyPackagingSubmission = async () => {
-    const matchedDevice = deviceList.find(
-      (d: any) => d.serialNo?.toLowerCase() === String(serialNumber || "").toLowerCase(),
-    );
+    const scanInput = String(serialNumber || "").trim();
+    const tokens = parseFlexibleScanTokens(scanInput);
+    if (!tokens.length) {
+      toast.error("Please scan a valid Serial / IMEI / CCID.");
+      return;
+    }
 
-    if (!matchedDevice || matchedDevice.serialNo !== searchResult) {
-      toast.error("Serial number does not match. Try again.");
+    const targetSerial = String(
+      pendingPackagingCarton?.deviceSerial || searchResult || "",
+    ).trim();
+    const targetDevice =
+      deviceList.find(
+        (d: any) =>
+          String(d?._id || "") === String(pendingPackagingCarton?.deviceId || ""),
+      ) ||
+      deviceList.find(
+        (d: any) =>
+          String(d?.serialNo || d?.serial_no || "").trim() === targetSerial,
+      );
+
+    if (!targetDevice) {
+      toast.error("Selected device not found for packaging verification.");
+      return;
+    }
+
+    if (!doesScanMatchDevice(scanInput, targetDevice)) {
+      const matchedOtherDevice = deviceList.find((device: any) =>
+        doesScanMatchDevice(scanInput, device),
+      );
+      if (
+        matchedOtherDevice &&
+        String(matchedOtherDevice?.serialNo || "").trim() !==
+          String(targetDevice?.serialNo || "").trim()
+      ) {
+        toast.error(
+          `Scanned sticker belongs to ${matchedOtherDevice?.serialNo}. Verify the current device sticker.`,
+        );
+      } else {
+        toast.error("Scanned Serial / IMEI / CCID does not match this device.");
+      }
       return;
     }
 
@@ -5104,7 +5212,7 @@ export default function DeviceTestComponent({
                                                             <div className="space-y-4">
                                                               <label className="mb-2 block text-sm font-bold text-gray-700">
                                                                 Enter / Scan
-                                                                Serial Number
+                                                                Serial / IMEI / CCID
                                                               </label>
                                                               <input
                                                                 type="text"
@@ -5126,7 +5234,7 @@ export default function DeviceTestComponent({
                                                                     handleVerifyPackagingSubmission();
                                                                   }
                                                                 }}
-                                                                placeholder="Scan device serial..."
+                                                                placeholder="Scan sticker (any order): Serial, IMEI, CCID"
                                                                 className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-3.5 text-base font-medium outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
                                                                 autoFocus
                                                               />
