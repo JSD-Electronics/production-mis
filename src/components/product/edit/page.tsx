@@ -170,6 +170,7 @@ const EditProduct = () => {
             cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
+            cartonWeightTolerance: 0,
           },
           stepType: "manual",
           printerFields: [],
@@ -451,6 +452,7 @@ const EditProduct = () => {
             cartonDepth: 0,
               maxCapacity: 0,
               cartonWeight: 0,
+            cartonWeightTolerance: 0,
             },
             stepType: "manual",
             printerFields: [],
@@ -619,6 +621,7 @@ const EditProduct = () => {
             cartonDepth: 0,
         maxCapacity: 0,
         cartonWeight: 0,
+            cartonWeightTolerance: 0,
       },
       stepType: "manual",
       printerFields: [],
@@ -777,6 +780,7 @@ const EditProduct = () => {
             cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
+            cartonWeightTolerance: 0,
           },
           stepType: "jig",
           printerFields: [],
@@ -868,6 +872,7 @@ const EditProduct = () => {
             cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
+            cartonWeightTolerance: 0,
           },
           stepType: "jig",
           printerFields: [],
@@ -929,6 +934,7 @@ const EditProduct = () => {
             cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
+            cartonWeightTolerance: 0,
           },
           stepType: "jig",
           printerFields: [],
@@ -2766,6 +2772,8 @@ const EditProduct = () => {
                                                               </label>
                                                               <input
                                                                 type="number"
+                                                                step="0.001"
+                                                                min="0"
                                                                 value={
                                                                   subStep
                                                                     ?.packagingData
@@ -2783,6 +2791,36 @@ const EditProduct = () => {
                                                                 placeholder="Carton Weight"
                                                                 className="w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-3 text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
                                                               />
+                                                            </div>
+                                                            <div>
+                                                              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                                Carton Weight Tolerance
+                                                                (in Kg)
+                                                              </label>
+                                                              <input
+                                                                type="number"
+                                                                step="0.001"
+                                                                min="0"
+                                                                value={
+                                                                  subStep
+                                                                    ?.packagingData
+                                                                    ?.cartonWeightTolerance
+                                                                }
+                                                                onChange={(e) =>
+                                                                  handleCartonInputs(
+                                                                    index,
+                                                                    subIndex,
+                                                                    e.target
+                                                                      .value,
+                                                                    "cartonWeightTolerance",
+                                                                  )
+                                                                }
+                                                                placeholder="Carton Weight Tolerance"
+                                                                className="w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-3 text-gray-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                                              />
+                                                              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                                                Example: carton weight 1.0 kg with tolerance 0.2 kg allows 0.8 kg to 1.2 kg.
+                                                              </p>
                                                             </div>
                                                           </div>
                                                         </div>
@@ -3475,4 +3513,6 @@ const EditProduct = () => {
 };
 
 export default EditProduct;
+
+
 

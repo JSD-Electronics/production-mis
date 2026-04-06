@@ -99,6 +99,7 @@ interface DeviceTestComponentProps {
   setSearchQuery: any;
   handleNoResults: any;
   getDeviceById: any;
+  resolveSearchQuery?: (query: string) => Promise<any> | any;
   setSearchResult: any;
   isPassNGButtonShow: any;
   isStatusSubmitting: boolean;
@@ -176,6 +177,7 @@ export default function DeviceTestComponent({
   setSearchQuery,
   handleNoResults,
   getDeviceById,
+  resolveSearchQuery,
   setSearchResult,
   setIsPassNGButtonShow,
   setIsStickerPrinted,
@@ -505,6 +507,41 @@ export default function DeviceTestComponent({
     return normalizePdiWeightValue(cartonStickerTemplate?.cartonWeight);
   }, [cartonStickerTemplate?.cartonWeight]);
 
+  const getConfiguredPdiTolerance = React.useCallback(() => {
+    const sanitizedTolerance = String(cartonStickerTemplate?.cartonWeightTolerance ?? "")
+      .trim()
+      .replace(",", ".")
+      .replace(/[^0-9.]/g, "");
+    if (!sanitizedTolerance) {
+      return {
+        raw: "0",
+        numeric: 0,
+        scaled: 0,
+        display: "0",
+      };
+    }
+    const parsedTolerance = Number.parseFloat(sanitizedTolerance);
+    if (Number.isNaN(parsedTolerance) || parsedTolerance < 0) {
+      return {
+        raw: "0",
+        numeric: 0,
+        scaled: 0,
+        display: "0",
+      };
+    }
+    return {
+      raw: sanitizedTolerance,
+      numeric: parsedTolerance,
+      scaled: Math.round(parsedTolerance * PDI_WEIGHT_PRECISION_SCALE),
+      display: sanitizedTolerance,
+    };
+  }, [cartonStickerTemplate?.cartonWeightTolerance]);
+
+  const formatPdiWeightForDisplay = React.useCallback((value?: number | null) => {
+    if (!Number.isFinite(Number(value))) return "0";
+    return Number(value).toFixed(3).replace(/\.?0+$/, "");
+  }, []);
+
   const getConfiguredPdiCapacity = React.useCallback(() => {
     const parsed = Number(
       cartonStickerTemplate?.maxCapacity ?? cartonStickerTemplate?.cartonCapacity ?? 0,
@@ -542,18 +579,105 @@ export default function DeviceTestComponent({
     [getConfiguredPdiCapacity],
   );
 
-  const isPdiWeightMatchedForCarton = React.useCallback(
+  const getPdiWeightMatchResult = React.useCallback(
     (carton: any, weightValue?: string | number | null) => {
       const normalizedWeight = normalizePdiWeightValue(weightValue);
-      if (!normalizedWeight) return false;
       const expectedWeight = getConfiguredPdiWeight();
-      if (!expectedWeight?.scaled) return true;
-      if (isPdiCartonUsingConfiguredWeight(carton)) {
-        return normalizedWeight.scaled === expectedWeight.scaled;
+      const expectedTolerance = getConfiguredPdiTolerance();
+      const shouldMatchConfiguredWeight = isPdiCartonUsingConfiguredWeight(carton);
+      if (!normalizedWeight) {
+        return {
+          matches: false,
+          normalizedWeight: null,
+          expectedWeight,
+          expectedTolerance,
+          requiresConfiguredWeightValidation: shouldMatchConfiguredWeight,
+        };
       }
-      return normalizedWeight.scaled <= expectedWeight.scaled;
+      if (!expectedWeight?.scaled) {
+        return {
+          matches: true,
+          normalizedWeight,
+          expectedWeight,
+          expectedTolerance,
+          requiresConfiguredWeightValidation: shouldMatchConfiguredWeight,
+        };
+      }
+      if (shouldMatchConfiguredWeight) {
+        return {
+          matches:
+            Math.abs(normalizedWeight.scaled - expectedWeight.scaled) <=
+            Number(expectedTolerance?.scaled || 0),
+          normalizedWeight,
+          expectedWeight,
+          expectedTolerance,
+          requiresConfiguredWeightValidation: true,
+        };
+      }
+      return {
+        matches: normalizedWeight.scaled <= expectedWeight.scaled,
+        normalizedWeight,
+        expectedWeight,
+        expectedTolerance,
+        requiresConfiguredWeightValidation: false,
+      };
     },
-    [getConfiguredPdiWeight, isPdiCartonUsingConfiguredWeight],
+    [getConfiguredPdiTolerance, getConfiguredPdiWeight, isPdiCartonUsingConfiguredWeight],
+  );
+
+  const isPdiWeightMatchedForCarton = React.useCallback(
+    (carton: any, weightValue?: string | number | null) => {
+      return getPdiWeightMatchResult(carton, weightValue).matches;
+    },
+    [getPdiWeightMatchResult],
+  );
+
+  const getPdiWeightMismatchMessage = React.useCallback(
+    (carton: any, matchResult?: any) => {
+      const resolvedMatchResult = matchResult || getPdiWeightMatchResult(carton);
+      if (!resolvedMatchResult?.requiresConfiguredWeightValidation) {
+        return "Partial carton weight cannot exceed the configured carton weight.";
+      }
+      const expectedWeightNumeric = Number(resolvedMatchResult?.expectedWeight?.numeric || 0);
+      const toleranceNumeric = Number(resolvedMatchResult?.expectedTolerance?.numeric || 0);
+      if (expectedWeightNumeric > 0 && toleranceNumeric > 0) {
+        const min = Math.max(expectedWeightNumeric - toleranceNumeric, 0);
+        const max = expectedWeightNumeric + toleranceNumeric;
+        return `Carton weight must be within ${formatPdiWeightForDisplay(min)} kg to ${formatPdiWeightForDisplay(max)} kg.`;
+      }
+      return "Weight mismatch! Please enter the correct carton weight.";
+    },
+    [formatPdiWeightForDisplay, getPdiWeightMatchResult],
+  );
+
+  const getPdiWeightRequirementDescription = React.useCallback(
+    (carton: any) => {
+      if (!isPdiCartonUsingConfiguredWeight(carton)) {
+        return "Verify a valid carton weight that does not exceed the configured carton weight before moving this carton to the next stage.";
+      }
+      if (Number(getConfiguredPdiTolerance()?.numeric || 0) > 0) {
+        return "Verify carton weight within the configured tolerance range before moving this carton to the next stage.";
+      }
+      return "Verify the exact configured carton weight before moving this carton to the next stage.";
+    },
+    [getConfiguredPdiTolerance, isPdiCartonUsingConfiguredWeight],
+  );
+
+  const getPdiWeightRequirementLabel = React.useCallback(
+    (carton: any) => {
+      if (!isPdiCartonUsingConfiguredWeight(carton)) {
+        return "Must not exceed configured carton weight";
+      }
+      const expectedWeightNumeric = Number(getConfiguredPdiWeight()?.numeric || 0);
+      const toleranceNumeric = Number(getConfiguredPdiTolerance()?.numeric || 0);
+      if (expectedWeightNumeric > 0 && toleranceNumeric > 0) {
+        const min = Math.max(expectedWeightNumeric - toleranceNumeric, 0);
+        const max = expectedWeightNumeric + toleranceNumeric;
+        return `Allowed range: ${formatPdiWeightForDisplay(min)} kg - ${formatPdiWeightForDisplay(max)} kg`;
+      }
+      return "Must match configured carton weight";
+    },
+    [formatPdiWeightForDisplay, getConfiguredPdiTolerance, getConfiguredPdiWeight, isPdiCartonUsingConfiguredWeight],
   );
 
   const selectedCartonObj = React.useMemo(() => {
@@ -1032,12 +1156,20 @@ export default function DeviceTestComponent({
         toast.success(`Device Identified: ${serial}`);
       }
     } catch (err: any) {
-      const msg =
-        err.response?.data?.message || err.message || "Device not found";
+      const errorStatus = Number(err?.status || err?.response?.status || 0);
+      const msg = errorStatus === 409
+        ? (
+            err?.message ||
+            err?.response?.data?.message ||
+            "Multiple devices matched the scanned sticker values. Please scan a more specific sticker."
+          )
+        : (
+            err?.message ||
+            err?.response?.data?.message ||
+            "Device not found"
+          );
       setJigSearchError(msg);
-      if (err.response?.status === 409) {
-        toast.error(msg);
-      }
+      toast.error(msg);
     } finally {
       setIsJigSearching(false);
     }
@@ -1077,16 +1209,13 @@ export default function DeviceTestComponent({
       return;
     }
 
-    if (!isPdiWeightMatchedForCarton(selectedCartonObj, normalizedWeight.numeric)) {
+    const matchResult = getPdiWeightMatchResult(selectedCartonObj, normalizedWeight.numeric);
+    if (!matchResult.matches) {
       if (isPDIWeightVerificationStage) {
         openPdiWeightMismatchNgModal();
         return;
       }
-      toast.error(
-        isPdiCartonUsingConfiguredWeight(selectedCartonObj)
-          ? "Weight mismatch! Please enter the correct carton weight."
-          : "Partial carton weight cannot exceed the configured carton weight.",
-      );
+      toast.error(getPdiWeightMismatchMessage(selectedCartonObj, matchResult));
       return;
     }
 
@@ -1116,6 +1245,7 @@ export default function DeviceTestComponent({
         errorStatus === 400 &&
         (normalizedErrorMessage.includes("weight mismatch") ||
           normalizedErrorMessage.includes("correct carton weight") ||
+          normalizedErrorMessage.includes("tolerance range") ||
           normalizedErrorMessage.includes("cannot exceed the configured carton weight"));
 
       if (isPDIWeightVerificationStage && isWeightMismatchError) {
@@ -3074,9 +3204,7 @@ export default function DeviceTestComponent({
                                         Carton Weight Verification
                                       </div>
                                       <div className="mt-1 text-[11px] font-semibold leading-relaxed text-emerald-900">
-                                      {isPdiCartonUsingConfiguredWeight(selectedCartonObj)
-                                        ? "Verify the exact configured carton weight before moving this carton to the next stage."
-                                        : "Verify a valid carton weight that does not exceed the configured carton weight before moving this carton to the next stage."}
+                                      {getPdiWeightRequirementDescription(selectedCartonObj)}
                                       </div>
                                     </div>
                                   <span
@@ -3115,9 +3243,7 @@ export default function DeviceTestComponent({
                                       </div>
                                     </div>
                                     <div className="text-[11px] font-semibold text-emerald-800">
-                                      {isPdiCartonUsingConfiguredWeight(selectedCartonObj)
-                                        ? "Must match configured carton weight"
-                                        : "Must not exceed configured carton weight"}
+                                      {getPdiWeightRequirementLabel(selectedCartonObj)}
                                     </div>
                                     <button
                                       type="button"
@@ -3818,6 +3944,7 @@ export default function DeviceTestComponent({
                         onNoResults={handleNoResults}
                         setSearchResult={setSearchResult}
                         getDeviceById={getDeviceById}
+                        resolveSearchQuery={resolveSearchQuery}
                         onDeviceSelected={(device: any) =>
                           registerAttempt(
                             String(device?.serialNo || ""),
@@ -3832,6 +3959,7 @@ export default function DeviceTestComponent({
                           (s: any) => s.isPrinterEnable && !s?.disabled,
                         )}
                         setIsDevicePassed={setIsDevicePassed}
+                        placeholder="Scan sticker / Serial / IMEI / CCID"
                       />
                       {searchResult && (
                         <div className="mt-2 text-xs font-semibold text-indigo-600">
@@ -6108,6 +6236,7 @@ export default function DeviceTestComponent({
     </>
   );
 }
+
 
 
 

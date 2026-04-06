@@ -153,6 +153,14 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
           barcodeLayout?.message && barcodeLayout?.recommendation
             ? `${barcodeLayout.message} ${barcodeLayout.recommendation}`
             : barcodeLayout?.message;
+        // Debug: Log QR code field order and value
+        if (field?.type === "qrcode") {
+          const debugSourceFields = Array.isArray(field?.sourceFields) ? field.sourceFields.map(f => f.slug || f.name || f).join(", ") : "(none)";
+          // eslint-disable-next-line no-console
+          console.log("[Sticker QR DEBUG] sourceFields order:", debugSourceFields);
+          // eslint-disable-next-line no-console
+          console.log("[Sticker QR DEBUG] generated value:", fieldValue);
+        }
         const qrValue = String(fieldValue || getSampleValueForField(field) || "N/A");
 
         return (

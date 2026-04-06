@@ -339,6 +339,46 @@ const CartonDetailsPopup = ({
     return normalizeWeightValue(packagingData.cartonWeight);
   };
 
+  const getConfiguredCartonTolerance = () => {
+    const packagingSubStep = assignUserStage?.subSteps?.find((s: any) => s.isPackagingStatus);
+    const packagingData = packagingSubStep?.packagingData || {};
+    const sanitizedTolerance = String(packagingData?.cartonWeightTolerance ?? "")
+      .trim()
+      .replace(",", ".")
+      .replace(/[^0-9.]/g, "");
+
+    if (!sanitizedTolerance) {
+      return {
+        raw: "0",
+        numeric: 0,
+        scaled: 0,
+        display: "0",
+      };
+    }
+
+    const parsedTolerance = Number.parseFloat(sanitizedTolerance);
+    if (Number.isNaN(parsedTolerance) || parsedTolerance < 0) {
+      return {
+        raw: "0",
+        numeric: 0,
+        scaled: 0,
+        display: "0",
+      };
+    }
+
+    return {
+      raw: sanitizedTolerance,
+      numeric: parsedTolerance,
+      scaled: Math.round(parsedTolerance * WEIGHT_PRECISION_SCALE),
+      display: sanitizedTolerance,
+    };
+  };
+
+  const formatWeightForDisplay = (value?: number | null) => {
+    if (!Number.isFinite(Number(value))) return "0";
+    return Number(value).toFixed(3).replace(/\.?0+$/, "");
+  };
+
   const getConfiguredCartonCapacity = () => {
     const packagingSubStep = assignUserStage?.subSteps?.find((s: any) => s.isPackagingStatus);
     const packagingData = packagingSubStep?.packagingData || {};
@@ -383,43 +423,84 @@ const CartonDetailsPopup = ({
     const normalizedWeight = normalizeWeightValue(weightValue);
     const shouldMatchConfiguredWeight = requiresConfiguredWeightValidation(carton);
     const expectedWeight = getExpectedCartonWeight();
+    const expectedTolerance = getConfiguredCartonTolerance();
     if (!normalizedWeight) {
       return {
         matches: false,
         normalizedWeight: null,
         expectedWeight,
+        expectedTolerance,
         requiresConfiguredWeightValidation: shouldMatchConfiguredWeight,
       };
     }
 
-    if (shouldMatchConfiguredWeight && expectedWeight?.scaled) {
+    if (!expectedWeight?.scaled) {
       return {
-        matches: normalizedWeight.scaled === expectedWeight.scaled,
+        matches: true,
         normalizedWeight,
         expectedWeight,
+        expectedTolerance,
+        requiresConfiguredWeightValidation: shouldMatchConfiguredWeight,
+      };
+    }
+
+    if (shouldMatchConfiguredWeight) {
+      return {
+        matches:
+          Math.abs(normalizedWeight.scaled - expectedWeight.scaled) <=
+          Number(expectedTolerance?.scaled || 0),
+        normalizedWeight,
+        expectedWeight,
+        expectedTolerance,
         requiresConfiguredWeightValidation: true,
       };
     }
 
-    if (!shouldMatchConfiguredWeight && expectedWeight?.scaled) {
-      return {
-        matches: normalizedWeight.scaled <= expectedWeight.scaled,
-        normalizedWeight,
-        expectedWeight,
-        requiresConfiguredWeightValidation: false,
-      };
-    }
-
     return {
-      matches: true,
+      matches: normalizedWeight.scaled <= expectedWeight.scaled,
       normalizedWeight,
       expectedWeight,
-      requiresConfiguredWeightValidation: shouldMatchConfiguredWeight,
+      expectedTolerance,
+      requiresConfiguredWeightValidation: false,
     };
   };
 
   const isCartonWeightMatched = (carton: Carton, weightValue?: string | number) => {
     return getWeightMatchResult(carton, weightValue).matches;
+  };
+
+  const getConfiguredWeightMismatchMessage = (
+    carton: Carton,
+    matchResult?: ReturnType<typeof getWeightMatchResult>,
+  ) => {
+    const resolvedMatchResult = matchResult || getWeightMatchResult(carton, cartonWeights[carton.cartonSerial] ?? "");
+    if (!resolvedMatchResult?.requiresConfiguredWeightValidation) {
+      return "Partial carton weight cannot exceed the configured carton weight.";
+    }
+
+    const expectedWeightNumeric = Number(resolvedMatchResult?.expectedWeight?.numeric || 0);
+    const toleranceNumeric = Number(resolvedMatchResult?.expectedTolerance?.numeric || 0);
+    if (expectedWeightNumeric > 0 && toleranceNumeric > 0) {
+      const min = Math.max(expectedWeightNumeric - toleranceNumeric, 0);
+      const max = expectedWeightNumeric + toleranceNumeric;
+      return `Carton weight must be within ${formatWeightForDisplay(min)} kg to ${formatWeightForDisplay(max)} kg.`;
+    }
+
+    return "Weight mismatch! Please enter the correct carton weight.";
+  };
+
+  const getWeightRequirementLabel = (carton: Carton) => {
+    if (!requiresConfiguredWeightValidation(carton)) {
+      return "Must not exceed configured carton weight";
+    }
+    const expectedWeightNumeric = Number(getExpectedCartonWeight()?.numeric || 0);
+    const toleranceNumeric = Number(getConfiguredCartonTolerance()?.numeric || 0);
+    if (expectedWeightNumeric > 0 && toleranceNumeric > 0) {
+      const min = Math.max(expectedWeightNumeric - toleranceNumeric, 0);
+      const max = expectedWeightNumeric + toleranceNumeric;
+      return `Allowed range: ${formatWeightForDisplay(min)} kg - ${formatWeightForDisplay(max)} kg`;
+    }
+    return "Must match configured carton weight";
   };
 
   const getWeightValidation = (
@@ -438,9 +519,7 @@ const CartonDetailsPopup = ({
     if (!matchResult.matches) {
       return {
         ok: false as const,
-        message: matchResult.requiresConfiguredWeightValidation
-          ? "Weight mismatch! Please enter the correct carton weight."
-          : "Partial carton weight cannot exceed the configured carton weight.",
+        message: getConfiguredWeightMismatchMessage(carton, matchResult),
       };
     }
 
@@ -1006,9 +1085,7 @@ const CartonDetailsPopup = ({
                               <div className="absolute right-4 top-2 text-[10px] font-black text-gray-400">KG</div>
                               </div>
                               <div className="mt-1 text-[10px] font-semibold text-slate-400">
-                                {shouldMatchConfiguredWeight
-                                  ? "Must match configured carton weight"
-                                  : "Must not exceed configured carton weight"}
+                                {getWeightRequirementLabel(carton)}
                               </div>
                             </div>
                           )}
