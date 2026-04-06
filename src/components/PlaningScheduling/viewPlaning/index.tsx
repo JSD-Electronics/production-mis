@@ -474,7 +474,11 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     return (processDevices || []).filter((device: any) => {
       const currentStage = String(device?.currentStage || "").trim().toLowerCase();
       const status = String(device?.status || "").trim().toLowerCase();
-      return currentStage === stageKey && status !== "pass";
+      if (currentStage !== stageKey) return false;
+      // Device status can carry forward from the previous stage (e.g. "Pass")
+      // even after moving into the next stage, so do not exclude by "pass" here.
+      if (status === "ng" || status === "completed") return false;
+      return true;
     });
   }, [processDevices, selectedStageNameForDevices]);
   const selectedProcessStageEntries = React.useMemo(() => {
@@ -3339,7 +3343,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
               {wipDevicesForStage.length > 0 && (
                 <div className="mt-6">
                   <h3 className="mb-2 text-sm font-semibold">
-                    WIP Devices (not yet passed from {selectedStageNameForDevices})
+                    WIP Devices (currently in {selectedStageNameForDevices})
                   </h3>
                   <div className="overflow-x-auto max-h-[30vh] border border-stroke rounded-md">
                     <table className="w-full table-auto border-collapse text-xs">
