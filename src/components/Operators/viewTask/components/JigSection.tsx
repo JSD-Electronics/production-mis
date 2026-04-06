@@ -520,18 +520,8 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
                 if (expected.startsWith(trimmedVal)) {
                   isFieldMatch = false; // Still waiting for full value match
                 } else {
-                  // Actual mismatch
-                  const numExp = parseFloat(expected);
-                  const numRec = parseFloat(trimmedVal);
-                  if (!isNaN(numExp) && !isNaN(numRec)) {
-                    if (Math.abs(numExp - numRec) > 0.1) {
-                      allPassed = false;
-                      failedFields.push(`${field.jigName} (Expected: ${expected}, Got: ${trimmedVal})`);
-                    }
-                  } else {
-                    allPassed = false;
-                    failedFields.push(`${field.jigName} (Expected: ${expected}, Got: ${trimmedVal})`);
-                  }
+                  allPassed = false;
+                  failedFields.push(`${field.jigName} (Expected: ${expected}, Got: ${trimmedVal})`);
                   isFieldMatch = true;
                 }
               }
@@ -927,10 +917,18 @@ const useSerialPort = ({ subStep, onDataReceived, onDecision, isLastStep, onDisc
               }
               if (val !== undefined) {
                 collectedData[fieldName] = val;
-                addLog(`Stored Field [${fieldName}]: ${val}`, "info");
               }
             });
-            updateCustomFieldsDataIntoDB(collectedData, searchQueryRef.current);
+            if (allPassed) {
+              Object.entries(collectedData).forEach(([fieldName, value]) => {
+                addLog(`Stored Field [${fieldName}]: ${value}`, "info");
+              });
+              if (Object.keys(collectedData).length > 0) {
+                updateCustomFieldsDataIntoDB(collectedData, searchQueryRef.current);
+              }
+            } else if (Object.keys(collectedData).length > 0) {
+              addLog("Skipped Store to DB write because validation failed", "info");
+            }
           }
 
           // For the new requirement: Pass is immediate, NG waits for timeout (isImmediate: false)

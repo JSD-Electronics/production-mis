@@ -33,6 +33,7 @@ import Loader from "@/components/common/Loader";
 import ConfirmationPopup from "@/components/Confirmation/page";
 
 import PrintTableComponent from "../printTableComponents";
+import { normalizeStagesStickerSourceFields } from "@/lib/sticker/sourceFields";
 import {
   BarChart3,
   Box,
@@ -473,13 +474,14 @@ const EditProduct = () => {
       const pathname = window.location.pathname;
       const id = pathname.split("/").pop();
       const formData = new FormData();
+      const normalizedStages = normalizeStagesStickerSourceFields(stages);
       formData.append("name", name);
       if (sopFilePickerRef.current?.files?.[0]) {
         formData.append("sopFile", sopFilePickerRef.current.files[0]);
       } else {
         formData.append("sopFile", sopFile);
       }
-      formData.append("stages", JSON.stringify(stages));
+      formData.append("stages", JSON.stringify(normalizedStages));
       formData.append("commonStages", JSON.stringify(commonStages));
       try {
         const result = await updateProduct(formData, id);
@@ -1443,7 +1445,8 @@ const EditProduct = () => {
       const formData = new FormData();
 
       // Clear managedBy and jigId for cloning to ensure assignments are fresh in the target process
-      const cleanedStages = stages.map((stage) => ({
+      const normalizedStages = normalizeStagesStickerSourceFields(stages);
+      const cleanedStages = normalizedStages.map((stage) => ({
         ...stage,
         managedBy: "",
         jigId: "",
