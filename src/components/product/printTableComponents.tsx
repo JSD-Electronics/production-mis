@@ -4,6 +4,10 @@ import Barcode from "react-barcode";
 import { QRCodeCanvas } from "qrcode.react";
 import { printStickerElements } from "@/lib/sticker/printSticker";
 import { resolveStickerValue } from "@/lib/sticker/resolveStickerValue";
+import {
+  normalizeSourceFieldEntry,
+  normalizeSourceFields,
+} from "@/lib/sticker/sourceFields";
 import StickerRenderer from "@/components/sticker/StickerRenderer";
 import { mmToPx, pxToMm, pxToMmExact } from "@/lib/sticker/units";
 import Modal from "../Modal/page";
@@ -737,47 +741,27 @@ const StickerDesigner = ({
     return patch;
   };
 
-  const normalizeSourceField = useCallback((entry: any) => {
-    if (!entry) return null;
-    if (typeof entry === "string") {
-      const trimmed = entry.trim();
-      return trimmed ? { slug: trimmed, name: trimmed } : null;
-    }
-
-    const slug = String(entry?.slug || entry?.value || entry?.name || "").trim();
-    const name = String(entry?.name || entry?.label || entry?.slug || entry?.value || "").trim();
-
-    if (!slug && !name) return null;
-
-    return {
-      slug: slug || name,
-      name: name || slug,
-    };
-  }, []);
-
   const getFieldSourceFields = useCallback(
     (field: any) => {
-      const explicit = Array.isArray(field?.sourceFields)
-        ? field.sourceFields
-            .map((entry: any) => normalizeSourceField(entry))
-            .filter(Boolean)
-        : [];
+      const explicit = normalizeSourceFields(
+        Array.isArray(field?.sourceFields) ? field.sourceFields : [],
+      );
 
       if (explicit.length > 0) return explicit;
 
-      const fallback = normalizeSourceField({
+      const fallback = normalizeSourceFieldEntry({
         slug: field?.slug,
         name: field?.name,
       });
 
       return fallback ? [fallback] : [];
     },
-    [normalizeSourceField],
+    [],
   );
 
   const buildNextSourceFields = useCallback(
     (field: any, candidate: any) => {
-      const normalizedCandidate = normalizeSourceField(candidate);
+      const normalizedCandidate = normalizeSourceFieldEntry(candidate);
       if (!normalizedCandidate) return getFieldSourceFields(field);
 
       const existing = getFieldSourceFields(field);
@@ -799,18 +783,14 @@ const StickerDesigner = ({
         );
       }
 
-      return [...existing, normalizedCandidate];
+      return normalizeSourceFields([...existing, normalizedCandidate]);
     },
-    [getFieldSourceFields, normalizeSourceField],
+    [getFieldSourceFields],
   );
 
   const reorderSourceFields = useCallback(
     (entries: any[], fromIndex: number, direction: number) => {
-      const normalized = Array.isArray(entries)
-        ? entries
-            .map((entry: any) => normalizeSourceField(entry))
-            .filter(Boolean)
-        : [];
+      const normalized = normalizeSourceFields(Array.isArray(entries) ? entries : []);
 
       const targetIndex = fromIndex + direction;
       if (
@@ -827,7 +807,7 @@ const StickerDesigner = ({
       next.splice(targetIndex, 0, moved);
       return next;
     },
-    [normalizeSourceField],
+    [],
   );
 
   const getSampleValueForSlug = useCallback((slugLike: any) => {
@@ -1031,10 +1011,8 @@ const StickerDesigner = ({
       return;
     }
 
-    const normalizedSourceFields = selectedScanFields
-      .map((entry: any) => normalizeSourceField(entry))
-      .filter(Boolean);
-    const fallbackBinding = normalizeSourceField(selectQRValue);
+    const normalizedSourceFields = normalizeSourceFields(selectedScanFields);
+    const fallbackBinding = normalizeSourceFieldEntry(selectQRValue);
     const nextSourceFields =
       normalizedSourceFields.length > 0
         ? normalizedSourceFields

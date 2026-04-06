@@ -30,6 +30,7 @@ import Loader from "@/components/common/Loader";
 import { faMinus, faTrash, faChevronUp, faChevronDown, faPlus, faPuzzlePiece, faGripLines, faCopy, faRotateLeft } from "@fortawesome/free-solid-svg-icons";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import PrintTableComponent from "./printTableComponents";
+import { normalizeStagesStickerSourceFields } from "@/lib/sticker/sourceFields";
 
 const ReactQuill = dynamic(() => import("react-quill"), { ssr: false });
 
@@ -487,8 +488,9 @@ const AddProduct = () => {
     setSubmitDisabled(true);
     setIsDraftSubmitting(asDraft);
     const formData = new FormData();
+    const normalizedStages = normalizeStagesStickerSourceFields(stages);
     formData.append("name", name);
-    formData.append("Products", JSON.stringify(stages));
+    formData.append("Products", JSON.stringify(normalizedStages));
     formData.append("commonStages", JSON.stringify(commonStages));
     formData.append("isDraft", String(asDraft));
     formData.append("status", asDraft ? "draft" : "active");

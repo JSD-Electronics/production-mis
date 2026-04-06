@@ -1,3 +1,5 @@
+import { normalizeFieldSourceFieldsForEncoding } from "@/lib/sticker/sourceFields";
+
 // Centralized sticker field value resolution used by Product preview/export,
 // Operator sticker preview/print, and the Simulator.
 //
@@ -25,29 +27,7 @@ export const resolveStickerValue = (field: any, device: any) => {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
 
-  const normalizeSourceField = (entry: any) => {
-    if (!entry) return null;
-    if (typeof entry === "string") {
-      const trimmed = entry.trim();
-      return trimmed ? { slug: trimmed, name: trimmed } : null;
-    }
-
-    const slug = String(entry?.slug || entry?.value || entry?.name || "").trim();
-    const name = String(entry?.name || entry?.label || entry?.slug || entry?.value || "").trim();
-
-    if (!slug && !name) return null;
-
-    return {
-      slug: slug || name,
-      name: name || slug,
-    };
-  };
-
-  const sourceFields = Array.isArray(field?.sourceFields)
-    ? field.sourceFields
-        .map((entry: any) => normalizeSourceField(entry))
-        .filter(Boolean)
-    : [];
+  const sourceFields = normalizeFieldSourceFieldsForEncoding(field);
 
   const isDynamic =
     field?.type === "barcode" ||

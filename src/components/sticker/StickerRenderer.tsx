@@ -3,6 +3,7 @@ import Barcode from "react-barcode";
 import { QRCodeSVG } from "qrcode.react";
 import { resolveStickerValue } from "@/lib/sticker/resolveStickerValue";
 import { getBarcodeLayout } from "@/lib/sticker/barcodeLayout";
+import { normalizeFieldSourceFieldsForEncoding } from "@/lib/sticker/sourceFields";
 
 type StickerRendererProps = {
   template: any;
@@ -45,40 +46,8 @@ const normalizeField = (field: any) => {
   };
 };
 
-const normalizeSourceField = (entry: any) => {
-  if (!entry) return null;
-  if (typeof entry === "string") {
-    const trimmed = entry.trim();
-    return trimmed ? { slug: trimmed, name: trimmed } : null;
-  }
-
-  const slug = String(entry?.slug || entry?.value || entry?.name || "").trim();
-  const name = String(entry?.name || entry?.label || entry?.slug || entry?.value || "").trim();
-
-  if (!slug && !name) return null;
-
-  return {
-    slug: slug || name,
-    name: name || slug,
-  };
-};
-
-const getSourceFields = (field: any) => {
-  const explicit = Array.isArray(field?.sourceFields)
-    ? field.sourceFields
-        .map((entry: any) => normalizeSourceField(entry))
-        .filter(Boolean)
-    : [];
-
-  if (explicit.length > 0) return explicit;
-
-  const fallback = normalizeSourceField({
-    slug: field?.slug,
-    name: field?.name,
-  });
-
-  return fallback ? [fallback] : [];
-};
+const getSourceFields = (field: any) =>
+  normalizeFieldSourceFieldsForEncoding(field, { includeFallback: true });
 
 const getSampleValueForSlug = (slugLike: any) => {
   const s = String(slugLike || "").toLowerCase();
