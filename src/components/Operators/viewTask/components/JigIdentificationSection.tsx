@@ -10,6 +10,49 @@ interface JigIdentificationSectionProps {
     error: string | null;
 }
 
+const normalizeFieldKey = (value: string) =>
+    String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+
+const getFieldKeyVariants = (fieldName: string) => {
+    const base = normalizeFieldKey(fieldName);
+    const variants = new Set<string>([base]);
+
+    if (base.includes("imei")) {
+        variants.add("imei");
+        variants.add("imeino");
+        variants.add("imeinumber");
+    }
+    if (base.includes("serial") || base === "sn" || base === "sno") {
+        variants.add("serial");
+        variants.add("serialno");
+        variants.add("serialnumber");
+        variants.add("sn");
+        variants.add("sno");
+    }
+    if (base.includes("ccid") || base.includes("iccid")) {
+        variants.add("ccid");
+        variants.add("iccid");
+    }
+
+    return Array.from(variants);
+};
+
+const parseInlineKeyValuePairs = (line: string) => {
+    const result: Record<string, string> = {};
+    const regex = /([A-Za-z0-9/_#\-\s.]+?)\s*:\s*([A-Za-z0-9._\-\/]+)(?=\s+[A-Za-z0-9/_#\-\s.]+?\s*:|$)/g;
+    let match: RegExpExecArray | null = null;
+    while ((match = regex.exec(line)) !== null) {
+        const key = String(match[1] || "").trim();
+        const value = String(match[2] || "").trim();
+        if (key && value) {
+            result[key] = value;
+        }
+    }
+    return result;
+};
+
 const parseJigOutput = (text: string) => {
     const lines = text.split('\n');
     const result: any = {};
@@ -19,6 +62,11 @@ const parseJigOutput = (text: string) => {
         const trimmed = line.trim();
         if (!trimmed) return;
 
+        const parametersIdx = trimmed.toUpperCase().indexOf("PARAMETERS:");
+        const lineForPairs = parametersIdx >= 0
+            ? trimmed.slice(parametersIdx + "PARAMETERS:".length).trim()
+            : trimmed;
+
         if (trimmed.endsWith(':') && !trimmed.includes(' ')) {
             currentSection = trimmed.replace(':', '');
             if (!result[currentSection]) result[currentSection] = {};
@@ -27,7 +75,12 @@ const parseJigOutput = (text: string) => {
 
         if (!result[currentSection]) result[currentSection] = {};
 
-        const segments = trimmed.split(/   +|  |, /);
+        const inlinePairs = parseInlineKeyValuePairs(lineForPairs);
+        Object.entries(inlinePairs).forEach(([k, v]) => {
+            result[currentSection][k] = v;
+        });
+
+        const segments = lineForPairs.split(/   +|  |, /);
         let lastKey: string | null = null;
 
         segments.forEach(segment => {
@@ -82,54 +135,126 @@ export default function JigIdentificationSection({
         );
     };
 
-    const collectValidatedFields = (parsedData: any, fields: any[]) => {
+    const isFieldValueValid = (field: any, value: string) => {
+        const trimmedVal = String(value || "").trim();
+        const vtype = String(field?.validationType || "value").toLowerCase();
+
+        if (!trimmedVal) return false;
+
+        if (vtype === "length") {
+            const len = trimmedVal.length;
+            const from = Number(field?.lengthFrom);
+            const to = Number(field?.lengthTo);
+            if (!isNaN(from) && !isNaN(to)) {
+                return len >= from && len <= to;
+            }
+            return true;
+        }
+
+        if (vtype === "value") {
+            const expected = String(field?.value || "").trim();
+            if (!expected) return true;
+            return trimmedVal === expected;
+        }
+
+        if (vtype === "range") {
+            const num = Number(trimmedVal);
+            const from = Number(field?.rangeFrom);
+            const to = Number(field?.rangeTo);
+            if (isNaN(num) || isNaN(from) || isNaN(to)) return false;
+            return num >= from && num <= to;
+        }
+
+        return true;
+    };
+
+    const findValueInParsedData = (parsedData: any, field: any) => {
+        const fieldName = String(field?.jigName || "");
+        const variants = new Set(getFieldKeyVariants(fieldName));
+        variants.add(normalizeFieldKey(fieldName));
+
+        const tryObject = (obj: any) => {
+            if (!obj || typeof obj !== "object") return undefined;
+            for (const [rawKey, rawValue] of Object.entries(obj)) {
+                if (typeof rawValue !== "string") continue;
+                const nk = normalizeFieldKey(rawKey);
+                if (variants.has(nk)) {
+                    return rawValue;
+                }
+            }
+            return undefined;
+        };
+
+        let found = tryObject(parsedData);
+        if (found !== undefined) return found;
+
+        for (const section of Object.values(parsedData || {})) {
+            found = tryObject(section);
+            if (found !== undefined) return found;
+        }
+
+        return undefined;
+    };
+
+    const findRawCandidateForField = (rawText: string, field: any) => {
+        const source = String(rawText || "");
+        if (!source.trim()) return undefined;
+
+        const fieldName = String(field?.jigName || "");
+        const normalizedFieldName = normalizeFieldKey(fieldName);
+
+        // Strong IMEI fallback when a device outputs only a bare 15-digit token.
+        if (normalizedFieldName.includes("imei")) {
+            const imeiMatch = source.match(/\b\d{15}\b/);
+            if (imeiMatch?.[0]) return imeiMatch[0];
+        }
+
+        // Generic token scan fallback for single-field capture.
+        const rawTokens = source.match(/[A-Za-z0-9._\-\/]{3,}/g) || [];
+        const noiseTokens = new Set([
+            "wait",
+            "done",
+            "parameters",
+            "factrst",
+            "moving",
+            "capture",
+            "started",
+            "stream",
+            "break",
+            "received",
+            "connection",
+            "closed",
+        ]);
+
+        const tokens = rawTokens
+            .map((token) => String(token || "").trim())
+            .filter(Boolean)
+            .filter((token) => !noiseTokens.has(token.toLowerCase()));
+
+        for (const token of tokens) {
+            if (isFieldValueValid(field, token)) {
+                return token;
+            }
+        }
+
+        return undefined;
+    };
+
+    const collectValidatedFields = (parsedData: any, fields: any[], rawText: string) => {
         const capturedFields: Record<string, string> = {};
         let allFound = true;
 
         for (const field of fields) {
-            const fieldName = field.jigName;
-            let foundValue = undefined;
+            const fieldName = String(field?.jigName || "");
+            let foundValue = findValueInParsedData(parsedData, field);
 
-            if (parsedData[fieldName] && typeof parsedData[fieldName] === "string") {
-                foundValue = parsedData[fieldName];
-            } else {
-                for (const section in parsedData) {
-                    if (
-                        typeof parsedData[section] === "object" &&
-                        parsedData[section][fieldName] &&
-                        typeof parsedData[section][fieldName] === "string"
-                    ) {
-                        foundValue = parsedData[section][fieldName];
-                        break;
-                    }
-                }
+            if (foundValue === undefined && fields.length === 1) {
+                foundValue = findRawCandidateForField(rawText, field);
             }
 
             if (foundValue !== undefined && String(foundValue).trim() !== "" && typeof foundValue === "string") {
                 const trimmedVal = foundValue.trim();
-                let isFieldValid = true;
-                const vtype = field.validationType;
-
-                if (vtype === "length") {
-                    const len = trimmedVal.length;
-                    const from = Number(field.lengthFrom);
-                    const to = Number(field.lengthTo);
-                    if (!isNaN(from) && !isNaN(to) && (len < from || len > to)) {
-                        isFieldValid = false;
-                    }
-                } else if (vtype === "value") {
-                    const expected = (field.value || "").trim();
-                    if (expected && trimmedVal !== expected) {
-                        isFieldValid = false;
-                    }
-                } else if (vtype === "range") {
-                    const num = Number(trimmedVal);
-                    const from = Number(field.rangeFrom);
-                    const to = Number(field.rangeTo);
-                    if (!isNaN(num) && !isNaN(from) && !isNaN(to) && (num < from || num > to)) {
-                        isFieldValid = false;
-                    }
-                }
+                const isFieldValid = isFieldValueValid(field, trimmedVal);
 
                 if (isFieldValid) {
                     capturedFields[fieldName] = trimmedVal;
@@ -161,19 +286,17 @@ export default function JigIdentificationSection({
             portRef.current = port;
             addLog('info', 'Port opened at 115200 baud.');
 
-            // Sending Factory Reset command to trigger device output
-            try {
-                const encoder = new TextEncoder();
-                const writer = port.writable.getWriter();
-                addLog('info', 'Sending command: +#FACTRST;');
-                await writer.write(encoder.encode("+#FACTRST;\r\n"));
-                writer.releaseLock();
-                addLog('info', 'Command sent. Waiting for parameter stream...');
-                // Give the device a moment to process the command
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            } catch (writeErr: any) {
-                addLog('error', `Failed to send command: ${writeErr.message}`);
+            const configuredFieldNames = (jigStageFields || [])
+                .map((f: any) => String(f?.jigName || "").trim())
+                .filter(Boolean);
+            if (configuredFieldNames.length > 0) {
+                addLog('info', `Waiting for configured field(s): ${configuredFieldNames.join(", ")}`);
+            } else {
+                addLog('error', 'No Jig Stage Fields configured for this stage.');
+                toast.error("No Jig Stage Fields configured for this stage.");
+                return;
             }
+            const expectedFieldCount = configuredFieldNames.length;
 
             toast.info("Connected. Capturing parameters...");
             addLog('info', 'Initial capture started...');
@@ -220,9 +343,9 @@ export default function JigIdentificationSection({
                 accumulatedData += chunk;
 
                 const parsedData = parseJigOutput(accumulatedData);
-                const { capturedFields, allFound } = collectValidatedFields(parsedData, jigStageFields);
+                const { capturedFields, allFound } = collectValidatedFields(parsedData, jigStageFields, accumulatedData);
 
-                if (allFound && Object.keys(capturedFields).length === jigStageFields.length) {
+                if (expectedFieldCount > 0 && allFound && Object.keys(capturedFields).length === expectedFieldCount) {
                     if (timeoutId) clearTimeout(timeoutId);
                     addLog('info', `Identification successful: ${JSON.stringify(capturedFields)}`);
                     await onIdentify(capturedFields);
@@ -234,8 +357,8 @@ export default function JigIdentificationSection({
             // Final pass after stream end/break to avoid false failure when device closes immediately after sending.
             if (!identificationDone && accumulatedData.trim()) {
                 const parsedData = parseJigOutput(accumulatedData);
-                const { capturedFields, allFound } = collectValidatedFields(parsedData, jigStageFields);
-                if (allFound && Object.keys(capturedFields).length === jigStageFields.length) {
+                const { capturedFields, allFound } = collectValidatedFields(parsedData, jigStageFields, accumulatedData);
+                if (expectedFieldCount > 0 && allFound && Object.keys(capturedFields).length === expectedFieldCount) {
                     addLog('info', `Identification successful: ${JSON.stringify(capturedFields)}`);
                     await onIdentify(capturedFields);
                     identificationDone = true;
