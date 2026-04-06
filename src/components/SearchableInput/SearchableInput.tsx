@@ -14,11 +14,66 @@ interface SearchableInputProps {
   excludedSerials?: string[];
   setIsPassNGButtonShow: any;
   setIsStickerPrinted: any;
-  setIsVerifiedSticker: any;
+  setIsVerifiedSticker?: any;
   checkIsPrintEnable: any;
   setIsDevicePassed: any;
   allowPassedOptions?: boolean;
+  resolveSearchQuery?: (query: string) => Promise<any> | any;
+  placeholder?: string;
 }
+
+const normalizeSearchTerm = (value: any) =>
+  String(value || "")
+    .replace(/[\r\n]+/g, " ")
+    .trim()
+    .toLowerCase();
+
+const parseCustomFields = (raw: any) => {
+  if (!raw) return {};
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  }
+  return typeof raw === "object" ? raw : {};
+};
+
+const collectSearchTerms = (option: any) => {
+  const values: string[] = [];
+  const addValue = (value: any) => {
+    const normalized = normalizeSearchTerm(value);
+    if (!normalized) return;
+    values.push(normalized);
+  };
+
+  const visit = (input: any) => {
+    if (input === undefined || input === null) return;
+    if (Array.isArray(input)) {
+      input.forEach((item) => visit(item));
+      return;
+    }
+    if (typeof input === "object") {
+      Object.values(input).forEach((item) => visit(item));
+      return;
+    }
+    addValue(input);
+  };
+
+  addValue(option?.serialNo);
+  addValue(option?.serial_no);
+  addValue(option?.serial);
+  addValue(option?.imeiNo);
+  addValue(option?.imei);
+  addValue(option?.imei_no);
+  addValue(option?.ccid);
+  addValue(option?.CCID);
+  addValue(option?.ccidNo);
+  visit(parseCustomFields(option?.customFields));
+
+  return Array.from(new Set(values));
+};
 
 const SearchableInput = ({
   options,
@@ -32,10 +87,12 @@ const SearchableInput = ({
   excludedSerials = [],
   setIsPassNGButtonShow,
   setIsStickerPrinted,
-  setIsVerifiedSticker,
+  setIsVerifiedSticker = () => {},
   checkIsPrintEnable,
   setIsDevicePassed,
   allowPassedOptions = false,
+  resolveSearchQuery,
+  placeholder = "Scan sticker / Serial / IMEI / CCID",
 }: SearchableInputProps) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const excludedSet = React.useMemo(
@@ -48,35 +105,112 @@ const SearchableInput = ({
     [excludedSerials],
   );
 
-  // Derived state for filtered options
+  const searchableOptions = React.useMemo(() => {
+    return (Array.isArray(options) ? options : [])
+      .filter((value) => {
+        const serial = String(value?.serialNo || value?.serial_no || "").toLowerCase();
+        const status = String(value?.status || value?.testStatus || "").trim().toLowerCase();
+        const isNg =
+          status.includes("ng") ||
+          status.includes("fail") ||
+          status.includes("rework");
+        const isPassed =
+          status === "pass" ||
+          status.includes("pass") ||
+          status.includes("completed") ||
+          status.includes("done");
+        const isExcluded = excludedSet.has(serial);
+        return !isNg && (allowPassedOptions || !isPassed) && !isExcluded;
+      })
+      .map((option) => ({
+        option,
+        searchTerms: collectSearchTerms(option),
+      }));
+  }, [options, excludedSet, allowPassedOptions]);
+
   const filteredOptions = React.useMemo(() => {
-    if (!searchQuery || searchQuery.trim() === "") {
+    const normalizedQuery = normalizeSearchTerm(searchQuery);
+    if (!normalizedQuery) {
       return [];
     }
-    return options.filter((value) => {
-      const serial = String(value?.serialNo || "").toLowerCase();
-      if (!serial.includes(searchQuery.toLowerCase())) return false;
-      const status = String(value?.status || value?.testStatus || "").trim().toLowerCase();
-      const isNg =
-        status.includes("ng") ||
-        status.includes("fail") ||
-        status.includes("rework");
-      const isPassed =
-        status === "pass" ||
-        status.includes("pass") ||
-        status.includes("completed") ||
-        status.includes("done");
-      const isExcluded = excludedSet.has(serial);
-      return !isNg && (allowPassedOptions || !isPassed) && !isExcluded;
-    });
-  }, [options, searchQuery, excludedSet, allowPassedOptions]);
 
-  // Handle No Results side effect
-  React.useEffect(() => {
-    if (filteredOptions.length === 0 && searchQuery.trim() !== "") {
-      onNoResults(searchQuery);
-    }
-  }, [filteredOptions, searchQuery, onNoResults]);
+    return searchableOptions
+      .filter(({ searchTerms }) => searchTerms.some((term) => term.includes(normalizedQuery)))
+      .map(({ option }) => option);
+  }, [searchQuery, searchableOptions]);
+
+  const findExactMatches = React.useCallback(
+    (rawQuery: any) => {
+      const normalizedQuery = normalizeSearchTerm(rawQuery);
+      if (!normalizedQuery) return [];
+      return searchableOptions
+        .filter(({ searchTerms }) => searchTerms.includes(normalizedQuery))
+        .map(({ option }) => option);
+    },
+    [searchableOptions],
+  );
+
+  const resetSelectionState = React.useCallback(() => {
+    setIsPassNGButtonShow(false);
+    setIsStickerPrinted(false);
+    setIsVerifiedSticker(false);
+    setIsDevicePassed(false);
+  }, [setIsPassNGButtonShow, setIsStickerPrinted, setIsVerifiedSticker, setIsDevicePassed]);
+
+  const handleSuggestionClick = React.useCallback(
+    (option: any) => {
+      if (!option) return;
+      if (option?._id) {
+        getDeviceById(option._id);
+      }
+      setSearchQuery(option?.serialNo || option?.serial_no || "");
+      setSearchResult(option?.serialNo || option?.serial_no || "");
+      if (onDeviceSelected) onDeviceSelected(option);
+      resetSelectionState();
+      setShowSuggestions(false);
+    },
+    [getDeviceById, onDeviceSelected, resetSelectionState, setSearchQuery, setSearchResult],
+  );
+
+  const resolveEnteredQuery = React.useCallback(
+    async (rawQuery: any) => {
+      const query = String(rawQuery || "").trim();
+      if (!query) {
+        setSearchResult("");
+        setSearchQuery("");
+        setShowSuggestions(false);
+        return;
+      }
+
+      const exactMatches = findExactMatches(query);
+      if (exactMatches.length === 1) {
+        handleSuggestionClick(exactMatches[0]);
+        return;
+      }
+
+      if (!query.includes(",") && exactMatches.length === 0 && filteredOptions.length > 0) {
+        handleSuggestionClick(filteredOptions[0]);
+        return;
+      }
+
+      if (resolveSearchQuery) {
+        const result = await resolveSearchQuery(query);
+        const ok = typeof result === "boolean" ? result : Boolean(result && result.ok !== false);
+        if (ok) {
+          resetSelectionState();
+        }
+        setShowSuggestions(false);
+        return;
+      }
+
+      setSearchResult("");
+      setSearchQuery(query);
+      resetSelectionState();
+      setShowSuggestions(false);
+      onNoResults(query);
+    },
+    [filteredOptions, findExactMatches, handleSuggestionClick, onNoResults, resetSelectionState, resolveSearchQuery, setSearchQuery, setSearchResult],
+  );
 
   const handleInputChange = (e: any) => {
     const query = e.target.value;
@@ -89,48 +223,27 @@ const SearchableInput = ({
     }
   };
 
-  const handleSuggestionClick = (option: any) => {
-    if (!option) return;
-    if (option?._id) {
-      getDeviceById(option._id);
-    }
-    setSearchQuery(option?.serialNo || "");
-    setSearchResult(option?.serialNo || "");
-    if (onDeviceSelected) onDeviceSelected(option);
-    setIsPassNGButtonShow(false);
-    setIsStickerPrinted(false);
-    setIsVerifiedSticker(false);
-    setIsDevicePassed(false);
-    setShowSuggestions(false);
-  };
-
   const handleKeyDown = (e: any) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      if (filteredOptions.length > 0) {
-        const option = filteredOptions[0];
-        if (option?._id) {
-          getDeviceById(option._id);
-        }
-        setSearchResult(option?.serialNo || "");
-        setSearchQuery(option?.serialNo || "");
-        if (onDeviceSelected && option) onDeviceSelected(option);
+      void resolveEnteredQuery(e.currentTarget.value);
+    }
+  };
 
-      } else {
-        setSearchResult("");
-        setSearchQuery(e.target.value);
-      }
-      setIsDevicePassed(false);
-      setIsStickerPrinted(false);
-      setIsVerifiedSticker(false);
-      setIsPassNGButtonShow(false);
+  const handlePaste = (e: any) => {
+    const pastedValue = String(e?.clipboardData?.getData("text") || "").trim();
+    if (!pastedValue) return;
+
+    if (resolveSearchQuery && pastedValue.includes(",")) {
+      e.preventDefault();
+      setSearchQuery(pastedValue);
       setShowSuggestions(false);
+      void resolveEnteredQuery(pastedValue);
     }
   };
 
   return (
     <div className="relative w-full">
-      {/* Input */}
       <div className="border-gray-300 flex items-center rounded-md border bg-white px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-blue-500">
         <Search className="text-gray-400 mr-2 h-4 w-4" />
         <input
@@ -140,7 +253,8 @@ const SearchableInput = ({
           onFocus={() => setShowSuggestions(true)}
           onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
           onKeyDown={handleKeyDown}
-          placeholder="Search by Serial No..."
+          onPaste={handlePaste}
+          placeholder={placeholder}
           className="text-gray-700 placeholder-gray-400 w-full border-none text-sm focus:outline-none"
         />
         {searchQuery && (
@@ -155,10 +269,8 @@ const SearchableInput = ({
         )}
       </div>
 
-      {/* Suggestions */}
       {showSuggestions && (
         <div className="border-gray-200 absolute z-10 mt-1 w-full rounded-md border bg-white shadow-lg">
-
           {filteredOptions.length > 0 ? (
             <ul className="max-h-40 overflow-y-auto py-1 text-sm">
               {filteredOptions.map((option, index) => (
@@ -183,3 +295,4 @@ const SearchableInput = ({
 };
 
 export default SearchableInput;
+

@@ -151,6 +151,7 @@ const AddProduct = () => {
             cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
+            cartonWeightTolerance: 0,
           },
           ngStatusData: [],
           jigFields: [],
@@ -396,6 +397,7 @@ const AddProduct = () => {
             cartonDepth: 0,
               maxCapacity: 0,
               cartonWeight: 0,
+            cartonWeightTolerance: 0,
             },
           })),
         }));
@@ -460,6 +462,7 @@ const AddProduct = () => {
             cartonDepth: 0,
               maxCapacity: 0,
               cartonWeight: 0,
+            cartonWeightTolerance: 0,
             },
             ngStatusData: [],
             jigFields: [],
@@ -684,6 +687,7 @@ const AddProduct = () => {
             cartonDepth: 0,
         maxCapacity: 0,
         cartonWeight: 0,
+            cartonWeightTolerance: 0,
       },
       ngStatusData: [],
       jigFields: [],
@@ -780,6 +784,7 @@ const AddProduct = () => {
             cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
+            cartonWeightTolerance: 0,
           },
           stepType: "jig",
           printerFields: [],
@@ -817,6 +822,7 @@ const AddProduct = () => {
             cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
+            cartonWeightTolerance: 0,
           },
           stepType: "jig",
           printerFields: [],
@@ -851,6 +857,7 @@ const AddProduct = () => {
             cartonDepth: 0,
             maxCapacity: 0,
             cartonWeight: 0,
+            cartonWeightTolerance: 0,
           },
           stepType: "jig",
           printerFields: [],
@@ -2121,6 +2128,8 @@ const AddProduct = () => {
                                                                   </label>
                                                                   <input
                                                                     type="number"
+                                                                    step="0.001"
+                                                                    min="0"
                                                                     value={
                                                                       subStep?.packagingData
                                                                         ?.cartonWeight || ""
@@ -2136,6 +2145,34 @@ const AddProduct = () => {
                                                                     placeholder="Enter weight"
                                                                     className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
                                                                   />
+                                                                </div>
+
+                                                                <div>
+                                                                  <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
+                                                                    Carton Weight Tolerance (Kg)
+                                                                  </label>
+                                                                  <input
+                                                                    type="number"
+                                                                    step="0.001"
+                                                                    min="0"
+                                                                    value={
+                                                                      subStep?.packagingData
+                                                                        ?.cartonWeightTolerance || ""
+                                                                    }
+                                                                    onChange={(e) =>
+                                                                      handleCartonInputs(
+                                                                        index,
+                                                                        subIndex,
+                                                                        e.target.value,
+                                                                        "cartonWeightTolerance",
+                                                                      )
+                                                                    }
+                                                                    placeholder="Enter tolerance"
+                                                                    className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
+                                                                  />
+                                                                  <p className="text-gray-500 dark:text-gray-400 mt-2 text-xs">
+                                                                    Example: carton weight 1.0 kg with tolerance 0.2 kg allows 0.8 kg to 1.2 kg.
+                                                                  </p>
                                                                 </div>
                                                               </div>
                                                             </div>
@@ -2775,6 +2812,8 @@ const AddProduct = () => {
 };
 
 export default AddProduct;
+
+
 
 
 

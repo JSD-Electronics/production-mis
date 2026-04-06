@@ -688,12 +688,14 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             ? optimized.history
             : [];
         setDeviceHistory(history);
+        setNotFoundError("");
         return history;
       }
 
       const result = await getDeviceTestByDeviceId(id);
       if (result && result.status == 200) {
         setDeviceHistory(result.data);
+        setNotFoundError("");
         return result.data;
       }
 
@@ -706,6 +708,53 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       setIsDeviceHistoryLoading(false);
     }
   };
+
+  const resolveSearchQuery = React.useCallback(async (rawQuery: string) => {
+    const query = String(rawQuery || "").trim();
+    if (!query) {
+      return { ok: false };
+    }
+
+    if (!(taskPlanId && currentUserId)) {
+      setNotFoundError("No results found for: " + query);
+      setSearchedSerialNo(query);
+      return { ok: false };
+    }
+
+    setIsDeviceHistoryLoading(true);
+    try {
+      const optimized = await getOperatorTaskDevice(taskPlanId, currentUserId, { scanInput: query });
+      const history = Array.isArray(optimized?.data?.history)
+        ? optimized.data.history
+        : Array.isArray(optimized?.history)
+          ? optimized.history
+          : [];
+      const resolvedDevice = optimized?.data?.device || optimized?.device || null;
+      const resolvedSerial = String(
+        resolvedDevice?.serialNo || resolvedDevice?.serial_no || query,
+      ).trim();
+
+      setDeviceHistory(history);
+      setSearchResult(resolvedSerial);
+      setSearchQuery(resolvedSerial);
+      setNotFoundError("");
+      setSearchedSerialNo(resolvedSerial);
+      return { ok: true, device: resolvedDevice, history };
+    } catch (error: any) {
+      setDeviceHistory([]);
+      const message =
+        error?.message ||
+        error?.error ||
+        error?.response?.data?.message ||
+        "No matching device found for the scanned input";
+      setNotFoundError(message);
+      setSearchedSerialNo(query);
+      toast.error(message);
+      return { ok: false, error: message };
+    } finally {
+      setIsDeviceHistoryLoading(false);
+    }
+  }, [currentUserId, taskPlanId]);
 
   const getDeviceTestEntry = async () => {
     try {
@@ -1536,11 +1585,24 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       if (raw.includes("ccid")) return "ccid";
       return raw;
     };
+    const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
+    const preferConfiguredCombined = (arr: string[]) => {
+      const normalized = uniq(arr.map((value) => normalizeVerifyType(value)).filter(Boolean));
+      const combined = normalized.filter((entry) => entry.startsWith("combined:"));
+      if (combined.length === 0) return normalized;
+
+      const preferredCombined = [...combined].sort((left, right) => {
+        const leftCount = left.slice("combined:".length).split(",").filter(Boolean).length;
+        const rightCount = right.slice("combined:".length).split(",").filter(Boolean).length;
+        return rightCount - leftCount;
+      })[0];
+
+      return preferredCombined ? [preferredCombined] : normalized;
+    };
 
     try {
-      const uniq = (arr: string[]) => Array.from(new Set(arr.filter(Boolean)));
       let derived = Array.isArray(types)
-        ? uniq(types.map((value) => normalizeVerifyType(value)).filter(Boolean))
+        ? preferConfiguredCombined(types)
         : [];
 
       if (derived.length === 0) {
@@ -1578,10 +1640,10 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           !!(active?.serialNo || active?.serial_no || active?.deviceInfo?.serialNo) ||
           hasInCF("serial");
         const ordered: string[] = [];
-        if (hasImei) ordered.push("imei");
         if (hasCcid) ordered.push("ccid");
         if (hasSerial) ordered.push("serial");
-        derived = uniq(ordered.map((value) => normalizeVerifyType(value)).filter(Boolean));
+        if (hasImei) ordered.push("imei");
+        derived = preferConfiguredCombined(ordered);
       }
 
       setExpectedScanTypes(derived);
@@ -1590,7 +1652,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     } catch {
       setExpectedScanTypes(
         Array.isArray(types)
-          ? types.map((value) => normalizeVerifyType(value)).filter(Boolean)
+          ? preferConfiguredCombined(types)
           : [],
       );
       setCurrentScanStep(0);
@@ -2303,6 +2365,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             setSearchQuery={setSearchQuery}
             handleNoResults={handleNoResults}
             getDeviceById={getDeviceById}
+            resolveSearchQuery={resolveSearchQuery}
             setSearchResult={setSearchResult}
             setIsPassNGButtonShow={setIsPassNGButtonShow}
             setIsStickerPrinted={setIsStickerPrinted}
@@ -2383,6 +2446,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
 };
 
 export default ViewTaskDetailsComponent;
+
 
 
 
