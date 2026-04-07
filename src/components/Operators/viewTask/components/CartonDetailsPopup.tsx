@@ -23,6 +23,7 @@ import {
   fetchOpenCartonsByProcessID,
   closeLooseCarton,
 } from "@/lib/api";
+import { resolveEffectivePackagingConfig } from "../utils/packagingConfig";
 
 interface Carton {
   cartonSerial: string;
@@ -99,6 +100,22 @@ const CartonDetailsPopup = ({
     cartonWeight: "",
     quantity: "",
   });
+  const basePackagingConfig = React.useMemo(() => {
+    return resolveEffectivePackagingConfig({
+      assignUserStage,
+      processData,
+      product,
+    });
+  }, [assignUserStage, processData, product]);
+
+  const getEffectivePackagingConfig = React.useCallback((carton?: Carton | null) => {
+    return resolveEffectivePackagingConfig({
+      cartonPackagingData: carton?.packagingData,
+      assignUserStage,
+      processData,
+      product,
+    });
+  }, [assignUserStage, processData, product]);
 
   const maskCartonSerialForDisplay = React.useCallback((value?: string | null) => {
     const serial = String(value || "").trim();
@@ -209,14 +226,13 @@ const CartonDetailsPopup = ({
       toast.error("Only partial cartons can be closed as loose cartons.");
       return;
     }
-    const packagingData = assignUserStage?.subSteps?.find((s: any) => s.isPackagingStatus)?.packagingData || {};
     setLooseCartonTarget(carton);
     setLooseCartonStep("choice");
     setLooseCartonForm({
-      cartonWidth: String(carton?.cartonSize?.width || packagingData?.cartonWidth || ""),
-      cartonHeight: String(carton?.cartonSize?.height || packagingData?.cartonHeight || ""),
-      cartonDepth: String(carton?.cartonSize?.depth || packagingData?.cartonDepth || ""),
-      cartonWeight: String(carton?.weightCarton || packagingData?.cartonWeight || ""),
+      cartonWidth: String(carton?.cartonSize?.width || basePackagingConfig?.cartonWidth || ""),
+      cartonHeight: String(carton?.cartonSize?.height || basePackagingConfig?.cartonHeight || ""),
+      cartonDepth: String(carton?.cartonSize?.depth || basePackagingConfig?.cartonDepth || ""),
+      cartonWeight: String(carton?.weightCarton || basePackagingConfig?.cartonWeight || ""),
       quantity: String(carton?.devices?.length || 0),
     });
   };
@@ -249,6 +265,7 @@ const CartonDetailsPopup = ({
     const cartonHeight = Number(looseCartonForm.cartonHeight);
     const cartonDepth = Number(looseCartonForm.cartonDepth);
     const cartonWeight = Number(looseCartonForm.cartonWeight);
+    const cartonWeightTolerance = Number(basePackagingConfig?.cartonWeightTolerance ?? 0);
 
     if (!Number.isInteger(quantity) || quantity <= 0) {
       toast.error("Quantity must be a positive integer.");
@@ -278,11 +295,13 @@ const CartonDetailsPopup = ({
         cartonHeight,
         cartonDepth,
         cartonWeight,
+        cartonWeightTolerance,
         packagingData: {
           cartonWidth,
           cartonHeight,
           cartonDepth,
           cartonWeight,
+          cartonWeightTolerance,
           maxCapacity: quantity,
         },
       });
@@ -333,15 +352,13 @@ const CartonDetailsPopup = ({
     };
   };
 
-  const getExpectedCartonWeight = () => {
-    const packagingSubStep = assignUserStage?.subSteps?.find((s: any) => s.isPackagingStatus);
-    const packagingData = packagingSubStep?.packagingData || {};
+  const getExpectedCartonWeight = (carton?: Carton) => {
+    const packagingData = getEffectivePackagingConfig(carton);
     return normalizeWeightValue(packagingData.cartonWeight);
   };
 
-  const getConfiguredCartonTolerance = () => {
-    const packagingSubStep = assignUserStage?.subSteps?.find((s: any) => s.isPackagingStatus);
-    const packagingData = packagingSubStep?.packagingData || {};
+  const getConfiguredCartonTolerance = (carton?: Carton) => {
+    const packagingData = getEffectivePackagingConfig(carton);
     const sanitizedTolerance = String(packagingData?.cartonWeightTolerance ?? "")
       .trim()
       .replace(",", ".")
@@ -379,9 +396,8 @@ const CartonDetailsPopup = ({
     return Number(value).toFixed(3).replace(/\.?0+$/, "");
   };
 
-  const getConfiguredCartonCapacity = () => {
-    const packagingSubStep = assignUserStage?.subSteps?.find((s: any) => s.isPackagingStatus);
-    const packagingData = packagingSubStep?.packagingData || {};
+  const getConfiguredCartonCapacity = (carton?: Carton) => {
+    const packagingData = getEffectivePackagingConfig(carton);
     const configuredCapacity = Number(
       packagingData?.maxCapacity ??
       packagingData?.cartonCapacity ??
@@ -395,7 +411,7 @@ const CartonDetailsPopup = ({
   const requiresConfiguredWeightValidation = (carton: Carton) => {
     const status = String(carton?.status || "").toLowerCase();
     const looseCartonAction = String(carton?.looseCartonAction || "").toLowerCase();
-    const configuredCapacity = getConfiguredCartonCapacity();
+    const configuredCapacity = getConfiguredCartonCapacity(carton);
     const cartonCapacity = Number(
       carton?.packagingData?.maxCapacity ??
       carton?.maxCapacity ??
@@ -422,8 +438,8 @@ const CartonDetailsPopup = ({
   const getWeightMatchResult = (carton: Carton, weightValue?: string | number) => {
     const normalizedWeight = normalizeWeightValue(weightValue);
     const shouldMatchConfiguredWeight = requiresConfiguredWeightValidation(carton);
-    const expectedWeight = getExpectedCartonWeight();
-    const expectedTolerance = getConfiguredCartonTolerance();
+    const expectedWeight = getExpectedCartonWeight(carton);
+    const expectedTolerance = getConfiguredCartonTolerance(carton);
     if (!normalizedWeight) {
       return {
         matches: false,
@@ -493,8 +509,8 @@ const CartonDetailsPopup = ({
     if (!requiresConfiguredWeightValidation(carton)) {
       return "Must not exceed configured carton weight";
     }
-    const expectedWeightNumeric = Number(getExpectedCartonWeight()?.numeric || 0);
-    const toleranceNumeric = Number(getConfiguredCartonTolerance()?.numeric || 0);
+    const expectedWeightNumeric = Number(getExpectedCartonWeight(carton)?.numeric || 0);
+    const toleranceNumeric = Number(getConfiguredCartonTolerance(carton)?.numeric || 0);
     if (expectedWeightNumeric > 0 && toleranceNumeric > 0) {
       const min = Math.max(expectedWeightNumeric - toleranceNumeric, 0);
       const max = expectedWeightNumeric + toleranceNumeric;
@@ -552,8 +568,7 @@ const CartonDetailsPopup = ({
       return;
     }
 
-    const packagingSubStep = assignUserStage?.subSteps?.find((s: any) => s.isPackagingStatus);
-    const packagingData = packagingSubStep?.packagingData || {};
+    const packagingData = getEffectivePackagingConfig(carton);
     const recordedWeight = validation.recordedWeight;
     const weight = validation.weight;
 

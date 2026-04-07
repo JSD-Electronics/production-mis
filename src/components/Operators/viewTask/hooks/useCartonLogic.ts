@@ -180,6 +180,7 @@ export const useCartonLogic = ({
           cartonHeight: packagingData.packagingData.cartonHeight,
           cartonDepth: packagingData.packagingData.cartonDepth,
           cartonWeight: packagingData.packagingData.cartonWeight,
+          cartonWeightTolerance: packagingData.packagingData.cartonWeightTolerance,
           maxCapacity: packagingData.packagingData.maxCapacity,
         },
       });

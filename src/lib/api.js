@@ -1667,7 +1667,9 @@ export const fetchCartonByProcessID = async (processID) => {
     let response = await api.get(`/cartons/${processID}/partial`);
     return response.data;
   } catch (error) {
-
+    const status = Number(error?.response?.status || 0);
+    if (status === 404) return [];
+    throw error?.response?.data || error;
   }
 };
 export const fetchOpenCartonsByProcessID = async (processID) => {
@@ -1684,7 +1686,9 @@ export const fetchCartons = async (processID) => {
 
     return response.data;
   } catch (error) {
-
+    const status = Number(error?.response?.status || 0);
+    if (status === 404) return { cartonDetails: [], cartonSerials: [] };
+    throw error?.response?.data || error;
   }
 };
 export const shiftToPDI = async (cartons) => {
@@ -1742,7 +1746,9 @@ export const getPDICartonByProcessId = async (processId) => {
     let result = await api.get(`/cartonsProcessId/${processId}`);
     return result.data;
   } catch (error) {
-    console.error("Error Fetching Carton Shift: ", error.message);
+    const status = Number(error?.response?.status || 0);
+    if (status === 404) return { cartonDetails: [], cartonSerials: [] };
+    throw error?.response?.data || error;
   }
 };
 export const getCartonsIntoStore = async (processId) => {
@@ -1750,7 +1756,9 @@ export const getCartonsIntoStore = async (processId) => {
     let result = await api.get(`/cartonsIntoStore/${processId}`);
     return result.data;
   } catch (error) {
-    console.error("Error Fetching Carton Shift: ", error.message);
+    const status = Number(error?.response?.status || 0);
+    if (status === 404) return { cartonDetails: [], cartonSerials: [] };
+    throw error?.response?.data || error;
   }
 };
 
