@@ -1699,13 +1699,35 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       if (raw.includes("ccid")) return "ccid";
       return raw;
     };
-    const normalizeCombinedValue = (value: any) =>
+    const splitCombinedTokens = (value: any): string[] =>
       String(value || "")
-        .split(",")
-        .map((entry) => String(entry || "").trim())
-        .filter(Boolean)
-        .join(",")
-        .toLowerCase();
+        .split(/[\n\r,;|]+/)
+        .map((entry) =>
+          String(entry || "")
+            .trim()
+            .replace(/^["'`]+|["'`]+$/g, ""),
+        )
+        .filter(Boolean);
+    const normalizeCombinedValue = (value: any) =>
+      splitCombinedTokens(value)
+        .map((entry) => entry.toLowerCase())
+        .join(",");
+    const normalizeCombinedToken = (value: any) =>
+      String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+    const matchCombinedTokenSet = (expectedValues: string[], scannedValues: string[]) => {
+      const expected = expectedValues.map(normalizeCombinedToken).filter(Boolean);
+      const scannedPool = scannedValues.map(normalizeCombinedToken).filter(Boolean);
+      if (expected.length === 0 || scannedPool.length === 0) return false;
+      for (const token of expected) {
+        const idx = scannedPool.indexOf(token);
+        if (idx === -1) return false;
+        scannedPool.splice(idx, 1);
+      }
+      return true;
+    };
 
     const candidates: string[] = [];
     candidates.push(lc(input));
@@ -1829,19 +1851,24 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
 
     const matchesCombinedScan = (d: any): boolean => {
       if (!d || combinedVerifyFields.length === 0) return false;
-      const expectedCombined = normalizeCombinedValue(
-        resolveStickerValue(
-          {
-            type: "qrcode",
-            sourceFields: combinedVerifyFields.map((slug) => ({ slug, name: slug })),
-          },
-          d,
-        ),
+      const expectedCombinedRaw = resolveStickerValue(
+        {
+          type: "qrcode",
+          sourceFields: combinedVerifyFields.map((slug) => ({ slug, name: slug })),
+        },
+        d,
       );
+      const expectedCombined = normalizeCombinedValue(expectedCombinedRaw);
       if (!expectedCombined) return false;
 
       const directCombined = normalizeCombinedValue(input);
       if (directCombined && directCombined === expectedCombined) {
+        return true;
+      }
+
+      const expectedTokens = splitCombinedTokens(expectedCombinedRaw);
+      const scannedTokens = splitCombinedTokens(input);
+      if (matchCombinedTokenSet(expectedTokens, scannedTokens)) {
         return true;
       }
 
@@ -1850,7 +1877,10 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         .filter((value) => String(value || "").trim() !== "");
 
       if (parsedCombined.length === combinedVerifyFields.length) {
-        return normalizeCombinedValue(parsedCombined.join(",")) === expectedCombined;
+        if (normalizeCombinedValue(parsedCombined.join(",")) === expectedCombined) {
+          return true;
+        }
+        return matchCombinedTokenSet(expectedTokens, parsedCombined);
       }
 
       return false;
