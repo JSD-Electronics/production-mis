@@ -914,6 +914,7 @@ export default function DeviceTestComponent({
   >({});
   const stepStartTimeRef = React.useRef<number>(Date.now());
   const [stepTimeLeft, setStepTimeLeft] = useState<number | null>(null);
+  const [retryCycle, setRetryCycle] = useState(0);
   const [isJigConnected, setIsJigConnected] = useState(false);
   const [jigRuntimeStatus, setJigRuntimeStatus] = useState<{
     phase:
@@ -1848,6 +1849,7 @@ export default function DeviceTestComponent({
     if (currentSerial && currentSerial !== activeSessionSerial) {
       setActiveSessionSerial(currentSerial);
       setCurrentJigStepIndex(0);
+      setRetryCycle(0);
       setJigResults({});
       setJigDecision(null);
       setIsJigConnected(false);
@@ -1862,6 +1864,7 @@ export default function DeviceTestComponent({
     else if (!currentSerial && activeSessionSerial) {
       setActiveSessionSerial("");
       setCurrentJigStepIndex(0);
+      setRetryCycle(0);
       setJigResults({});
       setJigDecision(null);
       setStepTimeLeft(null);
@@ -1899,7 +1902,7 @@ export default function DeviceTestComponent({
     const canStartTimer = isJigStep
       ? ((isJigConnected && !isRuntimeBlocking) || allowsPassiveTimeout)
       : !!activeSessionSerial;
-    const currentStepKey = `${activeSessionSerial}-${currentJigStepIndex}`;
+    const currentStepKey = `${activeSessionSerial}-${currentJigStepIndex}-${retryCycle}`;
 
     // Condition 1: If we have a finalized decision or no timeout configured, ensure timer is null
     if (jigDecision || isdevicePassed || !currentSubStep?.ngTimeout || currentSubStep.ngTimeout <= 0) {
@@ -1945,6 +1948,7 @@ export default function DeviceTestComponent({
     isdevicePassed,
     isJigConnected,
     jigRuntimeStatus.phase,
+    retryCycle,
   ]);
   const handlePrint = () => {
     setIsCartonBarCodePrinted(true);
@@ -2562,19 +2566,32 @@ export default function DeviceTestComponent({
     setJigDecision(null);
     setNgReason(null);
     setNgDescription("");
-    // Keep current jig connection state on retry.
-    // Forcing false here can block timer restart when the jig stays connected.
-    setIsJigConnected(Boolean(jigRuntimeStatus?.connected));
+    if (setIsDevicePassed) setIsDevicePassed(false);
+    // Preserve live connection when available so NG timeout can resume immediately.
+    const wasConnected = Boolean(jigRuntimeStatus?.connected || isJigConnected);
+    setIsJigConnected(wasConnected);
+    setJigRuntimeStatus({
+      phase: wasConnected ? "connected" : "idle",
+      message: wasConnected ? "Retrying step: connected" : "Retrying step",
+      recoverableWarnings: 0,
+      connected: wasConnected,
+      command: "",
+    });
     setStepTimeLeft(null);
     pendingJigErrorRef.current = null;
     setPendingJigErrorState(null);
     setGeneratedCommand("");
+    setManualFieldValues({});
+    setManualErrors({});
+    setHasManualValues(false);
+    setIsManualValuesModalOpen(false);
     stepStartTimeRef.current = Date.now();
     totalProcessStartTimeRef.current = Date.now();
     // Important: retrying the same serial+step keeps the same timeout key.
     // Clear timer keys so NG timeout can start again from full duration.
     timerStartedRef.current = null;
     timerDecisionTriggeredRef.current = null;
+    setRetryCycle((prev) => prev + 1);
 
     // Close modal
   };
@@ -4520,7 +4537,7 @@ export default function DeviceTestComponent({
                                             </div>
                                           </div>
                                           <JigSection
-                                            key={`jig-${searchResult?.serialNo || searchResult}`}
+                                            key={`jig-${searchResult?.serialNo || searchResult}-${retryCycle}`}
                                             subStep={currentSubStep}
                                             isLastStep={
                                               currentJigStepIndex ===
