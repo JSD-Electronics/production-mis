@@ -20,6 +20,7 @@ import {
   updateProcessStatus,
   addProcessOvertime,
   removeProcessOvertime,
+  getDispatchSummaryByProcesses,
 } from "@/lib/api";
 import {
   FiClipboard,
@@ -437,6 +438,15 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   const [jigCategories, setJigCategories] = useState([]);
   const [packagingData, setPackagingData] = useState([]);
   const [inventoryData, setInventoryData] = useState({});
+  const createEmptyDispatchSummary = () => ({
+    cartonsInStore: 0,
+    devicesInStore: 0,
+    cartons: { ready: 0, reserved: 0, dispatched: 0 },
+    devices: { ready: 0, reserved: 0, dispatched: 0 },
+  });
+  const [dispatchSummary, setDispatchSummary] = useState<any>(
+    createEmptyDispatchSummary(),
+  );
   const [totalConsumedKits, setTotalConsumedkits] = useState(0);
   const [overAllUPHA, setOverallUPHA] = useState([]);
   const [completedKitsUPH, setCompletedKitsUPH] = useState([]);
@@ -646,6 +656,74 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     const avg = parseInt(lastStageOverallSummary) || 0;
     return { required, issued, consumed, pending, wip, avg };
   }, [selectedProcess, lastStageOverallSummary]);
+  const dispatchStats = React.useMemo(() => {
+    const dispatchedDevices = Number(dispatchSummary?.devices?.dispatched || 0);
+    const dispatchedCartons = Number(dispatchSummary?.cartons?.dispatched || 0);
+    const pendingCartons = Math.max(
+      Number(dispatchSummary?.cartons?.ready || 0) +
+        Number(dispatchSummary?.cartons?.reserved || 0),
+      0,
+    );
+    const quantity = Number(selectedProcess?.quantity || 0);
+    const pendingDevices =
+      quantity > 0
+        ? Math.max(quantity - dispatchedDevices, 0)
+        : Math.max(
+            Number(dispatchSummary?.devices?.ready || 0) +
+              Number(dispatchSummary?.devices?.reserved || 0),
+            0,
+          );
+    return {
+      dispatchedDevices,
+      dispatchedCartons,
+      pendingDevices,
+      pendingCartons,
+    };
+  }, [dispatchSummary, selectedProcess?.quantity]);
+  const loadDispatchSummary = async (processId: any) => {
+    if (!processId) {
+      setDispatchSummary(createEmptyDispatchSummary());
+      return;
+    }
+
+    try {
+      const result = await getDispatchSummaryByProcesses([processId]);
+      const summaryRows = Array.isArray(result)
+        ? result
+        : Array.isArray(result?.data)
+          ? result.data
+          : Array.isArray(result?.summaries)
+            ? result.summaries
+            : [];
+
+      const matched = summaryRows.find(
+        (item: any) => String(item?.processId || "") === String(processId),
+      );
+
+      if (!matched) {
+        setDispatchSummary(createEmptyDispatchSummary());
+        return;
+      }
+
+      setDispatchSummary({
+        cartonsInStore: Number(matched?.cartonsInStore || 0),
+        devicesInStore: Number(matched?.devicesInStore || 0),
+        cartons: {
+          ready: Number(matched?.cartons?.ready || 0),
+          reserved: Number(matched?.cartons?.reserved || 0),
+          dispatched: Number(matched?.cartons?.dispatched || 0),
+        },
+        devices: {
+          ready: Number(matched?.devices?.ready || 0),
+          reserved: Number(matched?.devices?.reserved || 0),
+          dispatched: Number(matched?.devices?.dispatched || 0),
+        },
+      });
+    } catch (error) {
+      console.error("Failed to load dispatch summary", error);
+      setDispatchSummary(createEmptyDispatchSummary());
+    }
+  };
   const hasCurrentPlanSeatAllocations = React.useMemo(() => {
     return Object.keys(normalizedAssignedStageMap || {}).some((seatKey) => {
       return Boolean(getSeatStageEntry(normalizedAssignedStageMap, seatKey)?.reserved === false);
@@ -980,6 +1058,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       }
 
       setSelectedProcess(singleProcess);
+      void loadDispatchSummary(result?.selectedProcess || singleProcess?._id);
       const room = roomPlan.find(
         (value) => value?._id === result?.selectedRoom,
       );
@@ -1283,7 +1362,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         }
       })();
     } catch (error) {
-
+      setDispatchSummary(createEmptyDispatchSummary());
       setLoading(false);
       return {};
     }
@@ -2483,6 +2562,38 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                               <FiInfo className="inline text-blue-400" />{" "}
                               <strong>Description:</strong>{" "}
                               {selectedProcess?.descripition}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="dark:bg-gray-800 rounded-lg border-l-4 border-violet-500 bg-white p-4 shadow-md">
+                          <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-violet-600 dark:text-violet-400">
+                            <FiArchive /> Dispatch Summary
+                          </h3>
+                          <div className="text-gray-700 dark:text-gray-300 grid gap-3 text-sm sm:grid-cols-3">
+                            <div>
+                              <strong>Cartons In Store:</strong>{" "}
+                              {Number(dispatchSummary?.cartonsInStore || 0)}
+                            </div>
+                            <div>
+                              <strong>Devices In Store:</strong>{" "}
+                              {Number(dispatchSummary?.devicesInStore || 0)}
+                            </div>
+                            <div>
+                              <strong>Dispatched Cartons:</strong>{" "}
+                              {dispatchStats.dispatchedCartons}
+                            </div>
+                            <div>
+                              <strong>Dispatched Devices:</strong>{" "}
+                              {dispatchStats.dispatchedDevices}
+                            </div>
+                            <div>
+                              <strong>Pending Cartons:</strong>{" "}
+                              {dispatchStats.pendingCartons}
+                            </div>
+                            <div>
+                              <strong>Pending Devices:</strong>{" "}
+                              {dispatchStats.pendingDevices}
                             </div>
                           </div>
                         </div>

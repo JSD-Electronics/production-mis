@@ -2562,12 +2562,19 @@ export default function DeviceTestComponent({
     setJigDecision(null);
     setNgReason(null);
     setNgDescription("");
-    setIsJigConnected(false);
+    // Keep current jig connection state on retry.
+    // Forcing false here can block timer restart when the jig stays connected.
+    setIsJigConnected(Boolean(jigRuntimeStatus?.connected));
     setStepTimeLeft(null);
     pendingJigErrorRef.current = null;
     setPendingJigErrorState(null);
     setGeneratedCommand("");
     stepStartTimeRef.current = Date.now();
+    totalProcessStartTimeRef.current = Date.now();
+    // Important: retrying the same serial+step keeps the same timeout key.
+    // Clear timer keys so NG timeout can start again from full duration.
+    timerStartedRef.current = null;
+    timerDecisionTriggeredRef.current = null;
 
     // Close modal
   };

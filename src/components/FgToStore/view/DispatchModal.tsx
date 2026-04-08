@@ -4,13 +4,14 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   createDispatchInvoice,
+  updateDispatchInvoice,
   confirmDispatchInvoice,
   cancelDispatchInvoice,
   generateDispatchGatePass,
   getDispatchInvoiceById,
 } from "@/lib/api";
 import { toast } from "react-toastify";
-import { CheckSquare, FileText, Printer, ScanLine, Trash2, Truck, X } from "lucide-react";
+import { CheckSquare, ChevronLeft, ChevronRight, FileText, Printer, Save, ScanLine, Trash2, Truck, X } from "lucide-react";
 
 type Props = {
   isOpen: boolean;
@@ -21,6 +22,10 @@ type Props = {
   onRefresh: () => Promise<void>;
 };
 
+type StepId = 1 | 2 | 3;
+
+const normalizeStatus = (value: any) => String(value || "").trim().toUpperCase();
+
 const openHtmlForPrint = (html: string, title = "Gate Pass") => {
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
@@ -30,8 +35,16 @@ const openHtmlForPrint = (html: string, title = "Gate Pass") => {
   printWindow.document.open();
   printWindow.document.write(html);
   printWindow.document.close();
-  printWindow.document.title = title;
-  setTimeout(() => printWindow.print(), 400);
+  printWindow.document.title = title || "Gate Pass";
+  const triggerPrint = () => {
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 150);
+  };
+  if (printWindow.document.readyState === "complete") {
+    triggerPrint();
+  } else {
+    printWindow.onload = triggerPrint;
+  }
 };
 
 const fieldClass =
@@ -42,25 +55,25 @@ const sectionTitleClass =
 
 const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClose, onRefresh }: Props) => {
   const leftScrollRef = useRef<HTMLDivElement | null>(null);
+  const [currentStep, setCurrentStep] = useState<StepId>(1);
   const reservedInvoiceCartons = useMemo(
     () => new Set((initialInvoice?.selectedCartons || []).map((carton: any) => String(carton?.cartonSerial || ""))),
     [initialInvoice],
   );
   const readyCartons = useMemo(
     () =>
-      cartons.filter(
-        (carton) =>
-          String(carton?.cartonStatus || carton?.status || "") === "STOCKED" &&
-          (!String(carton?.dispatchStatus || "").trim() ||
-            String(carton?.dispatchStatus || "") === "READY"),
-      ),
+      cartons.filter((carton) => {
+        const storeStatus = normalizeStatus(carton?.cartonStatus || carton?.status);
+        const dispatchStatus = normalizeStatus(carton?.dispatchStatus);
+        return storeStatus === "STOCKED" && (!dispatchStatus || dispatchStatus === "READY");
+      }),
     [cartons],
   );
   const draftCartons = useMemo(
     () =>
       cartons.filter(
         (carton) =>
-          String(carton?.cartonStatus || carton?.status || "") === "STOCKED" &&
+          normalizeStatus(carton?.cartonStatus || carton?.status) === "STOCKED" &&
           reservedInvoiceCartons.has(String(carton?.cartonSerial || "")),
       ),
     [cartons, reservedInvoiceCartons],
@@ -78,6 +91,7 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
   const [invoice, setInvoice] = useState<any | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [scanCartonSerial, setScanCartonSerial] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     invoiceNumber: "",
     customerName: "",
@@ -97,11 +111,18 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
     includeImeiList: true,
   });
 
+  const stepDefs: Array<{ id: StepId; title: string; subtitle: string }> = [
+    { id: 1, title: "Select Cartons", subtitle: "Pick cartons from stock" },
+    { id: 2, title: "Invoice & Logistics", subtitle: "Fill required details" },
+    { id: 3, title: "Review & Action", subtitle: "Create, save, confirm, print" },
+  ];
+
   useEffect(() => {
     if (!isOpen) return;
     if (initialInvoice?._id) {
       setInvoice(initialInvoice);
       setScanCartonSerial("");
+      setErrors({});
       setSelectedCartons(
         (initialInvoice.selectedCartons || [])
           .map((carton: any) => String(carton?.cartonSerial || ""))
@@ -129,8 +150,11 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
         remarks: initialInvoice.remarks || (process?.name ? `Dispatch from ${process.name}` : ""),
         includeImeiList: true,
       });
+      const normalizedStatus = String(initialInvoice?.status || "").trim().toUpperCase();
+      setCurrentStep(normalizedStatus === "CONFIRMED" ? 3 : 1);
     } else {
       setScanCartonSerial("");
+      setErrors({});
       setSelectedCartons([]);
       setInvoice(null);
       setForm({
@@ -151,11 +175,12 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
         remarks: process?.name ? `Dispatch from ${process.name}` : "",
         includeImeiList: true,
       });
+      setCurrentStep(1);
     }
     requestAnimationFrame(() => {
       if (leftScrollRef.current) leftScrollRef.current.scrollTo({ top: 0, behavior: "auto" });
     });
-  }, [isOpen, process?.name, process?._id, readyCartons, initialInvoice]);
+  }, [isOpen, process?.name, process?._id, initialInvoice]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -166,22 +191,84 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
     };
   }, [isOpen]);
 
-  const selectedCartonDetails = availableCartons.filter((carton) =>
-    selectedCartons.includes(carton.cartonSerial),
+  const selectableCartonPool = useMemo(() => {
+    const seeded = [...availableCartons, ...(invoice?.selectedCartons || [])];
+    const deduped = new Map<string, any>();
+    seeded.forEach((carton: any) => {
+      const serial = String(carton?.cartonSerial || "").trim();
+      if (serial) deduped.set(serial, carton);
+    });
+    return Array.from(deduped.values());
+  }, [availableCartons, invoice?.selectedCartons]);
+
+  const selectedCartonDetails = selectableCartonPool.filter((carton) =>
+    selectedCartons.includes(String(carton?.cartonSerial || "")),
   );
   const invoiceStatus = String(invoice?.status || "").trim().toUpperCase();
+  const isDraftInvoice = invoiceStatus === "DRAFT";
+  const canEditDraft = !invoice || isDraftInvoice;
   const totalQuantity = selectedCartonDetails.reduce(
     (sum, carton) => sum + Number(carton.devices?.length || 0),
     0,
   );
 
+  const setError = (key: string, value = "") => {
+    setErrors((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const validateStepOne = () => {
+    if (selectedCartons.length > 0) {
+      setError("cartons");
+      return true;
+    }
+    setError("cartons", "Scan at least one stocked carton.");
+    return false;
+  };
+
+  const validateStepTwo = () => {
+    let isValid = true;
+    if (!form.invoiceNumber.trim()) {
+      setError("invoiceNumber", "Invoice number is required.");
+      isValid = false;
+    } else {
+      setError("invoiceNumber");
+    }
+    if (!form.customerName.trim()) {
+      setError("customerName", "Company name is required.");
+      isValid = false;
+    } else {
+      setError("customerName");
+    }
+    if (!form.dispatchDate) {
+      setError("dispatchDate", "Dispatch date is required.");
+      isValid = false;
+    } else {
+      setError("dispatchDate");
+    }
+    if (!form.invoiceDate) {
+      setError("invoiceDate", "Invoice date is required.");
+      isValid = false;
+    } else {
+      setError("invoiceDate");
+    }
+    return isValid;
+  };
+
+  const ensureFormReadyForSubmit = () => {
+    const stepOneOk = validateStepOne();
+    const stepTwoOk = validateStepTwo();
+    if (!stepOneOk) setCurrentStep(1);
+    else if (!stepTwoOk) setCurrentStep(2);
+    return stepOneOk && stepTwoOk;
+  };
+
   const removeSelectedCarton = (cartonSerial: string) => {
-    if (invoice) return;
+    if (!canEditDraft) return;
     setSelectedCartons((prev) => prev.filter((value) => value !== cartonSerial));
   };
 
   const handleScanCarton = () => {
-    if (invoice) return;
+    if (!canEditDraft) return;
     const scanned = scanCartonSerial.trim();
     if (!scanned) {
       toast.error("Enter or scan a carton serial");
@@ -200,52 +287,111 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
     setSelectedCartons((prev) =>
       prev.includes(matchedCarton.cartonSerial) ? prev : [...prev, matchedCarton.cartonSerial],
     );
+    if (errors.cartons) setError("cartons");
     setScanCartonSerial("");
   };
 
   const handleCreateDraft = async () => {
-    if (!form.invoiceNumber.trim() || !form.customerName.trim()) {
-      toast.error("Invoice number and company name are required");
-      return;
-    }
-    if (selectedCartons.length === 0) {
-      toast.error("Select at least one stocked carton");
+    if (!ensureFormReadyForSubmit()) {
+      toast.error("Please complete required fields before creating draft.");
       return;
     }
 
+    const payload = {
+      invoiceNumber: form.invoiceNumber.trim(),
+      customerName: form.customerName.trim(),
+      contactPerson: form.contactPerson.trim(),
+      customerEmail: form.customerEmail.trim(),
+      customerPhone: form.customerPhone.trim(),
+      ewayBillNo: form.ewayBillNo.trim(),
+      logisticsDetails: {
+        transporterName: form.logisticsDetails.transporterName.trim(),
+        transportMode: form.logisticsDetails.transportMode.trim(),
+        vehicleNumber: form.logisticsDetails.vehicleNumber.trim().toUpperCase(),
+        referenceNumber: form.logisticsDetails.referenceNumber.trim(),
+      },
+      dispatchDate: form.dispatchDate,
+      invoiceDate: form.invoiceDate,
+      cartonSerials: selectedCartons,
+      remarks: form.remarks.trim(),
+      pricingSummary: {
+        currency: "INR",
+        subtotal: 0,
+        taxAmount: 0,
+        discountAmount: 0,
+        otherCharges: 0,
+        grandTotal: 0,
+      },
+    };
+
     setSubmitting(true);
     try {
-      const result = await createDispatchInvoice({
-        invoiceNumber: form.invoiceNumber.trim(),
-        customerName: form.customerName.trim(),
-        contactPerson: form.contactPerson.trim(),
-        customerEmail: form.customerEmail.trim(),
-        customerPhone: form.customerPhone.trim(),
-        ewayBillNo: form.ewayBillNo.trim(),
-        logisticsDetails: {
-          transporterName: form.logisticsDetails.transporterName.trim(),
-          transportMode: form.logisticsDetails.transportMode.trim(),
-          vehicleNumber: form.logisticsDetails.vehicleNumber.trim(),
-          referenceNumber: form.logisticsDetails.referenceNumber.trim(),
-        },
-        dispatchDate: form.dispatchDate,
-        invoiceDate: form.invoiceDate,
-        cartonSerials: selectedCartons,
-        remarks: form.remarks.trim(),
-        pricingSummary: {
-          currency: "INR",
-          subtotal: 0,
-          taxAmount: 0,
-          discountAmount: 0,
-          otherCharges: 0,
-          grandTotal: 0,
-        },
-      });
-      setInvoice(result?.data || result);
+      const result = await createDispatchInvoice(payload);
+      const nextInvoice = result?.data || result;
+      setInvoice(nextInvoice);
+      setSelectedCartons(
+        (nextInvoice?.selectedCartons || [])
+          .map((carton: any) => String(carton?.cartonSerial || ""))
+          .filter(Boolean),
+      );
       toast.success(result?.message || "Dispatch draft created");
       await onRefresh();
+      setCurrentStep(3);
     } catch (error: any) {
       toast.error(error?.message || "Failed to create dispatch draft");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (!invoice?._id || !isDraftInvoice) return;
+    if (!ensureFormReadyForSubmit()) {
+      toast.error("Please complete required fields before saving draft.");
+      return;
+    }
+
+    const payload = {
+      invoiceNumber: form.invoiceNumber.trim(),
+      customerName: form.customerName.trim(),
+      contactPerson: form.contactPerson.trim(),
+      customerEmail: form.customerEmail.trim(),
+      customerPhone: form.customerPhone.trim(),
+      ewayBillNo: form.ewayBillNo.trim(),
+      logisticsDetails: {
+        transporterName: form.logisticsDetails.transporterName.trim(),
+        transportMode: form.logisticsDetails.transportMode.trim(),
+        vehicleNumber: form.logisticsDetails.vehicleNumber.trim().toUpperCase(),
+        referenceNumber: form.logisticsDetails.referenceNumber.trim(),
+      },
+      dispatchDate: form.dispatchDate,
+      invoiceDate: form.invoiceDate,
+      cartonSerials: selectedCartons,
+      remarks: form.remarks.trim(),
+      pricingSummary: {
+        currency: "INR",
+        subtotal: 0,
+        taxAmount: 0,
+        discountAmount: 0,
+        otherCharges: 0,
+        grandTotal: 0,
+      },
+    };
+
+    setSubmitting(true);
+    try {
+      const result = await updateDispatchInvoice(invoice._id, payload);
+      const nextInvoice = result?.data || result;
+      setInvoice(nextInvoice);
+      setSelectedCartons(
+        (nextInvoice?.selectedCartons || [])
+          .map((carton: any) => String(carton?.cartonSerial || ""))
+          .filter(Boolean),
+      );
+      toast.success(result?.message || "Dispatch draft updated");
+      await onRefresh();
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to update dispatch draft");
     } finally {
       setSubmitting(false);
     }
@@ -267,6 +413,16 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
     }
   };
 
+  const goToNextStep = () => {
+    if (currentStep === 1 && !validateStepOne()) return;
+    if (currentStep === 2 && !validateStepTwo()) return;
+    setCurrentStep((prev) => (prev < 3 ? ((prev + 1) as StepId) : prev));
+  };
+
+  const goToPreviousStep = () => {
+    setCurrentStep((prev) => (prev > 1 ? ((prev - 1) as StepId) : prev));
+  };
+
   const handleConfirm = async () => {
     if (!invoice?._id) return;
     if (invoiceStatus !== "DRAFT") {
@@ -281,6 +437,7 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
       setInvoice(result?.data || result);
       toast.success(result?.message || "Dispatch confirmed successfully");
       await onRefresh();
+      setCurrentStep(3);
     } catch (error: any) {
       const message = String(error?.message || error?.error || "").trim();
       if (
@@ -337,30 +494,57 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
           style={{ zIndex: 2147483647 }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-start justify-between border-b border-slate-200 px-4 py-3 sm:px-5 sm:py-4">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">
-                Dispatch From Stock
-              </p>
-              <h2 className="mt-1 text-[18px] font-black text-slate-900 sm:text-[22px]">
-                {process?.name || "Process"}
-              </h2>
-              <p className="mt-1 text-[12px] text-slate-500">
-                Draft the invoice, reserve cartons, then confirm dispatch.
-              </p>
+          <div className="border-b border-slate-200 px-4 py-3 sm:px-5 sm:py-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">
+                  Dispatch From Stock
+                </p>
+                <h2 className="mt-1 text-[18px] font-black text-slate-900 sm:text-[22px]">
+                  {process?.name || "Process"}
+                </h2>
+                <p className="mt-1 text-[12px] text-slate-500">
+                  Guided flow: select cartons, fill invoice details, then review and submit.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+              {stepDefs.map((step) => {
+                const isActive = currentStep === step.id;
+                const isDone = currentStep > step.id;
+                return (
+                  <button
+                    key={step.id}
+                    type="button"
+                    onClick={() => setCurrentStep(step.id)}
+                    className={`rounded-lg border px-3 py-2 text-left transition ${
+                      isActive
+                        ? "border-sky-300 bg-sky-50"
+                        : isDone
+                          ? "border-emerald-200 bg-emerald-50"
+                          : "border-slate-200 bg-white"
+                    }`}
+                  >
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Step {step.id}</p>
+                    <p className="text-[13px] font-semibold text-slate-800">{step.title}</p>
+                    <p className="text-[11px] text-slate-500">{step.subtitle}</p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_250px] xl:grid-cols-[minmax(0,1fr)_270px]">
             <div ref={leftScrollRef} className="min-h-0 overflow-y-auto bg-slate-50/60 p-3 sm:p-4">
               <div className="space-y-3">
+                {currentStep === 2 && (
                 <section className="rounded-lg border border-slate-200 bg-white p-3.5 shadow-sm">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
@@ -373,36 +557,76 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
                   </div>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <label className="block">
-                      <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Invoice Number</span>
-                      <input type="text" value={form.invoiceNumber} disabled={!!invoice} onChange={(e) => setForm((prev) => ({ ...prev, invoiceNumber: e.target.value }))} className={fieldClass} />
+                      <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Invoice Number *</span>
+                      <input
+                        type="text"
+                        value={form.invoiceNumber}
+                        disabled={!canEditDraft}
+                        onChange={(e) => {
+                          setForm((prev) => ({ ...prev, invoiceNumber: e.target.value }));
+                          if (errors.invoiceNumber) setError("invoiceNumber");
+                        }}
+                        className={fieldClass}
+                      />
+                      {errors.invoiceNumber ? <p className="mt-1 text-[11px] text-rose-600">{errors.invoiceNumber}</p> : null}
                     </label>
                     <label className="block">
                       <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">E-Way Bill No</span>
-                      <input type="text" value={form.ewayBillNo} disabled={!!invoice} onChange={(e) => setForm((prev) => ({ ...prev, ewayBillNo: e.target.value }))} className={fieldClass} />
+                      <input type="text" value={form.ewayBillNo} disabled={!canEditDraft} onChange={(e) => setForm((prev) => ({ ...prev, ewayBillNo: e.target.value }))} className={fieldClass} />
                     </label>
                     <label className="block">
-                      <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Company Name</span>
-                      <input type="text" value={form.customerName} disabled={!!invoice} onChange={(e) => setForm((prev) => ({ ...prev, customerName: e.target.value }))} className={fieldClass} />
+                      <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Company Name *</span>
+                      <input
+                        type="text"
+                        value={form.customerName}
+                        disabled={!canEditDraft}
+                        onChange={(e) => {
+                          setForm((prev) => ({ ...prev, customerName: e.target.value }));
+                          if (errors.customerName) setError("customerName");
+                        }}
+                        className={fieldClass}
+                      />
+                      {errors.customerName ? <p className="mt-1 text-[11px] text-rose-600">{errors.customerName}</p> : null}
                     </label>
                     <label className="block">
                       <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Contact Person</span>
-                      <input type="text" value={form.contactPerson} disabled={!!invoice} onChange={(e) => setForm((prev) => ({ ...prev, contactPerson: e.target.value }))} className={fieldClass} />
+                      <input type="text" value={form.contactPerson} disabled={!canEditDraft} onChange={(e) => setForm((prev) => ({ ...prev, contactPerson: e.target.value }))} className={fieldClass} />
                     </label>
                     <label className="block">
                       <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Email</span>
-                      <input type="email" value={form.customerEmail} disabled={!!invoice} onChange={(e) => setForm((prev) => ({ ...prev, customerEmail: e.target.value }))} className={fieldClass} />
+                      <input type="email" value={form.customerEmail} disabled={!canEditDraft} onChange={(e) => setForm((prev) => ({ ...prev, customerEmail: e.target.value }))} className={fieldClass} />
                     </label>
                     <label className="block">
                       <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Phone Number</span>
-                      <input type="text" value={form.customerPhone} disabled={!!invoice} onChange={(e) => setForm((prev) => ({ ...prev, customerPhone: e.target.value }))} className={fieldClass} />
+                      <input type="text" value={form.customerPhone} disabled={!canEditDraft} onChange={(e) => setForm((prev) => ({ ...prev, customerPhone: e.target.value }))} className={fieldClass} />
                     </label>
                     <label className="block">
-                      <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Dispatch Date</span>
-                      <input type="date" value={form.dispatchDate} disabled={!!invoice} onChange={(e) => setForm((prev) => ({ ...prev, dispatchDate: e.target.value }))} className={fieldClass} />
+                      <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Dispatch Date *</span>
+                      <input
+                        type="date"
+                        value={form.dispatchDate}
+                        disabled={!canEditDraft}
+                        onChange={(e) => {
+                          setForm((prev) => ({ ...prev, dispatchDate: e.target.value }));
+                          if (errors.dispatchDate) setError("dispatchDate");
+                        }}
+                        className={fieldClass}
+                      />
+                      {errors.dispatchDate ? <p className="mt-1 text-[11px] text-rose-600">{errors.dispatchDate}</p> : null}
                     </label>
                     <label className="block">
-                      <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Invoice Date</span>
-                      <input type="date" value={form.invoiceDate} disabled={!!invoice} onChange={(e) => setForm((prev) => ({ ...prev, invoiceDate: e.target.value }))} className={fieldClass} />
+                      <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Invoice Date *</span>
+                      <input
+                        type="date"
+                        value={form.invoiceDate}
+                        disabled={!canEditDraft}
+                        onChange={(e) => {
+                          setForm((prev) => ({ ...prev, invoiceDate: e.target.value }));
+                          if (errors.invoiceDate) setError("invoiceDate");
+                        }}
+                        className={fieldClass}
+                      />
+                      {errors.invoiceDate ? <p className="mt-1 text-[11px] text-rose-600">{errors.invoiceDate}</p> : null}
                     </label>
                   </div>
                   <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -416,7 +640,7 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
                         <input
                           type="text"
                           value={form.logisticsDetails.transporterName}
-                          disabled={!!invoice}
+                          disabled={!canEditDraft}
                           onChange={(e) =>
                             setForm((prev) => ({
                               ...prev,
@@ -430,7 +654,7 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
                         <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Transport Mode</span>
                         <select
                           value={form.logisticsDetails.transportMode}
-                          disabled={!!invoice}
+                          disabled={!canEditDraft}
                           onChange={(e) =>
                             setForm((prev) => ({
                               ...prev,
@@ -452,7 +676,7 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
                         <input
                           type="text"
                           value={form.logisticsDetails.vehicleNumber}
-                          disabled={!!invoice}
+                          disabled={!canEditDraft}
                           onChange={(e) =>
                             setForm((prev) => ({
                               ...prev,
@@ -467,7 +691,7 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
                         <input
                           type="text"
                           value={form.logisticsDetails.referenceNumber}
-                          disabled={!!invoice}
+                          disabled={!canEditDraft}
                           onChange={(e) =>
                             setForm((prev) => ({
                               ...prev,
@@ -480,12 +704,14 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
                     </div>
                   </div>
                 </section>
+                )}
 
+                {currentStep === 1 && (
                 <section className="rounded-lg border border-slate-200 bg-white p-3.5 shadow-sm">
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div>
                       <p className={sectionTitleClass}>Carton Selection</p>
-                      <p className="mt-1 text-[12px] text-slate-500">Scan or enter carton serials to build the dispatch list. Only scanned cartons will appear below.</p>
+                      <p className="mt-1 text-[12px] text-slate-500">Scan stocked carton serials to add them to dispatch.</p>
                     </div>
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
                       {selectedCartons.length} selected
@@ -495,7 +721,7 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
                     <input
                       type="text"
                       value={scanCartonSerial}
-                      disabled={!!invoice}
+                      disabled={!canEditDraft}
                       onChange={(e) => setScanCartonSerial(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
@@ -508,7 +734,7 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
                     />
                     <button
                       type="button"
-                      disabled={!!invoice}
+                      disabled={!canEditDraft}
                       onClick={handleScanCarton}
                       className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
@@ -516,6 +742,7 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
                       Add Carton
                     </button>
                   </div>
+
                   <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Selected Cartons</p>
                     {selectedCartons.length === 0 ? (
@@ -528,7 +755,7 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
                             className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-700"
                           >
                             {cartonSerial}
-                            {!invoice ? (
+                            {canEditDraft ? (
                               <button
                                 type="button"
                                 onClick={() => removeSelectedCarton(cartonSerial)}
@@ -546,18 +773,58 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
                   <p className="text-[11px] text-slate-500">
                     Available cartons in this process: <span className="font-semibold text-slate-700">{availableCartons.length}</span>
                   </p>
+                  {errors.cartons ? <p className="mt-2 text-[12px] font-semibold text-rose-600">{errors.cartons}</p> : null}
                 </section>
+                )}
 
+                {currentStep === 2 && (
                 <section className="rounded-lg border border-slate-200 bg-white p-3.5 shadow-sm">
                   <label className="block">
                     <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500">Remarks</span>
-                    <textarea value={form.remarks} disabled={!!invoice} onChange={(e) => setForm((prev) => ({ ...prev, remarks: e.target.value }))} rows={3} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
-                  </label>
-                  <label className="mt-3 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] font-medium text-slate-700">
-                    <input type="checkbox" checked={form.includeImeiList} onChange={(e) => setForm((prev) => ({ ...prev, includeImeiList: e.target.checked }))} />
-                    Include IMEI annex in gate pass
+                    <textarea value={form.remarks} disabled={!canEditDraft} onChange={(e) => setForm((prev) => ({ ...prev, remarks: e.target.value }))} rows={3} className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100" />
                   </label>
                 </section>
+                )}
+
+                {currentStep === 3 && (
+                  <section className="rounded-lg border border-slate-200 bg-white p-3.5 shadow-sm">
+                    <p className={sectionTitleClass}>Step 3 - Review</p>
+                    <p className="mt-1 text-[12px] text-slate-500">
+                      Verify selected cartons and invoice details before dispatch action.
+                    </p>
+                    <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[12px] text-slate-700">
+                        <p>Cartons: <span className="font-semibold">{selectedCartons.length}</span></p>
+                        <p>Devices: <span className="font-semibold">{totalQuantity}</span></p>
+                        <p>Invoice No: <span className="font-semibold">{form.invoiceNumber || "-"}</span></p>
+                        <p>Company: <span className="font-semibold">{form.customerName || "-"}</span></p>
+                        <p>Dispatch Date: <span className="font-semibold">{form.dispatchDate || "-"}</span></p>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-[12px] text-slate-700">
+                        <p>Status: <span className="font-semibold">{invoiceStatus || "NEW"}</span></p>
+                        {invoice?.gatePassNumber ? <p>Gate Pass: <span className="font-semibold">{invoice.gatePassNumber}</span></p> : null}
+                        {invoice?.updatedAt ? <p>Updated: <span className="font-semibold">{new Date(invoice.updatedAt).toLocaleString()}</span></p> : null}
+                      </div>
+                    </div>
+                    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Selected Cartons</p>
+                      {selectedCartons.length === 0 ? (
+                        <p className="mt-2 text-[12px] text-slate-400">No cartons selected.</p>
+                      ) : (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {selectedCartons.map((cartonSerial) => (
+                            <span
+                              key={cartonSerial}
+                              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[12px] font-semibold text-slate-700"
+                            >
+                              {cartonSerial}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                )}
               </div>
             </div>
 
@@ -579,68 +846,97 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
                   </div>
                 </div>
 
-                {!invoice ? (
-                  <button
-                    type="button"
-                    disabled={submitting || selectedCartons.length === 0}
-                    onClick={handleCreateDraft}
-                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-3 text-[13px] font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <FileText className="h-4 w-4" />
-                    {submitting ? "Creating Draft..." : "Create Draft Invoice"}
-                  </button>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Current Invoice</p>
-                      <p className="mt-1 text-[18px] font-black text-slate-900">{invoice.invoiceNumber}</p>
-                      <div className="mt-3 space-y-1.5 text-[12px] text-slate-600">
-                        <p>Company: <span className="font-semibold text-slate-800">{invoice.customerName}</span></p>
-                        {invoice.contactPerson ? <p>Contact: <span className="font-semibold text-slate-800">{invoice.contactPerson}</span></p> : null}
-                        {invoice.customerPhone ? <p>Phone: <span className="font-semibold text-slate-800">{invoice.customerPhone}</span></p> : null}
-                        {invoice.customerEmail ? <p>Email: <span className="font-semibold text-slate-800">{invoice.customerEmail}</span></p> : null}
-                        {invoice.ewayBillNo ? <p>E-Way Bill: <span className="font-semibold text-slate-800">{invoice.ewayBillNo}</span></p> : null}
-                        {invoice?.logisticsDetails?.transporterName ? <p>Transporter: <span className="font-semibold text-slate-800">{invoice.logisticsDetails.transporterName}</span></p> : null}
-                        {invoice?.logisticsDetails?.transportMode ? <p>Mode: <span className="font-semibold text-slate-800">{invoice.logisticsDetails.transportMode}</span></p> : null}
-                        {invoice?.logisticsDetails?.vehicleNumber ? <p>Vehicle: <span className="font-semibold text-slate-800">{invoice.logisticsDetails.vehicleNumber}</span></p> : null}
-                        {invoice?.logisticsDetails?.referenceNumber ? <p>Reference: <span className="font-semibold text-slate-800">{invoice.logisticsDetails.referenceNumber}</span></p> : null}
-                        <p>Status: <span className="font-semibold text-slate-800">{invoice.status}</span></p>
-                        {invoice.gatePassNumber ? <p>Gate Pass: <span className="font-semibold text-slate-800">{invoice.gatePassNumber}</span></p> : null}
-                      </div>
+                {invoice ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Current Invoice</p>
+                    <p className="mt-1 text-[18px] font-black text-slate-900">{invoice.invoiceNumber}</p>
+                    <div className="mt-3 space-y-1.5 text-[12px] text-slate-600">
+                      <p>Company: <span className="font-semibold text-slate-800">{invoice.customerName}</span></p>
+                      <p>Status: <span className="font-semibold text-slate-800">{invoice.status}</span></p>
+                      {invoice.gatePassNumber ? <p>Gate Pass: <span className="font-semibold text-slate-800">{invoice.gatePassNumber}</span></p> : null}
                     </div>
+                  </div>
+                ) : null}
 
-                    {invoiceStatus === "DRAFT" ? (
-                      <>
-                        <button
-                          type="button"
-                          disabled={submitting}
-                          onClick={handleConfirm}
-                          className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-3 text-[13px] font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <CheckSquare className="h-4 w-4" />
-                          {submitting ? "Confirming..." : "Confirm Dispatch"}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={submitting}
-                          onClick={handleCancel}
-                          className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-[13px] font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <X className="h-4 w-4" />
-                          Cancel Draft
-                        </button>
-                      </>
-                    ) : invoiceStatus === "CONFIRMED" ? (
+                <div className="rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Navigation</p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={currentStep === 1}
+                      onClick={goToPreviousStep}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      disabled={currentStep === 3}
+                      onClick={goToNextStep}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {currentStep === 3 ? (
+                  !invoice ? (
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={handleCreateDraft}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-3 text-[13px] font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <FileText className="h-4 w-4" />
+                      {submitting ? "Creating Draft..." : "Create Draft Invoice"}
+                    </button>
+                  ) : invoiceStatus === "DRAFT" ? (
+                    <>
                       <button
                         type="button"
                         disabled={submitting}
-                        onClick={handlePrint}
-                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-[13px] font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={handleSaveDraft}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 text-[13px] font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        <Printer className="h-4 w-4" />
-                        {submitting ? "Preparing Gate Pass..." : "Print Gate Pass"}
+                        <Save className="h-4 w-4" />
+                        {submitting ? "Saving..." : "Save Changes"}
                       </button>
-                    ) : null}
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={handleConfirm}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-3 text-[13px] font-bold text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <CheckSquare className="h-4 w-4" />
+                        {submitting ? "Confirming..." : "Confirm Dispatch"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={handleCancel}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-[13px] font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <X className="h-4 w-4" />
+                        Cancel Draft
+                      </button>
+                    </>
+                  ) : invoiceStatus === "CONFIRMED" ? (
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={handlePrint}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-[13px] font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Printer className="h-4 w-4" />
+                      {submitting ? "Preparing Gate Pass..." : "Print Gate Pass"}
+                    </button>
+                  ) : null
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-[12px] text-slate-600">
+                    Continue to Step 3 to perform dispatch actions.
                   </div>
                 )}
               </div>
@@ -654,3 +950,4 @@ const DispatchModal = ({ isOpen, process, cartons, initialInvoice = null, onClos
 };
 
 export default DispatchModal;
+

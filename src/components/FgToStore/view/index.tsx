@@ -8,6 +8,7 @@ import {
   getDeviceById,
   getDispatchInvoices,
   generateDispatchGatePass,
+  getDispatchSummaryByProcesses,
 } from "@/lib/api";
 import DispatchModal from "./DispatchModal";
 import { ToastContainer, toast } from "react-toastify";
@@ -58,6 +59,59 @@ const STORE_STATUSES = [
 const isStoreCarton = (c: any) => {
   const st = (c?.cartonStatus || c?.status || "").toString();
   return STORE_STATUSES.some((s) => s.toLowerCase() === st.toLowerCase());
+};
+
+type DispatchSummary = {
+  processId: string;
+  cartonsInStore: number;
+  devicesInStore: number;
+  cartons: { ready: number; reserved: number; dispatched: number };
+  devices: { ready: number; reserved: number; dispatched: number };
+};
+
+const createEmptyDispatchSummary = (processId = ""): DispatchSummary => ({
+  processId,
+  cartonsInStore: 0,
+  devicesInStore: 0,
+  cartons: { ready: 0, reserved: 0, dispatched: 0 },
+  devices: { ready: 0, reserved: 0, dispatched: 0 },
+});
+
+const normalizeDispatchStatus = (value: any) =>
+  String(value || "").trim().toUpperCase();
+
+const buildLocalDispatchSummary = (processId: string, cartons: any[] = []): DispatchSummary => {
+  const summary = createEmptyDispatchSummary(processId);
+  summary.cartonsInStore = cartons.length;
+
+  cartons.forEach((carton) => {
+    const storeStatus = String(carton?.cartonStatus || carton?.status || "").trim().toUpperCase();
+    const dispatchStatus = normalizeDispatchStatus(carton?.dispatchStatus);
+    const devices = Array.isArray(carton?.devices) ? carton.devices : [];
+
+    summary.devicesInStore += devices.length;
+
+    if (storeStatus === "STOCKED" && (!dispatchStatus || dispatchStatus === "READY")) {
+      summary.cartons.ready += 1;
+    } else if (dispatchStatus === "RESERVED") {
+      summary.cartons.reserved += 1;
+    } else if (dispatchStatus === "DISPATCHED") {
+      summary.cartons.dispatched += 1;
+    }
+
+    devices.forEach((device: any) => {
+      const deviceDispatchStatus = normalizeDispatchStatus(device?.dispatchStatus);
+      if (storeStatus === "STOCKED" && (!deviceDispatchStatus || deviceDispatchStatus === "READY")) {
+        summary.devices.ready += 1;
+      } else if (deviceDispatchStatus === "RESERVED") {
+        summary.devices.reserved += 1;
+      } else if (deviceDispatchStatus === "DISPATCHED") {
+        summary.devices.dispatched += 1;
+      }
+    });
+  });
+
+  return summary;
 };
 
 const CARTON_STATUS_META: Record<string, { label: string; cls: string }> = {
@@ -163,8 +217,16 @@ const openHtmlForPrint = (html: string, title = "Gate Pass") => {
   printWindow.document.open();
   printWindow.document.write(html);
   printWindow.document.close();
-  printWindow.document.title = title;
-  setTimeout(() => printWindow.print(), 400);
+  printWindow.document.title = title || "Gate Pass";
+  const triggerPrint = () => {
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 150);
+  };
+  if (printWindow.document.readyState === "complete") {
+    triggerPrint();
+  } else {
+    printWindow.onload = triggerPrint;
+  }
 };
 
 /* ─── CartonCard ─── */
@@ -627,10 +689,15 @@ const ProcessCard = ({
   const [open, setOpen] = useState(false);
   const meta = getProcessMeta(process.status);
   const totalDevices = storeCartons.reduce((s, c) => s + (c.devices?.length ?? 0), 0);
+  const dispatchSummary: DispatchSummary =
+    process.dispatchSummary || buildLocalDispatchSummary(String(process?._id || ""), storeCartons);
   const isCompleted = ["completed", "complete"].includes(String(process.status || "").toLowerCase());
-  const readyCount = process.dispatchStats?.readyCartons || 0;
-  const reservedCount = process.dispatchStats?.reservedCartons || 0;
-  const dispatchedCount = process.dispatchStats?.dispatchedCartons || 0;
+  const readyCount = dispatchSummary?.cartons?.ready || 0;
+  const reservedCount = dispatchSummary?.cartons?.reserved || 0;
+  const dispatchedCount = dispatchSummary?.cartons?.dispatched || 0;
+  const deviceReadyCount = dispatchSummary?.devices?.ready || 0;
+  const deviceReservedCount = dispatchSummary?.devices?.reserved || 0;
+  const deviceDispatchedCount = dispatchSummary?.devices?.dispatched || 0;
   const hasDraft = !!process.draftInvoice?._id;
   const hasConfirmed = !!process.confirmedInvoice?._id;
 
@@ -698,11 +765,26 @@ const ProcessCard = ({
             </div>
           </div>
           <div className="mt-1 flex flex-wrap gap-4 text-xs text-slate-500">
-            <span><span className="font-semibold text-slate-700">{storeCartons.length}</span> cartons in store</span>
-            <span><span className="font-semibold text-slate-700">{totalDevices}</span> devices</span>
-            <span><span className="font-semibold text-sky-700">{readyCount}</span> ready</span>
-            <span><span className="font-semibold text-amber-700">{reservedCount}</span> reserved</span>
-            <span><span className="font-semibold text-violet-700">{dispatchedCount}</span> dispatched</span>
+            <span><span className="font-semibold text-slate-700">{dispatchSummary?.cartonsInStore ?? storeCartons.length}</span> cartons in store</span>
+            <span><span className="font-semibold text-slate-700">{dispatchSummary?.devicesInStore ?? totalDevices}</span> devices in store</span>
+            <span>
+              Cartons:
+              {" "}
+              <span className="font-semibold text-sky-700">{readyCount}</span> ready
+              {" "}
+              <span className="font-semibold text-amber-700">{reservedCount}</span> reserved
+              {" "}
+              <span className="font-semibold text-violet-700">{dispatchedCount}</span> dispatched
+            </span>
+            <span>
+              Devices:
+              {" "}
+              <span className="font-semibold text-sky-700">{deviceReadyCount}</span> ready
+              {" "}
+              <span className="font-semibold text-amber-700">{deviceReservedCount}</span> reserved
+              {" "}
+              <span className="font-semibold text-violet-700">{deviceDispatchedCount}</span> dispatched
+            </span>
             {process.quantity && <span>Target: <span className="font-semibold text-slate-700">{process.quantity}</span></span>}
             {process.createdAt && <span>Created {new Date(process.createdAt).toLocaleDateString()}</span>}
           </div>
@@ -742,11 +824,7 @@ type ProcessWithCartons = {
   loaded: boolean;
   draftInvoice: any | null;
   confirmedInvoice: any | null;
-  dispatchStats: {
-    readyCartons: number;
-    reservedCartons: number;
-    dispatchedCartons: number;
-  };
+  dispatchSummary: DispatchSummary;
 };
 
 const ViewFGToStore = () => {
@@ -803,7 +881,7 @@ const ViewFGToStore = () => {
           : [];
 
       const latestInvoiceByProcess = (invoices: any[]) => {
-        const map = new Map<string, any>();
+        const invoiceByProcess: Record<string, any> = {};
         invoices.forEach((invoice) => {
           const selectedCartons = Array.isArray(invoice?.selectedCartons) ? invoice.selectedCartons : [];
           const processIds: string[] = Array.from(
@@ -814,60 +892,79 @@ const ViewFGToStore = () => {
             ),
           );
           processIds.forEach((pid) => {
-            const existing = map.get(pid);
+            const existing = invoiceByProcess[pid];
             const nextTime = new Date(invoice?.updatedAt || invoice?.createdAt || 0).getTime();
             const currentTime = new Date(existing?.updatedAt || existing?.createdAt || 0).getTime();
             if (!existing || nextTime >= currentTime) {
-              map.set(pid, invoice);
+              invoiceByProcess[pid] = invoice;
             }
           });
         });
-        return map;
+        return invoiceByProcess;
       };
 
       const draftInvoiceByProcess = latestInvoiceByProcess(draftInvoicesRaw);
       const confirmedInvoiceByProcess = latestInvoiceByProcess(confirmedInvoicesRaw);
 
       // Group cartons by processId for fast joins.
-      const byProcess = new Map<string, any[]>();
+      const byProcess: Record<string, any[]> = {};
       portalCartonsRaw.forEach((c: any) => {
         const pid = String(c?.processId?._id || c?.processId || "");
         if (!pid) return;
-        const arr = byProcess.get(pid) || [];
-        arr.push(c);
-        byProcess.set(pid, arr);
+        if (!Array.isArray(byProcess[pid])) {
+          byProcess[pid] = [];
+        }
+        byProcess[pid].push(c);
       });
+
+      const summaryProcessIds = Array.from(
+        new Set([
+          ...scopedProcesses.map((proc: any) => String(proc?._id || "")).filter(Boolean),
+          ...Object.keys(byProcess),
+        ]),
+      );
+
+      let summaryByProcess: Record<string, DispatchSummary> = {};
+      if (summaryProcessIds.length > 0) {
+        try {
+          const summaryResult = await getDispatchSummaryByProcesses(summaryProcessIds);
+          const summaryRows: any[] =
+            Array.isArray(summaryResult)
+              ? summaryResult
+              : (summaryResult?.data ?? summaryResult?.summaries ?? []);
+
+          summaryByProcess = {};
+          summaryRows.forEach((row) => {
+            const processId = String(row?.processId || "").trim();
+            if (!processId) return;
+            summaryByProcess[processId] = row as DispatchSummary;
+          });
+        } catch {
+          // Fall back to local in-memory computation to keep the UI usable.
+        }
+      }
 
       const data: ProcessWithCartons[] = scopedProcesses.map((proc: any) => {
         const pid = String(proc?._id || "");
-        const storeCartons = (byProcess.get(pid) || []).filter(isStoreCarton);
+        const storeCartons = (byProcess[pid] || []).filter(isStoreCarton);
+        const fallbackSummary = buildLocalDispatchSummary(pid, storeCartons);
         return {
           process: proc,
           storeCartons,
           loaded: true,
-          draftInvoice: draftInvoiceByProcess.get(pid) || null,
-          confirmedInvoice: confirmedInvoiceByProcess.get(pid) || null,
-          dispatchStats: {
-            readyCartons: storeCartons.filter((carton) => {
-              const cartonStatus = String(carton?.cartonStatus || carton?.status || "").trim().toUpperCase();
-              const dispatchStatus = String(carton?.dispatchStatus || "").trim().toUpperCase();
-              return cartonStatus === "STOCKED" && (!dispatchStatus || dispatchStatus === "READY");
-            }).length,
-            reservedCartons: storeCartons.filter(
-              (carton) => String(carton?.dispatchStatus || "").trim().toUpperCase() === "RESERVED",
-            ).length,
-            dispatchedCartons: storeCartons.filter(
-              (carton) => String(carton?.dispatchStatus || "").trim().toUpperCase() === "DISPATCHED",
-            ).length,
-          },
+          draftInvoice: draftInvoiceByProcess[pid] || null,
+          confirmedInvoice: confirmedInvoiceByProcess[pid] || null,
+          dispatchSummary: summaryByProcess[pid] || fallbackSummary,
         };
       });
 
       // Also include any cartons that belong to processes not in the active/completed list (data repair / legacy).
-      byProcess.forEach((cartons, pid) => {
+      Object.entries(byProcess).forEach(([pid, cartons]) => {
         const exists = data.some((d) => String(d.process?._id || "") === pid);
         if (exists) return;
         const first = cartons[0] || {};
+        const storeCartons = cartons.filter(isStoreCarton);
+        const fallbackSummary = buildLocalDispatchSummary(pid, storeCartons);
         data.push({
           process: {
             _id: pid,
@@ -875,23 +972,11 @@ const ViewFGToStore = () => {
             processID: first.processID,
             status: "active",
           },
-          storeCartons: cartons.filter(isStoreCarton),
+          storeCartons,
           loaded: true,
-          draftInvoice: draftInvoiceByProcess.get(pid) || null,
-          confirmedInvoice: confirmedInvoiceByProcess.get(pid) || null,
-          dispatchStats: {
-            readyCartons: cartons.filter((carton) => {
-              const cartonStatus = String(carton?.cartonStatus || carton?.status || "").trim().toUpperCase();
-              const dispatchStatus = String(carton?.dispatchStatus || "").trim().toUpperCase();
-              return cartonStatus === "STOCKED" && (!dispatchStatus || dispatchStatus === "READY");
-            }).length,
-            reservedCartons: cartons.filter(
-              (carton) => String(carton?.dispatchStatus || "").trim().toUpperCase() === "RESERVED",
-            ).length,
-            dispatchedCartons: cartons.filter(
-              (carton) => String(carton?.dispatchStatus || "").trim().toUpperCase() === "DISPATCHED",
-            ).length,
-          },
+          draftInvoice: draftInvoiceByProcess[pid] || null,
+          confirmedInvoice: confirmedInvoiceByProcess[pid] || null,
+          dispatchSummary: summaryByProcess[pid] || fallbackSummary,
         });
       });
 
@@ -1098,10 +1183,10 @@ const ViewFGToStore = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            {filtered.map(({ process, storeCartons, loaded, draftInvoice, confirmedInvoice, dispatchStats }, idx) => (
+            {filtered.map(({ process, storeCartons, loaded, draftInvoice, confirmedInvoice, dispatchSummary }, idx) => (
               <ProcessCard
                 key={process._id ?? idx}
-                process={{ ...process, draftInvoice, confirmedInvoice, dispatchStats }}
+                process={{ ...process, draftInvoice, confirmedInvoice, dispatchSummary }}
                 index={idx}
                 storeCartons={storeCartons}
                 loadingCartons={!loaded}

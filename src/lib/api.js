@@ -2096,6 +2096,19 @@ export const getReadyDispatchCartons = async (params = {}) => {
   }
 };
 
+export const getDispatchSummaryByProcesses = async (processIds = []) => {
+  try {
+    const normalizedIds = Array.isArray(processIds)
+      ? processIds.map((value) => String(value || "").trim()).filter(Boolean)
+      : [];
+    const params = normalizedIds.length > 0 ? { processIds: normalizedIds.join(",") } : {};
+    const response = await api.get(`/dispatch/summary/processes`, { params });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to fetch dispatch summaries" };
+  }
+};
+
 export const getReadyDispatchCartonBySerial = async (cartonSerial) => {
   try {
     const response = await api.get(`/dispatch/cartons/${encodeURIComponent(cartonSerial)}`);
