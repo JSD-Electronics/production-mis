@@ -10,12 +10,13 @@ import {
   createProcessLogs,
   updateMarkAsComplete,
   getOrderConfirmationNumers,
+  getDispatchSummaryByProcesses,
 } from "@/lib/api";
 import Modal from "@/components/Modal/page";
 import { useRouter } from "next/navigation";
 import { Tooltip } from "react-tooltip";
 import { FiEdit, FiEye, FiPlus, FiTrash } from "react-icons/fi";
-import { Search, Trash2, XCircle, Activity, CheckCircle, Clock, PauseCircle, Truck, PackageCheck, Plus } from "lucide-react";
+import { Search, Trash2, XCircle, Activity, CheckCircle, Clock, PauseCircle, Plus } from "lucide-react";
 import { TableSkeleton } from "@/components/common/Skeletons";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import { ToastContainer, toast } from "react-toastify";
@@ -57,6 +58,14 @@ const StatusBadge = ({ status }: any) => {
   );
 };
 
+type DispatchSummary = {
+  processId: string;
+  cartonsInStore: number;
+  devicesInStore: number;
+  cartons: { ready: number; reserved: number; dispatched: number };
+  devices: { ready: number; reserved: number; dispatched: number };
+};
+
 const ViewProcess = () => {
   const router = useRouter();
 
@@ -94,7 +103,32 @@ const ViewProcess = () => {
     try {
       setLoading(true);
       const result = await viewProcess();
-      setShiftData(result.Processes || []);
+      const rows = result.Processes || [];
+      let summaryMap = new Map<string, DispatchSummary>();
+
+      try {
+        const processIds = rows.map((row: any) => String(row?._id || "")).filter(Boolean);
+        if (processIds.length > 0) {
+          const summaryResult = await getDispatchSummaryByProcesses(processIds);
+          const summaryRows: any[] = Array.isArray(summaryResult)
+            ? summaryResult
+            : (summaryResult?.data ?? summaryResult?.summaries ?? []);
+          summaryMap = new Map(
+            summaryRows
+              .filter((item) => String(item?.processId || "").trim().length > 0)
+              .map((item) => [String(item.processId), item as DispatchSummary]),
+          );
+        }
+      } catch {
+        // Keep process table available even if dispatch summary API fails.
+      }
+
+      setShiftData(
+        rows.map((row: any) => ({
+          ...row,
+          dispatchSummary: summaryMap.get(String(row?._id || "")) || null,
+        })),
+      );
     } catch (error) {
       console.error("Error Fetching Processes:", error);
     } finally {
@@ -307,12 +341,29 @@ const ViewProcess = () => {
     },
     {
       name: "Logistics",
-      cell: (row: any) => (
-        <div className="flex flex-col gap-1 py-1 text-[11px] font-medium text-gray-500">
-          <div className="flex items-center gap-1"><Truck size={10} /> {row?.dispatchStatus || 'Pending'}</div>
-          <div className="flex items-center gap-1"><PackageCheck size={10} /> {row?.deliverStatus || 'Pending'}</div>
-        </div>
-      ),
+      cell: (row: any) => {
+        const summary = row?.dispatchSummary;
+        const dispatchedDevices = Number(summary?.devices?.dispatched || 0);
+        const targetDevices = Number(row?.quantity || row?.qty || 0);
+        const pendingDevices =
+          targetDevices > 0
+            ? Math.max(targetDevices - dispatchedDevices, 0)
+            : Math.max(
+                Number(summary?.devices?.ready || 0) + Number(summary?.devices?.reserved || 0),
+                0,
+              );
+
+        return (
+          <div className="flex flex-col gap-1 py-1 text-[11px] font-medium text-gray-600">
+            <div className="text-blue-700">
+              Dispatched Devices: <span className="font-semibold">{summary ? dispatchedDevices : "-"}</span>
+            </div>
+            <div className="text-amber-700">
+              Pending Devices: <span className="font-semibold">{summary ? pendingDevices : (targetDevices > 0 ? targetDevices : "-")}</span>
+            </div>
+          </div>
+        );
+      },
       grow: 1.2
     },
     {

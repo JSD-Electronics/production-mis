@@ -36,6 +36,11 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem("token");
       localStorage.removeItem("userDetails");
+      localStorage.removeItem("portalAccessCache:persist:v1");
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.removeItem("portalAccessCache:v1");
+        sessionStorage.removeItem("planningLookups:viewPlaning:v1");
+      }
       window.location.href = "/";
     }
     return Promise.reject(error);
@@ -75,6 +80,11 @@ export const logout = async () => {
     if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
       localStorage.removeItem("token");
       localStorage.removeItem("userDetails");
+      localStorage.removeItem("portalAccessCache:persist:v1");
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.removeItem("portalAccessCache:v1");
+        sessionStorage.removeItem("planningLookups:viewPlaning:v1");
+      }
     }
   }
 };
@@ -1667,7 +1677,9 @@ export const fetchCartonByProcessID = async (processID) => {
     let response = await api.get(`/cartons/${processID}/partial`);
     return response.data;
   } catch (error) {
-
+    const status = Number(error?.response?.status || 0);
+    if (status === 404) return [];
+    throw error?.response?.data || error;
   }
 };
 export const fetchOpenCartonsByProcessID = async (processID) => {
@@ -1684,7 +1696,9 @@ export const fetchCartons = async (processID) => {
 
     return response.data;
   } catch (error) {
-
+    const status = Number(error?.response?.status || 0);
+    if (status === 404) return { cartonDetails: [], cartonSerials: [] };
+    throw error?.response?.data || error;
   }
 };
 export const shiftToPDI = async (cartons) => {
@@ -1742,7 +1756,9 @@ export const getPDICartonByProcessId = async (processId) => {
     let result = await api.get(`/cartonsProcessId/${processId}`);
     return result.data;
   } catch (error) {
-    console.error("Error Fetching Carton Shift: ", error.message);
+    const status = Number(error?.response?.status || 0);
+    if (status === 404) return { cartonDetails: [], cartonSerials: [] };
+    throw error?.response?.data || error;
   }
 };
 export const getCartonsIntoStore = async (processId) => {
@@ -1750,7 +1766,9 @@ export const getCartonsIntoStore = async (processId) => {
     let result = await api.get(`/cartonsIntoStore/${processId}`);
     return result.data;
   } catch (error) {
-    console.error("Error Fetching Carton Shift: ", error.message);
+    const status = Number(error?.response?.status || 0);
+    if (status === 404) return { cartonDetails: [], cartonSerials: [] };
+    throw error?.response?.data || error;
   }
 };
 
@@ -2066,6 +2084,118 @@ export const getStorePortalCartons = async () => {
   } catch (error) {
     console.error("Error Fetching Store Portal Cartons: ", error.message);
     throw error;
+  }
+};
+
+export const getReadyDispatchCartons = async (params = {}) => {
+  try {
+    const response = await api.get(`/dispatch/cartons/ready`, { params });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to fetch ready dispatch cartons" };
+  }
+};
+
+export const getDispatchSummaryByProcesses = async (processIds = []) => {
+  try {
+    const normalizedIds = Array.isArray(processIds)
+      ? processIds.map((value) => String(value || "").trim()).filter(Boolean)
+      : [];
+    const params = normalizedIds.length > 0 ? { processIds: normalizedIds.join(",") } : {};
+    const response = await api.get(`/dispatch/summary/processes`, { params });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to fetch dispatch summaries" };
+  }
+};
+
+export const getReadyDispatchCartonBySerial = async (cartonSerial) => {
+  try {
+    const response = await api.get(`/dispatch/cartons/${encodeURIComponent(cartonSerial)}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to fetch dispatch carton" };
+  }
+};
+
+export const createDispatchInvoice = async (payload) => {
+  try {
+    const response = await api.post(`/dispatch/invoices`, payload);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to create dispatch invoice" };
+  }
+};
+
+export const getDispatchInvoices = async (params = {}) => {
+  try {
+    const response = await api.get(`/dispatch/invoices`, { params });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to fetch dispatch invoices" };
+  }
+};
+
+export const getDispatchInvoiceById = async (id) => {
+  try {
+    const response = await api.get(`/dispatch/invoices/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to fetch dispatch invoice" };
+  }
+};
+
+export const updateDispatchInvoice = async (id, payload) => {
+  try {
+    const response = await api.put(`/dispatch/invoices/${id}`, payload);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to update dispatch invoice" };
+  }
+};
+
+export const cancelDispatchInvoice = async (id) => {
+  try {
+    const response = await api.post(`/dispatch/invoices/${id}/cancel`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to cancel dispatch invoice" };
+  }
+};
+
+export const confirmDispatchInvoice = async (id, payload = {}) => {
+  try {
+    const response = await api.post(`/dispatch/invoices/${id}/confirm`, payload);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to confirm dispatch invoice" };
+  }
+};
+
+export const getDispatchGatePass = async (id, params = {}) => {
+  try {
+    const response = await api.get(`/dispatch/invoices/${id}/gate-pass`, { params });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to fetch gate pass" };
+  }
+};
+
+export const generateDispatchGatePass = async (id, payload = {}) => {
+  try {
+    const response = await api.post(`/dispatch/invoices/${id}/gate-pass/pdf`, payload);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to generate gate pass" };
+  }
+};
+
+export const checkWarranty = async (params = {}) => {
+  try {
+    const response = await api.get(`/warranty/check`, { params });
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: "Failed to check warranty" };
   }
 };
 

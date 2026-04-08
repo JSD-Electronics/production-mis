@@ -25,9 +25,14 @@ import "react-toastify/dist/ReactToastify.css";
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import Modal from "@/components/Modal/page";
+import ConfirmationPopup from "@/components/Confirmation/page";
 import { Clock, Calendar, Coffee, UserPlus } from "lucide-react";
-import { FaClock, FaCogs, FaLayerGroup, FaClipboardList, FaBox } from "react-icons/fa";
-import { normalizeAssignedStagesPayload } from "@/lib/parallelStageRouting";
+import { FaClock, FaCogs, FaLayerGroup, FaClipboardList, FaBox, FaUndo } from "react-icons/fa";
+import {
+  normalizeAssignedStagesPayload,
+  sanitizeCurrentPlanAssignedStages,
+  stripReservedSeatEntries,
+} from "@/lib/parallelStageRouting";
 
 const ADDPlanSchedule = () => {
   const router = useRouter();
@@ -70,9 +75,74 @@ const ADDPlanSchedule = () => {
   const [isCustomStagesModalOpen, setCustomStagesModalOpen] = useState(false);
   const [isSubmitButtonDisabled, setIsSubmitButtonDisabled] = useState(false);
   const [isFullLayoutModalOpen, setIsFullLayoutModalOpen] = useState(false);
+  const [history, setHistory] = useState<any[]>([]);
+  const [confirmRemoval, setConfirmRemoval] = useState<null | {
+    rowIndex: number;
+    seatIndex: number;
+    stageIndex: number;
+    rowSeatLength: number;
+  }>(null);
+  const reservedSeatMap = React.useMemo(() => {
+    const map: Record<string, any[]> = {};
+    Object.entries(assignedStages || {}).forEach(([seatKey, seatStages]: [string, any]) => {
+      const stageList = Array.isArray(seatStages) ? seatStages : [seatStages];
+      if (stageList.some((stage: any) => stage?.reserved)) {
+        map[seatKey] = stageList;
+      }
+    });
+    return map;
+  }, [assignedStages]);
   const closeClonePlaningModal = () => {
     setIsClonePlaningModel(false);
   };
+  const snapshotPlaningState = React.useCallback(
+    () =>
+      JSON.parse(
+        JSON.stringify({
+          assignedStages,
+          assignedOperators,
+          assignedJigs,
+          assignedCustomOperators,
+          repeatCount,
+          startDate,
+          totalTimeEstimation,
+          totalUPHA,
+          estimatedEndDate,
+        }),
+      ),
+    [
+      assignedCustomOperators,
+      assignedJigs,
+      assignedOperators,
+      assignedStages,
+      estimatedEndDate,
+      repeatCount,
+      startDate,
+      totalTimeEstimation,
+      totalUPHA,
+    ],
+  );
+  const pushToHistory = React.useCallback(() => {
+    setHistory((prev) => [...prev.slice(-19), snapshotPlaningState()]);
+  }, [snapshotPlaningState]);
+  const handleUndo = React.useCallback(() => {
+    if (history.length === 0) {
+      toast.info("Nothing to undo");
+      return;
+    }
+    const lastState = history[history.length - 1];
+    setHistory((prev) => prev.slice(0, -1));
+    setAssignedStages(lastState?.assignedStages || {});
+    setAssignedOperators(lastState?.assignedOperators || {});
+    setAssignedJigs(lastState?.assignedJigs || {});
+    setAssignedCustomOperators(lastState?.assignedCustomOperators || []);
+    setRepeatCount(lastState?.repeatCount || "");
+    setStartDate(lastState?.startDate || "");
+    setTotalTimeEstimation(lastState?.totalTimeEstimation || "");
+    setTotalUPHA(lastState?.totalUPHA || "");
+    setEstimatedEndDate(lastState?.estimatedEndDate || "");
+    toast.info("Reverted last change");
+  }, [history]);
   useEffect(() => {
     getAllProcess();
     getAllRoomPlan();
@@ -203,7 +273,11 @@ const ADDPlanSchedule = () => {
     setStartDate(formatDate(selectedClonePlaning?.startDate));
     setAssignedStages(
       normalizeAssignedStagesPayload(
-        JSON.parse(selectedClonePlaning?.assignedStages),
+        sanitizeCurrentPlanAssignedStages({
+          assignedStages: JSON.parse(selectedClonePlaning?.assignedStages || "{}"),
+          processStages: singleProcess?.stages || [],
+          currentProcess: singleProcess,
+        }),
         singleProcess?.stages || [],
       ),
     );
@@ -244,6 +318,9 @@ const ADDPlanSchedule = () => {
     startDate: any,
     expectedEndDate: any,
   ) => {
+    if (!selectedRoom?._id || !selectedShift?._id || !startDate || !expectedEndDate) {
+      return {};
+    }
     try {
       const shiftDataChange = JSON.stringify({
         startTime: selectedShift.startTime,
@@ -256,8 +333,9 @@ const ADDPlanSchedule = () => {
         startDate,
         expectedEndDate,
         shiftDataChange,
+        { silentNotFound: true },
       );
-      let assignedStagesObject = result.plans.reduce((acc: any, plan: any) => {
+      let assignedStagesObject = (Array.isArray(result?.plans) ? result.plans : []).reduce((acc: any, plan: any) => {
         try {
           let assignedJigs = plan?.assignedJigs
             ? JSON.parse(plan?.assignedJigs)
@@ -351,7 +429,7 @@ const ADDPlanSchedule = () => {
 
     }
   };
-  const handleRemoveStage = (
+  const performRemoveStage = (
     rowIndex,
     seatIndex,
     stageIndex,
@@ -416,6 +494,33 @@ const ADDPlanSchedule = () => {
       return newStages;
     });
   };
+  const handleRemoveStage = (
+    rowIndex,
+    seatIndex,
+    stageIndex,
+    rowSeatLength,
+  ) => {
+    setConfirmRemoval({
+      rowIndex,
+      seatIndex,
+      stageIndex,
+      rowSeatLength,
+    });
+  };
+  const handleConfirmRemoval = () => {
+    if (!confirmRemoval) return;
+    pushToHistory();
+    performRemoveStage(
+      confirmRemoval.rowIndex,
+      confirmRemoval.seatIndex,
+      confirmRemoval.stageIndex,
+      confirmRemoval.rowSeatLength,
+    );
+    setConfirmRemoval(null);
+  };
+  const handleCancelRemoval = () => {
+    setConfirmRemoval(null);
+  };
   const getAllRoomPlan = async () => {
     try {
       const result = await viewRoom();
@@ -458,6 +563,7 @@ const ADDPlanSchedule = () => {
           return false;
         }
       }
+      pushToHistory();
 
       setAssignedStages((prev) => {
         const updatedStages = { ...prev };
@@ -812,6 +918,7 @@ const ADDPlanSchedule = () => {
     event.dataTransfer.setData("text/plain", JSON.stringify(data));
   };
   const moveItem = (fromCoordinates: any, toCoordinates: any) => {
+    pushToHistory();
     setAssignedStages((prevStages) => {
       const updatedStages = { ...prevStages };
       const updatedOperators = { ...assignedOperators };
@@ -880,16 +987,14 @@ const ADDPlanSchedule = () => {
   const handlePlaningDraft = async () => {
     try {
       const formData = new FormData();
-      const filteredData = normalizeAssignedStagesPayload(Object.fromEntries(
-        Object.entries(assignedStages)
-          .map(([key, value]) => [
-            key,
-            value.filter(
-              (item) => !(item.name === "Reserved" && item.reserved === true),
-            ),
-          ])
-          .filter(([_, value]) => value.length > 0), // Remove keys with empty arrays
-      ), selectedProduct?.product?.stages || selectedProduct?.stages || []);
+      const filteredData = normalizeAssignedStagesPayload(
+        sanitizeCurrentPlanAssignedStages({
+          assignedStages: stripReservedSeatEntries(assignedStages),
+          processStages: selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+          currentProcess: selectedProcess,
+        }),
+        selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+      );
       formData.append("processName", processName);
       formData.append("selectedProcess", selectedProcess?._id || "");
       formData.append("selectedRoom", selectedRoom?._id || "");
@@ -932,24 +1037,30 @@ const ADDPlanSchedule = () => {
       const formData = new FormData();
       let requiredKits = parseInt(selectedProcess?.quantity || "0");
       let isFirstElement = true;
-      const filteredData = normalizeAssignedStagesPayload(Object.fromEntries(
-        Object.entries(assignedStages)
-          .map(([key, value]) => [
-            key,
-            value
-              .filter(
-                (item) => !(item.name === "Reserved" && item.reserved === true),
-              )
-              .map((item) => {
+      const filteredData = normalizeAssignedStagesPayload(
+        Object.fromEntries(
+          Object.entries(
+            sanitizeCurrentPlanAssignedStages({
+              assignedStages: stripReservedSeatEntries(assignedStages),
+              processStages:
+                selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+              currentProcess: selectedProcess,
+            }),
+          )
+            .map(([key, value]: [string, any]) => [
+              key,
+              value.map((item: any) => {
                 if (isFirstElement) {
                   isFirstElement = false;
                   return { ...item, totalUPHA: parseInt(totalUPHA || "0") };
                 }
                 return { ...item, totalUPHA: 0 };
               }),
-          ])
-          .filter(([_, value]) => value.length > 0),
-      ), selectedProduct?.product?.stages || selectedProduct?.stages || []);
+            ])
+            .filter(([_, value]) => Array.isArray(value) && value.length > 0),
+        ),
+        selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+      );
       const assignStageKeys = Object.keys(filteredData);
       const filteredJigs = Object.keys(assignedJigs)
         .filter((key) => assignStageKeys.includes(key))
@@ -1147,17 +1258,42 @@ const ADDPlanSchedule = () => {
     const selected = getSavedPlaning.find((value) => value._id === event);
     setSelectedClonePlaning(selected);
   };
+  const getAssignedOperatorIds = () =>
+    Object.values(assignedOperators || {})
+      .flatMap((operatorsForSeat: any) =>
+        Array.isArray(operatorsForSeat) ? operatorsForSeat : [operatorsForSeat],
+      )
+      .filter((operator: any) => operator && typeof operator === "object" && operator._id)
+      .map((operator: any) => String(operator._id));
+  const normalizeOperatorsSlot = (slot: any): any[] => {
+    if (Array.isArray(slot)) return slot.filter(Boolean);
+    if (!slot) return [];
+    if (typeof slot === "string") {
+      const trimmed = slot.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+      } catch {
+        return [];
+      }
+    }
+    if (typeof slot === "object") {
+      if (Array.isArray(slot.operators)) return slot.operators.filter(Boolean);
+      if (slot?._id || slot?.id || slot?.operatorId || slot?.userId || slot?.name) {
+        return [slot];
+      }
+    }
+    return [];
+  };
+
   const openCustomStagesModal = (stage, index) => {
     const requiredSkill = String(stage?.requiredSkill || "").toLowerCase().trim();
-    const requiredUserType = String(stage?.managedBy || "").toLowerCase().trim();
-    const assignedOperatorIds = Object.values(assignedOperators || {})
-      .flat()
-      .filter((operator: any) => operator && operator._id)
-      .map((operator: any) => String(operator._id));
 
+    const requiredUserType = String(stage?.managedBy || "").toLowerCase().trim();
+    const assignedOperatorIds = getAssignedOperatorIds();
     const compatibleOperators = (Array.isArray(operators) ? operators : []).filter((operator: any) => {
       if (!operator?._id) return false;
-
       const normalizedSkills = (Array.isArray(operator?.skills) ? operator.skills : [])
         .map((skill: any) => String(skill || "").toLowerCase().trim())
         .filter(Boolean);
@@ -1165,7 +1301,6 @@ const ADDPlanSchedule = () => {
       const hasRequiredSkill = !requiredSkill || normalizedSkills.includes(requiredSkill);
       const hasRequiredUserType = !requiredUserType || normalizedUserType === requiredUserType;
       const isAlreadyAssigned = assignedOperatorIds.includes(String(operator._id));
-
       return hasRequiredSkill && hasRequiredUserType && !isAlreadyAssigned;
     });
 
@@ -1174,14 +1309,14 @@ const ADDPlanSchedule = () => {
     setCustomStagesModalOpen(true);
   };
   const handleOperator = (event) => {
+    pushToHistory();
     const operator = operators.find((val) => val._id === event);
+    if (!operator) return;
     const key = `${customStagesIndexVal}`;
     const newAssignedOperators = { ...assignedCustomOperators };
-
-    if (!newAssignedOperators[key]) {
-      newAssignedOperators[key] = [];
-    }
-    const alreadyExists = newAssignedOperators[key].some(
+    const existingOperators = normalizeOperatorsSlot(newAssignedOperators[key]);
+    newAssignedOperators[key] = existingOperators;
+    const alreadyExists = existingOperators.some(
       (op) => op._id === operator._id,
     );
     if (!alreadyExists) {
@@ -1190,9 +1325,9 @@ const ADDPlanSchedule = () => {
     setAssignedCustomOperators(newAssignedOperators);
   };
   const isOperatorAssignedToAnySeat = (operatorName: any) => {
-    return Object.values(assignedOperators).some((operatorsForSeat) =>
-      operatorsForSeat?.some(
-        (assignedOperator) => assignedOperator.name === operatorName,
+    return Object.values(assignedOperators || {}).some((operatorsForSeat: any) =>
+      (Array.isArray(operatorsForSeat) ? operatorsForSeat : []).some(
+        (assignedOperator: any) => assignedOperator?.name === operatorName,
       ),
     );
   };
@@ -1204,6 +1339,7 @@ const ADDPlanSchedule = () => {
   };
   const handleRemoveAssignCustomOperator = (index, opId) => {
     try {
+      pushToHistory();
       const key = `${index}`;
       setAssignedCustomOperators((prevAssignedOperators) => {
         const newAssignedOperators = { ...prevAssignedOperators };
@@ -1235,13 +1371,24 @@ const ADDPlanSchedule = () => {
                 Add Planning & Scheduling
               </h3>
 
-              {/* <button
-                type="button"
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white shadow-sm transition-all duration-200 hover:bg-blue-500"
-                onClick={() => setIsClonePlaningModel(true)}
-              >
-                Clone Planning
-              </button> */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-xs font-bold uppercase tracking-widest text-gray-700 transition-all duration-200 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                  onClick={handleUndo}
+                  title="Undo last change"
+                >
+                  <FaUndo className="h-3 w-3" />
+                  Undo
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm text-white shadow-sm transition-all duration-200 hover:bg-blue-500"
+                  onClick={() => setIsClonePlaningModel(true)}
+                >
+                  Clone Planning
+                </button>
+              </div>
 
               <Modal
                 isOpen={isClonePlaningModel}
@@ -1350,163 +1497,161 @@ const ADDPlanSchedule = () => {
                           <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">UPHA Analysis</span>
                           <div className="mt-1 flex items-baseline gap-1">
                             <span className="text-xl font-black text-gray-900 dark:text-white font-outfit">
-                              {totalUPHA}
+                              {totalUPHA || "0"}
                             </span>
-                            <span className="text-xs font-bold text-gray-500 uppercase">U/Day</span>
+                            <span className="text-xs font-bold text-gray-500 uppercase">
+                              Units/Day
+                            </span>
                           </div>
-                          <p className="mt-0.5 text-[9px] font-black text-green-600 dark:text-green-400 uppercase tracking-tighter">
-                            Active:{" "}
-                            {(
-                              shiftTime -
-                              parseInt(selectedShift?.totalBreakTime || "0") / 60
-                            ).toFixed(2)}{" "}
-                            Hrs
-                          </p>
-                        </div>
-                        <FaCogs className="absolute -bottom-2 -right-2 h-16 w-16 text-green-500/5 dark:text-green-400/5" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {isPlaningAndSchedulingShow && (
-                  <div className="mt-6 border-t border-gray-100 pt-6 dark:border-gray-800">
-                    <div className="flex flex-col xl:flex-row gap-6">
-                      <div className="w-full xl:w-64 shrink-0">
-                        <div className="flex items-center gap-2 mb-3">
-                          <div className="p-1 bg-blue-100 text-blue-600 rounded dark:bg-blue-900/30 dark:text-blue-400">
-                            <FaLayerGroup className="h-4 w-4" />
-                          </div>
-                          <h3 className="text-sm font-bold text-gray-900 dark:text-white font-outfit uppercase tracking-tight">Available Stages</h3>
-                        </div>
-                        <div className="custom-scroll max-h-[400px] overflow-y-auto space-y-3 pr-2">
-                          {stages?.map((stage, index) => (
-                            <div key={index} className="group relative">
-                              <button
-                                className="w-full flex items-center justify-between truncate rounded-xl bg-white border border-gray-100 px-4 py-3 text-[11px] font-bold text-gray-700 shadow-sm transition-all duration-300 hover:border-blue-400 hover:shadow-md hover:shadow-blue-500/10 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500 group-active:scale-[0.98]"
-                                type="button"
-                                draggable
-                                onDragStart={handleDragStart(stage)}
-                              >
-                                <span>{stage.stageName}</span>
-                                <div className="h-2 w-2 rounded-full bg-blue-500/20 group-hover:bg-blue-500 transition-colors shadow-sm shadow-blue-500/50" />
-                              </button>
-                            </div>
-                          ))}
+                          <span className="mt-0.5 block text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                            Projected Daily Output
+                          </span>
                         </div>
                       </div>
 
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2 mb-3">
-                          <div className="flex items-center gap-2">
-                            <div className="p-1 bg-purple-100 text-purple-600 rounded dark:bg-purple-900/30 dark:text-purple-400">
-                              <FaClipboardList className="h-4 w-4" />
+                      <div className="md:col-span-3 mt-2">
+                        <div className="flex flex-col xl:flex-row gap-6">
+                          <div className="w-full xl:w-64 shrink-0">
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className="p-1 bg-blue-100 text-blue-600 rounded dark:bg-blue-900/30 dark:text-blue-400">
+                                <FaLayerGroup className="h-4 w-4" />
+                              </div>
+                              <h3 className="text-sm font-bold text-gray-900 dark:text-white font-outfit uppercase tracking-tight">
+                                Available Stages
+                              </h3>
                             </div>
-                            <h3 className="text-sm font-bold text-gray-900 dark:text-white font-outfit uppercase tracking-tight">Floor Layout Mapping</h3>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setIsFullLayoutModalOpen(true)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all duration-200 text-[10px] font-black uppercase tracking-widest shadow-sm shadow-blue-500/10 active:scale-95 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/40"
-                          >
-                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                            </svg>
-                            View Full
-                          </button>
-                        </div>
-                        <div className="bg-gray-50/50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-800 p-4 overflow-hidden relative">
-                          <div className="overflow-x-auto custom-scroll pb-2">
-                            <div className="flex flex-col gap-4 pr-4 max-h-[600px] overflow-y-auto">
-                              {selectedRoom?.lines?.map((row, rowIndex) => (
-                                <div key={rowIndex} className="space-y-2">
-                                  <div className="text-[10px] font-black uppercase text-gray-400 tracking-widest pl-1">
-                                    {row.rowName}
-                                  </div>
-                                  <div className="grid grid-cols-3 gap-2">
-                                    {row.seats?.map((seat, seatIndex) => (
-                                      <div key={seatIndex} className="w-full h-full">
-                                        <DraggableGridItem
-                                          rowIndex={rowIndex}
-                                          seatIndex={seatIndex}
-                                          handleDrop={handleDrop}
-                                          handleDragOver={handleDragOver}
-                                          handleRemoveStage={handleRemoveStage}
-                                          item={seat}
-                                          assignedStages={assignedStages}
-                                          coordinates={`${rowIndex}-${seatIndex}`}
-                                          moveItem={moveItem}
-                                          operators={operators}
-                                          assignedOperators={assignedOperators}
-                                          setAssignedOperators={setAssignedOperators}
-                                          filteredOperators={filteredOperators}
-                                          setFilteredOperators={setFilteredOperators}
-                                          rowSeatLength={row.seats.length}
-                                          jigCategories={jigCategories}
-                                          assignedJigs={assignedJigs}
-                                          setAssignedJigs={setAssignedJigs}
-                                        />
-                                      </div>
-                                    ))}
-                                  </div>
+                            <div className="custom-scroll max-h-[400px] overflow-y-auto space-y-3 pr-2">
+                              {stages?.map((stage, index) => (
+                                <div key={index} className="group relative">
+                                  <button
+                                    className="w-full flex items-center justify-between truncate rounded-xl bg-white border border-gray-100 px-4 py-3 text-[11px] font-bold text-gray-700 shadow-sm transition-all duration-300 hover:border-blue-400 hover:shadow-md hover:shadow-blue-500/10 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500 group-active:scale-[0.98]"
+                                    type="button"
+                                    draggable
+                                    onDragStart={handleDragStart(stage)}
+                                  >
+                                    <span>{stage.stageName}</span>
+                                    <div className="h-2 w-2 rounded-full bg-blue-500/20 group-hover:bg-blue-500 transition-colors shadow-sm shadow-blue-500/50" />
+                                  </button>
                                 </div>
                               ))}
                             </div>
                           </div>
-                        </div>
 
-                        <div className="mt-8">
-                          <h3 className="text-sm font-bold text-gray-900 dark:text-white font-outfit uppercase tracking-tight mb-4">
-                            Common Services Stages
-                          </h3>
-                          <div className="grid grid-cols-3 gap-3">
-                            {commonStages?.map((value, index) => (
-                              <div
-                                key={index}
-                                className="w-full h-full border-gray-100 flex flex-col rounded-xl border border-green-500/40 bg-white p-3 transition-all duration-300 hover:border-green-400 hover:shadow-lg hover:shadow-green-500/5 dark:bg-gray-800 dark:border-green-900/50"
-                              >
-                                <div className="text-gray-900 dark:text-white flex items-center justify-between mb-3">
-                                  <div className="flex flex-col">
-                                    <span className="text-[10px] font-black uppercase tracking-wider text-green-600 dark:text-green-400 font-outfit">Common Service</span>
-                                    <span className="text-xs font-bold tracking-tight">{value?.stageName}</span>
-                                  </div>
-                                  <div className="h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <div className="flex items-center gap-2">
+                                <div className="p-1 bg-purple-100 text-purple-600 rounded dark:bg-purple-900/30 dark:text-purple-400">
+                                  <FaClipboardList className="h-4 w-4" />
                                 </div>
-
-                                <div className="mt-auto pt-3 border-t border-gray-50 dark:border-gray-700/50 flex items-center justify-between">
-                                  <div className="flex flex-wrap gap-1 max-w-[150px]">
-                                    {assignedCustomOperators[index]?.map((op: any, i: number) => (
-                                      <div key={i} className="px-2 py-0.5 rounded-md bg-blue-50 border border-blue-100 flex items-center justify-center text-[9px] font-bold text-blue-600 dark:bg-blue-900/30 dark:border-blue-800/50 dark:text-blue-400">
-                                        {op.name}
+                                <h3 className="text-sm font-bold text-gray-900 dark:text-white font-outfit uppercase tracking-tight">Floor Layout Mapping</h3>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setIsFullLayoutModalOpen(true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-all duration-200 text-[10px] font-black uppercase tracking-widest shadow-sm shadow-blue-500/10 active:scale-95 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/40"
+                              >
+                                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                </svg>
+                                View Full
+                              </button>
+                            </div>
+                            <div className="bg-gray-50/50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-800 p-4 overflow-hidden relative">
+                              <div className="overflow-x-auto custom-scroll pb-2">
+                                <div className="flex flex-col gap-4 pr-4 max-h-[600px] overflow-y-auto">
+                                  {selectedRoom?.lines?.map((row, rowIndex) => (
+                                    <div key={rowIndex} className="space-y-2">
+                                      <div className="text-[10px] font-black uppercase text-gray-400 tracking-widest pl-1">
+                                        {row.rowName}
                                       </div>
-                                    ))}
-                                  </div>
-
-                                  <div className="flex gap-1.5">
-                                    {assignedCustomOperators[index] && assignedCustomOperators[index].length > 0 && (
-                                      <button
-                                        type="button"
-                                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors dark:hover:bg-red-900/20"
-                                        onClick={() => handleRemoveAssignCustomOperator(index, "")}
-                                        title="Clear Assignments"
-                                      >
-                                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                      </button>
-                                    )}
-                                    <button
-                                      type="button"
-                                      className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-all text-[9.5px] font-black uppercase tracking-wider dark:bg-blue-900/20 dark:text-blue-400"
-                                      onClick={() => openCustomStagesModal(value, index)}
-                                    >
-                                      <UserPlus className="h-3 w-3" />
-                                      {assignedCustomOperators[index]?.length > 0 ? "Edit" : "Assign"}
-                                    </button>
-                                  </div>
+                                      <div className="grid grid-cols-3 gap-2">
+                                        {row.seats?.map((seat, seatIndex) => (
+                                          <div key={seatIndex} className="w-full h-full">
+                                            <DraggableGridItem
+                                              rowIndex={rowIndex}
+                                              seatIndex={seatIndex}
+                                              handleDrop={handleDrop}
+                                              handleDragOver={handleDragOver}
+                                              handleRemoveStage={handleRemoveStage}
+                                              item={seat}
+                                              assignedStages={assignedStages}
+                                              reservedStages={reservedSeatMap}
+                                              coordinates={`${rowIndex}-${seatIndex}`}
+                                              moveItem={moveItem}
+                                              operators={operators}
+                                              assignedOperators={assignedOperators}
+                                              setAssignedOperators={setAssignedOperators}
+                                              filteredOperators={filteredOperators}
+                                              setFilteredOperators={setFilteredOperators}
+                                              rowSeatLength={row.seats.length}
+                                              jigCategories={jigCategories}
+                                              assignedJigs={assignedJigs}
+                                              setAssignedJigs={setAssignedJigs}
+                                              onSeatMutation={pushToHistory}
+                                            />
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
-                            ))}
+                            </div>
+
+                            <div className="mt-8">
+                              <h3 className="text-sm font-bold text-gray-900 dark:text-white font-outfit uppercase tracking-tight mb-4">
+                                Common Services Stages
+                              </h3>
+                              <div className="grid grid-cols-3 gap-3">
+                                {commonStages?.map((value, index) => (
+                                  <div
+                                    key={index}
+                                    className="w-full h-full border-gray-100 flex flex-col rounded-xl border border-green-500/40 bg-white p-3 transition-all duration-300 hover:border-green-400 hover:shadow-lg hover:shadow-green-500/5 dark:bg-gray-800 dark:border-green-900/50"
+                                  >
+                                    <div className="text-gray-900 dark:text-white flex items-center justify-between mb-3">
+                                      <div className="flex flex-col">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-green-600 dark:text-green-400 font-outfit">Common Service</span>
+                                        <span className="text-xs font-bold tracking-tight">{value?.stageName}</span>
+                                      </div>
+                                      <div className="h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
+                                    </div>
+
+                                    <div className="mt-auto pt-3 border-t border-gray-50 dark:border-gray-700/50 flex items-center justify-between">
+                                      <div className="flex flex-wrap gap-1 max-w-[150px]">
+                                        {normalizeOperatorsSlot(assignedCustomOperators[index]).map((op: any, i: number) => (
+                                          <div key={i} className="px-2 py-0.5 rounded-md bg-blue-50 border border-blue-100 flex items-center justify-center text-[9px] font-bold text-blue-600 dark:bg-blue-900/30 dark:border-blue-800/50 dark:text-blue-400">
+                                            {op.name}
+                                          </div>
+                                        ))}
+                                      </div>
+
+                                      <div className="flex gap-1.5">
+                                        {normalizeOperatorsSlot(assignedCustomOperators[index]).length > 0 && (
+                                          <button
+                                            type="button"
+                                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors dark:hover:bg-red-900/20"
+                                            onClick={() => handleRemoveAssignCustomOperator(index, "")}
+                                            title="Clear Assignments"
+                                          >
+                                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                          </button>
+                                        )}
+                                        <button
+                                          type="button"
+                                          className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-all text-[9.5px] font-black uppercase tracking-wider dark:bg-blue-900/20 dark:text-blue-400"
+                                          onClick={() => openCustomStagesModal(value, index)}
+                                        >
+                                          <UserPlus className="h-3 w-3" />
+                                          {normalizeOperatorsSlot(assignedCustomOperators[index]).length > 0 ? "Edit" : "Assign"}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1610,6 +1755,7 @@ const ADDPlanSchedule = () => {
                         handleRemoveStage={handleRemoveStage}
                         item={seat}
                         assignedStages={assignedStages}
+                        reservedStages={reservedSeatMap}
                         coordinates={`${rowIndex}-${seatIndex}`}
                         moveItem={moveItem}
                         operators={operators}
@@ -1621,6 +1767,7 @@ const ADDPlanSchedule = () => {
                         jigCategories={jigCategories}
                         assignedJigs={assignedJigs}
                         setAssignedJigs={setAssignedJigs}
+                        onSeatMutation={pushToHistory}
                       />
                     </div>
                   ))}
@@ -1630,6 +1777,13 @@ const ADDPlanSchedule = () => {
           </div>
         </div>
       </Modal>
+      {confirmRemoval && (
+        <ConfirmationPopup
+          message="Are you sure you want to remove this stage?"
+          onConfirm={handleConfirmRemoval}
+          onCancel={handleCancelRemoval}
+        />
+      )}
     </DndProvider>
   );
 };

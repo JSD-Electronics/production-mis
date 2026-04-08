@@ -12,6 +12,7 @@ const DraggableGridItem = ({
   handleDragOver,
   handleRemoveStage,
   assignedStages,
+  reservedStages,
   coordinates,
   moveItem,
   operators,
@@ -23,6 +24,7 @@ const DraggableGridItem = ({
   jigCategories,
   assignedJigs,
   setAssignedJigs,
+  onSeatMutation,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAssignJigModalOpen, setAssignJigModelOpen] = useState(false);
@@ -96,6 +98,9 @@ const DraggableGridItem = ({
     },
   });
   const handleOperator = (rowIndex, seatIndex, event) => {
+    if (typeof onSeatMutation === "function") {
+      onSeatMutation();
+    }
     let operator = operators.filter((val) => val._id == event);
     let key = `${rowIndex}-${seatIndex}`;
     let newAssignedOperators = { ...assignedOperators };
@@ -106,6 +111,9 @@ const DraggableGridItem = ({
     setAssignedOperators(newAssignedOperators);
   };
   const handleJig = (rowIndex, seatIndex, event) => {
+    if (typeof onSeatMutation === "function") {
+      onSeatMutation();
+    }
     let jig = jigs.filter((val) => val._id == event);
     let key = `${rowIndex}-${seatIndex}`;
     let newAssignedJigs = { ...assignedJigs };
@@ -122,6 +130,9 @@ const DraggableGridItem = ({
     setAssignJigModelOpen(false);
   };
   const handleRemoveOperator = (rowIndex, seatIndex) => {
+    if (typeof onSeatMutation === "function") {
+      onSeatMutation();
+    }
     const key = `${rowIndex}-${seatIndex}`;
     setAssignedOperators((prevAssignedOperators) => {
       const newAssignedOperators = { ...prevAssignedOperators };
@@ -130,6 +141,9 @@ const DraggableGridItem = ({
     });
   };
   const handleRemoveJig = (rowIndex, seatIndex, index) => {
+    if (typeof onSeatMutation === "function") {
+      onSeatMutation();
+    }
     const key = `${rowIndex}-${seatIndex}`;
     setAssignedJigs((prevAssignedJigs) => {
       const newAssignedJigs = { ...prevAssignedJigs };
@@ -167,41 +181,64 @@ const DraggableGridItem = ({
     <div
       ref={(node) => drag(drop(node))}
       key={seatIndex}
-      className={`flex flex-col h-full rounded-xl border-2 p-2 transition-all duration-300 ${assignedStages[coordinates] && assignedStages[coordinates].length > 0
-        ? !assignedStages[coordinates][0]?.reserved
-          ? "border-green-500/50 bg-green-50 shadow-sm transform hover:scale-[1.01] dark:bg-green-900/20"
-          : "border-red-500/50 bg-red-50/80 shadow-sm dark:bg-red-900/20 backdrop-blur-[2px]"
-        : "border-dashed border-gray-300 bg-white hover:border-primary/50 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700"
-        } ${assignedStages[coordinates]?.[0]?.reserved ? 'opacity-80 grayscale-[0.4]' : ''}`}
+      className={`flex flex-col h-full rounded-xl border-2 p-2 transition-all duration-300 ${reservedStages?.[coordinates] && reservedStages[coordinates].length > 0
+          ? "border-red-500/50 bg-red-50 shadow-sm dark:bg-red-900/20"
+          : assignedStages[coordinates] && assignedStages[coordinates].length > 0
+            ? "border-green-500/50 bg-green-50 shadow-sm transform hover:scale-[1.01] dark:bg-green-900/20"
+            : "border-dashed border-gray-300 bg-white hover:border-primary/50 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700"
+        }`}
       onDrop={handleDrop(rowIndex, seatIndex)}
       onDragOver={handleDragOver}
       title={
-        assignedStages[coordinates] && assignedStages[coordinates].length > 0
-          ? assignedStages[coordinates].join(",")
-          : "Drop Stage Here"
+        reservedStages?.[coordinates] && reservedStages[coordinates].length > 0
+          ? reservedStages[coordinates].map((stage: any) => stage.name).join(",")
+          : assignedStages[coordinates] && assignedStages[coordinates].length > 0
+            ? assignedStages[coordinates].join(",")
+            : "Vacant"
       }
     >
       <span className="text-gray-800 flex items-center justify-between text-[10px] font-bold">
         <p className="text-xs"> S{item.seatNumber} </p>
       </span>
-      {assignedStages[coordinates] && assignedStages[coordinates].length > 0 ? (
+      {reservedStages?.[coordinates] && reservedStages[coordinates].length > 0 ? (
+        <div className="mt-1">
+          {reservedStages[coordinates].map((stage: any, stageIndex: number) => (
+            <div key={stageIndex}>
+              <div className="flex items-center justify-between">
+                <strong className="text-gray-900 text-[10px] leading-tight">
+                  {stage.name}
+                  <p className="text-[9px] text-gray-500">Reserved</p>
+                </strong>
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-500">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth="2"
+                    stroke="currentColor"
+                    className="h-3 w-3"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </span>
+              </div>
+              <p className="text-[10px] text-gray-500">{stage.processName || ""}</p>
+            </div>
+          ))}
+        </div>
+      ) : assignedStages[coordinates] && assignedStages[coordinates].length > 0 ? (
         <div className="mt-1">
           <div>
             {assignedStages[coordinates].map((stage: any, stageIndex: any) => (
               <div key={stageIndex}>
                 <div className="flex items-center justify-between">
                   <strong className="text-gray-900 text-[10px] leading-tight">
-                    {stage.reserved ? (
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[7px] font-black text-red-600 uppercase tracking-tighter">Occupied By:</span>
-                        <span className="text-gray-800 font-bold truncate max-w-[100px]" title={stage.processName}>{stage.processName || "Active Plan"}</span>
-                      </div>
-                    ) : (
-                      <>
-                        {stage.name}
-                        <p className="text-[9px] text-gray-500">{stage.upha}</p>
-                      </>
-                    )}
+                    {stage.name}
+                    <p className="text-[9px] text-gray-500">{stage.upha}</p>
                   </strong>
                   {!stage?.reserved && (
                     <button
@@ -318,7 +355,7 @@ const DraggableGridItem = ({
       )}
       {assignedStages[coordinates] &&
         assignedStages[coordinates].length > 0 &&
-        !assignedStages[`${rowIndex}-${seatIndex}`][0]?.reserved &&
+        !reservedStages?.[coordinates] &&
         !assignedOperators[`${rowIndex}-${seatIndex}`] && (
           <div>
             <div className="mt-1 flex justify-end">
@@ -350,6 +387,7 @@ const DraggableGridItem = ({
           </div>
         )}
       {assignedStages[coordinates] &&
+        !reservedStages?.[coordinates] &&
         assignedStages[coordinates][0].hasJigStepType && (
           <div className="mt-1 flex justify-end">
             <button
@@ -409,7 +447,7 @@ const DraggableGridItem = ({
                     disabled={isOperatorAssignedToAnySeat(operator.name)}
                   >
                     {operator.name}
-                    {isOperatorAssignedToAnySeat(operator.name) ? " — (Assigné)" : ""}
+                    {isOperatorAssignedToAnySeat(operator.name) ? " - (Assigned)" : ""}
                   </option>
                 ))}
               </select>
@@ -485,7 +523,7 @@ const DraggableGridItem = ({
                     disabled={isJigAssignedToAnySeat(jig?.name)}
                   >
                     {jig?.name}
-                    {isJigAssignedToAnySeat(jig?.name) ? " — (Occupé)" : ""}
+                    {isJigAssignedToAnySeat(jig?.name) ? " - (Occupied)" : ""}
                   </option>
                 ))}
               </select>
@@ -512,4 +550,5 @@ const DraggableGridItem = ({
 };
 
 export default DraggableGridItem;
+
 

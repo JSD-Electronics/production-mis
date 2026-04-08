@@ -7,32 +7,30 @@ function useLocalStorage<T>(
   key: string,
   initialValue: T,
 ): [T, (value: SetValue<T>) => void] {
-  const [storedValue, setStoredValue] = useState(() => {
-    try {
-      if (typeof window === "undefined") {
-        return initialValue;
-      }
-
-      const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
-      return initialValue;
-    }
-
-    return initialValue;
-  });
+  const [storedValue, setStoredValue] = useState<T>(initialValue);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
     try {
-      const valueToStore =
-        typeof storedValue === "function"
-          ? storedValue(storedValue)
-          : storedValue;
-      if (typeof window === "undefined") return;
-      window.localStorage.setItem(key, JSON.stringify(valueToStore));
+      const item = window.localStorage.getItem(key);
+      if (item !== null) {
+        setStoredValue(JSON.parse(item));
+      }
+    } catch (error) {
+      setStoredValue(initialValue);
+    } finally {
+      setIsInitialized(true);
+    }
+  }, [key]);
+
+  useEffect(() => {
+    if (!isInitialized || typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(key, JSON.stringify(storedValue));
     } catch (error) {
     }
-  }, [key, storedValue]);
+  }, [isInitialized, key, storedValue]);
 
   return [storedValue, setStoredValue];
 }

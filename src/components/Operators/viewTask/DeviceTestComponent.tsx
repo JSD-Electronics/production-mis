@@ -72,6 +72,7 @@ import JigSection from "./components/JigSection";
 import JigIdentificationSection from "./components/JigIdentificationSection";
 import CartonDetailsPopup from "./components/CartonDetailsPopup";
 import type { StageEligibilityResult } from "./stageEligibility";
+import { resolveEffectivePackagingConfig } from "./utils/packagingConfig";
 
 interface Cart {
   cartonSerial: string;
@@ -237,11 +238,19 @@ export default function DeviceTestComponent({
   stageEligibility,
   isDeviceHistoryLoading,
 }: DeviceTestComponentProps) {
-  const currentStageName =
-    (Array.isArray(assignUserStage) ? assignUserStage?.[0]?.name : null) ||
-    assignUserStage?.stage ||
-    assignUserStage?.name ||
-    "";
+  const currentStageName = String(
+    assignedTaskDetails?.stageName ||
+      assignedTaskDetails?.stage ||
+      (Array.isArray(assignUserStage)
+        ? assignUserStage?.[0]?.name ||
+          assignUserStage?.[0]?.stageName ||
+          assignUserStage?.[0]?.stage
+        : null) ||
+      assignUserStage?.stage ||
+      assignUserStage?.name ||
+      assignUserStage?.stageName ||
+      "",
+  ).trim();
   const isCommon =
     assignedTaskDetails?.stageType === "common" ||
     (Array.isArray(processData?.commonStages)
@@ -251,35 +260,56 @@ export default function DeviceTestComponent({
             String(currentStageName || "").trim().toLowerCase(),
         )
       : false);
-  const isPDIStage = currentStageName === "PDI";
-  const isFGToStoreStage = currentStageName === "FG to Store";
+  const stageCandidates = React.useMemo(() => {
+    return Array.from(
+      new Set(
+        [
+          currentStageName,
+          assignedTaskDetails?.stageName,
+          assignedTaskDetails?.stage,
+          processAssignUserStage?.stageName,
+          processAssignUserStage?.name,
+          processAssignUserStage?.stage,
+        ]
+          .map((value) => String(value || "").trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    );
+  }, [
+    assignedTaskDetails?.stage,
+    assignedTaskDetails?.stageName,
+    currentStageName,
+    processAssignUserStage?.name,
+    processAssignUserStage?.stage,
+    processAssignUserStage?.stageName,
+  ]);
+  const stageHasKeyword = React.useCallback(
+    (keywords: string[]) => {
+      return stageCandidates.some((candidate) =>
+        keywords.some((keyword) => {
+          const normalizedKeyword = String(keyword || "").trim().toLowerCase();
+          return (
+            candidate === normalizedKeyword ||
+            candidate.includes(normalizedKeyword)
+          );
+        }),
+      );
+    },
+    [stageCandidates],
+  );
+  const normalizedCurrentStageName = String(currentStageName || "").trim().toLowerCase();
+  const isPDIStage = stageHasKeyword(["pdi", "quality control", "quality check", "qc"]);
+  const isFGToStoreStage = stageHasKeyword(["fg to store", "fg_to_store", "to store"]);
   const isPDIWeightVerificationStage = isPDIStage;
 
-  const cartonStickerTemplate = React.useMemo(() => {
-    const fromProcess = processAssignUserStage?.subSteps?.find(
-      (s: any) => s?.isPackagingStatus && !s?.disabled,
-    )?.packagingData;
-    const fromAssign = (assignUserStage as any)?.subSteps?.find(
-      (s: any) => s?.isPackagingStatus && !s?.disabled,
-    )?.packagingData;
-
-    const fromAnyStage = (() => {
-      const stages = Array.isArray(processData?.stages) ? processData.stages : [];
-      for (const st of stages) {
-        const sub = st?.subSteps?.find(
-          (s: any) =>
-            s?.isPackagingStatus &&
-            !s?.disabled &&
-            Array.isArray(s?.packagingData?.fields),
-        );
-        if (sub?.packagingData) return sub.packagingData;
-      }
-      return null;
-    })();
-
-    const candidate = fromProcess || fromAssign || fromAnyStage || null;
-    return Array.isArray(candidate?.fields) ? candidate : null;
-  }, [processAssignUserStage, assignUserStage, processData?.stages]);
+  const effectivePackagingConfig = React.useMemo(() => {
+    return resolveEffectivePackagingConfig({
+      processAssignUserStage,
+      assignUserStage,
+      processData,
+      product,
+    });
+  }, [assignUserStage, processAssignUserStage, processData, product]);
   const [orderConfirmationData, setOrderConfirmationData] = useState<any>(null);
   const fetchOrderConfirmationData = async () => {
     console.log("processData?.orderConfirmationN ==>", processData.orderConfirmationNo);
@@ -504,11 +534,11 @@ export default function DeviceTestComponent({
   }, []);
 
   const getConfiguredPdiWeight = React.useCallback(() => {
-    return normalizePdiWeightValue(cartonStickerTemplate?.cartonWeight);
-  }, [cartonStickerTemplate?.cartonWeight]);
+    return normalizePdiWeightValue(effectivePackagingConfig?.cartonWeight);
+  }, [effectivePackagingConfig?.cartonWeight]);
 
   const getConfiguredPdiTolerance = React.useCallback(() => {
-    const sanitizedTolerance = String(cartonStickerTemplate?.cartonWeightTolerance ?? "")
+    const sanitizedTolerance = String(effectivePackagingConfig?.cartonWeightTolerance ?? "")
       .trim()
       .replace(",", ".")
       .replace(/[^0-9.]/g, "");
@@ -535,7 +565,7 @@ export default function DeviceTestComponent({
       scaled: Math.round(parsedTolerance * PDI_WEIGHT_PRECISION_SCALE),
       display: sanitizedTolerance,
     };
-  }, [cartonStickerTemplate?.cartonWeightTolerance]);
+  }, [effectivePackagingConfig?.cartonWeightTolerance]);
 
   const formatPdiWeightForDisplay = React.useCallback((value?: number | null) => {
     if (!Number.isFinite(Number(value))) return "0";
@@ -543,11 +573,9 @@ export default function DeviceTestComponent({
   }, []);
 
   const getConfiguredPdiCapacity = React.useCallback(() => {
-    const parsed = Number(
-      cartonStickerTemplate?.maxCapacity ?? cartonStickerTemplate?.cartonCapacity ?? 0,
-    );
+    const parsed = Number(effectivePackagingConfig?.maxCapacity ?? 0);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-  }, [cartonStickerTemplate?.cartonCapacity, cartonStickerTemplate?.maxCapacity]);
+  }, [effectivePackagingConfig?.maxCapacity]);
 
   const isPdiCartonUsingConfiguredWeight = React.useCallback(
     (carton: any) => {
@@ -685,6 +713,20 @@ export default function DeviceTestComponent({
     const list = Array.isArray(cartonDetails) ? cartonDetails : [];
     return list.find((c: any) => c?.cartonSerial === selectedCarton) || null;
   }, [selectedCarton, cartonDetails]);
+  const normalizeWorkflowStatus = React.useCallback((value: any) => {
+    return String(value || "").trim().toUpperCase().replace(/\s+/g, "_");
+  }, []);
+  const selectedCartonWorkflowStatus = React.useMemo(
+    () => normalizeWorkflowStatus((selectedCartonObj as any)?.cartonStatus),
+    [normalizeWorkflowStatus, selectedCartonObj],
+  );
+  const isSelectedCartonInPDI = selectedCartonWorkflowStatus === "PDI";
+  const isSelectedCartonInFGToStore = selectedCartonWorkflowStatus === "FG_TO_STORE";
+  const isPdiCartonContext = Boolean(isPDIStage || isSelectedCartonInPDI);
+  const isFgToStoreCartonContext = Boolean(isFGToStoreStage || isSelectedCartonInFGToStore);
+  const isPdiWeightVerificationContext = Boolean(
+    isPDIWeightVerificationStage || isSelectedCartonInPDI,
+  );
   const isSelectedCartonVerified = Boolean((selectedCartonObj as any)?.isStickerVerified);
   const persistedSelectedCartonWeightVerified = Boolean(
     (selectedCartonObj as any)?.isWeightVerified ||
@@ -837,7 +879,7 @@ export default function DeviceTestComponent({
   };
   const packagingDescriptionHtml = React.useMemo(() => {
     const stageName = String(
-      assignUserStage?.stage || assignedTaskDetails?.stageName || "",
+      currentStageName || assignedTaskDetails?.stageName || "",
     );
     const productStage = product?.stages?.find(
       (st: any) => String(st?.stageName || st?.name || "") === stageName,
@@ -855,7 +897,7 @@ export default function DeviceTestComponent({
 
     return packagingStep?.description ? String(packagingStep.description) : "";
   }, [
-    assignUserStage?.stage,
+    currentStageName,
     assignedTaskDetails?.stageName,
     processAssignUserStage?.subSteps,
     product?.stages,
@@ -1211,7 +1253,7 @@ export default function DeviceTestComponent({
 
     const matchResult = getPdiWeightMatchResult(selectedCartonObj, normalizedWeight.numeric);
     if (!matchResult.matches) {
-      if (isPDIWeightVerificationStage) {
+      if (isPdiWeightVerificationContext) {
         openPdiWeightMismatchNgModal();
         return;
       }
@@ -1248,7 +1290,7 @@ export default function DeviceTestComponent({
           normalizedErrorMessage.includes("tolerance range") ||
           normalizedErrorMessage.includes("cannot exceed the configured carton weight"));
 
-      if (isPDIWeightVerificationStage && isWeightMismatchError) {
+      if (isPdiWeightVerificationContext && isWeightMismatchError) {
         openPdiWeightMismatchNgModal();
         return;
       }
@@ -1971,9 +2013,14 @@ export default function DeviceTestComponent({
       console.error("Error generating QR Code:", error);
     }
   };
+  const resolvedStageCacheKey = React.useMemo(() => {
+    if (isPDIStage) return "pdi";
+    if (isFGToStoreStage) return "fg_to_store";
+    return normalizedCurrentStageName || "unknown";
+  }, [isFGToStoreStage, isPDIStage, normalizedCurrentStageName]);
   const getProcessCartonsCacheKey = React.useCallback(() => {
-    return `${String(processData?._id || "")}::${String(assignUserStage?.stage || "")}`;
-  }, [assignUserStage?.stage, processData?._id]);
+    return `${String(processData?._id || "")}::${String(resolvedStageCacheKey || "")}`;
+  }, [processData?._id, resolvedStageCacheKey]);
 
   const applyProcessCartonsPayload = React.useCallback((payload: any) => {
     if (!payload) return;
@@ -2022,19 +2069,50 @@ export default function DeviceTestComponent({
       setIsCartonsLoading(true);
     }
 
-    const promise = (async () => {
-      let result;
-      const currentStageName = assignUserStage?.stage || "";
+    const safeFetch = async (request: () => Promise<any>) => {
+      try {
+        return await request();
+      } catch (error: any) {
+        const status = Number(error?.response?.status || error?.status || 0);
+        if (status === 404) {
+          return { cartonDetails: [], cartonSerials: [] };
+        }
+        throw error;
+      }
+    };
 
-      if (currentStageName === "PDI") {
-        result = await getPDICartonByProcessId(processData._id);
-      } else if (currentStageName === "FG to Store") {
-        result = await getCartonsIntoStore(processData?._id);
-      } else {
-        result = await fetchCartons(processData._id);
+    const promise = (async () => {
+      const endpointAttempts: Array<() => Promise<any>> = isPDIStage
+        ? [
+            () => getPDICartonByProcessId(processData._id),
+            () => fetchCartons(processData._id),
+            () => getCartonsIntoStore(processData?._id),
+          ]
+        : isFGToStoreStage
+          ? [
+              () => getCartonsIntoStore(processData?._id),
+              () => fetchCartons(processData._id),
+              () => getPDICartonByProcessId(processData._id),
+            ]
+          : [
+              () => fetchCartons(processData._id),
+              () => getPDICartonByProcessId(processData._id),
+              () => getCartonsIntoStore(processData?._id),
+            ];
+
+      let payload = normalizeProcessCartonsPayload({ cartonDetails: [], cartonSerials: [] });
+      for (const endpointRequest of endpointAttempts) {
+        const result = await safeFetch(endpointRequest);
+        const normalized = normalizeProcessCartonsPayload(result);
+        if (payload.activeDetails.length === 0) {
+          payload = normalized;
+        }
+        if (normalized.activeDetails.length > 0) {
+          payload = normalized;
+          break;
+        }
       }
 
-      const payload = normalizeProcessCartonsPayload(result);
       processCartonsCacheRef.current.set(cacheKey, payload);
       return payload;
     })();
@@ -2111,16 +2189,19 @@ export default function DeviceTestComponent({
   const fetchExistingCartonsByProcessID = async () => {
     try {
       if (!processData?._id) return;
+      if (isPDIStage || isFGToStoreStage) {
+        existingCartonsCacheRef.current.set(String(processData._id), []);
+        setCartons([]);
+        return;
+      }
       const cached = existingCartonsCacheRef.current.get(String(processData._id));
       if (cached) {
         setCartons(cached);
       }
       const result = await fetchCartonByProcessID(processData._id);
-      const cartons = Array.isArray(result)
-        ? result
-        : Array.isArray(result.data)
-          ? result.data
-          : [result];
+      const cartonsSource =
+        Array.isArray(result) ? result : Array.isArray(result?.data) ? result.data : [];
+      const cartons = Array.isArray(cartonsSource) ? cartonsSource : [];
       const transformed = normalizeCartonList(cartons, { excludeMoved: true }).map((carton: any) => ({
         ...carton,
         devices: carton.devices?.map((d: any) => d.serialNo) || [],
@@ -2130,6 +2211,7 @@ export default function DeviceTestComponent({
       setCartons(transformed);
     } catch (error) {
       console.error("Error fetching cartons:", error);
+      setCartons([]);
     }
   };
 
@@ -2175,6 +2257,7 @@ export default function DeviceTestComponent({
           cartonHeight: packagingData.packagingData.cartonHeight,
           cartonDepth: packagingData.packagingData.cartonDepth,
           cartonWeight: packagingData.packagingData.cartonWeight,
+          cartonWeightTolerance: packagingData.packagingData.cartonWeightTolerance,
           maxCapacity: packagingData.packagingData.maxCapacity,
         },
       });
@@ -2220,12 +2303,18 @@ export default function DeviceTestComponent({
   };
 
   const handleSearchCarton = (carton: any) => {
-    let data = cartonDetails.filter(
-      (value, index) => value.cartonSerial == carton,
+    const normalizedCarton = normalizeScanToken(carton);
+    const matched = (Array.isArray(cartonDetails) ? cartonDetails : []).find(
+      (value: any) =>
+        normalizeScanToken(value?.cartonSerial) === normalizedCarton,
     );
-    setSelectedCarton(data[0].cartonSerial);
+    if (!matched) {
+      return false;
+    }
+    setSelectedCarton(matched.cartonSerial);
     setLoadingCartonDevices(false);
-    setCartonDevices(data[0].devices);
+    setCartonDevices(Array.isArray(matched.devices) ? matched.devices : []);
+    return true;
   };
 
   const normalizeScanToken = (value: any) =>
@@ -2312,7 +2401,13 @@ export default function DeviceTestComponent({
       return options;
     }
 
-    const currentStageName = assignUserStage[0].name;
+    const currentStageName = String(
+      assignedTaskDetails?.stageName ||
+      assignedTaskDetails?.stage ||
+      assignUserStage?.[0]?.name ||
+      assignUserStage?.[0]?.stageName ||
+      "",
+    ).trim();
 
     const currentStageIndex = processStagesName.indexOf(currentStageName);
     const qcStageIndex = processStagesName.indexOf("Functional Quality Check");
@@ -2352,6 +2447,7 @@ export default function DeviceTestComponent({
         cartonHeight: packagingData.cartonHeight,
         cartonDepth: packagingData.cartonDepth,
         cartonWeight: packagingData.cartonWeight,
+        cartonWeightTolerance: packagingData.cartonWeightTolerance,
         maxCapacity: packagingData.maxCapacity,
       },
     });
@@ -2409,7 +2505,7 @@ export default function DeviceTestComponent({
         }
         clearPendingPackagingCarton();
         fetchExistingCartonsByProcessID();
-        fetchProcessCartons();
+        fetchProcessCartons({ force: true });
       }
 
       toast.success("Packaging verified successfully!");
@@ -2466,12 +2562,19 @@ export default function DeviceTestComponent({
     setJigDecision(null);
     setNgReason(null);
     setNgDescription("");
-    setIsJigConnected(false);
+    // Keep current jig connection state on retry.
+    // Forcing false here can block timer restart when the jig stays connected.
+    setIsJigConnected(Boolean(jigRuntimeStatus?.connected));
     setStepTimeLeft(null);
     pendingJigErrorRef.current = null;
     setPendingJigErrorState(null);
     setGeneratedCommand("");
     stepStartTimeRef.current = Date.now();
+    totalProcessStartTimeRef.current = Date.now();
+    // Important: retrying the same serial+step keeps the same timeout key.
+    // Clear timer keys so NG timeout can start again from full duration.
+    timerStartedRef.current = null;
+    timerDecisionTriggeredRef.current = null;
 
     // Close modal
   };
@@ -2833,7 +2936,11 @@ export default function DeviceTestComponent({
       alert("No carton selected.");
       return;
     }
-    if (isPDIWeightVerificationStage && !isSelectedCartonWeightVerified) {
+    if (isFgToStoreCartonContext) {
+      toast.warning("Shift to next stage is temporarily disabled for FG to Store stage.");
+      return;
+    }
+    if (isPdiWeightVerificationContext && !isSelectedCartonWeightVerified) {
       toast.error("Verify carton weight before shifting to the next stage.");
       return;
     }
@@ -2851,7 +2958,7 @@ export default function DeviceTestComponent({
         const data = result;
         alert("Cartons shifted to STORE successfully!");
         fetchExistingCartonsByProcessID();
-        fetchProcessCartons();
+        fetchProcessCartons({ force: true });
         setSelectedCarton("");
         setLoadingCartonDevices(true);
         setCartonDevices([]);
@@ -3150,16 +3257,38 @@ export default function DeviceTestComponent({
                         type="text"
                         placeholder="Scan or type..."
                         className="w-full h-12 pl-11 pr-4 rounded-xl bg-slate-50 border border-slate-200 text-sm sm:text-base font-semibold text-slate-900 placeholder:text-slate-400 transition-colors focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none"
-                        onKeyDown={(e) => {
+                        onKeyDown={async (e) => {
                           if (e.key === "Enter") {
                             const val = e.currentTarget.value.trim();
+                            const normalizedScan = String(val || "").trim().toLowerCase();
                             // First check cartons
-                            const matchedCarton = (cartonSerial || []).find((c) => c === val);
+                            const matchedCarton = (cartonSerial || []).find(
+                              (c) =>
+                                String(c || "").trim().toLowerCase() === normalizedScan,
+                            );
                             if (matchedCarton) {
-                              handleSearchCarton(val);
-                              setSearchResult(""); // Clear device
-                              e.currentTarget.value = "";
-                              return;
+                              if (handleSearchCarton(String(matchedCarton))) {
+                                setSearchResult(""); // Clear device
+                                e.currentTarget.value = "";
+                                return;
+                              }
+                            }
+                            try {
+                              const refreshedPayload = await fetchProcessCartons({ force: true });
+                              const refreshedSerials = Array.isArray(refreshedPayload?.serials)
+                                ? refreshedPayload.serials
+                                : [];
+                              const refreshedCarton = refreshedSerials.find(
+                                (c: any) =>
+                                  String(c || "").trim().toLowerCase() === normalizedScan,
+                              );
+                              if (refreshedCarton && handleSearchCarton(String(refreshedCarton))) {
+                                setSearchResult("");
+                                e.currentTarget.value = "";
+                                return;
+                              }
+                            } catch (refreshError) {
+                              console.error("Error refreshing cartons during scan:", refreshError);
                             }
                             // Then check devices
                             const matchedDevice = deviceList.find(
@@ -3233,7 +3362,7 @@ export default function DeviceTestComponent({
                               <div className="rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
                                 <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Stage</div>
                                 <div className="mt-1 text-sm font-black text-slate-950 truncate">
-                                  {String(assignUserStage?.stage || "N/A")}
+                                  {String(currentStageName || "N/A")}
                                 </div>
                               </div>
                             </div>
@@ -3304,7 +3433,7 @@ export default function DeviceTestComponent({
                               </div>
                             )}
 
-                            {isPDIWeightVerificationStage && (
+                            {isPdiWeightVerificationContext && (
                               <div className="mt-3 rounded-2xl border border-emerald-200 bg-[linear-gradient(180deg,#f0fdf4_0%,#ecfdf5_100%)] p-3 shadow-sm">
                                 <div className="flex items-center justify-between gap-3">
                                     <div>
@@ -3404,7 +3533,7 @@ export default function DeviceTestComponent({
 
                           <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-4 sm:px-5">
                             <div className="space-y-3">
-                              {isPDIStage || isFGToStoreStage ? (
+                              {isPdiCartonContext || isFgToStoreCartonContext ? (
                                 !generatedCartonSticker[selectedCarton] ? (
                                   <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                                     <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
@@ -3814,7 +3943,7 @@ export default function DeviceTestComponent({
                           </div>
 
                           <div className="flex flex-col justify-end gap-3 border-t border-slate-100 bg-slate-50/70 p-4 sm:flex-row sm:p-4">
-                            {assignUserStage?.stage === "FG to Store" && (
+                            {isFgToStoreCartonContext && (
                               <button
                                 onClick={() => handleKeepInStore(selectedCarton)}
                                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-emerald-200 transition-all hover:bg-emerald-700 hover:-translate-y-0.5 sm:w-auto sm:px-8 sm:py-4"
@@ -3822,7 +3951,7 @@ export default function DeviceTestComponent({
                                 <Box className="h-4 w-4" /> Keep In Store
                               </button>
                             )}
-                            {isPDIStage && (
+                            {isPdiCartonContext && (
                               <button
                                 type="button"
                                 onClick={openPdiCartonNgModal}
@@ -3833,8 +3962,13 @@ export default function DeviceTestComponent({
                             )}
                             <button
                               onClick={() => handleShiftToNextStage(selectedCarton)}
-                              disabled={isPDIWeightVerificationStage && !isSelectedCartonWeightVerified}
-                              className={`flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg transition-all sm:w-auto sm:px-8 sm:py-4 ${isPDIWeightVerificationStage && !isSelectedCartonWeightVerified
+                              disabled={
+                                isFgToStoreCartonContext ||
+                                (isPdiWeightVerificationContext && !isSelectedCartonWeightVerified)
+                              }
+                              className={`flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg transition-all sm:w-auto sm:px-8 sm:py-4 ${
+                                isFgToStoreCartonContext ||
+                                (isPdiWeightVerificationContext && !isSelectedCartonWeightVerified)
                                 ? "cursor-not-allowed bg-slate-300 shadow-none"
                                 : "bg-indigo-600 shadow-indigo-200 hover:bg-indigo-700 hover:-translate-y-0.5"
                                 }`}
@@ -6337,7 +6471,7 @@ export default function DeviceTestComponent({
         assignUserStage={assignUserStage}
         onUpdate={() => {
           fetchExistingCartonsByProcessID();
-          fetchProcessCartons();
+          fetchProcessCartons({ force: true });
         }}
         isLoading={isCartonsLoading}
       />

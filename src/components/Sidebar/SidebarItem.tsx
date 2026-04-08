@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import Link from "next/link";
 import SidebarDropdown from "@/components/Sidebar/SidebarDropdown";
 import { usePathname } from "next/navigation";
@@ -16,18 +16,21 @@ const SidebarItem = ({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pathname = usePathname();
   const itemChildren = Array.isArray(item?.children) ? item.children : [];
+  const itemLabel = String(item?.label || "");
+  const safePermission =
+    permission && typeof permission === "object" ? permission : {};
 
   const handleClick = () => {
     const updatedPageName =
-      pageName !== item.label.toLowerCase() ? item.label.toLowerCase() : "";
+      pageName !== itemLabel.toLowerCase() ? itemLabel.toLowerCase() : "";
     setPageName(updatedPageName);
     if (typeof onNavigate === "function") onNavigate();
   };
 
-  const transformedLabel = item.label.replace(/\s+/g, "_").toLowerCase();
+  const transformedLabel = itemLabel.replace(/\s+/g, "_").toLowerCase();
   const normalizedUserType = (userType || "").toLowerCase().replace(/\s+/g, "_");
   const hasPermission =
-    permission[transformedLabel]?.[normalizedUserType] ?? normalizedUserType === "admin";
+    safePermission[transformedLabel]?.[normalizedUserType] ?? normalizedUserType === "admin";
 
   const isActive = (node: any): boolean => {
     if (node.route === pathname) return true;
@@ -36,60 +39,16 @@ const SidebarItem = ({
   };
 
   const SvgIcon = ({ svgString }: { svgString: string }) => {
-    const decoded = useMemo(
-      () =>
-        (svgString || "")
-          .replace(/&lt;/g, "<")
-          .replace(/&gt;/g, ">")
-          .replace(/&quot;/g, '"')
-          .replace(/&#x2F;/g, "/")
-          .replace(/&amp;/g, "&"),
-      [svgString],
+    const hasCustomIcon = typeof svgString === "string" && svgString.trim().length > 0;
+    const iconClass = hasCustomIcon ? "text-current" : "text-white/70";
+
+    return (
+      <span className={`inline-flex h-[18px] w-[18px] items-center justify-center ${iconClass}`} aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M4 5h16v4H4zM4 11h7v8H4zM13 11h7v8h-7z" stroke="currentColor" strokeWidth="1.5" />
+        </svg>
+      </span>
     );
-    const [safeSvg, setSafeSvg] = useState<string | null>(null);
-
-    useEffect(() => {
-      if (!decoded || typeof window === "undefined") {
-        setSafeSvg(null);
-        return;
-      }
-
-      try {
-        const parser = new window.DOMParser();
-        const doc = parser.parseFromString(decoded, "image/svg+xml");
-        const svg = doc.querySelector("svg");
-        const parserError = doc.querySelector("parsererror");
-
-        if (!svg || parserError) {
-          setSafeSvg(null);
-          return;
-        }
-
-        const pathNodes = Array.from(svg.querySelectorAll("path"));
-        const allPathsValid = pathNodes.every((node) => {
-          const d = node.getAttribute("d") || "";
-          if (!d.trim()) return true;
-          try {
-            const pathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            pathEl.setAttribute("d", d);
-            pathEl.getTotalLength();
-            return true;
-          } catch {
-            return false;
-          }
-        });
-
-        setSafeSvg(allPathsValid ? svg.outerHTML : null);
-      } catch {
-        setSafeSvg(null);
-      }
-    }, [decoded]);
-
-    if (!safeSvg) {
-      return <span className="inline-block h-[18px] w-[18px]" aria-hidden="true" />;
-    }
-
-    return <div aria-hidden="true" dangerouslySetInnerHTML={{ __html: safeSvg }} />;
   };
 
   const isItemActive = isActive(item);
@@ -145,7 +104,7 @@ const SidebarItem = ({
               </Link>
             )}
 
-            {(tooltipOpen || (collapsed && pageName === item.label.toLowerCase())) && (
+            {(tooltipOpen || (collapsed && pageName === itemLabel.toLowerCase())) && (
               <div
                 className="absolute left-full top-0 ml-3 z-[10000]"
                 onMouseEnter={openTooltip}
@@ -158,7 +117,7 @@ const SidebarItem = ({
                   <div className="min-w-[180px] rounded-xl overflow-hidden bg-gray-800 shadow-2xl ring-1 ring-white/10 border border-white/5">
                     <div className="px-4 py-2.5 bg-gray-700/50 border-b border-white/10">
                       <span className="text-[11px] font-bold uppercase tracking-widest text-white/70">
-                        {item.label}
+                        {itemLabel}
                       </span>
                     </div>
                     <ul className="py-1.5">
@@ -167,7 +126,7 @@ const SidebarItem = ({
                           ?.replace(/\s+/g, "_")
                           .toLowerCase();
                         const childPermission =
-                          permission[childLabel]?.[normalizedUserType] ??
+                          safePermission[childLabel]?.[normalizedUserType] ??
                           normalizedUserType === "admin";
 
                         return (
@@ -197,7 +156,7 @@ const SidebarItem = ({
                   </div>
                 ) : (
                   <div className="whitespace-nowrap rounded-lg bg-gray-800 px-3.5 py-2 text-xs font-semibold text-white shadow-2xl ring-1 ring-white/10 border border-white/5">
-                    {item.label}
+                    {itemLabel}
                   </div>
                 )}
               </div>

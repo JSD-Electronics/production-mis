@@ -7,6 +7,7 @@ import {
   updateInventoryById,
   updateProductionStatus,
   updateIssuedKitsToLine,
+  getDispatchSummaryByProcesses,
 } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import {
@@ -24,6 +25,14 @@ import { TableSkeleton } from "@/components/common/Skeletons";
 import Modal from "@/components/Modal/page";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+
+type DispatchSummary = {
+  processId: string;
+  cartonsInStore: number;
+  devicesInStore: number;
+  cartons: { ready: number; reserved: number; dispatched: number };
+  devices: { ready: number; reserved: number; dispatched: number };
+};
 
 const ViewProcessInventory = () => {
   const router = useRouter();
@@ -57,7 +66,31 @@ const ViewProcessInventory = () => {
     try {
       setLoading(true);
       let result = await fetchList("/production-manger/process/get");
-      setProductionManagerData(result.Processes || []);
+      const rows = result.Processes || [];
+      let summaryMap = new Map<string, DispatchSummary>();
+      try {
+        const processIds = rows.map((row: any) => String(row?._id || "")).filter(Boolean);
+        if (processIds.length > 0) {
+          const summaryResult = await getDispatchSummaryByProcesses(processIds);
+          const summaryRows: any[] = Array.isArray(summaryResult)
+            ? summaryResult
+            : (summaryResult?.data ?? summaryResult?.summaries ?? []);
+          summaryMap = new Map(
+            summaryRows
+              .filter((item) => String(item?.processId || "").trim().length > 0)
+              .map((item) => [String(item.processId), item as DispatchSummary]),
+          );
+        }
+      } catch {
+        // Keep page available if dispatch summary API fails.
+      }
+
+      setProductionManagerData(
+        rows.map((row: any) => ({
+          ...row,
+          dispatchSummary: summaryMap.get(String(row?._id || "")) || null,
+        })),
+      );
     } catch (error) {
       console.error("Error Fetching Process:", error);
       toast.error("Failed to fetch processes");
@@ -313,6 +346,33 @@ const ViewProcessInventory = () => {
           </div>
         </div>
       ),
+    },
+    {
+      name: "Dispatch",
+      grow: 1.6,
+      cell: (row: any) => {
+        const summary = row?.dispatchSummary;
+        const dispatchedDevices = Number(summary?.devices?.dispatched || 0);
+        const targetDevices = Number(row?.quantity || row?.qty || 0);
+        const pendingDevices =
+          targetDevices > 0
+            ? Math.max(targetDevices - dispatchedDevices, 0)
+            : Math.max(
+                Number(summary?.devices?.ready || 0) + Number(summary?.devices?.reserved || 0),
+                0,
+              );
+
+        return (
+          <div className="flex flex-col gap-1 py-2 text-[11px] font-semibold">
+            <div className="text-blue-700">
+              Dispatched Devices: {summary ? dispatchedDevices : "-"}
+            </div>
+            <div className="text-amber-700">
+              Pending Devices: {summary ? pendingDevices : (targetDevices > 0 ? targetDevices : "-")}
+            </div>
+          </div>
+        );
+      },
     },
     {
       name: "Kit Distribution",

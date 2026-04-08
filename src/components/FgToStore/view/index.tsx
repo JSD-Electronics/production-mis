@@ -1,8 +1,17 @@
 "use client";
 import React, { useState, useEffect, useMemo } from "react";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
-import { viewProcess, getStorePortalCartons, getDeviceTestByDeviceId, getDeviceById } from "@/lib/api";
-import { ToastContainer } from "react-toastify";
+import {
+  viewProcess,
+  getStorePortalCartons,
+  getDeviceTestByDeviceId,
+  getDeviceById,
+  getDispatchInvoices,
+  generateDispatchGatePass,
+  getDispatchSummaryByProcesses,
+} from "@/lib/api";
+import DispatchModal from "./DispatchModal";
+import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
   Package,
@@ -16,6 +25,10 @@ import {
   Archive,
   Layers,
   X,
+  Truck,
+  RotateCcw,
+  Eye,
+  Printer,
 } from "lucide-react";
 import { CardGridSkeleton, TableSkeleton } from "@/components/common/Skeletons";
 
@@ -48,6 +61,59 @@ const isStoreCarton = (c: any) => {
   return STORE_STATUSES.some((s) => s.toLowerCase() === st.toLowerCase());
 };
 
+type DispatchSummary = {
+  processId: string;
+  cartonsInStore: number;
+  devicesInStore: number;
+  cartons: { ready: number; reserved: number; dispatched: number };
+  devices: { ready: number; reserved: number; dispatched: number };
+};
+
+const createEmptyDispatchSummary = (processId = ""): DispatchSummary => ({
+  processId,
+  cartonsInStore: 0,
+  devicesInStore: 0,
+  cartons: { ready: 0, reserved: 0, dispatched: 0 },
+  devices: { ready: 0, reserved: 0, dispatched: 0 },
+});
+
+const normalizeDispatchStatus = (value: any) =>
+  String(value || "").trim().toUpperCase();
+
+const buildLocalDispatchSummary = (processId: string, cartons: any[] = []): DispatchSummary => {
+  const summary = createEmptyDispatchSummary(processId);
+  summary.cartonsInStore = cartons.length;
+
+  cartons.forEach((carton) => {
+    const storeStatus = String(carton?.cartonStatus || carton?.status || "").trim().toUpperCase();
+    const dispatchStatus = normalizeDispatchStatus(carton?.dispatchStatus);
+    const devices = Array.isArray(carton?.devices) ? carton.devices : [];
+
+    summary.devicesInStore += devices.length;
+
+    if (storeStatus === "STOCKED" && (!dispatchStatus || dispatchStatus === "READY")) {
+      summary.cartons.ready += 1;
+    } else if (dispatchStatus === "RESERVED") {
+      summary.cartons.reserved += 1;
+    } else if (dispatchStatus === "DISPATCHED") {
+      summary.cartons.dispatched += 1;
+    }
+
+    devices.forEach((device: any) => {
+      const deviceDispatchStatus = normalizeDispatchStatus(device?.dispatchStatus);
+      if (storeStatus === "STOCKED" && (!deviceDispatchStatus || deviceDispatchStatus === "READY")) {
+        summary.devices.ready += 1;
+      } else if (deviceDispatchStatus === "RESERVED") {
+        summary.devices.reserved += 1;
+      } else if (deviceDispatchStatus === "DISPATCHED") {
+        summary.devices.dispatched += 1;
+      }
+    });
+  });
+
+  return summary;
+};
+
 const CARTON_STATUS_META: Record<string, { label: string; cls: string }> = {
   FG_TO_STORE:   { label: "FG to Store",   cls: "bg-blue-100 text-blue-700 border-blue-200" },
   KEPT_IN_STORE: { label: "Kept in Store", cls: "bg-emerald-100 text-emerald-700 border-emerald-200" },
@@ -58,6 +124,15 @@ const CARTON_STATUS_META: Record<string, { label: string; cls: string }> = {
 const getCartonMeta = (s: string) =>
   CARTON_STATUS_META[s] ??
   { label: s?.replace(/_/g, " ") || "—", cls: "bg-gray-100 text-gray-500 border-gray-200" };
+
+const DISPATCH_STATUS_META: Record<string, { label: string; cls: string }> = {
+  READY: { label: "Ready", cls: "bg-sky-100 text-sky-700 border-sky-200" },
+  RESERVED: { label: "Reserved", cls: "bg-amber-100 text-amber-700 border-amber-200" },
+  DISPATCHED: { label: "Dispatched", cls: "bg-violet-100 text-violet-700 border-violet-200" },
+};
+const getDispatchMeta = (s: string) =>
+  DISPATCH_STATUS_META[s] ??
+  { label: s?.replace(/_/g, " ") || "Pending", cls: "bg-gray-100 text-gray-500 border-gray-200" };
 
 const normalizeKey = (s: any) =>
   String(s || "")
@@ -133,6 +208,27 @@ const getDeviceId = (device: any): string => {
   );
 };
 
+const openHtmlForPrint = (html: string, title = "Gate Pass") => {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    toast.error("Please allow popups to print the gate pass");
+    return;
+  }
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.document.title = title || "Gate Pass";
+  const triggerPrint = () => {
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 150);
+  };
+  if (printWindow.document.readyState === "complete") {
+    triggerPrint();
+  } else {
+    printWindow.onload = triggerPrint;
+  }
+};
+
 /* ─── CartonCard ─── */
 const CartonCard = ({ carton }: { carton: any }) => {
   const [open, setOpen] = useState(false);
@@ -148,6 +244,7 @@ const CartonCard = ({ carton }: { carton: any }) => {
   const [deviceDetailsById, setDeviceDetailsById] = useState<Record<string, any>>({});
   const rawStatus = carton?.cartonStatus || carton?.status || "";
   const meta = getCartonMeta(rawStatus);
+  const dispatchMeta = getDispatchMeta(String(carton?.dispatchStatus || "").trim() || "READY");
   const devices: any[] = carton.devices ?? [];
 
   useEffect(() => {
@@ -327,6 +424,9 @@ const CartonCard = ({ carton }: { carton: any }) => {
         </div>
         <span className={`flex-shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${meta.cls}`}>
           {meta.label}
+        </span>
+        <span className={`flex-shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${dispatchMeta.cls}`}>
+          {dispatchMeta.label}
         </span>
         <span className="ml-2 flex-shrink-0 text-slate-400">
           {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -572,47 +672,131 @@ const ProcessCard = ({
   index,
   storeCartons,
   loadingCartons,
+  onOpenDispatch,
+  onResumeDispatch,
+  onViewDispatch,
+  onReprintGatePass,
 }: {
-  process: any; index: number; storeCartons: any[]; loadingCartons: boolean;
+  process: any;
+  index: number;
+  storeCartons: any[];
+  loadingCartons: boolean;
+  onOpenDispatch: (process: any) => void;
+  onResumeDispatch: (process: any) => void;
+  onViewDispatch: (process: any) => void;
+  onReprintGatePass: (process: any) => Promise<void>;
 }) => {
   const [open, setOpen] = useState(false);
   const meta = getProcessMeta(process.status);
   const totalDevices = storeCartons.reduce((s, c) => s + (c.devices?.length ?? 0), 0);
+  const dispatchSummary: DispatchSummary =
+    process.dispatchSummary || buildLocalDispatchSummary(String(process?._id || ""), storeCartons);
   const isCompleted = ["completed", "complete"].includes(String(process.status || "").toLowerCase());
+  const readyCount = dispatchSummary?.cartons?.ready || 0;
+  const reservedCount = dispatchSummary?.cartons?.reserved || 0;
+  const dispatchedCount = dispatchSummary?.cartons?.dispatched || 0;
+  const deviceReadyCount = dispatchSummary?.devices?.ready || 0;
+  const deviceReservedCount = dispatchSummary?.devices?.reserved || 0;
+  const deviceDispatchedCount = dispatchSummary?.devices?.dispatched || 0;
+  const hasDraft = !!process.draftInvoice?._id;
+  const hasConfirmed = !!process.confirmedInvoice?._id;
 
   return (
     <div className={`rounded-2xl border shadow-sm transition-all ${
       isCompleted ? "border-emerald-200 bg-emerald-50/40" : "border-slate-200 bg-white"
     }`}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-start gap-4 px-5 py-4 text-left"
-      >
+      <div className="flex w-full items-start gap-4 px-5 py-4 text-left">
         <div className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-sm font-bold ${
           isCompleted ? "bg-emerald-100 text-emerald-700" : "bg-blue-50 text-blue-600"
         }`}>
           {index + 1}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-base font-bold text-slate-800">
-              {process.name || "Unnamed Process"}
-            </h3>
-            <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${meta.cls}`}>
-              {meta.label}
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h3 className="truncate text-base font-bold text-slate-800">
+                {process.name || "Unnamed Process"}
+              </h3>
+              <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${meta.cls}`}>
+                {meta.label}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {readyCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onOpenDispatch(process); }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                >
+                  <Truck className="h-3.5 w-3.5" />
+                  Dispatch
+                </button>
+              ) : null}
+              {hasDraft ? (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onResumeDispatch(process); }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 shadow-sm hover:bg-amber-100"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Resume Dispatch
+                </button>
+              ) : null}
+              {hasConfirmed ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onViewDispatch(process); }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    View Dispatch
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); void onReprintGatePass(process); }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 shadow-sm hover:bg-violet-100"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    Reprint Gate Pass
+                  </button>
+                </>
+              ) : null}
+            </div>
           </div>
           <div className="mt-1 flex flex-wrap gap-4 text-xs text-slate-500">
-            <span><span className="font-semibold text-slate-700">{storeCartons.length}</span> cartons in store</span>
-            <span><span className="font-semibold text-slate-700">{totalDevices}</span> devices</span>
+            <span><span className="font-semibold text-slate-700">{dispatchSummary?.cartonsInStore ?? storeCartons.length}</span> cartons in store</span>
+            <span><span className="font-semibold text-slate-700">{dispatchSummary?.devicesInStore ?? totalDevices}</span> devices in store</span>
+            <span>
+              Cartons:
+              {" "}
+              <span className="font-semibold text-sky-700">{readyCount}</span> ready
+              {" "}
+              <span className="font-semibold text-amber-700">{reservedCount}</span> reserved
+              {" "}
+              <span className="font-semibold text-violet-700">{dispatchedCount}</span> dispatched
+            </span>
+            <span>
+              Devices:
+              {" "}
+              <span className="font-semibold text-sky-700">{deviceReadyCount}</span> ready
+              {" "}
+              <span className="font-semibold text-amber-700">{deviceReservedCount}</span> reserved
+              {" "}
+              <span className="font-semibold text-violet-700">{deviceDispatchedCount}</span> dispatched
+            </span>
             {process.quantity && <span>Target: <span className="font-semibold text-slate-700">{process.quantity}</span></span>}
             {process.createdAt && <span>Created {new Date(process.createdAt).toLocaleDateString()}</span>}
           </div>
         </div>
-        <span className="mt-1 flex-shrink-0 text-slate-400">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="mt-1 flex-shrink-0 text-slate-400 hover:text-slate-600"
+        >
           {open ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-        </span>
-      </button>
+        </button>
+      </div>
 
       {open && (
         <div className="border-t border-slate-100 px-5 pb-5 pt-3">
@@ -638,6 +822,9 @@ type ProcessWithCartons = {
   process: any;
   storeCartons: any[];
   loaded: boolean;
+  draftInvoice: any | null;
+  confirmedInvoice: any | null;
+  dispatchSummary: DispatchSummary;
 };
 
 const ViewFGToStore = () => {
@@ -647,15 +834,19 @@ const ViewFGToStore = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
+  const [dispatchModalProcessId, setDispatchModalProcessId] = useState<string | null>(null);
+  const [dispatchModalInvoice, setDispatchModalInvoice] = useState<any | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
     setError(null);
     try {
       // Fetch processes + store cartons in parallel (store-portal is the source of truth for FG_TO_STORE/STOCKED).
-      const [procs, storePortal] = await Promise.allSettled([
+      const [procs, storePortal, draftInvoicesResult, confirmedInvoicesResult] = await Promise.allSettled([
         viewProcess(),
         getStorePortalCartons(),
+        getDispatchInvoices({ status: "DRAFT" }),
+        getDispatchInvoices({ status: "CONFIRMED" }),
       ]);
 
       const procVal: any = procs.status === "fulfilled" ? procs.value : null;
@@ -676,27 +867,104 @@ const ViewFGToStore = () => {
           ? storeVal
           : (storeVal?.data ?? storeVal?.cartons ?? []);
 
+      const draftInvoicesRaw: any[] =
+        draftInvoicesResult.status === "fulfilled"
+          ? (Array.isArray(draftInvoicesResult.value)
+              ? draftInvoicesResult.value
+              : (draftInvoicesResult.value?.data ?? []))
+          : [];
+      const confirmedInvoicesRaw: any[] =
+        confirmedInvoicesResult.status === "fulfilled"
+          ? (Array.isArray(confirmedInvoicesResult.value)
+              ? confirmedInvoicesResult.value
+              : (confirmedInvoicesResult.value?.data ?? []))
+          : [];
+
+      const latestInvoiceByProcess = (invoices: any[]) => {
+        const invoiceByProcess: Record<string, any> = {};
+        invoices.forEach((invoice) => {
+          const selectedCartons = Array.isArray(invoice?.selectedCartons) ? invoice.selectedCartons : [];
+          const processIds: string[] = Array.from(
+            new Set(
+              selectedCartons
+                .map((carton: any) => String(carton?.processId || ""))
+                .filter(Boolean),
+            ),
+          );
+          processIds.forEach((pid) => {
+            const existing = invoiceByProcess[pid];
+            const nextTime = new Date(invoice?.updatedAt || invoice?.createdAt || 0).getTime();
+            const currentTime = new Date(existing?.updatedAt || existing?.createdAt || 0).getTime();
+            if (!existing || nextTime >= currentTime) {
+              invoiceByProcess[pid] = invoice;
+            }
+          });
+        });
+        return invoiceByProcess;
+      };
+
+      const draftInvoiceByProcess = latestInvoiceByProcess(draftInvoicesRaw);
+      const confirmedInvoiceByProcess = latestInvoiceByProcess(confirmedInvoicesRaw);
+
       // Group cartons by processId for fast joins.
-      const byProcess = new Map<string, any[]>();
+      const byProcess: Record<string, any[]> = {};
       portalCartonsRaw.forEach((c: any) => {
         const pid = String(c?.processId?._id || c?.processId || "");
         if (!pid) return;
-        const arr = byProcess.get(pid) || [];
-        arr.push(c);
-        byProcess.set(pid, arr);
+        if (!Array.isArray(byProcess[pid])) {
+          byProcess[pid] = [];
+        }
+        byProcess[pid].push(c);
       });
+
+      const summaryProcessIds = Array.from(
+        new Set([
+          ...scopedProcesses.map((proc: any) => String(proc?._id || "")).filter(Boolean),
+          ...Object.keys(byProcess),
+        ]),
+      );
+
+      let summaryByProcess: Record<string, DispatchSummary> = {};
+      if (summaryProcessIds.length > 0) {
+        try {
+          const summaryResult = await getDispatchSummaryByProcesses(summaryProcessIds);
+          const summaryRows: any[] =
+            Array.isArray(summaryResult)
+              ? summaryResult
+              : (summaryResult?.data ?? summaryResult?.summaries ?? []);
+
+          summaryByProcess = {};
+          summaryRows.forEach((row) => {
+            const processId = String(row?.processId || "").trim();
+            if (!processId) return;
+            summaryByProcess[processId] = row as DispatchSummary;
+          });
+        } catch {
+          // Fall back to local in-memory computation to keep the UI usable.
+        }
+      }
 
       const data: ProcessWithCartons[] = scopedProcesses.map((proc: any) => {
         const pid = String(proc?._id || "");
-        const storeCartons = (byProcess.get(pid) || []).filter(isStoreCarton);
-        return { process: proc, storeCartons, loaded: true };
+        const storeCartons = (byProcess[pid] || []).filter(isStoreCarton);
+        const fallbackSummary = buildLocalDispatchSummary(pid, storeCartons);
+        return {
+          process: proc,
+          storeCartons,
+          loaded: true,
+          draftInvoice: draftInvoiceByProcess[pid] || null,
+          confirmedInvoice: confirmedInvoiceByProcess[pid] || null,
+          dispatchSummary: summaryByProcess[pid] || fallbackSummary,
+        };
       });
 
       // Also include any cartons that belong to processes not in the active/completed list (data repair / legacy).
-      byProcess.forEach((cartons, pid) => {
+      Object.entries(byProcess).forEach(([pid, cartons]) => {
         const exists = data.some((d) => String(d.process?._id || "") === pid);
         if (exists) return;
         const first = cartons[0] || {};
+        const storeCartons = cartons.filter(isStoreCarton);
+        const fallbackSummary = buildLocalDispatchSummary(pid, storeCartons);
         data.push({
           process: {
             _id: pid,
@@ -704,8 +972,11 @@ const ViewFGToStore = () => {
             processID: first.processID,
             status: "active",
           },
-          storeCartons: cartons.filter(isStoreCarton),
+          storeCartons,
           loaded: true,
+          draftInvoice: draftInvoiceByProcess[pid] || null,
+          confirmedInvoice: confirmedInvoiceByProcess[pid] || null,
+          dispatchSummary: summaryByProcess[pid] || fallbackSummary,
         });
       });
 
@@ -719,6 +990,57 @@ const ViewFGToStore = () => {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  const activeDispatchProcess = useMemo(
+    () =>
+      processesWithCartons.find(
+        (entry) => String(entry.process?._id || "") === String(dispatchModalProcessId || ""),
+      ) || null,
+    [dispatchModalProcessId, processesWithCartons],
+  );
+
+  const handleOpenDispatch = (process: any) => {
+    setDispatchModalProcessId(String(process?._id || ""));
+    setDispatchModalInvoice(null);
+  };
+
+  const handleResumeDispatch = (process: any) => {
+    const target = processesWithCartons.find(
+      (entry) => String(entry.process?._id || "") === String(process?._id || ""),
+    );
+    setDispatchModalProcessId(String(process?._id || ""));
+    setDispatchModalInvoice(target?.draftInvoice || null);
+  };
+
+  const handleViewDispatch = (process: any) => {
+    const target = processesWithCartons.find(
+      (entry) => String(entry.process?._id || "") === String(process?._id || ""),
+    );
+    setDispatchModalProcessId(String(process?._id || ""));
+    setDispatchModalInvoice(target?.confirmedInvoice || null);
+  };
+
+  const handleReprintGatePass = async (process: any) => {
+    const target = processesWithCartons.find(
+      (entry) => String(entry.process?._id || "") === String(process?._id || ""),
+    );
+    if (!target?.confirmedInvoice?._id) {
+      toast.error("No confirmed dispatch was found for this process");
+      return;
+    }
+
+    try {
+      const result = await generateDispatchGatePass(target.confirmedInvoice._id, { includeImeiList: true });
+      const payload = result?.data || result;
+      if (!payload?.html) {
+        toast.error("Gate pass content is not available");
+        return;
+      }
+      openHtmlForPrint(payload.html, `Gate Pass ${target.confirmedInvoice?.gatePassNumber || ""}`.trim());
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to reprint gate pass");
+    }
+  };
 
   /* Stats */
   const totalCartons = processesWithCartons.reduce((s, p) => s + p.storeCartons.length, 0);
@@ -831,6 +1153,10 @@ const ViewFGToStore = () => {
         </p>
       )}
 
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+        Current managed flow: <span className="font-semibold text-slate-900">Packaging → FG_TO_STORE → STOCKED.</span> Dispatch now runs on top of stock with <span className="font-semibold text-sky-600">READY</span>, <span className="font-semibold text-amber-600">RESERVED</span>, and <span className="font-semibold text-violet-600">DISPATCHED</span>.
+      </div>
+
       {/* Content */}
       <div className="mt-4">
         {loading ? (
@@ -857,18 +1183,34 @@ const ViewFGToStore = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            {filtered.map(({ process, storeCartons, loaded }, idx) => (
+            {filtered.map(({ process, storeCartons, loaded, draftInvoice, confirmedInvoice, dispatchSummary }, idx) => (
               <ProcessCard
                 key={process._id ?? idx}
-                process={process}
+                process={{ ...process, draftInvoice, confirmedInvoice, dispatchSummary }}
                 index={idx}
                 storeCartons={storeCartons}
                 loadingCartons={!loaded}
+                onOpenDispatch={handleOpenDispatch}
+                onResumeDispatch={handleResumeDispatch}
+                onViewDispatch={handleViewDispatch}
+                onReprintGatePass={handleReprintGatePass}
               />
             ))}
           </div>
         )}
       </div>
+
+      <DispatchModal
+        isOpen={!!activeDispatchProcess}
+        process={activeDispatchProcess?.process || null}
+        cartons={activeDispatchProcess?.storeCartons || []}
+        initialInvoice={dispatchModalInvoice}
+        onClose={() => {
+          setDispatchModalProcessId(null);
+          setDispatchModalInvoice(null);
+        }}
+        onRefresh={fetchData}
+      />
     </div>
   );
 };
