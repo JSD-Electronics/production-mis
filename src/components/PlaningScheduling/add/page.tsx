@@ -27,7 +27,11 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 import Modal from "@/components/Modal/page";
 import { Clock, Calendar, Coffee, UserPlus } from "lucide-react";
 import { FaClock, FaCogs, FaLayerGroup, FaClipboardList, FaBox } from "react-icons/fa";
-import { normalizeAssignedStagesPayload } from "@/lib/parallelStageRouting";
+import {
+  normalizeAssignedStagesPayload,
+  sanitizeCurrentPlanAssignedStages,
+  stripReservedSeatEntries,
+} from "@/lib/parallelStageRouting";
 
 const ADDPlanSchedule = () => {
   const router = useRouter();
@@ -203,7 +207,11 @@ const ADDPlanSchedule = () => {
     setStartDate(formatDate(selectedClonePlaning?.startDate));
     setAssignedStages(
       normalizeAssignedStagesPayload(
-        JSON.parse(selectedClonePlaning?.assignedStages),
+        sanitizeCurrentPlanAssignedStages({
+          assignedStages: JSON.parse(selectedClonePlaning?.assignedStages || "{}"),
+          processStages: singleProcess?.stages || [],
+          currentProcess: singleProcess,
+        }),
         singleProcess?.stages || [],
       ),
     );
@@ -244,6 +252,9 @@ const ADDPlanSchedule = () => {
     startDate: any,
     expectedEndDate: any,
   ) => {
+    if (!selectedRoom?._id || !selectedShift?._id || !startDate || !expectedEndDate) {
+      return {};
+    }
     try {
       const shiftDataChange = JSON.stringify({
         startTime: selectedShift.startTime,
@@ -256,8 +267,9 @@ const ADDPlanSchedule = () => {
         startDate,
         expectedEndDate,
         shiftDataChange,
+        { silentNotFound: true },
       );
-      let assignedStagesObject = result.plans.reduce((acc: any, plan: any) => {
+      let assignedStagesObject = (Array.isArray(result?.plans) ? result.plans : []).reduce((acc: any, plan: any) => {
         try {
           let assignedJigs = plan?.assignedJigs
             ? JSON.parse(plan?.assignedJigs)
@@ -880,16 +892,14 @@ const ADDPlanSchedule = () => {
   const handlePlaningDraft = async () => {
     try {
       const formData = new FormData();
-      const filteredData = normalizeAssignedStagesPayload(Object.fromEntries(
-        Object.entries(assignedStages)
-          .map(([key, value]) => [
-            key,
-            value.filter(
-              (item) => !(item.name === "Reserved" && item.reserved === true),
-            ),
-          ])
-          .filter(([_, value]) => value.length > 0), // Remove keys with empty arrays
-      ), selectedProduct?.product?.stages || selectedProduct?.stages || []);
+      const filteredData = normalizeAssignedStagesPayload(
+        sanitizeCurrentPlanAssignedStages({
+          assignedStages: stripReservedSeatEntries(assignedStages),
+          processStages: selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+          currentProcess: selectedProcess,
+        }),
+        selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+      );
       formData.append("processName", processName);
       formData.append("selectedProcess", selectedProcess?._id || "");
       formData.append("selectedRoom", selectedRoom?._id || "");
@@ -932,24 +942,30 @@ const ADDPlanSchedule = () => {
       const formData = new FormData();
       let requiredKits = parseInt(selectedProcess?.quantity || "0");
       let isFirstElement = true;
-      const filteredData = normalizeAssignedStagesPayload(Object.fromEntries(
-        Object.entries(assignedStages)
-          .map(([key, value]) => [
-            key,
-            value
-              .filter(
-                (item) => !(item.name === "Reserved" && item.reserved === true),
-              )
-              .map((item) => {
+      const filteredData = normalizeAssignedStagesPayload(
+        Object.fromEntries(
+          Object.entries(
+            sanitizeCurrentPlanAssignedStages({
+              assignedStages: stripReservedSeatEntries(assignedStages),
+              processStages:
+                selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+              currentProcess: selectedProcess,
+            }),
+          )
+            .map(([key, value]: [string, any]) => [
+              key,
+              value.map((item: any) => {
                 if (isFirstElement) {
                   isFirstElement = false;
                   return { ...item, totalUPHA: parseInt(totalUPHA || "0") };
                 }
                 return { ...item, totalUPHA: 0 };
               }),
-          ])
-          .filter(([_, value]) => value.length > 0),
-      ), selectedProduct?.product?.stages || selectedProduct?.stages || []);
+            ])
+            .filter(([_, value]) => Array.isArray(value) && value.length > 0),
+        ),
+        selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+      );
       const assignStageKeys = Object.keys(filteredData);
       const filteredJigs = Object.keys(assignedJigs)
         .filter((key) => assignStageKeys.includes(key))
@@ -1147,17 +1163,42 @@ const ADDPlanSchedule = () => {
     const selected = getSavedPlaning.find((value) => value._id === event);
     setSelectedClonePlaning(selected);
   };
+  const getAssignedOperatorIds = () =>
+    Object.values(assignedOperators || {})
+      .flatMap((operatorsForSeat: any) =>
+        Array.isArray(operatorsForSeat) ? operatorsForSeat : [operatorsForSeat],
+      )
+      .filter((operator: any) => operator && typeof operator === "object" && operator._id)
+      .map((operator: any) => String(operator._id));
+  const normalizeOperatorsSlot = (slot: any): any[] => {
+    if (Array.isArray(slot)) return slot.filter(Boolean);
+    if (!slot) return [];
+    if (typeof slot === "string") {
+      const trimmed = slot.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+      } catch {
+        return [];
+      }
+    }
+    if (typeof slot === "object") {
+      if (Array.isArray(slot.operators)) return slot.operators.filter(Boolean);
+      if (slot?._id || slot?.id || slot?.operatorId || slot?.userId || slot?.name) {
+        return [slot];
+      }
+    }
+    return [];
+  };
+
   const openCustomStagesModal = (stage, index) => {
     const requiredSkill = String(stage?.requiredSkill || "").toLowerCase().trim();
-    const requiredUserType = String(stage?.managedBy || "").toLowerCase().trim();
-    const assignedOperatorIds = Object.values(assignedOperators || {})
-      .flat()
-      .filter((operator: any) => operator && operator._id)
-      .map((operator: any) => String(operator._id));
 
+    const requiredUserType = String(stage?.managedBy || "").toLowerCase().trim();
+    const assignedOperatorIds = getAssignedOperatorIds();
     const compatibleOperators = (Array.isArray(operators) ? operators : []).filter((operator: any) => {
       if (!operator?._id) return false;
-
       const normalizedSkills = (Array.isArray(operator?.skills) ? operator.skills : [])
         .map((skill: any) => String(skill || "").toLowerCase().trim())
         .filter(Boolean);
@@ -1165,7 +1206,6 @@ const ADDPlanSchedule = () => {
       const hasRequiredSkill = !requiredSkill || normalizedSkills.includes(requiredSkill);
       const hasRequiredUserType = !requiredUserType || normalizedUserType === requiredUserType;
       const isAlreadyAssigned = assignedOperatorIds.includes(String(operator._id));
-
       return hasRequiredSkill && hasRequiredUserType && !isAlreadyAssigned;
     });
 
@@ -1175,13 +1215,12 @@ const ADDPlanSchedule = () => {
   };
   const handleOperator = (event) => {
     const operator = operators.find((val) => val._id === event);
+    if (!operator) return;
     const key = `${customStagesIndexVal}`;
     const newAssignedOperators = { ...assignedCustomOperators };
-
-    if (!newAssignedOperators[key]) {
-      newAssignedOperators[key] = [];
-    }
-    const alreadyExists = newAssignedOperators[key].some(
+    const existingOperators = normalizeOperatorsSlot(newAssignedOperators[key]);
+    newAssignedOperators[key] = existingOperators;
+    const alreadyExists = existingOperators.some(
       (op) => op._id === operator._id,
     );
     if (!alreadyExists) {
@@ -1190,9 +1229,9 @@ const ADDPlanSchedule = () => {
     setAssignedCustomOperators(newAssignedOperators);
   };
   const isOperatorAssignedToAnySeat = (operatorName: any) => {
-    return Object.values(assignedOperators).some((operatorsForSeat) =>
-      operatorsForSeat?.some(
-        (assignedOperator) => assignedOperator.name === operatorName,
+    return Object.values(assignedOperators || {}).some((operatorsForSeat: any) =>
+      (Array.isArray(operatorsForSeat) ? operatorsForSeat : []).some(
+        (assignedOperator: any) => assignedOperator?.name === operatorName,
       ),
     );
   };
@@ -1350,49 +1389,15 @@ const ADDPlanSchedule = () => {
                           <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400">UPHA Analysis</span>
                           <div className="mt-1 flex items-baseline gap-1">
                             <span className="text-xl font-black text-gray-900 dark:text-white font-outfit">
-                              {totalUPHA}
+                              {totalUPHA || "0"}
                             </span>
-                            <span className="text-xs font-bold text-gray-500 uppercase">U/Day</span>
+                            <span className="text-xs font-bold text-gray-500 uppercase">
+                              Units/Day
+                            </span>
                           </div>
-                          <p className="mt-0.5 text-[9px] font-black text-green-600 dark:text-green-400 uppercase tracking-tighter">
-                            Active:{" "}
-                            {(
-                              shiftTime -
-                              parseInt(selectedShift?.totalBreakTime || "0") / 60
-                            ).toFixed(2)}{" "}
-                            Hrs
-                          </p>
-                        </div>
-                        <FaCogs className="absolute -bottom-2 -right-2 h-16 w-16 text-green-500/5 dark:text-green-400/5" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {isPlaningAndSchedulingShow && (
-                  <div className="mt-6 border-t border-gray-100 pt-6 dark:border-gray-800">
-                    <div className="flex flex-col xl:flex-row gap-6">
-                      <div className="w-full xl:w-64 shrink-0">
-                        <div className="flex items-center gap-2 mb-3">
-                          <div className="p-1 bg-blue-100 text-blue-600 rounded dark:bg-blue-900/30 dark:text-blue-400">
-                            <FaLayerGroup className="h-4 w-4" />
-                          </div>
-                          <h3 className="text-sm font-bold text-gray-900 dark:text-white font-outfit uppercase tracking-tight">Available Stages</h3>
-                        </div>
-                        <div className="custom-scroll max-h-[400px] overflow-y-auto space-y-3 pr-2">
-                          {stages?.map((stage, index) => (
-                            <div key={index} className="group relative">
-                              <button
-                                className="w-full flex items-center justify-between truncate rounded-xl bg-white border border-gray-100 px-4 py-3 text-[11px] font-bold text-gray-700 shadow-sm transition-all duration-300 hover:border-blue-400 hover:shadow-md hover:shadow-blue-500/10 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:border-blue-500 group-active:scale-[0.98]"
-                                type="button"
-                                draggable
-                                onDragStart={handleDragStart(stage)}
-                              >
-                                <span>{stage.stageName}</span>
-                                <div className="h-2 w-2 rounded-full bg-blue-500/20 group-hover:bg-blue-500 transition-colors shadow-sm shadow-blue-500/50" />
-                              </button>
-                            </div>
-                          ))}
+                          <span className="mt-0.5 block text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                            Projected Daily Output
+                          </span>
                         </div>
                       </div>
 
@@ -1475,7 +1480,7 @@ const ADDPlanSchedule = () => {
 
                                 <div className="mt-auto pt-3 border-t border-gray-50 dark:border-gray-700/50 flex items-center justify-between">
                                   <div className="flex flex-wrap gap-1 max-w-[150px]">
-                                    {assignedCustomOperators[index]?.map((op: any, i: number) => (
+                                    {normalizeOperatorsSlot(assignedCustomOperators[index]).map((op: any, i: number) => (
                                       <div key={i} className="px-2 py-0.5 rounded-md bg-blue-50 border border-blue-100 flex items-center justify-center text-[9px] font-bold text-blue-600 dark:bg-blue-900/30 dark:border-blue-800/50 dark:text-blue-400">
                                         {op.name}
                                       </div>
@@ -1483,7 +1488,7 @@ const ADDPlanSchedule = () => {
                                   </div>
 
                                   <div className="flex gap-1.5">
-                                    {assignedCustomOperators[index] && assignedCustomOperators[index].length > 0 && (
+                                    {normalizeOperatorsSlot(assignedCustomOperators[index]).length > 0 && (
                                       <button
                                         type="button"
                                         className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors dark:hover:bg-red-900/20"
@@ -1501,7 +1506,7 @@ const ADDPlanSchedule = () => {
                                       onClick={() => openCustomStagesModal(value, index)}
                                     >
                                       <UserPlus className="h-3 w-3" />
-                                      {assignedCustomOperators[index]?.length > 0 ? "Edit" : "Assign"}
+                                      {normalizeOperatorsSlot(assignedCustomOperators[index]).length > 0 ? "Edit" : "Assign"}
                                     </button>
                                   </div>
                                 </div>

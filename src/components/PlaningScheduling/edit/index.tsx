@@ -35,7 +35,11 @@ import Modal from "@/components/Modal/page";
 import ConfirmationPopup from "@/components/Confirmation/page";
 import { Clock, Calendar, Coffee, UserPlus, Settings, Wrench } from "lucide-react";
 import { FaClock, FaCogs, FaLayerGroup, FaClipboardList, FaBox } from "react-icons/fa";
-import { normalizeAssignedStagesPayload } from "@/lib/parallelStageRouting";
+import {
+  normalizeAssignedStagesPayload,
+  sanitizeCurrentPlanAssignedStages,
+  stripReservedSeatEntries,
+} from "@/lib/parallelStageRouting";
 
 const EditPlanSchedule = () => {
   const router = useRouter();
@@ -112,6 +116,37 @@ const EditPlanSchedule = () => {
     } catch {
       return fallback;
     }
+  };
+  const normalizeOperatorsSlot = (slot: any): any[] => {
+    if (Array.isArray(slot)) return slot.filter(Boolean);
+    if (!slot) return [];
+    if (typeof slot === "string") {
+      const trimmed = slot.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+      } catch {
+        return [];
+      }
+    }
+    if (typeof slot === "object") {
+      if (Array.isArray(slot.operators)) return slot.operators.filter(Boolean);
+      if (slot?._id || slot?.id || slot?.operatorId || slot?.userId || slot?.name) {
+        return [slot];
+      }
+    }
+    return [];
+  };
+  const normalizeCustomOperatorsPayload = (val: any): any[] => {
+    const parsed = safeParse(val, []);
+    if (Array.isArray(parsed)) return parsed.map((slot) => normalizeOperatorsSlot(slot));
+    if (parsed && typeof parsed === "object") {
+      return Object.keys(parsed)
+        .sort((a, b) => Number(a) - Number(b))
+        .map((key) => normalizeOperatorsSlot(parsed[key]));
+    }
+    return [];
   };
   const toLocalIso = (d: any) => {
     if (!d) return "";
@@ -220,7 +255,11 @@ const EditPlanSchedule = () => {
     setRepeatCount(result?.repeatCount);
     setStartDate(formatDate(result?.startDate));
     const currentAssignedStages = normalizeAssignedStagesPayload(
-      safeParse(result?.assignedStages, {}),
+      sanitizeCurrentPlanAssignedStages({
+        assignedStages: safeParse(result?.assignedStages, {}),
+        processStages: singleProcess?.stages || [],
+        currentProcess: singleProcess,
+      }),
       singleProcess?.stages || [],
     );
     const currentAssignedOperators = safeParse(result?.assignedOperators, {});
@@ -229,7 +268,9 @@ const EditPlanSchedule = () => {
     setAssignedOperators(currentAssignedOperators);
     setAssignedJigs(currentAssignedJigs);
     setAssignedCustomStages(safeParse(result?.assignedCustomStages, []));
-    setAssignedCustomOperators(safeParse(result?.assignedCustomStagesOp, []));
+    setAssignedCustomOperators(
+      normalizeCustomOperatorsPayload(result?.assignedCustomStagesOp),
+    );
     setEstimatedEndDate(formatDate(result?.estimatedEndDate));
     setTotalTimeEstimation(result?.totalTimeEstimation);
     const downTimeArr = result.downTime;
@@ -303,6 +344,9 @@ const EditPlanSchedule = () => {
     startDate: any,
     expectedEndDate: any,
   ) => {
+    if (!selectedRoom?._id || !selectedShift?._id || !startDate || !expectedEndDate) {
+      return {};
+    }
     let startTime = selectedShift?.intervals[0]?.startTime;
     let endTime = selectedShift?.intervals[0]?.endTime;
     try {
@@ -317,10 +361,12 @@ const EditPlanSchedule = () => {
         startDate,
         expectedEndDate,
         shiftDataChange,
+        { silentNotFound: true },
       );
-      let assignedStagesObject = result.plans.reduce((acc: any, plan: any) => {
+      const activePlanId = String(id || "");
+      let assignedStagesObject = (Array.isArray(result?.plans) ? result.plans : []).reduce((acc: any, plan: any) => {
         try {
-          if (plan._id != id) {
+          if (String(plan?._id || "") !== activePlanId) {
             let assignedJigs = safeParse(plan?.assignedJigs, {});
             let assignedOperator = safeParse(plan?.assignedOperators, {});
             setAssignedOperators((prev) => ({
@@ -841,20 +887,15 @@ const EditPlanSchedule = () => {
       const formData = new FormData();
       const userDetails = JSON.parse(localStorage.getItem("userDetails"));
       let seatIndexCounter = 0;
-      const filteredData = normalizeAssignedStagesPayload(Object.fromEntries(
-        Object.entries(assignedStages)
-          .map(([key, value]) => [
-            key,
-            value
-              .filter(
-                (item) => !(item.name === "Reserved" && item.reserved === true),
-              )
-              .map((item) => {
-                return { ...item };
-              }),
-          ])
-          .filter(([_, value]) => value.length > 0),
-      ), selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || []);
+      const filteredData = normalizeAssignedStagesPayload(
+        sanitizeCurrentPlanAssignedStages({
+          assignedStages: stripReservedSeatEntries(assignedStages),
+          processStages:
+            selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+          currentProcess: selectedProcess,
+        }),
+        selectedProduct?.product?.stages || selectedProduct?.stages || selectedProcess?.stages || [],
+      );
       const assignStageKeys = Object.keys(filteredData);
       const filteredJigs = Object.keys(assignedJigs)
         .filter((key) => assignStageKeys.includes(key))
@@ -1238,13 +1279,12 @@ const EditPlanSchedule = () => {
   };
   const handleOperator = (event) => {
     const operator = operators.find((val) => val._id === event);
+    if (!operator) return;
     const key = `${customStagesIndexVal}`;
     const newAssignedOperators = { ...assignedCustomOperators };
-
-    if (!newAssignedOperators[key]) {
-      newAssignedOperators[key] = [];
-    }
-    const alreadyExists = newAssignedOperators[key].some(
+    const existingOperators = normalizeOperatorsSlot(newAssignedOperators[key]);
+    newAssignedOperators[key] = existingOperators;
+    const alreadyExists = existingOperators.some(
       (op) => op._id === operator._id,
     );
     if (!alreadyExists) {
@@ -1696,7 +1736,7 @@ const EditPlanSchedule = () => {
 
                               <div className="mt-auto pt-3 border-t border-gray-50 dark:border-gray-700/50 flex items-center justify-between">
                                 <div className="flex flex-wrap gap-1 max-w-[150px]">
-                                  {assignedCustomOperators[index]?.map((op: any, i: number) => (
+                                  {normalizeOperatorsSlot(assignedCustomOperators[index]).map((op: any, i: number) => (
                                     <div key={i} className="px-2 py-0.5 rounded-md bg-blue-50 border border-blue-100 flex items-center justify-center text-[9px] font-bold text-blue-600 dark:bg-blue-900/30 dark:border-blue-800/50 dark:text-blue-400">
                                       {op.name}
                                     </div>
@@ -1704,7 +1744,7 @@ const EditPlanSchedule = () => {
                                 </div>
 
                                 <div className="flex gap-1.5">
-                                  {assignedCustomOperators[index] && assignedCustomOperators[index].length > 0 && (
+                                  {normalizeOperatorsSlot(assignedCustomOperators[index]).length > 0 && (
                                     <button
                                       type="button"
                                       className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors dark:hover:bg-red-900/20"
@@ -1722,7 +1762,7 @@ const EditPlanSchedule = () => {
                                     onClick={() => openCustomStagesModal(value, index)}
                                   >
                                     <UserPlus className="h-3 w-3" />
-                                    {assignedCustomOperators[index]?.length > 0 ? "Edit" : "Assign"}
+                                    {normalizeOperatorsSlot(assignedCustomOperators[index]).length > 0 ? "Edit" : "Assign"}
                                   </button>
                                 </div>
                               </div>

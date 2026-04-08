@@ -45,9 +45,21 @@ export default function GlobalError({
               </button>
             </div>
             {process.env.NODE_ENV !== "production" && (
-              <pre className="mt-6 overflow-auto rounded-xl bg-gray-50 p-4 text-xs text-gray-500">
-                {error.message}
-              </pre>
+              <div className="mt-6 space-y-3">
+                <pre className="overflow-auto rounded-xl bg-gray-50 p-4 text-xs text-gray-500">
+                  {error.message}
+                </pre>
+                {error?.stack && (
+                  <pre className="max-h-64 overflow-auto rounded-xl bg-gray-50 p-4 text-xs text-gray-500">
+                    {error.stack}
+                  </pre>
+                )}
+                {error?.digest && (
+                  <pre className="overflow-auto rounded-xl bg-gray-50 p-4 text-xs text-gray-500">
+                    Digest: {error.digest}
+                  </pre>
+                )}
+              </div>
             )}
           </div>
         </div>

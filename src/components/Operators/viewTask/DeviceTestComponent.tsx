@@ -713,6 +713,20 @@ export default function DeviceTestComponent({
     const list = Array.isArray(cartonDetails) ? cartonDetails : [];
     return list.find((c: any) => c?.cartonSerial === selectedCarton) || null;
   }, [selectedCarton, cartonDetails]);
+  const normalizeWorkflowStatus = React.useCallback((value: any) => {
+    return String(value || "").trim().toUpperCase().replace(/\s+/g, "_");
+  }, []);
+  const selectedCartonWorkflowStatus = React.useMemo(
+    () => normalizeWorkflowStatus((selectedCartonObj as any)?.cartonStatus),
+    [normalizeWorkflowStatus, selectedCartonObj],
+  );
+  const isSelectedCartonInPDI = selectedCartonWorkflowStatus === "PDI";
+  const isSelectedCartonInFGToStore = selectedCartonWorkflowStatus === "FG_TO_STORE";
+  const isPdiCartonContext = Boolean(isPDIStage || isSelectedCartonInPDI);
+  const isFgToStoreCartonContext = Boolean(isFGToStoreStage || isSelectedCartonInFGToStore);
+  const isPdiWeightVerificationContext = Boolean(
+    isPDIWeightVerificationStage || isSelectedCartonInPDI,
+  );
   const isSelectedCartonVerified = Boolean((selectedCartonObj as any)?.isStickerVerified);
   const persistedSelectedCartonWeightVerified = Boolean(
     (selectedCartonObj as any)?.isWeightVerified ||
@@ -1239,7 +1253,7 @@ export default function DeviceTestComponent({
 
     const matchResult = getPdiWeightMatchResult(selectedCartonObj, normalizedWeight.numeric);
     if (!matchResult.matches) {
-      if (isPDIWeightVerificationStage) {
+      if (isPdiWeightVerificationContext) {
         openPdiWeightMismatchNgModal();
         return;
       }
@@ -1276,7 +1290,7 @@ export default function DeviceTestComponent({
           normalizedErrorMessage.includes("tolerance range") ||
           normalizedErrorMessage.includes("cannot exceed the configured carton weight"));
 
-      if (isPDIWeightVerificationStage && isWeightMismatchError) {
+      if (isPdiWeightVerificationContext && isWeightMismatchError) {
         openPdiWeightMismatchNgModal();
         return;
       }
@@ -2491,7 +2505,7 @@ export default function DeviceTestComponent({
         }
         clearPendingPackagingCarton();
         fetchExistingCartonsByProcessID();
-        fetchProcessCartons();
+        fetchProcessCartons({ force: true });
       }
 
       toast.success("Packaging verified successfully!");
@@ -2915,7 +2929,11 @@ export default function DeviceTestComponent({
       alert("No carton selected.");
       return;
     }
-    if (isPDIWeightVerificationStage && !isSelectedCartonWeightVerified) {
+    if (isFgToStoreCartonContext) {
+      toast.warning("Shift to next stage is temporarily disabled for FG to Store stage.");
+      return;
+    }
+    if (isPdiWeightVerificationContext && !isSelectedCartonWeightVerified) {
       toast.error("Verify carton weight before shifting to the next stage.");
       return;
     }
@@ -2933,7 +2951,7 @@ export default function DeviceTestComponent({
         const data = result;
         alert("Cartons shifted to STORE successfully!");
         fetchExistingCartonsByProcessID();
-        fetchProcessCartons();
+        fetchProcessCartons({ force: true });
         setSelectedCarton("");
         setLoadingCartonDevices(true);
         setCartonDevices([]);
@@ -3408,7 +3426,7 @@ export default function DeviceTestComponent({
                               </div>
                             )}
 
-                            {isPDIWeightVerificationStage && (
+                            {isPdiWeightVerificationContext && (
                               <div className="mt-3 rounded-2xl border border-emerald-200 bg-[linear-gradient(180deg,#f0fdf4_0%,#ecfdf5_100%)] p-3 shadow-sm">
                                 <div className="flex items-center justify-between gap-3">
                                     <div>
@@ -3508,7 +3526,7 @@ export default function DeviceTestComponent({
 
                           <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-4 sm:px-5">
                             <div className="space-y-3">
-                              {isPDIStage || isFGToStoreStage ? (
+                              {isPdiCartonContext || isFgToStoreCartonContext ? (
                                 !generatedCartonSticker[selectedCarton] ? (
                                   <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
                                     <div className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
@@ -3918,7 +3936,7 @@ export default function DeviceTestComponent({
                           </div>
 
                           <div className="flex flex-col justify-end gap-3 border-t border-slate-100 bg-slate-50/70 p-4 sm:flex-row sm:p-4">
-                            {isFGToStoreStage && (
+                            {isFgToStoreCartonContext && (
                               <button
                                 onClick={() => handleKeepInStore(selectedCarton)}
                                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-6 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-emerald-200 transition-all hover:bg-emerald-700 hover:-translate-y-0.5 sm:w-auto sm:px-8 sm:py-4"
@@ -3926,7 +3944,7 @@ export default function DeviceTestComponent({
                                 <Box className="h-4 w-4" /> Keep In Store
                               </button>
                             )}
-                            {isPDIStage && (
+                            {isPdiCartonContext && (
                               <button
                                 type="button"
                                 onClick={openPdiCartonNgModal}
@@ -3937,8 +3955,13 @@ export default function DeviceTestComponent({
                             )}
                             <button
                               onClick={() => handleShiftToNextStage(selectedCarton)}
-                              disabled={isPDIWeightVerificationStage && !isSelectedCartonWeightVerified}
-                              className={`flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg transition-all sm:w-auto sm:px-8 sm:py-4 ${isPDIWeightVerificationStage && !isSelectedCartonWeightVerified
+                              disabled={
+                                isFgToStoreCartonContext ||
+                                (isPdiWeightVerificationContext && !isSelectedCartonWeightVerified)
+                              }
+                              className={`flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg transition-all sm:w-auto sm:px-8 sm:py-4 ${
+                                isFgToStoreCartonContext ||
+                                (isPdiWeightVerificationContext && !isSelectedCartonWeightVerified)
                                 ? "cursor-not-allowed bg-slate-300 shadow-none"
                                 : "bg-indigo-600 shadow-indigo-200 hover:bg-indigo-700 hover:-translate-y-0.5"
                                 }`}
@@ -6441,7 +6464,7 @@ export default function DeviceTestComponent({
         assignUserStage={assignUserStage}
         onUpdate={() => {
           fetchExistingCartonsByProcessID();
-          fetchProcessCartons();
+          fetchProcessCartons({ force: true });
         }}
         isLoading={isCartonsLoading}
       />

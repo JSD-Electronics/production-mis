@@ -54,6 +54,8 @@ const Sidebar = ({
   const safeMenuGroups = Array.isArray(menuGroups)
     ? menuGroups
     : [{ name: "MENU", menuItems: [] }];
+  const safePermission =
+    permission && typeof permission === "object" ? permission : {};
   React.useEffect(() => {
     const raw = localStorage.getItem("userDetails");
     if (!raw) return;
@@ -62,7 +64,10 @@ const Sidebar = ({
 
     const bootstrapSidebar = async () => {
       try {
-        const portalAccess = await getPortalAccessData(userDetails?.userType);
+        const portalAccess = await getPortalAccessData(userDetails?.userType, {
+          allowStale: true,
+          backgroundRefresh: true,
+        });
         setUserType(portalAccess.userType || userDetails?.userType || "");
         setPermission(portalAccess.permissions || {});
         setMenuGroups((prev) =>
@@ -188,14 +193,14 @@ const Sidebar = ({
 
                 <ul className="mb-6 flex flex-col gap-1.5">
                   {(Array.isArray(group?.menuItems) ? group.menuItems : []).map((menuItem, menuIndex) => {
-                    const transformedLabel = menuItem.label
+                    const transformedLabel = String(menuItem?.label || "")
                       .replace(/\s+/g, "_")
                       .toLowerCase();
                     const normalizedUserType = (userType || "")
                       .toLowerCase()
                       .replace(/\s+/g, "_");
                     const hasPermission =
-                      permission[transformedLabel]?.[normalizedUserType] ??
+                      safePermission[transformedLabel]?.[normalizedUserType] ??
                       normalizedUserType === "admin";
 
                     return (
@@ -204,7 +209,7 @@ const Sidebar = ({
                           key={menuIndex}
                           item={menuItem}
                           pageName={pageName}
-                          permission={permission}
+                          permission={safePermission}
                           userType={userType}
                           setPageName={setPageName}
                           collapsed={effectiveCollapsed}

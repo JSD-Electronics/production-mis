@@ -38,7 +38,11 @@ import {
   FiTrash2,
 } from "react-icons/fi";
 import { FiUsers, FiActivity, FiCheckCircle, FiXCircle, FiSearch, FiFilter, FiRefreshCcw, FiEye, FiGrid, FiList } from "react-icons/fi";
-import { normalizeAssignedStagesPayload } from "@/lib/parallelStageRouting";
+import {
+  getSeatStageEntry,
+  normalizeAssignedStagesPayload,
+  sanitizeCurrentPlanAssignedStages,
+} from "@/lib/parallelStageRouting";
 import { formatDate } from "@/lib/common";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -319,6 +323,17 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   const [id, setID] = useState("");
   const [loading, setLoading] = useState(true);
   const isMountedRef = useRef(true);
+  const planningLookupsCacheRef = useRef<{
+    shifts: any[];
+    roomPlan: any[];
+    processes: any[];
+  } | null>(null);
+  const planningLookupsPromiseRef = useRef<Promise<{
+    shifts: any[];
+    roomPlan: any[];
+    processes: any[];
+  }> | null>(null);
+  const planFetchPromiseRef = useRef<Promise<any> | null>(null);
   const safeParse = (val: any, fallback: any) => {
     if (!val) return fallback;
     try {
@@ -327,13 +342,39 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       return fallback;
     }
   };
+  const normalizeOperatorsSlot = (slot: any): any[] => {
+    if (Array.isArray(slot)) return slot.filter(Boolean);
+    if (!slot) return [];
+    if (typeof slot === "string") {
+      const trimmed = slot.trim();
+      if (!trimmed) return [];
+      try {
+        const parsedSlot = JSON.parse(trimmed);
+        return Array.isArray(parsedSlot) ? parsedSlot.filter(Boolean) : [];
+      } catch {
+        return /^[a-fA-F0-9]{24}$/.test(trimmed) ? [trimmed] : [];
+      }
+    }
+    if (typeof slot === "object") {
+      if (Array.isArray(slot.operators)) return slot.operators.filter(Boolean);
+      const hasOperatorShape =
+        slot?._id ||
+        slot?.id ||
+        slot?.operatorId ||
+        slot?.userId ||
+        slot?.employeeCode ||
+        slot?.name;
+      return hasOperatorShape ? [slot] : [];
+    }
+    return [];
+  };
   const normalizeCustomOperatorsPayload = (val: any) => {
     const parsed = safeParse(val, []);
-    if (Array.isArray(parsed)) return parsed;
+    if (Array.isArray(parsed)) return parsed.map((slot) => normalizeOperatorsSlot(slot));
     if (parsed && typeof parsed === "object") {
       return Object.keys(parsed)
         .sort((a, b) => Number(a) - Number(b))
-        .map((k) => (Array.isArray(parsed[k]) ? parsed[k] : parsed[k] ? [parsed[k]] : []));
+        .map((k) => normalizeOperatorsSlot(parsed[k]));
     }
     return [];
   };
@@ -406,6 +447,37 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   const [seatStatusFilter, setSeatStatusFilter] = useState("all");
   const [showOccupiedOnly, setShowOccupiedOnly] = useState(true);
   const [seatSearch, setSeatSearch] = useState("");
+  const normalizeStageKey = (value: any) =>
+    String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+
+  const commonStageInsights = React.useMemo(() => {
+    const liveStageMap: Record<string, any> = {};
+    (assignedCustomStages || []).forEach((stage: any, index: number) => {
+      const key = normalizeStageKey(stage?.stage || stage?.stageName);
+      if (!key) return;
+      liveStageMap[key] = {
+        ...stage,
+        operators: normalizeOperatorsSlot(assignedCustomOperators?.[index]),
+      };
+    });
+
+    return (selectedProcess?.commonStages || []).map((stage: any) => {
+      const liveStage =
+        liveStageMap[normalizeStageKey(stage?.stageName || stage?.stage)] || null;
+
+      return {
+        ...stage,
+        upha: liveStage?.upha ?? stage?.upha ?? "100",
+        achievedUph: liveStage?.achievedUph ?? stage?.achievedUph ?? "0",
+        wip: liveStage?.wip ?? stage?.wip ?? "0",
+        pass: liveStage?.pass ?? stage?.pass ?? "0",
+        ng: liveStage?.ng ?? stage?.ng ?? "0",
+        operators: liveStage?.operators || [],
+      };
+    });
+  }, [assignedCustomOperators, assignedCustomStages, selectedProcess?.commonStages]);
   const [lastRefreshed, setLastRefreshed] = useState("");
   const [allDeviceTests, setAllDeviceTests] = useState([]);
   const [processDevices, setProcessDevices] = useState<any[]>([]);
@@ -434,6 +506,17 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     if (remaining > 0) return "Active";
     if (processed > 0) return "Completed";
     return "Downtime";
+  };
+  const mergeReservedSeats = (baseStages: Record<string, any> = {}, reservedSeats: Record<string, any> = {}) => {
+    const merged = { ...(baseStages || {}) };
+    Object.entries(reservedSeats || {}).forEach(([seatKey, seatValue]) => {
+      const existingSeat = merged[seatKey];
+      const hasOwnAllocation = Array.isArray(existingSeat) ? existingSeat.length > 0 : Boolean(existingSeat);
+      if (!hasOwnAllocation) {
+        merged[seatKey] = seatValue;
+      }
+    });
+    return merged;
   };
   const filteredDeviceTests = React.useMemo(() => {
     const start =
@@ -481,19 +564,28 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       return true;
     });
   }, [processDevices, selectedStageNameForDevices]);
+  const normalizedAssignedStageMap = React.useMemo(
+    () =>
+      normalizeAssignedStagesPayload(
+        assignedStages || {},
+        selectedProcess?.stages || [],
+      ),
+    [assignedStages, selectedProcess?.stages],
+  );
   const selectedProcessStageEntries = React.useMemo(() => {
-    return Object.entries(assignedStages || {}).filter(([, stages]) => {
-      if (!Array.isArray(stages) || stages.length === 0) return false;
-      return !stages[0]?.reserved;
+    return Object.entries(normalizedAssignedStageMap || {}).filter(([seatKey]) => {
+      return Boolean(getSeatStageEntry(normalizedAssignedStageMap, seatKey)?.reserved === false);
     });
-  }, [assignedStages]);
+  }, [normalizedAssignedStageMap]);
   const occupancyStats = React.useMemo(() => {
     let active = 0;
     let downtime = 0;
     let completed = 0;
 
     selectedProcessStageEntries.forEach(([, arr]) => {
-      const s = arr[0];
+      const s =
+        arr.find((stage: any) => !stage?.reserved) ||
+        arr[0];
       if (!s) return;
       const status = getStageCardStatus(s);
       if (status === "Active") active += 1;
@@ -554,6 +646,11 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     const avg = parseInt(lastStageOverallSummary) || 0;
     return { required, issued, consumed, pending, wip, avg };
   }, [selectedProcess, lastStageOverallSummary]);
+  const hasCurrentPlanSeatAllocations = React.useMemo(() => {
+    return Object.keys(normalizedAssignedStageMap || {}).some((seatKey) => {
+      return Boolean(getSeatStageEntry(normalizedAssignedStageMap, seatKey)?.reserved === false);
+    });
+  }, [normalizedAssignedStageMap]);
   const uphStats = React.useMemo(() => {
     const pass = (completedKitsUPH || []).reduce(
       (acc, row) => acc + (parseInt(row?.Pass) || 0),
@@ -618,22 +715,27 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   }, []);
 
   useEffect(() => {
-    getOperators();
-    fetchJigCategories();
     const id = resolvedPlaningId;
     if (!id) return;
     setID(id);
-    getPlaningById(id);
-    fetchDowntimeReasons();
+    void getPlaningById(id);
+    const warmupTimer = window.setTimeout(() => {
+      void getOperators();
+      void fetchJigCategories();
+      void fetchDowntimeReasons();
+    }, 300);
     setLastRefreshed(new Date().toLocaleTimeString());
 
     // Polling for live updates every 30 seconds
     const interval = setInterval(() => {
-      getPlaningById(id);
+      void getPlaningById(id, { skipIfBusy: true });
       setLastRefreshed(new Date().toLocaleTimeString());
     }, 30000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(warmupTimer);
+    };
   }, [resolvedPlaningId]);
 
   const fetchDowntimeReasons = async () => {
@@ -756,9 +858,10 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       setLoading(false);
     }
   };
-  const assignedStageKeys = Object.keys(assignedStages || {}).filter(
-    (key) => assignedStages[key][0].name !== "Reserved",
-  );
+  const assignedStageKeys = Object.keys(normalizedAssignedStageMap || {}).filter((key) => {
+    const seatEntry = getSeatStageEntry(normalizedAssignedStageMap, key);
+    return Boolean(seatEntry && !seatEntry?.reserved);
+  });
   const stages = selectedProcess?.stages || [];
   const stageLength = stages.length;
   const rows = [];
@@ -786,65 +889,55 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   };
   const getProduct = async (id: any) => {
     try {
-      let result = await getProductById(id);
-      const packagingItems =
-        result?.product?.stages?.flatMap((stage) =>
-          (stage?.subSteps || [])
-            .filter((value) => value.isPackagingStatus)
-            .map((value) => value),
-        ) || [];
-      setPackagingData(packagingItems);
-      setInventoryData(result.inventory);
-      setProductName(result.product.name);
-      setSelectedProduct(result);
+      return await getProductById(id);
     } catch (error) {
+      return null;
+    }
+  };
+  const calculateWorkingHours = (
+    startTimeValue: string,
+    endTimeValue: string,
+    breakMinutes: number | string = 0,
+  ) => {
+    const parseTime = (timeValue: string) => {
+      if (!timeValue || !timeValue.includes(":")) return NaN;
+      const [hours, minutes] = timeValue.split(":").map(Number);
+      if (Number.isNaN(hours) || Number.isNaN(minutes)) return NaN;
+      return hours * 60 + minutes;
+    };
 
-    }
+    const start = parseTime(startTimeValue);
+    const end = parseTime(endTimeValue);
+    const totalMinutes = end - start - Number(breakMinutes);
+
+    if (Number.isNaN(totalMinutes) || totalMinutes <= 0) return 0;
+
+    return Math.floor(totalMinutes / 60);
   };
-  const getHourlyIntervals = (start, end) => {
-    const intervals = [];
-    let current = new Date(start);
-    while (current < end) {
-      const next = new Date(current);
-      next.setHours(current.getHours() + 1);
-      if (next > end) next.setTime(end.getTime());
-      intervals.push({
-        start: toTimeString(current),
-        end: toTimeString(next),
-      });
-      current = next;
-    }
-    return intervals;
-  };
-  const toDate = (timeStr) => {
-    const [hours, minutes] = timeStr.split(":").map(Number);
+  const toDate = (timeStr: string) => {
+    const [hours, minutes] = (timeStr || "00:00").split(":").map(Number);
     const date = new Date();
-    date.setHours(hours);
-    date.setMinutes(minutes);
+    date.setHours(Number.isFinite(hours) ? hours : 0);
+    date.setMinutes(Number.isFinite(minutes) ? minutes : 0);
     date.setSeconds(0);
     date.setMilliseconds(0);
     return date;
   };
-  const toTimeString = (date) => date.toTimeString().slice(0, 5);
-  function calculateWorkingHours(startTime, endTime, breakMinutes) {
-    if (!startTime || !endTime || breakMinutes == null) return 0;
+  const toTimeString = (date: Date) => date.toTimeString().slice(0, 5);
+  const getPlaningById = async (
+    id: any,
+    options?: { skipIfBusy?: boolean; forceLookupRefresh?: boolean },
+  ) => {
+    if (!id) return null;
+    if (planFetchPromiseRef.current) {
+      if (options?.skipIfBusy) return null;
+      return planFetchPromiseRef.current;
+    }
 
-    const parseTime = (timeStr) => {
-      const [h, m] = timeStr.split(":").map(Number);
-      return h * 60 + m;
-    };
-
-    const start = parseTime(startTime);
-    const end = parseTime(endTime);
-    const totalMinutes = end - start - Number(breakMinutes);
-
-    if (isNaN(totalMinutes) || totalMinutes <= 0) return 0;
-
-    return Math.floor(totalMinutes / 60);
-  }
-  const getPlaningById = async (id: any) => {
-    try {
+    const request = (async () => {
+      try {
       // Keep existing UI visible; refresh in background
+      const lookupsPromise = getPlanningLookups(Boolean(options?.forceLookupRefresh));
       let result = await getPlaningAndSchedulingById(id);
       setPlanData(result);
       setOvertimeWindows(Array.isArray(result?.overtimeWindows) ? result.overtimeWindows : []);
@@ -858,11 +951,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       if (result.downTime) {
         setDownTimeVal(result.downTime);
       }
-      let [shifts, roomPlan, processes] = await Promise.all([
-        getAllShifts(),
-        getAllRoomPlan(),
-        getAllProcess(),
-      ]);
+      let { shifts, roomPlan, processes } = await lookupsPromise;
       let processData;
       const singleProcess = processes.find(
         (value) => value?._id === result.selectedProcess,
@@ -881,7 +970,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
             });
             // Re-fetch since status changed
             result = await getPlaningAndSchedulingById(id);
-            const refetchedProcesses = await getAllProcess();
+            const refetchedProcesses = await getAllProcess(true);
             const updatedSingleProcess = refetchedProcesses.find(p => p._id === result.selectedProcess);
             setSelectedProcess(updatedSingleProcess);
           } catch (err) {
@@ -933,31 +1022,23 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       setTotalConsumedkits(singleProcess?.consumedKits || 0);
       // Parse the plan's own stored data
       const currentAssignedStages = normalizeAssignedStagesPayload(
-        safeParse(result?.assignedStages, {}),
+        sanitizeCurrentPlanAssignedStages({
+          assignedStages: safeParse(result?.assignedStages, {}),
+          processStages: singleProcess?.stages || [],
+          currentProcess: singleProcess,
+        }),
         singleProcess?.stages || [],
       );
       const currentAssignedOperators = safeParse(result?.assignedOperators, {});
       const currentAssignedJigs = safeParse(result?.assignedJigs, {});
-      // Strip any stale `reserved: true` flags that may have been saved to the DB
-      // from a previous version of the code that merged cross-process reserved seats.
-      const cleanAssignedStages: Record<string, any[]> = {};
-      Object.keys(currentAssignedStages || {}).forEach((seatKey) => {
-        const entries = Array.isArray(currentAssignedStages[seatKey])
-          ? currentAssignedStages[seatKey]
-          : currentAssignedStages[seatKey]
-            ? [currentAssignedStages[seatKey]]
-            : [];
-        // Only keep seats that belong to this process (not reserved from another plan)
-        const ownEntries = entries.filter((e: any) => !e?.reserved);
-        if (ownEntries.length > 0) {
-          cleanAssignedStages[seatKey] = ownEntries;
-        }
-      });
-      // We do NOT use cross-process reservedSeats on the view page.
-      // Pass an empty object to allocateStagesToSeats.
-      const reservedSeats: Record<string, any[]> = {};
+      const reservedSeatsPromise = checkSeatAvailability(
+        room,
+        Shift,
+        formatDate(result?.startDate),
+        formatDate(result?.estimatedEndDate),
+      ).catch(() => ({}));
       setAssignedStages({
-        ...(cleanAssignedStages || {}),
+        ...(currentAssignedStages || {}),
       });
       setAssignedOperators((prev) => ({
         ...prev,
@@ -970,6 +1051,13 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       setLoading(false);
       void (async () => {
         try {
+          const reservedSeats = await reservedSeatsPromise;
+          if (!isMountedRef.current) return;
+          setAssignedStages({
+            ...(currentAssignedStages || {}),
+            ...(reservedSeats || {}),
+          });
+
           const [deviceTestEntry, latestEntry, productData, deviceResult] = await Promise.all([
             result.selectedProcess
               ? getDeviceTestRecordsByProcessId(result.selectedProcess)
@@ -1038,7 +1126,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
             room,
             Number(result?.repeatCount || 1),
             reservedSeats,
-            cleanAssignedStages,
+            currentAssignedStages,
             singleProcess,
             Number(result?.assignedIssuedKits || 0),
             deviceTests,
@@ -1049,6 +1137,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
           if (recalculatedAssignedStages) {
             setAssignedStages({
               ...(recalculatedAssignedStages || {}),
+              ...(reservedSeats || {}),
             });
           }
 
@@ -1198,14 +1287,25 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       setLoading(false);
       return {};
     }
+    })();
+
+    planFetchPromiseRef.current = request.finally(() => {
+      planFetchPromiseRef.current = null;
+    });
+
+    return planFetchPromiseRef.current;
   };
   const checkSeatAvailability = async (
     selectedRoom: any,
     selectedShift: any,
     startDate: any,
     expectedEndDate: any,
+    currentPlanId?: string,
   ) => {
     try {
+      if (!selectedRoom?._id || !selectedShift?._id || !startDate || !expectedEndDate) {
+        return {};
+      }
       const shiftDataChange = JSON.stringify({
         startTime,
         endTime,
@@ -1217,10 +1317,13 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
         startDate,
         expectedEndDate,
         shiftDataChange,
+        { silentNotFound: true },
       );
-      let assignedStagesObject = result.plans.reduce((acc: any, plan: any) => {
+      const plans = Array.isArray(result?.plans) ? result.plans : [];
+      const activePlanId = String(currentPlanId || resolvedPlaningId || id || "");
+      let assignedStagesObject = plans.reduce((acc: any, plan: any) => {
         try {
-          if (plan._id != id) {
+          if (String(plan?._id || "") !== activePlanId) {
             let assignedJigs = plan?.assignedJigs
               ? JSON.parse(plan?.assignedJigs)
               : {};
@@ -1266,22 +1369,106 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       return [];
     }
   };
-  const getAllShifts = async () => {
+  const getPlanningLookups = async (forceRefresh = false) => {
+    const LOOKUPS_CACHE_KEY = "planningLookups:viewPlaning:v1";
+    const LOOKUPS_TTL_MS = 5 * 60 * 1000;
+
+    if (!forceRefresh && planningLookupsCacheRef.current) {
+      return planningLookupsCacheRef.current;
+    }
+
+    if (!forceRefresh && planningLookupsPromiseRef.current) {
+      return planningLookupsPromiseRef.current;
+    }
+
+    if (!forceRefresh && typeof window !== "undefined") {
+      try {
+        const raw = window.sessionStorage.getItem(LOOKUPS_CACHE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const isFresh =
+            typeof parsed?.fetchedAt === "number" &&
+            Date.now() - parsed.fetchedAt < LOOKUPS_TTL_MS;
+          const hasPayload =
+            Array.isArray(parsed?.shifts) &&
+            Array.isArray(parsed?.roomPlan) &&
+            Array.isArray(parsed?.processes);
+
+          if (isFresh && hasPayload) {
+            const cachedLookups = {
+              shifts: parsed.shifts,
+              roomPlan: parsed.roomPlan,
+              processes: parsed.processes,
+            };
+            planningLookupsCacheRef.current = cachedLookups;
+            if (isMountedRef.current) {
+              setShifts(cachedLookups.shifts);
+              setRoomPlan(cachedLookups.roomPlan);
+              setProcess(cachedLookups.processes);
+            }
+            return cachedLookups;
+          }
+        }
+      } catch {
+        // Ignore malformed cache and continue with API fetch.
+      }
+    }
+
+    const request = Promise.all([viewShift(), viewRoom(), viewProcess()])
+      .then(([shiftResult, roomResult, processResult]) => {
+        const nextLookups = {
+          shifts: shiftResult?.Shifts || [],
+          roomPlan: roomResult?.RoomPlan || [],
+          processes: processResult?.Processes || [],
+        };
+        planningLookupsCacheRef.current = nextLookups;
+        if (isMountedRef.current) {
+          setShifts(nextLookups.shifts);
+          setRoomPlan(nextLookups.roomPlan);
+          setProcess(nextLookups.processes);
+        }
+        if (typeof window !== "undefined") {
+          try {
+            window.sessionStorage.setItem(
+              LOOKUPS_CACHE_KEY,
+              JSON.stringify({
+                ...nextLookups,
+                fetchedAt: Date.now(),
+              }),
+            );
+          } catch {
+            // Best-effort cache write.
+          }
+        }
+        return nextLookups;
+      })
+      .catch((error) => {
+        console.error("Error fetching planning lookups:", error);
+        return {
+          shifts: [],
+          roomPlan: [],
+          processes: [],
+        };
+      })
+      .finally(() => {
+        planningLookupsPromiseRef.current = null;
+      });
+
+    planningLookupsPromiseRef.current = request;
+    return request;
+  };
+  const getAllShifts = async (forceRefresh = false) => {
     try {
-      const result = await viewShift();
-      const shifts = result?.Shifts || [];
-      setShifts(shifts);
-      return shifts;
+      const lookups = await getPlanningLookups(forceRefresh);
+      return lookups.shifts || [];
     } catch (error) {
       return [];
     }
   };
-  const getAllProcess = async () => {
+  const getAllProcess = async (forceRefresh = false) => {
     try {
-      const result = await viewProcess();
-      const processes = result.Processes || [];
-      setProcess(processes);
-      return processes;
+      const lookups = await getPlanningLookups(forceRefresh);
+      return lookups.processes || [];
     } catch (error) {
       return [];
     }
@@ -1352,12 +1539,10 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       return newStages;
     });
   };
-  const getAllRoomPlan = async () => {
+  const getAllRoomPlan = async (forceRefresh = false) => {
     try {
-      const result = await viewRoom();
-      const rooms = result.RoomPlan || [];
-      setRoomPlan(rooms);
-      return rooms;
+      const lookups = await getPlanningLookups(forceRefresh);
+      return lookups.roomPlan || [];
     } catch (error) {
       console.error("Error Fetching Room Plan:", error);
       return [];
@@ -1575,7 +1760,10 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       ).trim();
       if (!serial) return;
 
-      const existing = latestRecordBySerial.get(serial);
+      const existing =
+        latestRecordBySerial && typeof latestRecordBySerial.get === "function"
+          ? latestRecordBySerial.get(serial)
+          : null;
       if (!existing || getRecordTime(record) >= getRecordTime(existing)) {
         latestRecordBySerial.set(serial, record);
       }
@@ -1599,7 +1787,10 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       if (!stageKey || status === "pass" || status === "completed") return;
 
       const serial = String(device?.serialNo || device?.serial || "").trim();
-      const latestRecord = serial ? latestRecordBySerial.get(serial) : null;
+      const latestRecord =
+        serial && latestRecordBySerial && typeof latestRecordBySerial.get === "function"
+          ? latestRecordBySerial.get(serial)
+          : null;
       let routedSeatKey = String(
         latestRecord?.assignedSeatKey ||
         latestRecord?.currentSeatKey ||
@@ -1866,11 +2057,23 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
   };
   const seatMatches = (rowIndex, seatIndex, seat) => {
     const coordinates = `${rowIndex}-${seatIndex}`;
-    const arr = assignedStages[coordinates];
+    const arr = normalizedAssignedStageMap[coordinates];
     const occupied = arr && arr.length > 0;
     if (showOccupiedOnly && !occupied) return false;
     if (!occupied) return false;
-    const s = arr[0];
+    const onlyReserved = Array.isArray(arr) && arr.length > 0 && arr.every((stage: any) => stage?.reserved);
+    if (
+      onlyReserved &&
+      hasCurrentPlanSeatAllocations &&
+      showOccupiedOnly &&
+      seatStatusFilter === "all" &&
+      !seatSearch
+    ) {
+      return false;
+    }
+    const s =
+      arr.find((stage: any) => !stage?.reserved) ||
+      arr[0];
     let status = "Empty";
     if (s?.reserved) status = "Reserved";
     else status = getStageCardStatus(s);
@@ -2657,11 +2860,12 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                                         </div>
 
                                         {/* Operators */}
-                                        {assignedCustomOperators[index] && (
+                                        {normalizeOperatorsSlot(assignedCustomOperators[index])
+                                          .length > 0 && (
                                           <div className="text-gray-600 dark:text-gray-300 mt-3 text-xs">
                                             <strong>Operators:</strong>
                                             <div className="mt-1 flex flex-wrap gap-1">
-                                              {assignedCustomOperators[index]
+                                              {normalizeOperatorsSlot(assignedCustomOperators[index])
                                                 .map(resolveOperatorDisplay)
                                                 .filter(Boolean)
                                                 .map((op: any, i: number) => (
@@ -2756,8 +2960,8 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                               <div className=" bg-gray-50 dark:bg-gray-800 mt-6 h-90 overflow-x-auto rounded-md rounded-xl border border-primary p-2 p-4 pt-3 shadow">
                                 {/* Common Stages */}
                                 <div className="mb-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                                  {(Array.isArray(assignedCustomStages) ? assignedCustomStages : []).map(
-                                    (stage: any, index: number) => (
+                                  {selectedProcess?.commonStages.map(
+                                    (stage, index) => (
                                       <div
                                         key={index}
                                         className="rounded-xl border border-green-400 bg-green-50 p-4 shadow hover:shadow-md dark:border-green-600 dark:bg-green-900"
@@ -2777,6 +2981,11 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                                           <p className="text-red-600 dark:text-red-400">
                                             NG: {stage?.ng || "0"}
                                           </p>
+                                          {stage?.operators?.length ? (
+                                            <p>Operators: {stage.operators.map((op: any) => op?.name || op?.operatorName || "").filter(Boolean).join(", ")}</p>
+                                          ) : (
+                                            <p>Operators:</p>
+                                          )}
                                           <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-600 dark:bg-orange-700 dark:text-orange-300">
                                             Active
                                           </span>
@@ -2819,15 +3028,15 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                                                 key={colIndex}
                                                 className="px-4 py-3 align-top"
                                               >
-                                                {assignedStages[key] &&
-                                                  assignedStages[key].length > 0 &&
-                                                  assignedStages[key].filter((stage: any) => {
+                                                {normalizedAssignedStageMap[key] &&
+                                                  normalizedAssignedStageMap[key].length > 0 &&
+                                                  normalizedAssignedStageMap[key].filter((stage: any) => {
                                                     const status = getStageCardStatus(stage);
                                                     return seatStatusFilter === "all"
                                                       ? true
                                                       : seatStatusFilter === status;
                                                   }).length > 0 ? (
-                                                  assignedStages[key]
+                                                  normalizedAssignedStageMap[key]
                                                     .filter((stage: any) => {
                                                       const status = getStageCardStatus(stage);
                                                       return seatStatusFilter === "all"

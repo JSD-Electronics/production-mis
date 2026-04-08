@@ -33,7 +33,10 @@ const withAuth = (WrappedComponent: ComponentType<any>) => {
         }
 
         try {
-          const portalAccess = await getPortalAccessData(userDetails.userType);
+          const portalAccess = await getPortalAccessData(userDetails.userType, {
+            allowStale: true,
+            backgroundRefresh: true,
+          });
           setUserType(portalAccess.userType);
           setUserRoles(portalAccess.permissions || {});
           setMenuGroups((portalAccess.menus || []) as MenuItem[]);

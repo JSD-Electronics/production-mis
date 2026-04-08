@@ -70,12 +70,47 @@ const CartonDetailsPopup = ({
   onUpdate,
   isLoading = false,
 }: CartonDetailsPopupProps) => {
-  const currentStageName =
-    (Array.isArray(assignUserStage) ? assignUserStage?.[0]?.name : null) ||
-    assignUserStage?.stage ||
-    assignUserStage?.name ||
-    "";
-  const isPDIStage = currentStageName === "PDI";
+  const currentStageName = String(
+    (Array.isArray(assignUserStage)
+      ? assignUserStage?.[0]?.name ||
+        assignUserStage?.[0]?.stageName ||
+        assignUserStage?.[0]?.stage
+      : null) ||
+      assignUserStage?.stage ||
+      assignUserStage?.name ||
+      assignUserStage?.stageName ||
+      "",
+  ).trim();
+  const stageCandidates = React.useMemo(() => {
+    return Array.from(
+      new Set(
+        [
+          currentStageName,
+          assignUserStage?.stage,
+          assignUserStage?.name,
+          assignUserStage?.stageName,
+          Array.isArray(assignUserStage) ? assignUserStage?.[0]?.stage : null,
+          Array.isArray(assignUserStage) ? assignUserStage?.[0]?.name : null,
+          Array.isArray(assignUserStage) ? assignUserStage?.[0]?.stageName : null,
+        ]
+          .map((value) => String(value || "").trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    );
+  }, [assignUserStage, currentStageName]);
+  const stageHasKeyword = React.useCallback(
+    (keywords: string[]) => {
+      return stageCandidates.some((candidate) =>
+        keywords.some((keyword) => {
+          const normalizedKeyword = String(keyword || "").trim().toLowerCase();
+          return candidate === normalizedKeyword || candidate.includes(normalizedKeyword);
+        }),
+      );
+    },
+    [stageCandidates],
+  );
+  const isPDIStage = stageHasKeyword(["pdi", "quality control", "quality check", "qc"]);
+  const isFGToStoreStage = stageHasKeyword(["fg to store", "fg_to_store", "to store"]);
 
   const [isVerifying, setIsVerifying] = useState<string | null>(null);
   const [scanValue, setScanValue] = useState("");
@@ -116,6 +151,18 @@ const CartonDetailsPopup = ({
       product,
     });
   }, [assignUserStage, processData, product]);
+  const normalizeWorkflowStatus = React.useCallback((value?: string | null) => {
+    return String(value || "").trim().toUpperCase().replace(/\s+/g, "_");
+  }, []);
+  const shouldShowCartonInCurrentStage = React.useCallback(
+    (carton?: Carton | null) => {
+      const workflowStatus = normalizeWorkflowStatus(carton?.cartonStatus);
+      if (isPDIStage) return workflowStatus === "PDI";
+      if (isFGToStoreStage) return workflowStatus === "FG_TO_STORE";
+      return workflowStatus === "";
+    },
+    [isFGToStoreStage, isPDIStage, normalizeWorkflowStatus],
+  );
 
   const maskCartonSerialForDisplay = React.useCallback((value?: string | null) => {
     const serial = String(value || "").trim();
@@ -131,11 +178,13 @@ const CartonDetailsPopup = ({
   }, []);
 
   const fullCartons = cartons.filter(c =>
-    (c.status || "").toLowerCase() === "full" ||
-    localCartonStatuses[c.cartonSerial] === "Printed" ||
-    localCartonStatuses[c.cartonSerial] === "Verified" ||
-    c.isStickerVerified ||
-    c.isStickerPrinted
+    shouldShowCartonInCurrentStage(c) && (
+      (c.status || "").toLowerCase() === "full" ||
+      localCartonStatuses[c.cartonSerial] === "Printed" ||
+      localCartonStatuses[c.cartonSerial] === "Verified" ||
+      c.isStickerVerified ||
+      c.isStickerPrinted
+    )
   );
   const shouldShowBlockingLoader =
     isLoading && fullCartons.length === 0 && openCartons.length === 0;
@@ -145,6 +194,7 @@ const CartonDetailsPopup = ({
       const statuses: Record<string, string> = {};
       const weights: Record<string, string> = {};
       const localOpenCartons = cartons.filter((c) => {
+        if (!shouldShowCartonInCurrentStage(c)) return false;
         const status = String(c?.status || "").toLowerCase();
         return (
           status !== "full" ||
@@ -187,11 +237,16 @@ const CartonDetailsPopup = ({
         return next;
       });
     }
-  }, [cartons]);
+  }, [cartons, shouldShowCartonInCurrentStage]);
 
   useEffect(() => {
     const loadOpenCartons = async () => {
-      if (!isOpen || !processData?._id) return;
+      if (!isOpen || !processData?._id || isPDIStage || isFGToStoreStage) {
+        if (isPDIStage || isFGToStoreStage) {
+          setOpenCartons([]);
+        }
+        return;
+      }
       setIsLoadingOpen(true);
       try {
         const result = await fetchOpenCartonsByProcessID(processData._id);
@@ -206,7 +261,7 @@ const CartonDetailsPopup = ({
       }
     };
     loadOpenCartons();
-  }, [isOpen, processData?._id]);
+  }, [isFGToStoreStage, isOpen, isPDIStage, processData?._id]);
 
   const resetLooseCartonFlow = () => {
     setLooseCartonTarget(null);

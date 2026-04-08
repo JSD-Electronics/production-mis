@@ -20,21 +20,26 @@ const Header = ({
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [menuItems, setMenuItems] = useState<{ label: string; route: string }[]>([]);
-  const [permission, setPermission] = useState<any[]>([]);
+  const [permission, setPermission] = useState<Record<string, any>>({});
   const [userType, setUserType] = useState("");
+  const permissionMap =
+    permission && typeof permission === "object" ? permission : {};
 
   useEffect(() => {
     const load = async () => {
       try {
         const raw = localStorage.getItem("userDetails");
         const userDetails = raw ? JSON.parse(raw) : {};
-        const portalAccess = await getPortalAccessData(userDetails?.userType);
+        const portalAccess = await getPortalAccessData(userDetails?.userType, {
+          allowStale: true,
+          backgroundRefresh: true,
+        });
         setUserType(portalAccess.userType || "");
         setMenuItems(portalAccess.flatMenuItems || []);
-        setPermission(portalAccess.permissions || []);
+        setPermission(portalAccess.permissions || {});
       } catch {
         setMenuItems([]);
-        setPermission([]);
+        setPermission({});
       }
     };
     load();
@@ -47,10 +52,10 @@ const Header = ({
     return menuItems.filter((item) => {
       const key = item.label.replace(/\s+/g, "_").toLowerCase();
       const hasPermission =
-        permission[key]?.[normalizedUserType] ?? normalizedUserType === "admin";
+        permissionMap[key]?.[normalizedUserType] ?? normalizedUserType === "admin";
       return hasPermission && item.label.toLowerCase().includes(q);
     });
-  }, [menuItems, permission, searchQuery, userType]);
+  }, [menuItems, permissionMap, searchQuery, userType]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();

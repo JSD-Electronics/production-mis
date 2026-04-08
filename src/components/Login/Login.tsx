@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { login } from "../../lib/api";
+import { preloadPortalAccess } from "@/lib/portalAccessCache";
 import {
   Mail,
   User,
@@ -38,7 +39,8 @@ const SignIn = () => {
     setError(null);
     setLoading(true);
     try {
-      await login(identifier, password);
+      const loginResponse = await login(identifier, password);
+      preloadPortalAccess(loginResponse?.user?.userType);
       router.push("/dashboard");
     } catch (err: any) {
       setError(err.message || "Invalid credentials");

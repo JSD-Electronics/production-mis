@@ -3,7 +3,9 @@
 import { getAllMenus, getUseTypeByType } from "@/lib/api";
 
 const PORTAL_ACCESS_CACHE_KEY = "portalAccessCache:v1";
+const PORTAL_ACCESS_PERSIST_KEY = "portalAccessCache:persist:v1";
 const PORTAL_ACCESS_CACHE_TTL_MS = 5 * 60 * 1000;
+const PORTAL_ACCESS_STALE_MAX_MS = 24 * 60 * 60 * 1000;
 
 export interface PortalMenuItem {
   label: string;
@@ -22,6 +24,7 @@ export interface PortalAccessData {
 }
 
 let portalAccessPromise: Promise<PortalAccessData> | null = null;
+let portalAccessMemoryCache: PortalAccessData | null = null;
 
 const reportsMenu: PortalMenuItem = {
   icon: `<svg class="fill-current" width="18" height="19" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 5h18v2H3V5zm0 6h18v2H3v-2zm0 6h12v2H3v-2z" fill="#ffffff"/></svg>`,
@@ -124,35 +127,92 @@ const flattenRoutableMenus = (menus: PortalMenuItem[]) => {
   return flat;
 };
 
-const readCachedPortalAccess = (normalizedUserType: string): PortalAccessData | null => {
+const isPortalAccessFresh = (cache?: PortalAccessData | null) =>
+  Boolean(
+    cache &&
+      typeof cache?.fetchedAt === "number" &&
+      Date.now() - cache.fetchedAt < PORTAL_ACCESS_CACHE_TTL_MS,
+  );
+
+const isPortalAccessNotTooOld = (cache?: PortalAccessData | null) =>
+  Boolean(
+    cache &&
+      typeof cache?.fetchedAt === "number" &&
+      Date.now() - cache.fetchedAt < PORTAL_ACCESS_STALE_MAX_MS,
+  );
+
+const isPortalAccessForUser = (
+  cache: PortalAccessData | null | undefined,
+  normalizedUserType: string,
+) => cache?.normalizedUserType === normalizedUserType;
+
+const readCachedPortalAccess = (
+  normalizedUserType: string,
+  options?: { allowStale?: boolean },
+): PortalAccessData | null => {
   if (typeof window === "undefined") return null;
+  const allowStale = options?.allowStale === true;
+
+  const acceptCache = (cache: PortalAccessData | null | undefined) => {
+    if (!cache || !isPortalAccessForUser(cache, normalizedUserType)) return null;
+    if (isPortalAccessFresh(cache)) return cache;
+    if (allowStale && isPortalAccessNotTooOld(cache)) return cache;
+    return null;
+  };
+
+  const memoryCache = acceptCache(portalAccessMemoryCache);
+  if (memoryCache) return memoryCache;
 
   try {
     const raw = window.sessionStorage.getItem(PORTAL_ACCESS_CACHE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as PortalAccessData;
-    const isFresh =
-      typeof parsed?.fetchedAt === "number" &&
-      Date.now() - parsed.fetchedAt < PORTAL_ACCESS_CACHE_TTL_MS;
-
-    if (!isFresh || parsed.normalizedUserType !== normalizedUserType) {
-      return null;
+    if (raw) {
+      const parsed = JSON.parse(raw) as PortalAccessData;
+      const accepted = acceptCache(parsed);
+      if (accepted) {
+        portalAccessMemoryCache = accepted;
+        return accepted;
+      }
     }
-
-    return parsed;
   } catch {
-    return null;
+    // Ignore session storage parse errors and continue with localStorage.
   }
+
+  try {
+    const raw = window.localStorage.getItem(PORTAL_ACCESS_PERSIST_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as PortalAccessData;
+      const accepted = acceptCache(parsed);
+      if (accepted) {
+        portalAccessMemoryCache = accepted;
+        try {
+          window.sessionStorage.setItem(PORTAL_ACCESS_CACHE_KEY, JSON.stringify(accepted));
+        } catch {
+          // Best-effort only.
+        }
+        return accepted;
+      }
+    }
+  } catch {
+    // Ignore local storage parse errors.
+  }
+
+  return null;
 };
 
 const writeCachedPortalAccess = (data: PortalAccessData) => {
   if (typeof window === "undefined") return;
+  portalAccessMemoryCache = data;
 
   try {
     window.sessionStorage.setItem(PORTAL_ACCESS_CACHE_KEY, JSON.stringify(data));
   } catch {
     // Ignore storage failures and continue with in-memory caching.
+  }
+
+  try {
+    window.localStorage.setItem(PORTAL_ACCESS_PERSIST_KEY, JSON.stringify(data));
+  } catch {
+    // Ignore persistent storage failures.
   }
 };
 
@@ -169,22 +229,36 @@ export const readStoredUserDetails = () => {
 
 export const getPortalAccessData = async (
   rawUserType?: string,
-  options?: { forceRefresh?: boolean },
+  options?: {
+    forceRefresh?: boolean;
+    allowStale?: boolean;
+    backgroundRefresh?: boolean;
+  },
 ): Promise<PortalAccessData> => {
   const userDetails = readStoredUserDetails();
   const userType = rawUserType || userDetails?.userType || "";
   const normalizedUserType = normalizeUserType(userType);
   const forceRefresh = options?.forceRefresh === true;
+  const allowStale = options?.allowStale === true;
 
   if (!forceRefresh) {
-    const cached = readCachedPortalAccess(normalizedUserType);
+    const cached = readCachedPortalAccess(normalizedUserType, { allowStale });
     if (cached) {
+      if (options?.backgroundRefresh) {
+        void getPortalAccessData(rawUserType, { forceRefresh: true }).catch(() => {
+          // Background refresh failure should never block UI.
+        });
+      }
       return cached;
     }
 
     if (portalAccessPromise) {
       return portalAccessPromise;
     }
+  }
+
+  if (portalAccessPromise) {
+    return portalAccessPromise;
   }
 
   portalAccessPromise = Promise.all([getUseTypeByType(), getAllMenus()])
@@ -213,4 +287,13 @@ export const getPortalAccessData = async (
     });
 
   return portalAccessPromise;
+};
+
+export const preloadPortalAccess = (rawUserType?: string) => {
+  void getPortalAccessData(rawUserType, {
+    allowStale: true,
+    backgroundRefresh: true,
+  }).catch(() => {
+    // Best-effort warmup.
+  });
 };

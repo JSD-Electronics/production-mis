@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 const SidebarDropdown = ({ item, permission, userType, onNavigate }: any) => {
   const pathname = usePathname();
   const items = Array.isArray(item) ? item : [];
+  const safePermission =
+    permission && typeof permission === "object" ? permission : {};
 
   return (
     <>
@@ -17,7 +19,7 @@ const SidebarDropdown = ({ item, permission, userType, onNavigate }: any) => {
             .toLowerCase()
             .replace(/\s+/g, "_");
           const hasPermission =
-            permission[transformedLabel]?.[normalizedUserType] ??
+            safePermission[transformedLabel]?.[normalizedUserType] ??
             normalizedUserType === "admin";
 
           return (
