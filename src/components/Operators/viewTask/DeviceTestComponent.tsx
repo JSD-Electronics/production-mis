@@ -2776,6 +2776,160 @@ export default function DeviceTestComponent({
     }
   };
 
+  const normalizeTerminalLogs = (rawLogs: any): Array<{
+    timestamp?: any;
+    displayTimestamp?: string;
+    message: string;
+    type: string;
+  }> => {
+    const normalizeEntry = (entry: any) => {
+      if (entry === null || entry === undefined) return null;
+
+      if (typeof entry === "string") {
+        const message = entry.trim();
+        if (!message) return null;
+        return {
+          timestamp: null,
+          displayTimestamp: "",
+          type: "log",
+          message,
+        };
+      }
+
+      if (typeof entry === "object") {
+        const rawMessage =
+          entry?.message ??
+          entry?.msg ??
+          entry?.text ??
+          entry?.output ??
+          entry?.data ??
+          "";
+        let message = "";
+        if (typeof rawMessage === "string") {
+          message = rawMessage.trim();
+        } else if (rawMessage !== null && rawMessage !== undefined) {
+          try {
+            message = JSON.stringify(rawMessage);
+          } catch {
+            message = String(rawMessage);
+          }
+        }
+
+        if (!message) return null;
+        return {
+          timestamp: entry?.timestamp ?? entry?.time ?? null,
+          displayTimestamp: String(
+            entry?.displayTimestamp || entry?.ts || "",
+          ).trim(),
+          type: String(entry?.type || entry?.level || "log")
+            .trim()
+            .toLowerCase(),
+          message,
+        };
+      }
+
+      return {
+        timestamp: null,
+        displayTimestamp: "",
+        type: "log",
+        message: String(entry),
+      };
+    };
+
+    if (Array.isArray(rawLogs)) {
+      return rawLogs.map(normalizeEntry).filter(Boolean) as Array<{
+        timestamp?: any;
+        displayTimestamp?: string;
+        message: string;
+        type: string;
+      }>;
+    }
+
+    if (typeof rawLogs === "string") {
+      return rawLogs
+        .split(/\r?\n/)
+        .map((line) => normalizeEntry(line))
+        .filter(Boolean) as Array<{
+        timestamp?: any;
+        displayTimestamp?: string;
+        message: string;
+        type: string;
+      }>;
+    }
+
+    if (rawLogs && typeof rawLogs === "object") {
+      const nested =
+        rawLogs?.terminalLogs ||
+        rawLogs?.logs ||
+        rawLogs?.entries ||
+        rawLogs?.history ||
+        null;
+      if (nested) {
+        return normalizeTerminalLogs(nested);
+      }
+    }
+
+    return [];
+  };
+
+  const flattenParsedDataLines = (
+    value: any,
+    keyPrefix = "",
+    depth = 0,
+  ): string[] => {
+    if (value === null || value === undefined) return [];
+    if (depth > 3) return [];
+
+    if (typeof value !== "object") {
+      return [`${keyPrefix || "value"}: ${String(value)}`];
+    }
+
+    if (Array.isArray(value)) {
+      if (value.length === 0) return [];
+      if (value.every((item) => item === null || typeof item !== "object")) {
+        return [`${keyPrefix || "value"}: ${value.map((item) => String(item)).join(", ")}`];
+      }
+      return value.flatMap((item, index) =>
+        flattenParsedDataLines(item, `${keyPrefix || "value"}[${index}]`, depth + 1),
+      );
+    }
+
+    return Object.entries(value).flatMap(([key, nestedValue]) => {
+      const nextPrefix = keyPrefix ? `${keyPrefix}.${key}` : key;
+      return flattenParsedDataLines(nestedValue, nextPrefix, depth + 1);
+    });
+  };
+
+  const getSupplementalLogLines = (logData: any): string[] => {
+    if (!logData || typeof logData !== "object") return [];
+
+    const lines: string[] = [];
+    const description = String(logData?.description || "").trim();
+    if (description) {
+      lines.push(`Description: ${description}`);
+    }
+
+    const timeTaken = logData?.timeTaken;
+    if (timeTaken !== undefined && timeTaken !== null && String(timeTaken).trim()) {
+      lines.push(`Time Taken: ${String(timeTaken)}`);
+    }
+
+    const parsedLines = flattenParsedDataLines(logData?.parsedData);
+    lines.push(...parsedLines);
+
+    return lines;
+  };
+
+  const recordContainsLogs = (record: any) => {
+    if (!record) return false;
+    if (Array.isArray(record?.logs) && record.logs.length > 0) return true;
+    if (normalizeTerminalLogs(record?.logData?.terminalLogs).length > 0) return true;
+    if (normalizeTerminalLogs(record?.terminalLogs).length > 0) return true;
+    if (record?.logData?.parsedData) return true;
+    if (record?.logData?.description || record?.ngDescription) return true;
+    return false;
+  };
+
   const openStageLogs = async (stageName: string, stageHistories: any[] = []) => {
     const targetSerial =
       typeof searchResult === "string"
@@ -2809,6 +2963,28 @@ export default function DeviceTestComponent({
         });
       }
 
+      const hasEmbeddedLogs = stageRecords.some((record: any) =>
+        recordContainsLogs(record),
+      );
+
+      if (!hasEmbeddedLogs) {
+        await ensureProcessRecords();
+        const normalizedStage = String(stageName).trim().toLowerCase();
+        const processSerialRecords =
+          processTestRecordsBySerialRef.current.get(String(targetSerial).trim()) || [];
+
+        const hydratedStageRecords = processSerialRecords.filter((record: any) => {
+          const recordStage = String(record?.stageName || record?.name || "")
+            .trim()
+            .toLowerCase();
+          return recordStage === normalizedStage;
+        });
+
+        if (hydratedStageRecords.length > 0) {
+          stageRecords = hydratedStageRecords;
+        }
+      }
+
       const normalizedRecords = stageRecords
         .sort((a: any, b: any) => {
           const at = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -2827,47 +3003,76 @@ export default function DeviceTestComponent({
                 record?.updatedAt ||
                 new Date().toISOString(),
               logData: {
-                terminalLogs: Array.isArray(record?.logData?.terminalLogs)
-                  ? record.logData.terminalLogs
-                  : [],
+                terminalLogs: normalizeTerminalLogs(
+                  record?.logData?.terminalLogs || record?.terminalLogs,
+                ),
+                parsedData: record?.logData?.parsedData,
                 reason: record?.logData?.reason || record?.reason,
                 description:
                   record?.logData?.description || record?.ngDescription || "",
+                timeTaken: record?.logData?.timeTaken || record?.timeConsumed,
               },
             },
           ];
         }
 
-        return record.logs.map((logGroup: any) => ({
-          ...logGroup,
-          stepName:
-            logGroup?.stepName ||
-            record?.stageName ||
-            record?.name ||
-            stageName,
-          status: logGroup?.status || record?.status || "N/A",
-          createdAt:
-            logGroup?.createdAt ||
-            record?.createdAt ||
-            record?.updatedAt ||
-            new Date().toISOString(),
-          logData: {
-            terminalLogs: Array.isArray(logGroup?.logData?.terminalLogs)
-              ? logGroup.logData.terminalLogs
-              : [],
-            parsedData: logGroup?.logData?.parsedData,
-            reason:
-              logGroup?.logData?.reason ||
-              record?.logData?.reason ||
-              record?.reason,
-            description:
-              logGroup?.logData?.description ||
-              record?.logData?.description ||
-              record?.ngDescription ||
-              "",
-            timeTaken: logGroup?.logData?.timeTaken,
-          },
-        }));
+        return record.logs.map((logGroup: any, logGroupIndex: number) => {
+          const normalizedLogData =
+            logGroup && typeof logGroup === "object" && logGroup?.logData
+              ? logGroup.logData
+              : {};
+
+          const fallbackTerminalLogs =
+            logGroupIndex === 0
+              ? normalizeTerminalLogs(
+                record?.logData?.terminalLogs || record?.terminalLogs,
+              )
+              : [];
+
+          const terminalLogs = normalizeTerminalLogs(
+            normalizedLogData?.terminalLogs ||
+            logGroup?.terminalLogs ||
+            logGroup?.logs ||
+            logGroup,
+          );
+
+          return {
+            ...(logGroup && typeof logGroup === "object" ? logGroup : {}),
+            stepName:
+              logGroup?.stepName ||
+              record?.stageName ||
+              record?.name ||
+              stageName,
+            status: logGroup?.status || record?.status || "N/A",
+            createdAt:
+              logGroup?.createdAt ||
+              record?.createdAt ||
+              record?.updatedAt ||
+              new Date().toISOString(),
+            logData: {
+              terminalLogs:
+                terminalLogs.length > 0 ? terminalLogs : fallbackTerminalLogs,
+              parsedData:
+                normalizedLogData?.parsedData ?? logGroup?.parsedData ?? null,
+              reason:
+                normalizedLogData?.reason ||
+                logGroup?.reason ||
+                record?.logData?.reason ||
+                record?.reason,
+              description:
+                normalizedLogData?.description ||
+                logGroup?.description ||
+                record?.logData?.description ||
+                record?.ngDescription ||
+                "",
+              timeTaken:
+                normalizedLogData?.timeTaken ??
+                logGroup?.timeTaken ??
+                record?.logData?.timeTaken ??
+                record?.timeConsumed,
+            },
+          };
+        });
       });
 
       setSelectedLogs(stageLogs);
@@ -2899,19 +3104,30 @@ export default function DeviceTestComponent({
           .filter(Boolean)
           .join("\n");
 
-        const terminalLogs = Array.isArray(logGroup?.logData?.terminalLogs)
-          ? logGroup.logData.terminalLogs
-            .map((log: any) => {
-              const timestamp =
-                log?.displayTimestamp || safeTime(log?.timestamp);
-              const type = log?.type || "log";
-              const message = log?.message || "";
-              return `[${timestamp}] [${type}] ${message}`;
-            })
-            .join("\n")
-          : "No terminal logs available for this step.";
+        const normalizedTerminalLogs = normalizeTerminalLogs(
+          logGroup?.logData?.terminalLogs,
+        );
+        const terminalLogsText =
+          normalizedTerminalLogs.length > 0
+            ? normalizedTerminalLogs
+              .map((log: any) => {
+                const timestamp =
+                  log?.displayTimestamp || safeTime(log?.timestamp);
+                const type = log?.type || "log";
+                const message = log?.message || "";
+                return `[${timestamp}] [${type}] ${message}`;
+              })
+              .join("\n")
+            : "";
 
-        return `${header}\n\n${terminalLogs}`;
+        const supplementalLines = getSupplementalLogLines(logGroup?.logData);
+        const supplementalText = supplementalLines.join("\n");
+
+        const body = [terminalLogsText, supplementalText]
+          .filter((section) => String(section || "").trim())
+          .join("\n");
+
+        return `${header}\n\n${body || "No logs captured for this step."}`;
       })
       .join("\n\n----------------------------------------\n\n");
 
@@ -6336,9 +6552,19 @@ export default function DeviceTestComponent({
                       ),
                     )}
                   </div>
+                ) : getSupplementalLogLines(logGroup?.logData).length > 0 ? (
+                  <div className="space-y-1 text-gray-300">
+                    {getSupplementalLogLines(logGroup?.logData).map(
+                      (line, lineIndex) => (
+                        <div key={lineIndex} className="break-all">
+                          {line}
+                        </div>
+                      ),
+                    )}
+                  </div>
                 ) : (
                   <div className="italic text-gray-500">
-                    No terminal logs available for this step.
+                    No logs captured for this step.
                   </div>
                 )}
 
