@@ -186,6 +186,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     useState<string>("");
   const [resetDeviceIds, setResetDeviceIds] = useState<string[]>([]);
   const isSubmitting = React.useRef<boolean>(false);
+  const resolveSearchRequestIdRef = React.useRef(0);
+  const resolvedScanDeviceRef = React.useRef<any>(null);
   const { SVG } = useQRCode();
   const [historyFilterDate, setHistoryFilterDate] = useState(() => {
     const now = new Date();
@@ -714,16 +716,123 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     if (!query) {
       return { ok: false };
     }
+    const requestId = ++resolveSearchRequestIdRef.current;
+    const isLatestRequest = () => requestId === resolveSearchRequestIdRef.current;
 
-    if (!(taskPlanId && currentUserId)) {
-      setNotFoundError("No results found for: " + query);
-      setSearchedSerialNo(query);
-      return { ok: false };
-    }
+    const normalizeScanToken = (value: any) =>
+      String(value ?? "")
+        .replace(/[\r\n]+/g, " ")
+        .trim()
+        .toLowerCase();
+    const parseFlexibleScanTokens = (input: string) => {
+      const normalizedInput = String(input || "").replace(/[\r\n]+/g, ",");
+      const tokens = normalizedInput
+        .split(/[,\|;]+/)
+        .map((token) => normalizeScanToken(token))
+        .filter(Boolean);
+      return Array.from(new Set(tokens));
+    };
+    const collectDeviceIdentityValues = (device: any) => {
+      const values = new Set<string>();
+      const addValue = (raw: any) => {
+        const token = normalizeScanToken(raw);
+        if (token) values.add(token);
+      };
 
-    setIsDeviceHistoryLoading(true);
-    try {
-      const optimized = await getOperatorTaskDevice(taskPlanId, currentUserId, { scanInput: query });
+      addValue(device?.serialNo);
+      addValue(device?.serial_no);
+      addValue(device?.serial);
+      addValue(device?.imeiNo);
+      addValue(device?.imei_no);
+      addValue(device?.imei);
+      addValue(device?.ccid);
+      addValue(device?.iccid);
+
+      const scanCustomFields = (source: any) => {
+        if (!source || typeof source !== "object") return;
+
+        if (Array.isArray(source)) {
+          source.forEach((entry) => scanCustomFields(entry));
+          return;
+        }
+
+        Object.entries(source).forEach(([rawKey, rawValue]) => {
+          const key = normalizeScanToken(rawKey).replace(/\s+/g, "");
+          const isIdentityKey =
+            key.includes("serial") ||
+            key === "sn" ||
+            key === "sno" ||
+            key.includes("imei") ||
+            key.includes("ccid") ||
+            key.includes("iccid");
+
+          if (rawValue && typeof rawValue === "object") {
+            scanCustomFields(rawValue);
+            return;
+          }
+
+          if (isIdentityKey) addValue(rawValue);
+        });
+      };
+
+      scanCustomFields(device?.customFields);
+      scanCustomFields(device?.custom_fields);
+      return values;
+    };
+    const doesScanMatchDevice = (scanInput: string, device: any) => {
+      const tokens = parseFlexibleScanTokens(scanInput);
+      if (!tokens.length || !device) return false;
+      const candidateValues = collectDeviceIdentityValues(device);
+      return tokens.every((token) => candidateValues.has(token));
+    };
+    const permuteTriplet = (items: string[]) => {
+      if (items.length !== 3) return [];
+      const [a, b, c] = items;
+      return [
+        [a, b, c],
+        [a, c, b],
+        [b, a, c],
+        [b, c, a],
+        [c, a, b],
+        [c, b, a],
+      ];
+    };
+    const buildScanCandidates = (input: string) => {
+      const base = String(input || "").trim();
+      const tokens = parseFlexibleScanTokens(base);
+      const candidates: string[] = [];
+
+      if (base) candidates.push(base);
+      if (tokens.length > 0) candidates.push(tokens.join(","));
+
+      if (tokens.length === 3) {
+        const looksImei = (value: string) => /^\d{15}$/.test(value);
+        const looksCcid = (value: string) => /^\d{18,22}[a-z]?$/i.test(value);
+        const imeiToken = tokens.find((token) => looksImei(token));
+        const ccidToken = tokens.find((token) => looksCcid(token));
+        const serialToken = tokens.find((token) => token !== imeiToken && token !== ccidToken);
+
+        if (serialToken && imeiToken && ccidToken) {
+          candidates.push([serialToken, imeiToken, ccidToken].join(","));
+        }
+
+        permuteTriplet(tokens).forEach((triplet) => candidates.push(triplet.join(",")));
+      }
+
+      tokens.forEach((token) => candidates.push(token));
+
+      return Array.from(
+        new Set(
+          candidates
+            .map((candidate) => String(candidate || "").trim())
+            .filter(Boolean),
+        ),
+      );
+    };
+    const applyResolvedDevice = (optimized: any, fallbackInput: string) => {
+      if (!isLatestRequest()) {
+        return { ok: false, stale: true };
+      }
       const history = Array.isArray(optimized?.data?.history)
         ? optimized.data.history
         : Array.isArray(optimized?.history)
@@ -731,7 +840,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           : [];
       const resolvedDevice = optimized?.data?.device || optimized?.device || null;
       const resolvedSerial = String(
-        resolvedDevice?.serialNo || resolvedDevice?.serial_no || query,
+        resolvedDevice?.serialNo || resolvedDevice?.serial_no || fallbackInput || query,
       ).trim();
 
       setDeviceHistory(history);
@@ -739,22 +848,96 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       setSearchQuery(resolvedSerial);
       setNotFoundError("");
       setSearchedSerialNo(resolvedSerial);
+      resolvedScanDeviceRef.current = resolvedDevice || null;
       return { ok: true, device: resolvedDevice, history };
-    } catch (error: any) {
-      setDeviceHistory([]);
+    };
+
+    if (!(taskPlanId && currentUserId)) {
+      if (isLatestRequest()) {
+        setNotFoundError("No results found for: " + query);
+        setSearchedSerialNo(query);
+      }
+      return { ok: false };
+    }
+
+    if (isLatestRequest()) {
+      setIsDeviceHistoryLoading(true);
+    }
+    let lastError: any = null;
+    try {
+      const candidates = buildScanCandidates(query);
+      for (const candidate of candidates) {
+        if (!isLatestRequest()) {
+          return { ok: false, stale: true };
+        }
+        try {
+          const optimized = await getOperatorTaskDevice(taskPlanId, currentUserId, {
+            scanInput: candidate,
+          });
+          return applyResolvedDevice(optimized, candidate);
+        } catch (error: any) {
+          lastError = error;
+        }
+      }
+
+      const localMatchedDevice = Array.isArray(deviceList)
+        ? deviceList.find((device: any) => doesScanMatchDevice(query, device))
+        : null;
+      if (localMatchedDevice) {
+        if (!isLatestRequest()) {
+          return { ok: false, stale: true };
+        }
+        const resolvedSerial = String(
+          localMatchedDevice?.serialNo || localMatchedDevice?.serial_no || query,
+        ).trim();
+        setDeviceHistory([]);
+        setSearchResult(resolvedSerial);
+        setSearchQuery(resolvedSerial);
+        setNotFoundError("");
+        setSearchedSerialNo(resolvedSerial);
+        resolvedScanDeviceRef.current = localMatchedDevice;
+        return { ok: true, device: localMatchedDevice, history: [] };
+      }
+
       const message =
-        error?.message ||
-        error?.error ||
-        error?.response?.data?.message ||
+        lastError?.message ||
+        lastError?.error ||
+        lastError?.response?.data?.message ||
         "No matching device found for the scanned input";
-      setNotFoundError(message);
-      setSearchedSerialNo(query);
-      toast.error(message);
+
+      const activeResolvedDevice = resolvedScanDeviceRef.current || selectedDevice || null;
+      const isSeatUnavailable = /not available for this seat/i.test(String(message || ""));
+      if (
+        isSeatUnavailable &&
+        activeResolvedDevice &&
+        doesScanMatchDevice(query, activeResolvedDevice)
+      ) {
+        if (isLatestRequest()) {
+          const resolvedSerial = String(
+            activeResolvedDevice?.serialNo || activeResolvedDevice?.serial_no || query,
+          ).trim();
+          setNotFoundError("");
+          setSearchedSerialNo(resolvedSerial);
+          setSearchResult(resolvedSerial);
+          setSearchQuery(resolvedSerial);
+        }
+        return { ok: true, device: activeResolvedDevice, history: deviceHistory || [] };
+      }
+
+      if (isLatestRequest()) {
+        setDeviceHistory([]);
+        resolvedScanDeviceRef.current = null;
+        setNotFoundError(message);
+        setSearchedSerialNo(query);
+        toast.error(message);
+      }
       return { ok: false, error: message };
     } finally {
-      setIsDeviceHistoryLoading(false);
+      if (isLatestRequest()) {
+        setIsDeviceHistoryLoading(false);
+      }
     }
-  }, [currentUserId, taskPlanId]);
+  }, [currentUserId, taskPlanId, deviceList, selectedDevice, deviceHistory]);
 
   const getDeviceTestEntry = async () => {
     try {
@@ -909,6 +1092,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       if (response && response.status == 200) {
         setIsReportIssueModal(false);
         setSearchResult("");
+        resolvedScanDeviceRef.current = null;
         setSearchQuery("");
         setIsPassNGButtonShow(false);
         setIsVerifiedSticker(false);
@@ -1373,6 +1557,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         setSearchQuery("");
         setNotFoundError("");
         setSearchResult("");
+        resolvedScanDeviceRef.current = null;
         setIsPassNGButtonShow(false);
         setIsDevicePassed(false);
         setIsStickerPrinted(false);
@@ -1672,7 +1857,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const closeVerifyPackagingModal = () => {
     setIsVerifyPackagingModal(false);
   };
-  const handleVerifyStickerModal = () => {
+  const handleVerifyStickerModal = async () => {
     if (isSubmitting.current) return;
     isSubmitting.current = true;
     const input = String(serialNumber || "").trim();
@@ -1717,16 +1902,12 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         .trim()
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "");
-    const matchCombinedTokenSet = (expectedValues: string[], scannedValues: string[]) => {
-      const expected = expectedValues.map(normalizeCombinedToken).filter(Boolean);
-      const scannedPool = scannedValues.map(normalizeCombinedToken).filter(Boolean);
-      if (expected.length === 0 || scannedPool.length === 0) return false;
-      for (const token of expected) {
-        const idx = scannedPool.indexOf(token);
-        if (idx === -1) return false;
-        scannedPool.splice(idx, 1);
-      }
-      return true;
+    const matchCombinedByOrder = (expectedValues: string[], scannedValues: string[]) => {
+      if (expectedValues.length === 0 || scannedValues.length === 0) return false;
+      if (expectedValues.length !== scannedValues.length) return false;
+      return expectedValues.every(
+        (value, index) => normalizeCombinedToken(value) === normalizeCombinedToken(scannedValues[index]),
+      );
     };
 
     const candidates: string[] = [];
@@ -1843,22 +2024,54 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       return vals;
     };
 
-    const activeStickerDevice =
-      deviceList.find(
-        (d: any) =>
-          lc(d?.serialNo || d?.serial_no || d?.deviceInfo?.serialNo) === lc(searchResult),
-      ) || null;
+    const resolveDeviceSerial = (d: any) => lc(d?.serialNo || d?.serial_no || d?.deviceInfo?.serialNo);
+    let activeStickerDevice =
+      deviceList.find((d: any) => resolveDeviceSerial(d) === lc(searchResult)) ||
+      selectedDevice ||
+      null;
+
+    if (
+      !activeStickerDevice &&
+      resolvedScanDeviceRef.current &&
+      resolveDeviceSerial(resolvedScanDeviceRef.current) === lc(searchResult)
+    ) {
+      activeStickerDevice = resolvedScanDeviceRef.current;
+    }
+
+    if (!activeStickerDevice && searchResult && taskPlanId && currentUserId) {
+      try {
+        const optimized = await getOperatorTaskDevice(taskPlanId, currentUserId, {
+          scanInput: searchResult,
+        });
+        const resolvedDevice = optimized?.data?.device || optimized?.device || null;
+        if (resolvedDevice && resolveDeviceSerial(resolvedDevice) === lc(searchResult)) {
+          activeStickerDevice = resolvedDevice;
+          resolvedScanDeviceRef.current = resolvedDevice;
+        }
+      } catch {
+        // Ignore refresh errors and continue with existing behavior.
+      }
+    }
 
     const matchesCombinedScan = (d: any): boolean => {
       if (!d || combinedVerifyFields.length === 0) return false;
-      const expectedCombinedRaw = resolveStickerValue(
-        {
-          type: "qrcode",
-          sourceFields: combinedVerifyFields.map((slug) => ({ slug, name: slug })),
-        },
-        d,
+      const expectedCombinedValues = combinedVerifyFields.map((slug) =>
+        resolveStickerValue(
+          {
+            type: "qrcode",
+            sourceFields: [{ slug, name: slug }],
+          },
+          d,
+        ),
       );
-      const expectedCombined = normalizeCombinedValue(expectedCombinedRaw);
+      if (
+        expectedCombinedValues.length !== combinedVerifyFields.length ||
+        expectedCombinedValues.some((value) => !normalizeCombinedToken(value))
+      ) {
+        return false;
+      }
+
+      const expectedCombined = normalizeCombinedValue(expectedCombinedValues.join(","));
       if (!expectedCombined) return false;
 
       const directCombined = normalizeCombinedValue(input);
@@ -1866,9 +2079,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         return true;
       }
 
-      const expectedTokens = splitCombinedTokens(expectedCombinedRaw);
       const scannedTokens = splitCombinedTokens(input);
-      if (matchCombinedTokenSet(expectedTokens, scannedTokens)) {
+      if (matchCombinedByOrder(expectedCombinedValues, scannedTokens)) {
         return true;
       }
 
@@ -1880,7 +2092,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         if (normalizeCombinedValue(parsedCombined.join(",")) === expectedCombined) {
           return true;
         }
-        return matchCombinedTokenSet(expectedTokens, parsedCombined);
+        return matchCombinedByOrder(expectedCombinedValues, parsedCombined);
       }
 
       return false;

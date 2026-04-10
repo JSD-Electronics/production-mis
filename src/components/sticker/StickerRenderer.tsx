@@ -106,13 +106,14 @@ export default function StickerRenderer({ template, deviceData }: StickerRendere
         const rawBarcodeValue = String(fieldValue ?? "").trim();
         const sampleBarcodeValue = getSampleValueForField(field);
         const barcodeValue = rawBarcodeValue || sampleBarcodeValue;
+        const lockToFieldBounds = Boolean(field?.lockToFieldBounds);
         const barcodeLayout =
           field?.type === "barcode"
             ? getBarcodeLayout({
                 value: barcodeValue,
                 field,
-                templateWidth: width,
-                templateHeight: height,
+                templateWidth: lockToFieldBounds ? undefined : width,
+                templateHeight: lockToFieldBounds ? undefined : height,
               })
             : null;
 

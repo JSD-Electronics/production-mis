@@ -30,6 +30,11 @@ const DEFAULT_FORMAT: SupportedBarcodeFormat = "CODE128";
 const DEFAULT_MARGIN_PX = 8;
 const DEFAULT_MIN_MODULE_WIDTH_PX = 0.95;
 const DEFAULT_MIN_BAR_HEIGHT_PX = 24;
+const COMPACT_LABEL_MAX_WIDTH_MM = 60;
+const COMPACT_LABEL_MAX_HEIGHT_MM = 30;
+const COMPACT_MARGIN_PX = 4;
+const COMPACT_MIN_MODULE_WIDTH_PX = 0.76; // 0.20 mm @ 96 DPI
+const COMPACT_MIN_BAR_HEIGHT_PX = 12;
 const MIN_FONT_SIZE_PX = 6;
 const MAX_AUTO_MODULE_WIDTH_PX = 4;
 
@@ -150,14 +155,22 @@ export const getBarcodeLayout = ({
   const trimmedValue = String(value || "").trim();
   const format = inferBarcodeFormat(trimmedValue, field);
   const label = fieldLabel(field);
+  const configuredWidth = Math.max(1, toPositiveNumber(field?.width, 100));
+  const configuredHeight = Math.max(1, toPositiveNumber(field?.height, 30));
+  const effectiveTemplateWidth = toPositiveNumber(templateWidth, configuredWidth);
+  const effectiveTemplateHeight = toPositiveNumber(templateHeight, configuredHeight);
+  const effectiveWidthMm = Math.min(configuredWidth, effectiveTemplateWidth) / PX_PER_MM;
+  const effectiveHeightMm = Math.min(configuredHeight, effectiveTemplateHeight) / PX_PER_MM;
+  const isCompactLabel =
+    effectiveWidthMm <= COMPACT_LABEL_MAX_WIDTH_MM &&
+    effectiveHeightMm <= COMPACT_LABEL_MAX_HEIGHT_MM;
+
   const marginPx = toPositiveNumber(
     field?.quietZoneMm != null
       ? mmValueToPx(field.quietZoneMm)
       : field?.quietZone ?? field?.margin,
-    DEFAULT_MARGIN_PX,
+    isCompactLabel ? COMPACT_MARGIN_PX : DEFAULT_MARGIN_PX,
   );
-  const configuredWidth = Math.max(1, toPositiveNumber(field?.width, 100));
-  const configuredHeight = Math.max(1, toPositiveNumber(field?.height, 30));
   const maxWidth = Math.max(
     configuredWidth,
     templateWidth != null ? Math.max(1, Number(templateWidth) - Number(field?.x ?? 0)) : configuredWidth,
@@ -173,17 +186,19 @@ export const getBarcodeLayout = ({
     field?.minModuleWidthMm != null
       ? mmValueToPx(field.minModuleWidthMm)
       : field?.minModuleWidth,
-    DEFAULT_MIN_MODULE_WIDTH_PX,
+    isCompactLabel ? COMPACT_MIN_MODULE_WIDTH_PX : DEFAULT_MIN_MODULE_WIDTH_PX,
   );
   const minBarHeightPx = toPositiveNumber(
     field?.minBarHeightMm != null ? mmValueToPx(field.minBarHeightMm) : field?.minBarHeight,
-    DEFAULT_MIN_BAR_HEIGHT_PX,
+    isCompactLabel ? COMPACT_MIN_BAR_HEIGHT_PX : DEFAULT_MIN_BAR_HEIGHT_PX,
   );
 
-  const explicitBarWidth =
+  const rawExplicitBarWidth =
     field?.barWidthMm != null
       ? toPositiveNumber(mmValueToPx(field.barWidthMm))
       : toPositiveNumber(field?.barWidth);
+  const explicitBarWidth =
+    rawExplicitBarWidth > 0 ? Math.max(rawExplicitBarWidth, minModuleWidthPx) : undefined;
   const explicitBarHeight =
     field?.barHeightMm != null
       ? toPositiveNumber(mmValueToPx(field.barHeightMm))
@@ -196,7 +211,7 @@ export const getBarcodeLayout = ({
   const desiredTextMargin = toPositiveNumber(field?.textMargin, 2);
   const fontOptions = field?.valueFontBold ? "bold" : undefined;
   let displayValue = field?.displayValue !== false;
-  const fontSize = desiredFontSize;
+  let fontSize = desiredFontSize;
   let textMargin = desiredTextMargin;
 
   if (!trimmedValue) {
@@ -251,25 +266,6 @@ export const getBarcodeLayout = ({
     ? explicitBarWidth
     : Math.min(MAX_AUTO_MODULE_WIDTH_PX, Math.max(minModuleWidthPx, usableWidth / moduleCount));
 
-  if (explicitBarWidth && explicitBarWidth < minModuleWidthPx) {
-    return {
-      value: trimmedValue,
-      format,
-      marginPx,
-      renderWidth: configuredWidth,
-      renderHeight: configuredHeight,
-      barWidth: explicitBarWidth,
-      barHeight: Math.max(1, configuredHeight - marginPx * 2),
-      displayValue,
-      fontSize,
-      textMargin,
-      fontOptions,
-      isValid: false,
-      message: `${label} bar width is below the scan-safe minimum.`,
-      recommendation: "Increase the configured bar width or remove the fixed bar width override.",
-    };
-  }
-
   if (renderWidth + 0.01 < minRequiredWidth || barWidth + 0.01 < minModuleWidthPx) {
     return {
       value: trimmedValue,
@@ -290,15 +286,44 @@ export const getBarcodeLayout = ({
     };
   }
 
-  let requiredHeight = minBarHeightPx + marginPx * 2;
+  const adaptiveMinBarHeightPx =
+    isCompactLabel && displayValue
+      ? Math.max(
+          10,
+          Math.min(
+            minBarHeightPx,
+            Math.max(10, maxHeight - marginPx * 2 - (MIN_FONT_SIZE_PX + 1)),
+          ),
+        )
+      : minBarHeightPx;
+
+  let requiredHeight = adaptiveMinBarHeightPx + marginPx * 2;
   if (displayValue) {
     requiredHeight += fontSize + textMargin;
   }
 
   if (requiredHeight > maxHeight && displayValue) {
-    displayValue = false;
-    textMargin = 0;
-    requiredHeight = minBarHeightPx + marginPx * 2;
+    const availableForText = Math.max(
+      0,
+      maxHeight - (adaptiveMinBarHeightPx + marginPx * 2),
+    );
+    if (availableForText >= MIN_FONT_SIZE_PX) {
+      fontSize = Math.max(
+        MIN_FONT_SIZE_PX,
+        Math.min(fontSize, availableForText),
+      );
+      textMargin = Math.max(
+        0,
+        Math.min(textMargin, Math.max(0, availableForText - fontSize)),
+      );
+      requiredHeight = adaptiveMinBarHeightPx + marginPx * 2 + fontSize + textMargin;
+    }
+
+    if (requiredHeight > maxHeight) {
+      displayValue = false;
+      textMargin = 0;
+      requiredHeight = adaptiveMinBarHeightPx + marginPx * 2;
+    }
   }
 
   const renderHeight = Math.min(maxHeight, Math.max(configuredHeight, requiredHeight));
@@ -307,13 +332,13 @@ export const getBarcodeLayout = ({
   const autoBarHeight = Math.max(1, usableHeight - textSpace);
   let barHeight = explicitBarHeight != null ? Math.min(explicitBarHeight, autoBarHeight) : autoBarHeight;
 
-  if (barHeight < minBarHeightPx && displayValue) {
+  if (barHeight < adaptiveMinBarHeightPx && displayValue) {
     displayValue = false;
     textMargin = 0;
     barHeight = explicitBarHeight != null ? Math.min(explicitBarHeight, usableHeight) : usableHeight;
   }
 
-  if (barHeight < minBarHeightPx) {
+  if (barHeight < adaptiveMinBarHeightPx) {
     return {
       value: trimmedValue,
       format,

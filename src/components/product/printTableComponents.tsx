@@ -4,6 +4,7 @@ import Barcode from "react-barcode";
 import { QRCodeCanvas } from "qrcode.react";
 import { printStickerElements } from "@/lib/sticker/printSticker";
 import { resolveStickerValue } from "@/lib/sticker/resolveStickerValue";
+import { getBarcodeLayout } from "@/lib/sticker/barcodeLayout";
 import {
   normalizeSourceFieldEntry,
   normalizeSourceFields,
@@ -34,6 +35,8 @@ import {
   Unlock
 } from "lucide-react";
 import { Tooltip } from "react-tooltip";
+
+const MIN_SAFE_BAR_WIDTH_MM = 0.2;
 
 const StickerDesigner = ({
   stages,
@@ -80,6 +83,12 @@ const StickerDesigner = ({
   const [isBarCodeDropDown, setBarCodeDropDown] = useState(false);
   const [isImageUploadModal, setImageUploadMoal] = useState(false);
   const [isExportingSticker, setIsExportingSticker] = useState(false);
+  const [previewNotice, setPreviewNotice] = useState<{
+    message: string;
+    fieldLabel?: string;
+    fieldIndex?: number | null;
+    canAutoFixBarWidth?: boolean;
+  } | null>(null);
 
   const [fontSettings, setFontSettings] = useState({ size: 16, weight: 400 });
   const [selectedBarCodeValue, setSelectedBarCodeValue] = useState("");
@@ -668,6 +677,7 @@ const StickerDesigner = ({
     }
   };
   const handleFieldChange = (SubfieldIndex, updates) => {
+    setPreviewNotice(null);
     pushHistory();
     setStages((prevStages) =>
       prevStages.map((stage, sIndex) =>
@@ -835,6 +845,139 @@ const StickerDesigner = ({
     [getFieldSourceFields, getSampleValueForSlug],
   );
 
+  const autoFixInvalidBarcodeFields = useCallback(
+    (root: HTMLElement, templateWidthPx: number, templateHeightPx: number) => {
+      const invalidNodes = Array.from(
+        root.querySelectorAll('[data-barcode-valid="false"]'),
+      ) as HTMLElement[];
+      if (invalidNodes.length === 0) return false;
+
+      const normalizeLabel = (value: any) => String(value || "").trim().toLowerCase();
+      const invalidLabels = new Set(
+        invalidNodes
+          .map((node) => normalizeLabel(node.getAttribute("data-barcode-field")))
+          .filter(Boolean),
+      );
+
+      if (invalidLabels.size === 0) return false;
+
+      const sampleDeviceData = Array.isArray(stickerData) ? stickerData[0] : stickerData;
+      let hasChanges = false;
+
+      const nextStages = stages.map((stage: any, sIndex: number) => {
+        if (sIndex !== index) return stage;
+        return {
+          ...stage,
+          subSteps: (stage.subSteps || []).map((subStep: any, sSubIndex: number) => {
+            if (sSubIndex !== subIndex1) return subStep;
+            return {
+              ...subStep,
+              printerFields: (subStep.printerFields || []).map(
+                (printerField: any, pFieldIndex: number) => {
+                  if (pFieldIndex !== fieldIndex) return printerField;
+                  return {
+                    ...printerField,
+                    fields: (printerField.fields || []).map((field: any) => {
+                      if (field?.type !== "barcode") return field;
+
+                      const label = normalizeLabel(field?.name || field?.slug);
+                      if (!label || !invalidLabels.has(label)) return field;
+
+                      let nextField = {
+                        ...field,
+                        // Child-friendly safe mode: allow auto-sizing engine to pick scan-safe dimensions.
+                        barWidthMm: undefined,
+                        barWidth: undefined,
+                        barHeightMm: undefined,
+                        barHeight: undefined,
+                      };
+
+                      const barcodeValue = String(
+                        resolveStickerValue(nextField, sampleDeviceData) ||
+                          getSampleValueForField(nextField) ||
+                          "",
+                      ).trim();
+
+                      let layout = getBarcodeLayout({
+                        value: barcodeValue,
+                        field: nextField,
+                        templateWidth: templateWidthPx,
+                        templateHeight: templateHeightPx,
+                      });
+
+                      // Numeric even-length values often fit better with ITF.
+                      if (
+                        !layout.isValid &&
+                        /^\d+$/.test(barcodeValue) &&
+                        barcodeValue.length > 0 &&
+                        barcodeValue.length % 2 === 0
+                      ) {
+                        nextField = { ...nextField, format: "ITF" };
+                        layout = getBarcodeLayout({
+                          value: barcodeValue,
+                          field: nextField,
+                          templateWidth: templateWidthPx,
+                          templateHeight: templateHeightPx,
+                        });
+                      }
+
+                      if (layout.isValid) {
+                        const targetWidth = Math.max(
+                          Number(nextField?.width || 0),
+                          Number(layout.renderWidth || 0),
+                        );
+                        const targetHeight = Math.max(
+                          Number(nextField?.height || 0),
+                          Number(layout.renderHeight || 0),
+                        );
+                        const maxX = Math.max(0, templateWidthPx - targetWidth);
+                        const maxY = Math.max(0, templateHeightPx - targetHeight);
+
+                        nextField = {
+                          ...nextField,
+                          width: targetWidth,
+                          height: targetHeight,
+                          x: Math.max(0, Math.min(Number(nextField?.x || 0), maxX)),
+                          y: Math.max(0, Math.min(Number(nextField?.y || 0), maxY)),
+                        };
+                      } else {
+                        // Final fallback: enforce minimum X dimension.
+                        nextField = {
+                          ...nextField,
+                          barWidthMm: MIN_SAFE_BAR_WIDTH_MM,
+                          barWidth: mmToPx(MIN_SAFE_BAR_WIDTH_MM),
+                        };
+                      }
+
+                      if (JSON.stringify(nextField) !== JSON.stringify(field)) {
+                        hasChanges = true;
+                        return nextField;
+                      }
+                      return field;
+                    }),
+                  };
+                },
+              ),
+            };
+          }),
+        };
+      });
+
+      if (!hasChanges) return false;
+      setStages(nextStages);
+      return true;
+    },
+    [
+      fieldIndex,
+      getSampleValueForField,
+      index,
+      setStages,
+      stages,
+      stickerData,
+      subIndex1,
+    ],
+  );
+
   const handleRemoveField = (subFieldIndex: number) => {
     let removedField: any = null;
 
@@ -886,13 +1029,76 @@ const StickerDesigner = ({
     // Clear the focused field index
     setFocusedFieldIndex(null);
   };
-  const exportSticker = (width: any, height: any) => {
+  const exportSticker = (width: any, height: any, attempt = 0) => {
+    const toFriendlyPreviewMessage = (rawMessage: string, fieldLabel?: string) => {
+      const message = String(rawMessage || "").trim();
+      const lower = message.toLowerCase();
+      const name = String(fieldLabel || "This barcode").trim();
+
+      if (lower.includes("bar width is below")) {
+        return `${name} was too thin for scanners. We can fix it automatically.`;
+      }
+      if (lower.includes("needs more horizontal space")) {
+        return `${name} needs a little more width to scan clearly.`;
+      }
+      if (lower.includes("needs more height")) {
+        return `${name} needs a little more height to scan clearly.`;
+      }
+      if (lower.includes("has no barcode value")) {
+        return `${name} is missing data. Pick a sticker field first.`;
+      }
+      if (lower.includes("not supported by")) {
+        return `${name} format does not match this value. We can switch it for you.`;
+      }
+      return message || "Barcode needs a small safety adjustment before preview.";
+    };
+
+    const resolvePreviewIssue = (root: HTMLElement | null) => {
+      if (!root) return null;
+
+      const invalidNode = root.querySelector('[data-barcode-valid="false"]') as HTMLElement | null;
+      if (!invalidNode) return null;
+
+      const rawMessage =
+        invalidNode.getAttribute("data-barcode-message") ||
+        "Barcode needs a small safety adjustment before preview.";
+      const fieldLabel = invalidNode.getAttribute("data-barcode-field") || "Barcode";
+      const normalizedLabel = String(fieldLabel).trim().toLowerCase();
+      const fields = Array.isArray(currentPrinterField?.fields) ? currentPrinterField.fields : [];
+      const fieldIndex = fields.findIndex((field: any) => {
+        const candidate = String(field?.name || field?.slug || "").trim().toLowerCase();
+        return candidate && candidate === normalizedLabel;
+      });
+
+      return {
+        message: toFriendlyPreviewMessage(rawMessage, fieldLabel),
+        fieldLabel,
+        fieldIndex: fieldIndex >= 0 ? fieldIndex : null,
+        canAutoFixBarWidth: String(rawMessage || "").toLowerCase().includes("bar width is below"),
+      };
+    };
+
+    const applyPreviewIssue = (issue: {
+      message: string;
+      fieldLabel?: string;
+      fieldIndex?: number | null;
+      canAutoFixBarWidth?: boolean;
+    } | null) => {
+      if (!issue) return;
+      setPreviewNotice(issue);
+      if (issue.fieldIndex != null) {
+        setFocusedFieldIndex(issue.fieldIndex);
+        setIsPropertiesOpen(true);
+      }
+    };
+
     // Prefer printing the canonical renderer (it uses inline styles and doesn't depend on Tailwind in the print window).
     // Fallback to the interactive designer DOM only if needed.
     const stickerElement =
       (printRenderRootRef.current as unknown as HTMLElement | null) ??
       (document.getElementById("sticker-preview") as HTMLElement | null);
     if (!stickerElement) return;
+    setPreviewNotice(null);
 
     // Reset zoom before capture to ensure pixel-perfect html2canvas capture
     const originalZoom = zoomLevel;
@@ -916,6 +1122,32 @@ const StickerDesigner = ({
         stickerElement.setAttribute("data-sticker-height", String(heightPx));
       }
 
+      const detectedIssue = resolvePreviewIssue(stickerElement);
+      if (detectedIssue) {
+        const didAutoFix = autoFixInvalidBarcodeFields(
+          stickerElement,
+          Number.isFinite(widthPx) && widthPx > 0
+            ? widthPx
+            : Number(currentPrinterField?.dimensions?.width || 0),
+          Number.isFinite(heightPx) && heightPx > 0
+            ? heightPx
+            : Number(currentPrinterField?.dimensions?.height || 0),
+        );
+        if (didAutoFix && attempt < 2) {
+          setPreviewNotice({
+            message: "No worries. We fixed barcode size automatically and are opening preview.",
+          });
+          setZoomLevel(originalZoom);
+          setIsExportingSticker(false);
+          setTimeout(() => exportSticker(width, height, attempt + 1), 450);
+          return;
+        }
+        applyPreviewIssue(detectedIssue);
+        setZoomLevel(originalZoom);
+        setIsExportingSticker(false);
+        return;
+      }
+
       printStickerElements({
         root: stickerElement as HTMLElement,
         scale: 6,
@@ -924,18 +1156,75 @@ const StickerDesigner = ({
       })
         .then((res) => {
           if (!res.ok) {
-            alert(
-              res.reason === "popup-blocked"
-                ? "Please allow pop-ups to preview the sticker."
-                : res.message || "Sticker barcode is not safe to print yet.",
+            if (res.reason === "popup-blocked") {
+              setPreviewNotice({
+                message:
+                  "Preview window was blocked by the browser. Allow pop-ups once, then press Preview Sticker again.",
+              });
+              return;
+            }
+
+            const didAutoFix = autoFixInvalidBarcodeFields(
+              stickerElement,
+              Number.isFinite(widthPx) && widthPx > 0
+                ? widthPx
+                : Number(currentPrinterField?.dimensions?.width || 0),
+              Number.isFinite(heightPx) && heightPx > 0
+                ? heightPx
+                : Number(currentPrinterField?.dimensions?.height || 0),
             );
+            if (didAutoFix && attempt < 2) {
+              setPreviewNotice({
+                message: "No worries. We auto-corrected barcode settings. Opening preview now.",
+              });
+              setTimeout(() => exportSticker(width, height, attempt + 1), 450);
+              return;
+            }
+
+            applyPreviewIssue(
+              resolvePreviewIssue(stickerElement) || {
+                message: res.message || "Barcode still needs adjustment. Press Focus Barcode Field and try once.",
+              },
+            );
+            return;
           }
+          setPreviewNotice(null);
         })
         .finally(() => {
           setZoomLevel(originalZoom);
           setIsExportingSticker(false);
         });
     }, 200);
+  };
+  const handleAutoFixBarWidth = () => {
+    if (!previewNotice || previewNotice.fieldIndex == null) return;
+    const targetIndex = previewNotice.fieldIndex;
+    const currentField =
+      stages[index]?.subSteps?.[subIndex1]?.printerFields?.[fieldIndex]?.fields?.[targetIndex];
+    if (!currentField || currentField.type !== "barcode") return;
+
+    handleFieldChange(
+      targetIndex,
+      ensureBarcodeBoxFits(currentField, {
+        barWidthMm: MIN_SAFE_BAR_WIDTH_MM,
+        barWidth: mmToPx(MIN_SAFE_BAR_WIDTH_MM),
+      }),
+    );
+    setPreviewNotice({
+      message: `Done. We set X Dimension to ${MIN_SAFE_BAR_WIDTH_MM} mm and are opening preview.`,
+      fieldLabel: previewNotice.fieldLabel,
+      fieldIndex: targetIndex,
+      canAutoFixBarWidth: false,
+    });
+    setTimeout(
+      () =>
+        exportSticker(
+          stages[index]?.subSteps?.[subIndex1]?.printerFields?.[fieldIndex]?.dimensions?.width,
+          stages[index]?.subSteps?.[subIndex1]?.printerFields?.[fieldIndex]?.dimensions?.height,
+          1,
+        ),
+      450,
+    );
   };
   const generateScanCode = (type = "barcode") => {
     pushHistory();
@@ -953,8 +1242,8 @@ const StickerDesigner = ({
         ...(type === "barcode"
           ? {
             format: "CODE128",
-            barWidthMm: 0.25,
-            barWidth: mmToPx(0.25),
+            barWidthMm: MIN_SAFE_BAR_WIDTH_MM,
+            barWidth: mmToPx(MIN_SAFE_BAR_WIDTH_MM),
             barHeightMm: 3.3,
             barDensity: 0.636,
             codeSet: "Auto",
@@ -967,12 +1256,18 @@ const StickerDesigner = ({
       },
     ]);
   };
+  const normalizeUiBarcodeFormat = (value: any) => {
+    const raw = String(value || "")
+      .trim()
+      .toUpperCase();
+    return raw === "CODE128" || raw === "CODE39" || raw === "ITF" ? raw : "CODE128";
+  };
   const openBarCodeValue = (value) => {
     setFieldType(value?.type || "");
     setSelectedQRValue(value);
     setSelectedScanFields(getFieldSourceFields(value));
     setDisplayBarValue(value?.displayValue !== false);
-    setBarFormat(value?.format || "CODE128");
+    setBarFormat(normalizeUiBarcodeFormat(value?.format));
     setIsModalBarCodeValue(true);
   };
   const [barWidth, setBarWidth] = useState<number | "">("");
@@ -1004,6 +1299,100 @@ const StickerDesigner = ({
     if (!previous) return;
     setStages(previous);
     setCanUndo(historyRef.current.length > 0);
+  };
+  const autoAlignBarcodeFields = () => {
+    const printerField = stages[index]?.subSteps?.[subIndex1]?.printerFields?.[fieldIndex];
+    const fields = Array.isArray(printerField?.fields) ? printerField.fields : [];
+    const canvasW = Number(printerField?.dimensions?.width || 0);
+    const canvasH = Number(printerField?.dimensions?.height || 0);
+
+    if (!fields.length || canvasW <= 0 || canvasH <= 0) return;
+
+    const barcodeEntries = fields
+      .map((field: any, idx: number) => ({ field, idx }))
+      .filter((entry: any) => entry?.field?.type === "barcode");
+
+    if (barcodeEntries.length === 0) {
+      setPreviewNotice({ message: "No barcode fields found to align." });
+      return;
+    }
+
+    const nonBarcodeBottom = fields
+      .filter((field: any) => field?.type !== "barcode")
+      .reduce(
+        (max: number, field: any) =>
+          Math.max(max, Number(field?.y || 0) + Number(field?.height || 0)),
+        0,
+      );
+
+    const sorted = [...barcodeEntries].sort(
+      (left: any, right: any) => Number(left?.field?.y || 0) - Number(right?.field?.y || 0),
+    );
+
+    const minGap = 6;
+    const topStart = Math.max(0, Math.min(canvasH - 1, Math.round(nonBarcodeBottom + minGap)));
+    const totalHeight = sorted.reduce(
+      (sum: number, entry: any) => sum + Math.max(1, Number(entry?.field?.height || 1)),
+      0,
+    );
+
+    const availableSpace = Math.max(0, canvasH - topStart - totalHeight);
+    const dynamicGap =
+      sorted.length > 1 ? Math.max(2, Math.floor(availableSpace / (sorted.length - 1))) : 0;
+
+    const updatesByIndex = new Map<number, any>();
+    let cursorY = topStart;
+
+    sorted.forEach((entry: any) => {
+      const field = entry.field || {};
+      const idx = Number(entry.idx);
+      const width = Math.max(1, Number(field?.width || 1));
+      const height = Math.max(1, Number(field?.height || 1));
+      const centeredX = Math.round((canvasW - width) / 2);
+      const x = Math.max(0, Math.min(centeredX, Math.max(0, canvasW - width)));
+      const y = Math.max(0, Math.min(Math.round(cursorY), Math.max(0, canvasH - height)));
+
+      updatesByIndex.set(idx, { ...field, x, y });
+      cursorY = y + height + dynamicGap;
+    });
+
+    const nextFields = fields.map((field: any, idx: number) => updatesByIndex.get(idx) || field);
+    const hasChanges =
+      JSON.stringify(nextFields.map((f: any) => ({ x: f?.x, y: f?.y }))) !==
+      JSON.stringify(fields.map((f: any) => ({ x: f?.x, y: f?.y })));
+
+    if (!hasChanges) {
+      setPreviewNotice({ message: "Barcodes are already aligned." });
+      return;
+    }
+
+    pushHistory();
+    setStages((prevStages: any[]) =>
+      prevStages.map((stage: any, sIndex: number) =>
+        sIndex === index
+          ? {
+              ...stage,
+              subSteps: stage.subSteps.map((subStep: any, sSubIndex: number) =>
+                sSubIndex === subIndex1
+                  ? {
+                      ...subStep,
+                      printerFields: subStep.printerFields.map(
+                        (printerField: any, pFieldIndex: number) =>
+                          pFieldIndex === fieldIndex
+                            ? {
+                                ...printerField,
+                                fields: nextFields,
+                              }
+                            : printerField,
+                      ),
+                    }
+                  : subStep,
+              ),
+            }
+          : stage,
+      ),
+    );
+    setPreviewNotice({ message: "Barcodes aligned and centered." });
   };
   const handleBarCodeValue = () => {
     if (!fieldType) {
@@ -1229,6 +1618,13 @@ const StickerDesigner = ({
           </button>
           <button
             type="button"
+            onClick={autoAlignBarcodeFields}
+            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50 active:scale-95"
+          >
+            Align Barcodes
+          </button>
+          <button
+            type="button"
             className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-orange-600 active:scale-95"
             onClick={() => {
               exportSticker(
@@ -1244,6 +1640,66 @@ const StickerDesigner = ({
           </button>
         </div>
       </div>
+
+      {previewNotice ? (
+        <div
+          className={`mx-6 mt-3 rounded-lg px-4 py-3 text-sm ${
+            String(previewNotice.message || "").toLowerCase().includes("opening preview")
+              ? "border border-emerald-200 bg-emerald-50 text-emerald-900"
+              : "border border-amber-200 bg-amber-50 text-amber-900"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-2">
+              <Info
+                size={16}
+                className={`mt-0.5 shrink-0 ${
+                  String(previewNotice.message || "").toLowerCase().includes("opening preview")
+                    ? "text-emerald-600"
+                    : "text-amber-600"
+                }`}
+              />
+              <div className="min-w-0">
+                <p className="font-semibold">
+                  Almost done
+                  {previewNotice.fieldLabel ? `: ${previewNotice.fieldLabel}` : ""}.
+                </p>
+                <p className="mt-1">{previewNotice.message}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPreviewNotice(null)}
+              className="rounded-md border border-amber-300 px-2 py-1 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
+            >
+              Dismiss
+            </button>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {previewNotice.fieldIndex != null ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setFocusedFieldIndex(previewNotice.fieldIndex as number);
+                  setIsPropertiesOpen(true);
+                }}
+                className="rounded-md border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:bg-amber-100"
+              >
+                Open Barcode Settings
+              </button>
+            ) : null}
+            {previewNotice.canAutoFixBarWidth && previewNotice.fieldIndex != null ? (
+              <button
+                type="button"
+                onClick={handleAutoFixBarWidth}
+                className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-700"
+              >
+                Fix For Me
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <div className="relative flex-1">
         {/* Main Area: Canvas (Background) */}
@@ -1338,18 +1794,45 @@ const StickerDesigner = ({
                     position={{ x: field.x, y: field.y }}
                     disableDragging={Boolean(field?.locked)}
                     enableResizing={!Boolean(field?.locked)}
-                    onDragStop={(e, d) =>
-                      field?.locked
-                        ? null
-                        : handleFieldChange(i, { x: d.x, y: d.y })
-                    }
+                    onDragStop={(e, d) => {
+                      if (field?.locked) return;
+                      const nextX = Number(d?.x || 0);
+                      const nextY = Number(d?.y || 0);
+                      if (field?.type !== "barcode" || !canvasWidthPx) {
+                        handleFieldChange(i, { x: nextX, y: nextY });
+                        return;
+                      }
+                      const widthPx = Math.max(1, Number(field?.width || 1));
+                      const centeredX = Math.round((canvasWidthPx - widthPx) / 2);
+                      const snapThreshold = 8;
+                      const snappedX =
+                        Math.abs(nextX - centeredX) <= snapThreshold ? centeredX : nextX;
+                      handleFieldChange(i, { x: snappedX, y: nextY });
+                    }}
                     onResizeStop={(e, direction, ref, delta, position) => {
                       if (field?.locked) return;
+                      const nextWidth = parseInt(ref.style.width, 10);
+                      const nextHeight = parseInt(ref.style.height, 10);
+                      const nextY = Number(position?.y || 0);
+                      const nextX = Number(position?.x || 0);
+                      if (field?.type !== "barcode" || !canvasWidthPx) {
+                        handleFieldChange(i, {
+                          width: nextWidth,
+                          height: nextHeight,
+                          x: nextX,
+                          y: nextY,
+                        });
+                        return;
+                      }
+                      const centeredX = Math.round((canvasWidthPx - Math.max(1, nextWidth)) / 2);
+                      const snapThreshold = 8;
+                      const snappedX =
+                        Math.abs(nextX - centeredX) <= snapThreshold ? centeredX : nextX;
                       handleFieldChange(i, {
-                        width: parseInt(ref.style.width, 10),
-                        height: parseInt(ref.style.height, 10),
-                        x: position.x,
-                        y: position.y,
+                        width: nextWidth,
+                        height: nextHeight,
+                        x: snappedX,
+                        y: nextY,
                       });
                     }}
                     className="absolute z-1"
@@ -1378,100 +1861,80 @@ const StickerDesigner = ({
                               : stickerData;
                             const resolved = src ? String(resolveStickerValue(field, src) ?? "").trim() : "";
                             const barcodeValue = resolved || getSampleValueForField(field);
+                            const barcodeLayout = getBarcodeLayout({
+                              value: barcodeValue,
+                              field: { ...field, lockToFieldBounds: true },
+                              templateWidth: Number(field?.width) || undefined,
+                              templateHeight: Number(field?.height) || undefined,
+                            });
+                            const barcodeMessage =
+                              barcodeLayout?.message && barcodeLayout?.recommendation
+                                ? `${barcodeLayout.message} ${barcodeLayout.recommendation}`
+                                : barcodeLayout?.message;
 
-                            const estimatedModules =
-                              barcodeValue.length * 11 + 35;
-                             const targetWidth = field.width;
-                             const explicitBarWidth =
-                               field.barWidthMm != null
-                                 ? mmToPx(Number(field.barWidthMm))
-                                 : field.barWidth;
-                              const marginPx = Number(field.margin ?? 4) || 0;
-                              const usableWidth = targetWidth
-                                ? Math.max(1, Number(targetWidth) - marginPx * 2)
-                                : undefined;
-
-                              // IMPORTANT: If an explicit X dimension is configured (barWidthMm/barWidth),
-                              // always respect it so all barcodes render with the same bar thickness.
-                              // Auto-fit is only used when no explicit bar width is provided.
-                              const computedBarWidth =
-                                explicitBarWidth != null
-                                  ? Math.max(0.5, Number(explicitBarWidth))
-                                  : usableWidth
-                                    ? Math.max(0.5, usableWidth / estimatedModules)
-                                    : 1;
-
-                             const showValue = field.displayValue !== false;
-                             const desiredFontSize = Number(field.fontSize ?? 12);
-                             const desiredTextMargin = Number(field.textMargin ?? 2);
-                             const valueFontOptions =
-                               field.valueFontBold ? "bold" : undefined;
-                             const explicitBarHeight =
-                               field.barHeightMm != null
-                                 ? mmToPx(Number(field.barHeightMm))
-                                 : undefined;
-                             const usableHeight = Math.max(
-                               1,
-                               (Number(field.height) || 0) - marginPx * 2,
-                             );
-
-                             const minFontSize = 6;
-                             const minTextMargin = 0;
-
-                             let renderShowValue = Boolean(showValue);
-                             let valueFontSize = desiredFontSize;
-                             let valueTextMargin = desiredTextMargin;
-
-                             const desiredValueSpace = renderShowValue
-                               ? Math.max(0, valueFontSize + valueTextMargin)
-                               : 0;
-                             const maxBarHeightWithValue = Math.max(1, usableHeight - desiredValueSpace);
-
-                             // Shrink bars first so the value font stays as configured on resize.
-                             let computedBarHeight = Math.max(
-                               1,
-                               Math.min(Number(explicitBarHeight ?? maxBarHeightWithValue), maxBarHeightWithValue),
-                             );
-
-                             if (renderShowValue && usableHeight - computedBarHeight < minFontSize) {
-                               const availableForValue = Math.max(0, usableHeight - computedBarHeight);
-                               if (availableForValue < minFontSize) {
-                                 renderShowValue = false;
-                               } else {
-                                 valueTextMargin = Math.min(
-                                   valueTextMargin,
-                                   Math.max(minTextMargin, availableForValue - minFontSize),
-                                 );
-                                 valueFontSize = Math.min(
-                                   valueFontSize,
-                                   Math.max(minFontSize, availableForValue - valueTextMargin),
-                                 );
-                                 if (valueFontSize < minFontSize) renderShowValue = false;
-                               }
-
-                               if (!renderShowValue) {
-                                 computedBarHeight = Math.max(
-                                   1,
-                                   Math.min(Number(explicitBarHeight ?? usableHeight), usableHeight),
-                                 );
-                               }
-                             }
+                            if (!barcodeLayout?.isValid) {
+                              return (
+                                <div
+                                  style={{
+                                    width: "100%",
+                                    height: "100%",
+                                    border: "1px solid #b91c1c",
+                                    color: "#991b1b",
+                                    background: "#fef2f2",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    justifyContent: "center",
+                                    alignItems: "flex-start",
+                                    padding: "4px 6px",
+                                    boxSizing: "border-box",
+                                    gap: "3px",
+                                    overflow: "hidden",
+                                  }}
+                                  data-barcode-valid="false"
+                                  data-barcode-message={barcodeMessage || undefined}
+                                  data-barcode-field={field?.name || field?.slug || undefined}
+                                >
+                                  <div style={{ fontSize: "10px", fontWeight: 700 }}>
+                                    {String(field?.name || field?.slug || "Barcode")}
+                                  </div>
+                                  <div style={{ fontSize: "10px", lineHeight: 1.25, whiteSpace: "normal" }}>
+                                    {barcodeLayout?.message}
+                                  </div>
+                                  {barcodeLayout?.recommendation ? (
+                                    <div style={{ fontSize: "9px", lineHeight: 1.2 }}>
+                                      {barcodeLayout.recommendation}
+                                    </div>
+                                  ) : null}
+                                  <div
+                                    style={{
+                                      fontSize: "9px",
+                                      opacity: 0.85,
+                                      whiteSpace: "nowrap",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      width: "100%",
+                                    }}
+                                  >
+                                    {barcodeValue}
+                                  </div>
+                                </div>
+                              );
+                            }
 
                             return (
                               <Barcode
                                 value={barcodeValue}
                                 renderer="svg"
-                                width={computedBarWidth}
-                                height={computedBarHeight}
-                                displayValue={renderShowValue}
-                                format={field.format || "CODE128"}
+                                width={barcodeLayout.barWidth}
+                                height={barcodeLayout.barHeight}
+                                displayValue={barcodeLayout.displayValue}
+                                format={barcodeLayout.format}
                                 lineColor={field.lineColor || "#222222"}
                                 background={field.background || "transparent"}
-                                // Default quiet-zone for scan reliability (can be overridden per field)
-                                margin={marginPx}
-                                fontSize={valueFontSize}
-                                textMargin={valueTextMargin}
-                                fontOptions={valueFontOptions}
+                                margin={barcodeLayout.marginPx}
+                                fontSize={barcodeLayout.fontSize}
+                                textMargin={barcodeLayout.textMargin}
+                                fontOptions={barcodeLayout.fontOptions}
                               />
                             );
                           })()}
@@ -1614,7 +2077,19 @@ const StickerDesigner = ({
                 }}
               >
                 {currentPrinterField ? (
-                  <StickerRenderer template={currentPrinterField} deviceData={stickerData} />
+                  <StickerRenderer
+                    template={{
+                      ...currentPrinterField,
+                      fields: Array.isArray(currentPrinterField?.fields)
+                        ? currentPrinterField.fields.map((field: any) =>
+                            field?.type === "barcode"
+                              ? { ...field, lockToFieldBounds: true }
+                              : field,
+                          )
+                        : currentPrinterField?.fields,
+                    }}
+                    deviceData={stickerData}
+                  />
                 ) : null}
               </div>
             </div>
@@ -2054,7 +2529,7 @@ const StickerDesigner = ({
                                 setSelectedQRValue(field);
                                 setSelectedScanFields(getFieldSourceFields(field));
                                 setDisplayBarValue(field?.displayValue !== false);
-                                setBarFormat(field?.format || "CODE128");
+                                setBarFormat(normalizeUiBarcodeFormat(field?.format));
                                 setIsModalBarCodeValue(true);
                               }}
                               className="rounded-lg p-1.5 text-primary hover:bg-primary/10"
@@ -2382,7 +2857,7 @@ const StickerDesigner = ({
                                   >
                                     <option value="CODE128">CODE128</option>
                                     <option value="CODE39">CODE39</option>
-                                    <option value="EAN13">EAN13</option>
+                                    <option value="ITF">ITF (Numeric)</option>
                                   </select>
                                 </div>
                                 <div className="col-span-2">
@@ -2482,7 +2957,7 @@ const StickerDesigner = ({
                                   <input
                                     type="number"
                                     step="0.01"
-                                    min={0.1}
+                                    min={MIN_SAFE_BAR_WIDTH_MM}
                                     value={
                                       stages[index]?.subSteps[subIndex1]?.printerFields[
                                         fieldIndex
@@ -2491,6 +2966,7 @@ const StickerDesigner = ({
                                     onChange={(e) => {
                                       const mmVal = Number(e.target.value);
                                       if (Number.isNaN(mmVal)) return;
+                                      const safeMmVal = Math.max(MIN_SAFE_BAR_WIDTH_MM, mmVal);
                                       const current =
                                         stages[index]?.subSteps[subIndex1]?.printerFields[
                                           fieldIndex
@@ -2498,13 +2974,26 @@ const StickerDesigner = ({
                                       handleFieldChange(
                                         focusedFieldIndex,
                                         ensureBarcodeBoxFits(current, {
-                                          barWidthMm: mmVal,
-                                          barWidth: mmToPx(mmVal),
+                                          barWidthMm: safeMmVal,
+                                          barWidth: mmToPx(safeMmVal),
                                         }),
                                       );
+                                      if (mmVal < MIN_SAFE_BAR_WIDTH_MM) {
+                                        setPreviewNotice({
+                                          message: `That value was too small for scanners. We set it to ${MIN_SAFE_BAR_WIDTH_MM} mm automatically.`,
+                                          fieldLabel: current?.name || current?.slug || "Barcode",
+                                          fieldIndex: focusedFieldIndex,
+                                          canAutoFixBarWidth: false,
+                                        });
+                                      } else if (previewNotice?.canAutoFixBarWidth) {
+                                        setPreviewNotice(null);
+                                      }
                                     }}
                                     className="w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs dark:border-strokedark dark:bg-form-input"
                                   />
+                                  <p className="mt-1 text-[10px] text-gray-500">
+                                    Recommended minimum: {MIN_SAFE_BAR_WIDTH_MM} mm for compact labels (like 50 x 25 mm).
+                                  </p>
                                 </div>
                                 <div className="col-span-2">
                                   <label className="mb-1 block text-[10px] font-medium text-gray-400">
@@ -3238,7 +3727,7 @@ const StickerDesigner = ({
                 >
                   <option value="CODE128">CODE128</option>
                   <option value="CODE39">CODE39</option>
-                  <option value="EAN13">EAN13</option>
+                  <option value="ITF">ITF (Numeric)</option>
                 </select>
               </div>
               <div className="col-span-2 flex items-center gap-2">
