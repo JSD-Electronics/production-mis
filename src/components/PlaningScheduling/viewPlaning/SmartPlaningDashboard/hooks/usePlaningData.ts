@@ -2,18 +2,16 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
     getPlaningAndSchedulingById,
+    getPlanInsights,
     viewShift,
     viewRoom,
     viewProcess,
     getProductById,
     getDeviceTestRecordsByProcessId,
-    getLatestDeviceTestsByPlanId,
-    getDeviceByProductId,
     checkPlanningAndScheduling
 } from "@/lib/api";
 import {
     transformIntervals,
-    calculateWorkingHours,
 } from "../utils/dataTransformers";
 import { formatDate } from "@/lib/common";
 
@@ -167,9 +165,37 @@ export const usePlaningData = (id: string | string[]) => {
     const [selectedShift, setSelectedShift] = useState<any>(null);
     const [overallUPHA, setOverallUPHA] = useState<any[]>([]);
     const [totalConsumedKits, setTotalConsumedKits] = useState(0);
+    const [planInsights, setPlanInsights] = useState<any>(null);
     const [allDeviceTests, setAllDeviceTests] = useState<any[]>([]);
-    const [latestDeviceTests, setLatestDeviceTests] = useState<any[]>([]);
     const [assignedStages, setAssignedStages] = useState<any>({});
+
+    const applyInsightsToAssignedStages = useCallback((stages: any = {}, insights: any = null) => {
+        if (!insights || !Array.isArray(insights?.bySeatStage)) return stages || {};
+        const bySeatStage = new Map<string, any>();
+        insights.bySeatStage.forEach((row: any) => {
+            const seatKey = String(row?.seatKey || "").trim();
+            const stageName = String(row?.stageName || "").trim().toLowerCase();
+            if (!seatKey || !stageName) return;
+            bySeatStage.set(`${seatKey}:${stageName}`, row);
+        });
+
+        return Object.keys(stages || {}).reduce((acc: any, seatKey) => {
+            const rows = Array.isArray(stages?.[seatKey]) ? stages[seatKey] : [];
+            acc[seatKey] = rows.map((stage: any) => {
+                if (stage?.reserved) return stage;
+                const stageName = String(stage?.name || stage?.stageName || stage?.stage || "").trim().toLowerCase();
+                const insight = bySeatStage.get(`${seatKey}:${stageName}`);
+                if (!insight) return stage;
+                return {
+                    ...stage,
+                    totalUPHA: Number(insight?.wip || 0),
+                    passedDevice: Number(insight?.pass || 0),
+                    ngDevice: Number(insight?.ng || 0),
+                };
+            });
+            return acc;
+        }, {});
+    }, []);
 
     const kpiStats = useMemo(() => {
         if (!planData || !selectedProcess) return {
@@ -180,16 +206,10 @@ export const usePlaningData = (id: string | string[]) => {
             utilization: 0
         };
 
-        const completed = selectedProcess.consumedKits || 0;
+        const completed = Number(planInsights?.totals?.pass || selectedProcess?.consumedKits || 0);
         const totalPlanned = selectedProcess.quantity || 0;
-        const running = totalPlanned > completed ? planData.repeatCount || 1 : 0;
-
-        let passTotal = 0;
-        let ngTotal = 0;
-        latestDeviceTests.forEach(test => {
-            if (test.status === "Pass") passTotal++;
-            else if (test.status === "NG") ngTotal++;
-        });
+        const running = Number(planInsights?.totals?.wip || 0) > 0 ? planData.repeatCount || 1 : 0;
+        const ngTotal = Number(planInsights?.totals?.ng || 0);
 
         return {
             totalPlanned,
@@ -198,7 +218,7 @@ export const usePlaningData = (id: string | string[]) => {
             delayed: ngTotal,
             utilization: Math.round((completed / (totalPlanned || 1)) * 100)
         };
-    }, [planData, selectedProcess, latestDeviceTests]);
+    }, [planData, selectedProcess, planInsights]);
 
     const fetchData = useCallback(async () => {
         if (!id) return;
@@ -228,21 +248,13 @@ export const usePlaningData = (id: string | string[]) => {
             const shift = shifts.find((s: any) => s._id === result.selectedShift);
             setSelectedShift(shift);
 
-            // Fetch Device Tests
-            const deviceTestEntry = await getDeviceTestRecordsByProcessId(result.selectedProcess);
+            const [deviceTestEntry, insightResult] = await Promise.all([
+                getDeviceTestRecordsByProcessId(result.selectedProcess).catch(() => null),
+                getPlanInsights(planIdString).catch(() => null),
+            ]);
             const deviceTests = deviceTestEntry?.deviceTestRecords || [];
             setAllDeviceTests(deviceTests);
-
-            let latestTests: any[] = [];
-            try {
-                const latestEntry = await getLatestDeviceTestsByPlanId(planIdString, result.selectedProcess);
-                latestTests = latestEntry?.deviceTestRecords || [];
-            } catch (e) {
-                latestTests = deviceTests.filter(
-                    (record: any) => String(record?.planId) === String(planIdString),
-                );
-            }
-            setLatestDeviceTests(latestTests);
+            setPlanInsights(insightResult?.data || null);
 
             // Assigned Stages & Flooring logic
             if (room && shift) {
@@ -266,9 +278,14 @@ export const usePlaningData = (id: string | string[]) => {
                     reservedSeats,
                     parsedInitialStages,
                     result?.assignedIssuedKits || 0,
-                    latestTests
+                    deviceTests
                 );
-                setAssignedStages(calculatedAssignedStages);
+                setAssignedStages(
+                    applyInsightsToAssignedStages(
+                        calculatedAssignedStages,
+                        insightResult?.data || null,
+                    ),
+                );
             }
 
             // Calculate UPHA Table

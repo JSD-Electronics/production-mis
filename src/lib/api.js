@@ -786,6 +786,14 @@ export const getPlaningAndSchedulingById = async (id) => {
     throw error.response?.data || { message: `Error Deleting Process!!` };
   }
 };
+export const getPlanInsights = async (id) => {
+  try {
+    const response = await api.get(`/planingAndScheduling/insights/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data || { message: `Error Fetching Plan Insights!!` };
+  }
+};
 export const getOperatorTaskByUserID = async (id) => {
   try {
     let response = await api.get(`/assignPlanToOperator/get/${id}`);
@@ -1687,7 +1695,17 @@ export const fetchOpenCartonsByProcessID = async (processID) => {
     const response = await api.get(`/cartons/${processID}/open`);
     return response.data;
   } catch (error) {
+    const status = Number(error?.response?.status || 0);
+    if (status === 404) return [];
     throw error?.response?.data || { message: "Error fetching open cartons" };
+  }
+};
+export const removeDeviceFromCarton = async (payload) => {
+  try {
+    const response = await api.put(`/carton/removeDevice`, payload);
+    return response.data;
+  } catch (error) {
+    throw error?.response?.data || error;
   }
 };
 export const fetchCartons = async (processID) => {

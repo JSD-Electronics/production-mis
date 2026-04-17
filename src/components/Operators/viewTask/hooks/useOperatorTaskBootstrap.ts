@@ -13,7 +13,7 @@ type UseOperatorTaskBootstrapOptions = {
 export default function useOperatorTaskBootstrap({
   planId,
   operatorId,
-  pollMs = 30000,
+  pollMs = 10000,
   enabled = true,
 }: UseOperatorTaskBootstrapOptions) {
   const [data, setData] = React.useState<any>(null);

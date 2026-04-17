@@ -188,6 +188,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   const isSubmitting = React.useRef<boolean>(false);
   const resolveSearchRequestIdRef = React.useRef(0);
   const resolvedScanDeviceRef = React.useRef<any>(null);
+  const verifyTargetSerialRef = React.useRef<string>("");
   const { SVG } = useQRCode();
   const [historyFilterDate, setHistoryFilterDate] = useState(() => {
     const now = new Date();
@@ -219,7 +220,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     planId: taskPlanId,
     operatorId: currentUserId,
     enabled: Boolean(taskPlanId && currentUserId),
-    pollMs: 30000,
+    pollMs: 10000,
   });
 
   const overtimeStats = useMemo(() => {
@@ -379,6 +380,33 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     const productPayload = payload?.product || {};
     const shiftPayload = payload?.shift || {};
     const counters = payload?.counters || {};
+    const insights = payload?.insights || {};
+    const operatorScope = insights?.operatorScope || {};
+    const mergedCounters = {
+      ...counters,
+      wipKits:
+        operatorScope?.wip !== undefined ? operatorScope.wip : counters?.wipKits,
+      lineIssueKits:
+        operatorScope?.lineIssueKits !== undefined
+          ? operatorScope.lineIssueKits
+          : counters?.lineIssueKits,
+      kitsShortage:
+        operatorScope?.kitsShortage !== undefined
+          ? operatorScope.kitsShortage
+          : counters?.kitsShortage,
+      overallTotalCompleted:
+        operatorScope?.pass !== undefined
+          ? operatorScope.pass
+          : counters?.overallTotalCompleted,
+      overallTotalNg:
+        operatorScope?.ng !== undefined
+          ? operatorScope.ng
+          : counters?.overallTotalNg,
+      overallTotalAttempts:
+        operatorScope?.tested !== undefined
+          ? operatorScope.tested
+          : counters?.overallTotalAttempts,
+    };
     const normalizedProduct = productPayload?._id
       ? {
           ...productPayload,
@@ -412,15 +440,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     setProcessStageName(Array.isArray(payload?.processStagesName) ? payload.processStagesName : []);
     setDeviceList(Array.isArray(payload?.compactQueue) ? payload.compactQueue : []);
     setOperatorSeatInfo(payload?.operatorSeatInfo || null);
-    setWipKits(Number(counters?.wipKits || 0));
-    setLineIssueKits(Number(counters?.lineIssueKits || 0));
-    setKitsShortage(Number(counters?.kitsShortage || 0));
-    setOverallTotalCompleted(Number(counters?.overallTotalCompleted || 0));
-    setOverallTotalNg(Number(counters?.overallTotalNg || 0));
-    setOverallTotalAttempts(Number(counters?.overallTotalAttempts || 0));
-    setTotalAttempts(Number(counters?.totalAttempts || 0));
-    setTotalCompleted(Number(counters?.totalCompleted || 0));
-    setTotalNg(Number(counters?.totalNg || 0));
+    setWipKits(Number(mergedCounters?.wipKits || 0));
+    setLineIssueKits(Number(mergedCounters?.lineIssueKits || 0));
+    setKitsShortage(Number(mergedCounters?.kitsShortage || 0));
+    setOverallTotalCompleted(Number(mergedCounters?.overallTotalCompleted || 0));
+    setOverallTotalNg(Number(mergedCounters?.overallTotalNg || 0));
+    setOverallTotalAttempts(Number(mergedCounters?.overallTotalAttempts || 0));
+    setTotalAttempts(Number(mergedCounters?.totalAttempts || 0));
+    setTotalCompleted(Number(mergedCounters?.totalCompleted || 0));
+    setTotalNg(Number(mergedCounters?.totalNg || 0));
 
     const downTimePayload = payload?.downTime || {};
     setIsDownTimeAvailable(Boolean(downTimePayload?.enabled));
@@ -433,6 +461,21 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     setLastSyncTime(new Date());
   }, []);
 
+  const refreshTaskSummaryNow = React.useCallback(async () => {
+    try {
+      const refreshedTask = await refreshTaskSummary();
+      if (refreshedTask) {
+        applyTaskBootstrapData({
+          ...(taskBootstrapData || {}),
+          ...refreshedTask,
+        });
+        setLastSyncTime(new Date());
+      }
+    } catch {
+      // Ignore summary refresh errors from carton mutation paths.
+    }
+  }, [applyTaskBootstrapData, refreshTaskSummary, taskBootstrapData]);
+
 
   useEffect(() => {
     getDeviceTestEntry();
@@ -444,15 +487,6 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       applyTaskBootstrapData(taskBootstrapData);
     }
   }, [taskBootstrapData, applyTaskBootstrapData]);
-
-  useEffect(() => {
-    const queueWip = Array.isArray(deviceList) ? deviceList.length : 0;
-    const issuedForSeat = queueWip + overallTotalCompleted + overallTotalNg;
-
-    setWipKits(queueWip);
-    setLineIssueKits(issuedForSeat);
-    setKitsShortage(0);
-  }, [deviceList, overallTotalCompleted, overallTotalNg]);
 
   const runSync = async () => {
     setIsSyncing(true);
@@ -486,7 +520,12 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
     }
   };
   const closeVerifyStickerModal = () => {
-    setIsVerifyStickerModal(!isVerifyStickerModal);
+    setIsVerifyStickerModal(false);
+    setExpectedScanTypes([]);
+    setCurrentScanStep(0);
+    setSerialNumber("");
+    verifyTargetSerialRef.current = "";
+    isSubmitting.current = false;
   };
   const filterDevicesForCurrentSeat = React.useCallback(
     ({
@@ -534,6 +573,8 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         const deviceCurrentStage = String(device?.currentStage || "").trim();
         const deviceSerial = String(device?.serialNo || device?.serial_no || "").trim();
         const latestPlanRecord = deviceSerial ? latestRecordMap.get(deviceSerial) : null;
+        const latestStatus = String(latestPlanRecord?.status || "").trim().toLowerCase();
+        const latestIsReverted = latestStatus === "reverted" || latestStatus === "removed";
 
         const stageMatches =
           deviceCurrentStage === trimmedStageName ||
@@ -550,12 +591,17 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
 
         if (
           latestPlanRecord?.assignedSeatKey &&
+          !latestIsReverted &&
           String(latestPlanRecord.assignedSeatKey) !== String(seatKey)
         ) {
           return false;
         }
 
         if (parallelSeats.length <= 1) {
+          return true;
+        }
+
+        if (latestIsReverted) {
           return true;
         }
 
@@ -944,16 +990,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       const userDetails = getCurrentUser();
       const result = await getDeviceTestEntryByOperatorId(userDetails?._id, historyFilterDate, historySerialQuery);
       let devices = result.data;
-
-      let deviceHistory = [];
-      let ngCount = 0;
-      let completedCount = 0;
       const updatedDeviceHistory = devices.map((value: any) => {
-        if (value.status === "NG") {
-          ngCount += 1;
-        } else if (value.status === "Pass" || value.status === "Completed") {
-          completedCount += 1;
-        }
         return {
           deviceInfo: value,
           stageName: value?.stageName,
@@ -962,17 +999,11 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           timeTaken: value?.timeConsumed,
         };
       });
-      setTotalNg(ngCount);
-      setTotalCompleted(completedCount);
-      setTotalAttempts(devices.length);
       setCheckedDevice(updatedDeviceHistory);
       return updatedDeviceHistory;
     } catch (error: any) {
       if (error?.status === 404) {
         setCheckedDevice([]);
-        setTotalNg(0);
-        setTotalCompleted(0);
-        setTotalAttempts(0);
       }
     }
   };
@@ -1751,6 +1782,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
   };
   const handleVerifySticker = (types?: string[]) => {
     setSerialNumber("");
+    const targetSerial = String(
+      selectedDevice?.serialNo ||
+      selectedDevice?.serial_no ||
+      resolvedScanDeviceRef.current?.serialNo ||
+      resolvedScanDeviceRef.current?.serial_no ||
+      searchResult ||
+      "",
+    ).trim();
+    verifyTargetSerialRef.current = targetSerial;
     const normalizeVerifyType = (value: any) => {
       const raw = String(value || "").trim().toLowerCase();
       if (!raw) return "";
@@ -1970,8 +2010,9 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       if (normalized.includes("ccid")) {
         ["ccid"].forEach((alias) => aliasMap.add(alias));
       }
-      for (const alias of aliasMap) {
-        const value = getParsed(alias);
+      const aliasCandidates = Array.from(aliasMap.values());
+      for (let i = 0; i < aliasCandidates.length; i += 1) {
+        const value = getParsed(aliasCandidates[i]);
         if (value) return String(value);
       }
       return "";
@@ -2024,33 +2065,51 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       return vals;
     };
 
-    const resolveDeviceSerial = (d: any) => lc(d?.serialNo || d?.serial_no || d?.deviceInfo?.serialNo);
+    const resolveDeviceSerial = (d: any) =>
+      lc(d?.serialNo || d?.serial_no || d?.deviceInfo?.serialNo);
+    const verificationTargetSerial = String(
+      verifyTargetSerialRef.current || searchResult || "",
+    ).trim();
     let activeStickerDevice =
-      deviceList.find((d: any) => resolveDeviceSerial(d) === lc(searchResult)) ||
-      selectedDevice ||
+      deviceList.find((d: any) => resolveDeviceSerial(d) === lc(verificationTargetSerial)) ||
+      (selectedDevice &&
+      resolveDeviceSerial(selectedDevice) === lc(verificationTargetSerial)
+        ? selectedDevice
+        : null) ||
       null;
 
     if (
       !activeStickerDevice &&
       resolvedScanDeviceRef.current &&
-      resolveDeviceSerial(resolvedScanDeviceRef.current) === lc(searchResult)
+      resolveDeviceSerial(resolvedScanDeviceRef.current) === lc(verificationTargetSerial)
     ) {
       activeStickerDevice = resolvedScanDeviceRef.current;
     }
 
-    if (!activeStickerDevice && searchResult && taskPlanId && currentUserId) {
+    if (!activeStickerDevice && verificationTargetSerial && taskPlanId && currentUserId) {
       try {
         const optimized = await getOperatorTaskDevice(taskPlanId, currentUserId, {
-          scanInput: searchResult,
+          scanInput: verificationTargetSerial,
         });
         const resolvedDevice = optimized?.data?.device || optimized?.device || null;
-        if (resolvedDevice && resolveDeviceSerial(resolvedDevice) === lc(searchResult)) {
+        if (
+          resolvedDevice &&
+          resolveDeviceSerial(resolvedDevice) === lc(verificationTargetSerial)
+        ) {
           activeStickerDevice = resolvedDevice;
           resolvedScanDeviceRef.current = resolvedDevice;
         }
       } catch {
         // Ignore refresh errors and continue with existing behavior.
       }
+    }
+
+    if (!activeStickerDevice) {
+      toast.error(
+        "Current serial context is missing. Scan/select the serial first, then verify sticker.",
+      );
+      isSubmitting.current = false;
+      return;
     }
 
     const matchesCombinedScan = (d: any): boolean => {
@@ -2151,34 +2210,48 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       return false;
     };
 
+    const matchesAnyInput = (d: any): boolean => {
+      const sn = [d?.serialNo, d?.serial_no, d?.deviceInfo?.serialNo]
+        .map(lc)
+        .filter(Boolean);
+      const imei = [d?.imeiNo, d?.imei, d?.imei_no, d?.deviceInfo?.imei]
+        .map(lc)
+        .filter(Boolean);
+      const ccid = [d?.ccid].map(lc).filter(Boolean);
+      const anyDirect =
+        sn.some((v) => candidates.includes(v)) ||
+        imei.some((v) => candidates.includes(v)) ||
+        ccid.some((v) => candidates.includes(v));
+      if (anyDirect) return true;
+      const fromCFAny = [
+        ...getCustomFieldValuesByType(d, "serial"),
+        ...getCustomFieldValuesByType(d, "imei"),
+        ...getCustomFieldValuesByType(d, "ccid"),
+      ];
+      return fromCFAny.some((v) => candidates.includes(v));
+    };
+
+    const matchesInputForDevice = (d: any): boolean => {
+      if (!d) return false;
+      if (combinedVerifyFields.length > 0) {
+        return matchesCombinedScan(d);
+      }
+      if (requiredType && requiredType !== "any") {
+        return matchesRequiredOnly(d);
+      }
+      if (explicitType) {
+        return matchesExplicit(d);
+      }
+      return matchesAnyInput(d);
+    };
+
     const found = combinedVerifyFields.length > 0
       ? activeStickerDevice && matchesCombinedScan(activeStickerDevice)
         ? activeStickerDevice
         : undefined
-      : deviceList.find((d: any) => {
-          if (requiredType && requiredType !== "any") {
-            return matchesRequiredOnly(d);
-          }
-
-          if (explicitType) {
-            return matchesExplicit(d);
-          }
-
-          const sn = [d?.serialNo, d?.serial_no, d?.deviceInfo?.serialNo].map(lc).filter(Boolean);
-          const imei = [d?.imeiNo, d?.imei, d?.imei_no, d?.deviceInfo?.imei].map(lc).filter(Boolean);
-          const ccid = [d?.ccid].map(lc).filter(Boolean);
-          const anyDirect =
-            sn.some((v) => candidates.includes(v)) ||
-            imei.some((v) => candidates.includes(v)) ||
-            ccid.some((v) => candidates.includes(v));
-          if (anyDirect) return true;
-          const fromCFAny = [
-            ...getCustomFieldValuesByType(d, "serial"),
-            ...getCustomFieldValuesByType(d, "imei"),
-            ...getCustomFieldValuesByType(d, "ccid"),
-          ];
-          return fromCFAny.some((v) => candidates.includes(v));
-        });
+      : matchesInputForDevice(activeStickerDevice)
+        ? activeStickerDevice
+        : undefined;
 
     if (found) {
       if (inMultiMode && currentScanStep < expectedScanTypes.length - 1) {
@@ -2194,6 +2267,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         setIsVerifyStickerModal(false);
         setExpectedScanTypes([]);
         setCurrentScanStep(0);
+        verifyTargetSerialRef.current = "";
         try {
           setTimeout(() => {
             if (typeof document !== "undefined") {
@@ -2211,10 +2285,32 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             .map((field) => field.toUpperCase())
             .join(", ")}.`,
         );
-      } else if (inMultiMode && requiredType && requiredType !== "any") {
-        toast.error(`Scan ${currentScanStep + 1} failed. Please scan ${String(requiredType).toUpperCase()}.`);
       } else {
-        toast.error("Sticker Verification Failed. Please try again.");
+        const activeSerial = String(
+          activeStickerDevice?.serialNo ||
+          activeStickerDevice?.serial_no ||
+          verificationTargetSerial,
+        ).trim();
+        const matchedOtherDevice = deviceList.find((device: any) => {
+          const serial = String(
+            device?.serialNo || device?.serial_no || device?.deviceInfo?.serialNo || "",
+          ).trim();
+          if (!serial || lc(serial) === lc(activeSerial)) return false;
+          return matchesInputForDevice(device);
+        });
+        if (matchedOtherDevice) {
+          toast.error(
+            `Scanned code belongs to ${matchedOtherDevice?.serialNo || matchedOtherDevice?.serial_no}. It does not match current serial ${activeSerial}.`,
+          );
+          isSubmitting.current = false;
+          return;
+        }
+
+        if (inMultiMode && requiredType && requiredType !== "any") {
+          toast.error(`Scan ${currentScanStep + 1} failed. Please scan ${String(requiredType).toUpperCase()}.`);
+        } else {
+          toast.error("Sticker Verification Failed. Please try again.");
+        }
       }
       isSubmitting.current = false;
     }
@@ -2266,9 +2362,13 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
         formData.append(
           "cartonSize",
           JSON.stringify({
-            width: packageData.width,
-            height: packageData.height,
-            depth: packageData.depth || packageData.cartonDepth,
+            length:
+              packageData.length ||
+              packageData.cartonLength ||
+              packageData.depth ||
+              packageData.cartonDepth,
+            width: packageData.width || packageData.cartonWidth,
+            height: packageData.height || packageData.cartonHeight,
           }),
         );
         formData.append("maxCapacity", String(packageData.maxCapacity));
@@ -2284,9 +2384,13 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           devices: [device],
           maxCapacity: packageData.maxCapacity,
           cartonSize: {
-            width: packageData.width,
-            height: packageData.height,
-            depth: packageData.depth || packageData.cartonDepth,
+            length:
+              packageData.length ||
+              packageData.cartonLength ||
+              packageData.depth ||
+              packageData.cartonDepth,
+            width: packageData.width || packageData.cartonWidth,
+            height: packageData.height || packageData.cartonHeight,
           },
           weight: packageData.cartonWeight,
           status: "partial",
@@ -2666,6 +2770,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
             handleStop={handleStop}
             stageEligibility={stageEligibility}
             isDeviceHistoryLoading={isDeviceHistoryLoading}
+            onTaskSummaryRefresh={refreshTaskSummaryNow}
           />
         ) : (
           <BasicInformation

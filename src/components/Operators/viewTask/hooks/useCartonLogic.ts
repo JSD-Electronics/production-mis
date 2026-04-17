@@ -11,7 +11,7 @@ interface Cart {
   cartonSerial: string;
   processId: string;
   devices: any[];
-  cartonSize: { width: number; height: number; depth?: number };
+  cartonSize: { length?: number; width: number; height: number; depth?: number };
   maxCapacity: number;
   weightCarton: number;
   status: "empty" | "partial" | "full";
@@ -145,9 +145,11 @@ export const useCartonLogic = ({
           processId: processData._id,
           devices: [],
           cartonSize: {
+            length:
+              packagingData.packagingData.cartonLength ??
+              packagingData.packagingData.cartonDepth,
             width: packagingData.packagingData.cartonWidth,
             height: packagingData.packagingData.cartonHeight,
-            depth: packagingData.packagingData.cartonDepth,
           },
           maxCapacity: packagingData.packagingData.maxCapacity,
           weightCarton: packagingData.packagingData.cartonWeight,
@@ -176,9 +178,11 @@ export const useCartonLogic = ({
         processId: processData._id,
         devices: [selectedDevice._id],
         packagingData: {
+          cartonLength:
+            packagingData.packagingData.cartonLength ??
+            packagingData.packagingData.cartonDepth,
           cartonWidth: packagingData.packagingData.cartonWidth,
           cartonHeight: packagingData.packagingData.cartonHeight,
-          cartonDepth: packagingData.packagingData.cartonDepth,
           cartonWeight: packagingData.packagingData.cartonWeight,
           cartonWeightTolerance: packagingData.packagingData.cartonWeightTolerance,
           maxCapacity: packagingData.packagingData.maxCapacity,

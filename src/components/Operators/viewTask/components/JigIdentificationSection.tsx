@@ -286,6 +286,21 @@ export default function JigIdentificationSection({
             portRef.current = port;
             addLog('info', 'Port opened at 115200 baud.');
 
+            // Dispatch identification trigger command
+            try {
+                const writer = port.writable.getWriter();
+                const encoder = new TextEncoder();
+                await writer.write(encoder.encode("+#FACTRST;\n"));
+                writer.releaseLock();
+                addLog('info', 'Sending identification trigger: +#FACTRST;');
+            } catch (writeErr: any) {
+                addLog('error', `Failed to send trigger command: ${writeErr.message}`);
+                console.error("Write error:", writeErr);
+            }
+
+            // Brief delay to allow device to process command
+            await new Promise(resolve => setTimeout(resolve, 300));
+
             const configuredFieldNames = (jigStageFields || [])
                 .map((f: any) => String(f?.jigName || "").trim())
                 .filter(Boolean);
