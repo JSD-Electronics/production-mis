@@ -5057,7 +5057,7 @@ export default function DeviceTestComponent({
             <div className="mt-4">
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between border-b pb-4">
-                  <h3 className="text-sm font-bold text-gray-800">
+                  <h3 className="flex items-center gap-3 text-sm font-bold text-gray-800">
                     {searchResult}
                   </h3>
                   {visibleDeviceHistory.length > 0 && (
