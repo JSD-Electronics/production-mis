@@ -87,6 +87,20 @@ interface CommonStage {
 }
 
 const AddProduct = () => {
+  const normalizePackagingData = (packagingData: any) => {
+    const base = packagingData && typeof packagingData === "object" ? packagingData : {};
+    return {
+      packagingType: "",
+      cartonWidth: 0,
+      cartonHeight: 0,
+      maxCapacity: 0,
+      cartonWeight: 0,
+      cartonWeightTolerance: 0,
+      ...base,
+      cartonLength: base?.cartonLength ?? base?.cartonDepth ?? 0,
+    };
+  };
+
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitDisabled, setSubmitDisabled] = useState(false);
@@ -149,7 +163,7 @@ const AddProduct = () => {
             packagingType: "",
             cartonWidth: 0,
             cartonHeight: 0,
-            cartonDepth: 0,
+            cartonLength: 0,
             maxCapacity: 0,
             cartonWeight: 0,
             cartonWeightTolerance: 0,
@@ -391,15 +405,7 @@ const AddProduct = () => {
             printerFields: step.printerFields || [],
             jigFields: step.jigFields || [],
             ngStatusData: step.ngStatusData || [],
-            packagingData: step.packagingData || {
-              packagingType: "",
-              cartonWidth: 0,
-              cartonHeight: 0,
-            cartonDepth: 0,
-              maxCapacity: 0,
-              cartonWeight: 0,
-            cartonWeightTolerance: 0,
-            },
+            packagingData: normalizePackagingData(step.packagingData),
           })),
         }));
 
@@ -460,10 +466,10 @@ const AddProduct = () => {
               packagingType: "",
               cartonWidth: 0,
               cartonHeight: 0,
-            cartonDepth: 0,
+              cartonLength: 0,
               maxCapacity: 0,
               cartonWeight: 0,
-            cartonWeightTolerance: 0,
+              cartonWeightTolerance: 0,
             },
             ngStatusData: [],
             jigFields: [],
@@ -686,10 +692,10 @@ const AddProduct = () => {
         packagingType: "",
         cartonWidth: 0,
         cartonHeight: 0,
-            cartonDepth: 0,
+        cartonLength: 0,
         maxCapacity: 0,
         cartonWeight: 0,
-            cartonWeightTolerance: 0,
+        cartonWeightTolerance: 0,
       },
       ngStatusData: [],
       jigFields: [],
@@ -783,7 +789,7 @@ const AddProduct = () => {
             packagingType: "",
             cartonWidth: 0,
             cartonHeight: 0,
-            cartonDepth: 0,
+            cartonLength: 0,
             maxCapacity: 0,
             cartonWeight: 0,
             cartonWeightTolerance: 0,
@@ -821,7 +827,7 @@ const AddProduct = () => {
             packagingType: "",
             cartonWidth: 0,
             cartonHeight: 0,
-            cartonDepth: 0,
+            cartonLength: 0,
             maxCapacity: 0,
             cartonWeight: 0,
             cartonWeightTolerance: 0,
@@ -856,7 +862,7 @@ const AddProduct = () => {
             packagingType: "",
             cartonWidth: 0,
             cartonHeight: 0,
-            cartonDepth: 0,
+            cartonLength: 0,
             maxCapacity: 0,
             cartonWeight: 0,
             cartonWeightTolerance: 0,
@@ -2075,26 +2081,29 @@ const AddProduct = () => {
                                                                   />
                                                                 </div>
 
-                                                                {/* Carton Depth */}
+                                                                {/* Carton Length */}
                                                                 <div>
                                                                   <label className="text-gray-700 dark:text-gray-300 mb-2 block text-sm font-medium">
-                                                                    Carton Depth (mm)
+                                                                    Carton Length (mm)
                                                                   </label>
                                                                   <input
                                                                     type="number"
                                                                     value={
                                                                       subStep?.packagingData
-                                                                        ?.cartonDepth || ""
+                                                                        ?.cartonLength ||
+                                                                      subStep?.packagingData
+                                                                        ?.cartonDepth ||
+                                                                      ""
                                                                     }
                                                                     onChange={(e) =>
                                                                       handleCartonInputs(
                                                                         index,
                                                                         subIndex,
                                                                         e.target.value,
-                                                                        "cartonDepth",
+                                                                        "cartonLength",
                                                                       )
                                                                     }
-                                                                    placeholder="Enter depth"
+                                                                    placeholder="Enter length"
                                                                     className="border-gray-300 bg-gray-50 text-gray-900 w-full rounded-lg border px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/40 dark:border-strokedark dark:bg-form-input dark:text-white"
                                                                   />
                                                                 </div>

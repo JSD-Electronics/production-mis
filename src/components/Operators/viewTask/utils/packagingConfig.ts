@@ -93,6 +93,7 @@ const getProductStages = (product: any): any[] => {
 };
 
 export interface EffectivePackagingConfig {
+  cartonLength: number;
   cartonWidth: number;
   cartonHeight: number;
   cartonDepth: number;
@@ -132,8 +133,22 @@ export const resolveEffectivePackagingConfig = ({
   );
   const rawProcess = normalizePackagingData(findPackagingDataFromStages(processData?.stages));
   const rawProduct = normalizePackagingData(findPackagingDataFromStages(getProductStages(product)));
+  const resolvedCartonLength =
+    pickFiniteNumber(
+      rawCarton?.cartonLength,
+      rawCarton?.cartonDepth,
+      rawProcessAssign?.cartonLength,
+      rawProcessAssign?.cartonDepth,
+      rawAssign?.cartonLength,
+      rawAssign?.cartonDepth,
+      rawProcess?.cartonLength,
+      rawProcess?.cartonDepth,
+      rawProduct?.cartonLength,
+      rawProduct?.cartonDepth,
+    ) ?? 0;
 
   return {
+    cartonLength: resolvedCartonLength,
     cartonWidth:
       pickFiniteNumber(
         rawCarton?.cartonWidth,
@@ -150,14 +165,7 @@ export const resolveEffectivePackagingConfig = ({
         rawProcess?.cartonHeight,
         rawProduct?.cartonHeight,
       ) ?? 0,
-    cartonDepth:
-      pickFiniteNumber(
-        rawCarton?.cartonDepth,
-        rawProcessAssign?.cartonDepth,
-        rawAssign?.cartonDepth,
-        rawProcess?.cartonDepth,
-        rawProduct?.cartonDepth,
-      ) ?? 0,
+    cartonDepth: resolvedCartonLength,
     cartonWeight:
       pickPositiveNumber(
         rawCarton?.cartonWeight,

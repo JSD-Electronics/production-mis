@@ -462,7 +462,9 @@ const FormComponent: React.FC<FormComponentProps> = ({
                 </div>
                 <div className="flex flex-col items-end">
                   <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Dimensions</span>
-                  <span className="text-[10px] font-black text-gray-900 dark:text-white">{packagingData[0]?.packagingData?.cartonWidth} x {packagingData[0]?.packagingData?.cartonHeight}</span>
+                  <span className="text-[10px] font-black text-gray-900 dark:text-white">
+                    {packagingData[0]?.packagingData?.cartonLength ?? packagingData[0]?.packagingData?.cartonDepth ?? 0} x {packagingData[0]?.packagingData?.cartonWidth} x {packagingData[0]?.packagingData?.cartonHeight}
+                  </span>
                 </div>
               </div>
 

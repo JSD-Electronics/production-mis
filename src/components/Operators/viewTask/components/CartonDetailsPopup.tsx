@@ -21,6 +21,7 @@ import {
   saveCartonWeight,
   updateCartonPrintingStatus,
   fetchOpenCartonsByProcessID,
+  fetchCartonByProcessID,
   closeLooseCarton,
 } from "@/lib/api";
 import { resolveEffectivePackagingConfig } from "../utils/packagingConfig";
@@ -131,7 +132,7 @@ const CartonDetailsPopup = ({
   const [looseCartonForm, setLooseCartonForm] = useState({
     cartonWidth: "",
     cartonHeight: "",
-    cartonDepth: "",
+    cartonLength: "",
     cartonWeight: "",
     quantity: "",
   });
@@ -159,7 +160,7 @@ const CartonDetailsPopup = ({
       const workflowStatus = normalizeWorkflowStatus(carton?.cartonStatus);
       if (isPDIStage) return workflowStatus === "PDI";
       if (isFGToStoreStage) return workflowStatus === "FG_TO_STORE";
-      return workflowStatus === "";
+      return workflowStatus === "" || workflowStatus === "LOOSE_CLOSED";
     },
     [isFGToStoreStage, isPDIStage, normalizeWorkflowStatus],
   );
@@ -189,21 +190,60 @@ const CartonDetailsPopup = ({
   const shouldShowBlockingLoader =
     isLoading && fullCartons.length === 0 && openCartons.length === 0;
 
+  const normalizeOpenCartonPayload = React.useCallback((payload: any): Carton[] => {
+    const rawList = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.cartonDetails)
+        ? payload.cartonDetails
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : payload?.carton
+            ? [payload.carton]
+            : payload && typeof payload === "object"
+              ? [payload]
+              : [];
+
+    const seen = new Set<string>();
+    const filtered = rawList.filter((item: any) => {
+      const serial = String(item?.cartonSerial || "").trim();
+      if (!serial) return false;
+      if (!shouldShowCartonInCurrentStage(item)) return false;
+
+      const status = String(item?.status || "").toLowerCase();
+      const isOpenCandidate =
+        status === "partial" ||
+        status === "empty";
+      if (!isOpenCandidate) return false;
+
+      if (seen.has(serial)) return false;
+      seen.add(serial);
+      return true;
+    });
+
+    return filtered.sort((left: any, right: any) => {
+      const leftTime = left?.updatedAt
+        ? new Date(left.updatedAt).getTime()
+        : left?.createdAt
+          ? new Date(left.createdAt).getTime()
+          : 0;
+      const rightTime = right?.updatedAt
+        ? new Date(right.updatedAt).getTime()
+        : right?.createdAt
+          ? new Date(right.createdAt).getTime()
+          : 0;
+      return rightTime - leftTime;
+    });
+  }, [shouldShowCartonInCurrentStage]);
+
   useEffect(() => {
     if (cartons) {
       const statuses: Record<string, string> = {};
       const weights: Record<string, string> = {};
-      const localOpenCartons = cartons.filter((c) => {
-        if (!shouldShowCartonInCurrentStage(c)) return false;
-        const status = String(c?.status || "").toLowerCase();
-        return (
-          status !== "full" ||
-          c?.isLooseCarton ||
-          status === "partial" ||
-          status === "empty"
-        );
-      });
-      setOpenCartons(localOpenCartons);
+      const localOpenCartons = normalizeOpenCartonPayload(cartons);
+      // Avoid wiping already-fetched open cartons when parent only provides full cartons.
+      if (localOpenCartons.length > 0) {
+        setOpenCartons(localOpenCartons);
+      }
       cartons.forEach(c => {
         if (c.isStickerVerified) {
           statuses[c.cartonSerial] = "Verified";
@@ -237,7 +277,7 @@ const CartonDetailsPopup = ({
         return next;
       });
     }
-  }, [cartons, shouldShowCartonInCurrentStage]);
+  }, [cartons, normalizeOpenCartonPayload]);
 
   useEffect(() => {
     const loadOpenCartons = async () => {
@@ -250,10 +290,14 @@ const CartonDetailsPopup = ({
       setIsLoadingOpen(true);
       try {
         const result = await fetchOpenCartonsByProcessID(processData._id);
-        const list = Array.isArray(result) ? result : (result?.cartonDetails || []);
-        if (Array.isArray(list) && list.length > 0) {
-          setOpenCartons(list);
+        let normalized = normalizeOpenCartonPayload(result);
+
+        if (normalized.length === 0) {
+          const partialFallback = await fetchCartonByProcessID(processData._id).catch(() => null);
+          normalized = normalizeOpenCartonPayload(partialFallback);
         }
+
+        setOpenCartons(normalized);
       } catch (e) {
         // keep the locally derived list if the background refresh fails
       } finally {
@@ -261,7 +305,7 @@ const CartonDetailsPopup = ({
       }
     };
     loadOpenCartons();
-  }, [isFGToStoreStage, isOpen, isPDIStage, processData?._id]);
+  }, [isFGToStoreStage, isOpen, isPDIStage, normalizeOpenCartonPayload, processData?._id]);
 
   const resetLooseCartonFlow = () => {
     setLooseCartonTarget(null);
@@ -270,7 +314,7 @@ const CartonDetailsPopup = ({
     setLooseCartonForm({
       cartonWidth: "",
       cartonHeight: "",
-      cartonDepth: "",
+      cartonLength: "",
       cartonWeight: "",
       quantity: "",
     });
@@ -286,7 +330,13 @@ const CartonDetailsPopup = ({
     setLooseCartonForm({
       cartonWidth: String(carton?.cartonSize?.width || basePackagingConfig?.cartonWidth || ""),
       cartonHeight: String(carton?.cartonSize?.height || basePackagingConfig?.cartonHeight || ""),
-      cartonDepth: String(carton?.cartonSize?.depth || basePackagingConfig?.cartonDepth || ""),
+      cartonLength: String(
+        carton?.cartonSize?.length ||
+          carton?.cartonSize?.depth ||
+          basePackagingConfig?.cartonLength ||
+          basePackagingConfig?.cartonDepth ||
+          "",
+      ),
       cartonWeight: String(carton?.weightCarton || basePackagingConfig?.cartonWeight || ""),
       quantity: String(carton?.devices?.length || 0),
     });
@@ -318,7 +368,7 @@ const CartonDetailsPopup = ({
     const quantity = Number(looseCartonForm.quantity);
     const cartonWidth = Number(looseCartonForm.cartonWidth);
     const cartonHeight = Number(looseCartonForm.cartonHeight);
-    const cartonDepth = Number(looseCartonForm.cartonDepth);
+    const cartonLength = Number(looseCartonForm.cartonLength);
     const cartonWeight = Number(looseCartonForm.cartonWeight);
     const cartonWeightTolerance = Number(basePackagingConfig?.cartonWeightTolerance ?? 0);
 
@@ -330,7 +380,7 @@ const CartonDetailsPopup = ({
       toast.error("Quantity cannot exceed the devices in the partial carton.");
       return;
     }
-    if (!cartonWidth || cartonWidth <= 0 || !cartonHeight || cartonHeight <= 0 || !cartonDepth || cartonDepth <= 0) {
+    if (!cartonWidth || cartonWidth <= 0 || !cartonHeight || cartonHeight <= 0 || !cartonLength || cartonLength <= 0) {
       toast.error("Please enter valid carton dimensions.");
       return;
     }
@@ -348,13 +398,13 @@ const CartonDetailsPopup = ({
         quantity,
         cartonWidth,
         cartonHeight,
-        cartonDepth,
+        cartonLength,
         cartonWeight,
         cartonWeightTolerance,
         packagingData: {
+          cartonLength,
           cartonWidth,
           cartonHeight,
-          cartonDepth,
           cartonWeight,
           cartonWeightTolerance,
           maxCapacity: quantity,
@@ -633,10 +683,36 @@ const CartonDetailsPopup = ({
 
       const printWindow = window.open("", "_blank", "width=800,height=600");
       if (printWindow) {
-        const boxSize = `${packagingData.cartonWidth || carton.cartonSize?.width || 0}*${packagingData.cartonHeight || carton.cartonSize?.height || 0}*${packagingData.cartonDepth || carton.cartonSize?.depth || 0}cm`.toUpperCase();
-        console.log("processData ==>", processData);
-        const processName = (processData?.customerName || "Production Order").toUpperCase();
-        const modelName = (processData?.modelName || "N/A").toUpperCase();
+        const boxLength =
+          packagingData.cartonLength ||
+          packagingData.cartonDepth ||
+          carton.cartonSize?.length ||
+          carton.cartonSize?.depth ||
+          0;
+        const boxWidth = packagingData.cartonWidth || carton.cartonSize?.width || 0;
+        const boxHeight = packagingData.cartonHeight || carton.cartonSize?.height || 0;
+        const boxSize = `${boxLength}*${boxWidth}*${boxHeight}cm`.toUpperCase();
+        const processName = (
+          String(
+            processData?.customerName ||
+            processData?.productName ||
+            carton?.customerName ||
+            carton?.productName ||
+            carton?.packagingData?.customerName ||
+            carton?.packagingData?.productName ||
+            "",
+          ).trim() || "Production Order"
+        ).toUpperCase();
+        const modelName = (
+          String(
+            processData?.modelName ||
+            carton?.modelName ||
+            carton?.packagingData?.modelName ||
+            product?.selectedProduct?.name ||
+            product?.name ||
+            "",
+          ).trim() || "N/A"
+        ).toUpperCase();
         const cartonNo = carton.cartonSerial;
         const quantity = carton.devices?.length || 0;
 
@@ -1082,10 +1158,17 @@ const CartonDetailsPopup = ({
 
                     const packagingSubStep = assignUserStage?.subSteps?.find((s: any) => s.isPackagingStatus);
                     const pkg = packagingSubStep?.packagingData || {};
+                    const sizeLength =
+                      carton?.cartonSize?.length ||
+                      carton?.cartonSize?.depth ||
+                      carton?.packagingData?.cartonLength ||
+                      carton?.packagingData?.cartonDepth ||
+                      pkg.cartonLength ||
+                      pkg.cartonDepth ||
+                      0;
                     const sizeWidth = carton?.cartonSize?.width || carton?.packagingData?.cartonWidth || pkg.cartonWidth || 0;
                     const sizeHeight = carton?.cartonSize?.height || carton?.packagingData?.cartonHeight || pkg.cartonHeight || 0;
-                    const sizeDepth = carton?.cartonSize?.depth || carton?.packagingData?.cartonDepth || pkg.cartonDepth || 0;
-                    const dim = `${sizeWidth}x${sizeHeight}x${sizeDepth}`;
+                    const dim = `${sizeLength}x${sizeWidth}x${sizeHeight}`;
 
                     return (
                       <tr key={carton.cartonSerial} className="group hover:bg-blue-50/30 transition-all duration-300">
@@ -1393,13 +1476,13 @@ const CartonDetailsPopup = ({
                   />
                 </label>
                 <label className="space-y-1 sm:col-span-2">
-                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Depth (cm)</div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Length (cm)</div>
                   <input
                     type="number"
                     min={0}
                     step="0.01"
-                    value={looseCartonForm.cartonDepth}
-                    onChange={(e) => setLooseCartonForm((prev) => ({ ...prev, cartonDepth: e.target.value }))}
+                    value={looseCartonForm.cartonLength}
+                    onChange={(e) => setLooseCartonForm((prev) => ({ ...prev, cartonLength: e.target.value }))}
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500"
                   />
                 </label>

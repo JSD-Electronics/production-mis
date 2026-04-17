@@ -24,7 +24,7 @@ export interface Carton {
   cartonSerial: string;
   processId: string;
   devices: string[] | any[]; // Sometimes IDs, sometimes objects?
-  cartonSize?: { width: number; height: number };
+  cartonSize?: { length?: number | string; width: number; height: number; depth?: number | string };
   maxCapacity?: number;
   weightCarton?: number;
   status?: "empty" | "partial" | "full";

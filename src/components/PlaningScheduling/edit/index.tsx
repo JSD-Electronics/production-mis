@@ -438,66 +438,34 @@ const EditPlanSchedule = () => {
     rowIndex: any,
     seatIndex: any,
     stageIndex: any,
-    rowSeatLength: any,
+    _rowSeatLength: any,
   ) => {
     setAssignedStages((prev) => {
       const updatedStages = { ...prev };
       const currentKey = `${rowIndex}-${seatIndex}`;
-      if (updatedStages[currentKey]) {
-        updatedStages[currentKey] = updatedStages[currentKey].filter(
-          (_, index) => index !== stageIndex,
-        );
-        if (updatedStages[currentKey].length === 0) {
-          delete updatedStages[currentKey];
-          delete assignedOperators[currentKey];
-        }
+      const seatStages = Array.isArray(updatedStages[currentKey])
+        ? updatedStages[currentKey]
+        : [];
+      if (seatStages.length === 0) {
+        return prev;
       }
-      const reservedSeats = new Set(
-        Object.keys(updatedStages).filter(
-          (key) => updatedStages[key][0]?.reserved,
-        ),
-      );
-      const nonReservedKeys = Object.keys(updatedStages)
-        .filter((key) => !reservedSeats.has(key))
-        .sort((a, b) => {
-          const [rowA, seatA] = a.split("-").map(Number);
-          const [rowB, seatB] = b.split("-").map(Number);
-          return rowA === rowB ? seatA - seatB : rowA - rowB;
-        });
 
-      const newStages = {};
-      const newOperators = {};
-      let currentRow = 0;
-      let currentSeat = 0;
-      for (const key of nonReservedKeys) {
-        while (reservedSeats.has(`${currentRow}-${currentSeat}`)) {
-          const reservedKey = `${currentRow}-${currentSeat}`;
-          newStages[reservedKey] = updatedStages[reservedKey];
-          newOperators[reservedKey] = assignedOperators[reservedKey];
-          currentSeat++;
-          if (currentSeat >= rowSeatLength) {
-            currentRow++;
-            currentSeat = 0;
-          }
-        }
-
-        const newKey = `${currentRow}-${currentSeat}`;
-        newStages[newKey] = updatedStages[key];
-        newOperators[newKey] = assignedOperators[key];
-        currentSeat++;
-        if (currentSeat >= rowSeatLength) {
-          currentRow++;
-          currentSeat = 0;
-        }
+      const filteredStages = seatStages.filter((_, index) => index !== stageIndex);
+      if (filteredStages.length > 0) {
+        updatedStages[currentKey] = filteredStages;
+      } else {
+        delete updatedStages[currentKey];
       }
-      for (const reservedKey of reservedSeats) {
-        newStages[reservedKey] = updatedStages[reservedKey];
-        newOperators[reservedKey] = assignedOperators[reservedKey];
-      }
-      calculateSingleStage(newStages, rowIndex, seatIndex);
-      setAssignedOperators(newOperators);
 
-      return newStages;
+      setAssignedOperators((prevOperators) => {
+        if (filteredStages.length > 0) return prevOperators;
+        const updatedOperators = { ...prevOperators };
+        delete updatedOperators[currentKey];
+        return updatedOperators;
+      });
+
+      calculateSingleStage(updatedStages, rowIndex, seatIndex);
+      return updatedStages;
     });
   };
   const getAllRoomPlan = async () => {

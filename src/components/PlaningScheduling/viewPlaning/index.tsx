@@ -10,10 +10,10 @@ import {
   getUsers,
   checkPlanningAndScheduling,
   getPlaningAndSchedulingById,
+  getPlanInsights,
   fetchHolidays,
   viewJigCategory,
   getDeviceTestRecordsByProcessId,
-  getLatestDeviceTestsByPlanId,
   getDeviceByProductId,
   getDowntimeReasons,
   updateDownTimeProcess,
@@ -489,6 +489,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     });
   }, [assignedCustomOperators, assignedCustomStages, selectedProcess?.commonStages]);
   const [lastRefreshed, setLastRefreshed] = useState("");
+  const [planInsights, setPlanInsights] = useState<any>(null);
   const [allDeviceTests, setAllDeviceTests] = useState([]);
   const [processDevices, setProcessDevices] = useState<any[]>([]);
   const [isDevicesModalOpen, setIsDevicesModalOpen] = useState(false);
@@ -528,6 +529,82 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     });
     return merged;
   };
+  const applyInsightsToAssignedStages = React.useCallback(
+    (
+      baseStages: Record<string, any> = {},
+      insightsPayload: any = null,
+      processStages: any[] = [],
+    ) => {
+      if (!insightsPayload) return baseStages || {};
+
+      const bySeatStage = Array.isArray(insightsPayload?.bySeatStage)
+        ? insightsPayload.bySeatStage
+        : [];
+      const byStage = Array.isArray(insightsPayload?.byStage)
+        ? insightsPayload.byStage
+        : [];
+
+      if (bySeatStage.length === 0 && byStage.length === 0) {
+        return baseStages || {};
+      }
+
+      const normalized = normalizeAssignedStagesPayload(baseStages || {}, processStages || []);
+      const seatStageMap = new Map<string, any>();
+      const stageMap = new Map<string, any>();
+
+      bySeatStage.forEach((row: any) => {
+        const seatKey = String(row?.seatKey || "").trim();
+        const stageName = String(row?.stageName || "").trim();
+        if (!seatKey || !stageName) return;
+        seatStageMap.set(
+          `${seatKey}:${normalizeStageKey(stageName)}`,
+          {
+            pass: Number(row?.pass || 0),
+            ng: Number(row?.ng || 0),
+            wip: Number(row?.wip || 0),
+          },
+        );
+      });
+      byStage.forEach((row: any) => {
+        const stageName = String(row?.stageName || "").trim();
+        if (!stageName) return;
+        stageMap.set(normalizeStageKey(stageName), {
+          pass: Number(row?.pass || 0),
+          ng: Number(row?.ng || 0),
+          wip: Number(row?.wip || 0),
+        });
+      });
+
+      return Object.keys(normalized || {}).reduce((acc: Record<string, any>, seatKey) => {
+        const seatStages = Array.isArray(normalized?.[seatKey])
+          ? normalized[seatKey]
+          : normalized?.[seatKey]
+            ? [normalized[seatKey]]
+            : [];
+
+        acc[seatKey] = seatStages.map((stage: any) => {
+          if (stage?.reserved) return stage;
+          const stageName = String(
+            stage?.stageName || stage?.name || stage?.stage || "",
+          ).trim();
+          const stageKey = normalizeStageKey(stageName);
+          const seatStageInsight = seatStageMap.get(`${seatKey}:${stageKey}`);
+          const stageInsight = stageMap.get(stageKey);
+          const insight = seatStageInsight || stageInsight || null;
+          if (!insight) return stage;
+
+          return {
+            ...stage,
+            totalUPHA: Number(insight?.wip || 0),
+            passedDevice: Number(insight?.pass || 0),
+            ngDevice: Number(insight?.ng || 0),
+          };
+        });
+        return acc;
+      }, {});
+    },
+    [],
+  );
   const filteredDeviceTests = React.useMemo(() => {
     const start =
       modalFilterDateStart
@@ -730,6 +807,12 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     });
   }, [normalizedAssignedStageMap]);
   const uphStats = React.useMemo(() => {
+    const canonicalPass = Number(planInsights?.totals?.pass || 0);
+    const canonicalNg = Number(planInsights?.totals?.ng || 0);
+    if ((!completedKitsUPH || completedKitsUPH.length === 0) && planInsights) {
+      return { pass: canonicalPass, ng: canonicalNg, avg: 0, hoursWithData: 0 };
+    }
+
     const pass = (completedKitsUPH || []).reduce(
       (acc, row) => acc + (parseInt(row?.Pass) || 0),
       0,
@@ -743,7 +826,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     ).length;
     const avg = hoursWithData > 0 ? Math.round(pass / hoursWithData) : 0;
     return { pass, ng, avg, hoursWithData };
-  }, [completedKitsUPH]);
+  }, [completedKitsUPH, planInsights]);
 
   const handleDownloadSerials = async () => {
     try {
@@ -804,11 +887,11 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
     }, 300);
     setLastRefreshed(new Date().toLocaleTimeString());
 
-    // Polling for live updates every 30 seconds
+    // Polling for live updates every 10 seconds
     const interval = setInterval(() => {
       void getPlaningById(id, { skipIfBusy: true });
       setLastRefreshed(new Date().toLocaleTimeString());
-    }, 30000);
+    }, 10000);
 
     return () => {
       clearInterval(interval);
@@ -1137,31 +1220,21 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
             ...(reservedSeats || {}),
           });
 
-          const [deviceTestEntry, latestEntry, productData, deviceResult] = await Promise.all([
-            result.selectedProcess
-              ? getDeviceTestRecordsByProcessId(result.selectedProcess)
-              : Promise.resolve(null),
-            result.selectedProcess
-              ? getLatestDeviceTestsByPlanId(result?._id, result.selectedProcess).catch(() => null)
+          const [planInsightsResponse, productData] = await Promise.all([
+            result?._id
+              ? getPlanInsights(result._id).catch(() => null)
               : Promise.resolve(null),
             singleProcess?.selectedProduct
               ? getProductById(singleProcess.selectedProduct)
-              : Promise.resolve(null),
-            singleProcess?.selectedProduct
-              ? getDeviceByProductId(singleProcess.selectedProduct).catch(() => null)
               : Promise.resolve(null),
           ]);
 
           if (!isMountedRef.current) return;
 
-          const deviceTests = deviceTestEntry?.deviceTestRecords || [];
-          setAllDeviceTests(deviceTests);
-          let latestTests = latestEntry?.deviceTestRecords || [];
-          if (!Array.isArray(latestTests) || latestTests.length === 0) {
-            latestTests = deviceTests.filter(
-              (record) => String(record?.planId) === String(result?._id),
-            );
-          }
+          const insightsPayload = planInsightsResponse?.data || null;
+          setPlanInsights(insightsPayload || null);
+          setAllDeviceTests([]);
+          setProcessDevices([]);
 
           if (productData) {
             processData = productData;
@@ -1190,40 +1263,21 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
               );
             }
           }
-
-          let onlyProcessDevices: any[] = [];
-          if (deviceResult) {
-            const allDevices = deviceResult?.data || [];
-            onlyProcessDevices = allDevices.filter(
-              (d: any) => String(d.processID) === String(singleProcess?._id),
-            );
-            setProcessDevices(onlyProcessDevices);
-          }
-
-          const recalculatedAssignedStages = allocateStagesToSeats(
-            processData?.product,
-            room,
-            Number(result?.repeatCount || 1),
-            reservedSeats,
+          const insightAlignedStages = applyInsightsToAssignedStages(
             currentAssignedStages,
-            singleProcess,
-            Number(result?.assignedIssuedKits || 0),
-            deviceTests,
-            latestTests,
-            onlyProcessDevices,
+            insightsPayload,
+            singleProcess?.stages || [],
           );
-
-          if (recalculatedAssignedStages) {
-            setAssignedStages({
-              ...(recalculatedAssignedStages || {}),
-              ...(reservedSeats || {}),
-            });
-          }
+          setAssignedStages({
+            ...(insightAlignedStages || currentAssignedStages || {}),
+            ...(reservedSeats || {}),
+          });
 
           const stageHeaders =
             processData?.product?.stages?.map((stage) =>
               stage?.stageName?.trim(),
             ) || [];
+          const deviceTests: any[] = [];
           const totalHours = calculateWorkingHours(
             result.startTime,
             result.endTime,
@@ -1283,6 +1337,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
 
           const today = new Date();
           today.setHours(0, 0, 0, 0);
+          setCompletedKitsUPH([]);
           if (deviceTests.length > 0) {
             deviceTests?.forEach((record) => {
               const recordTime = new Date(record.createdAt);
@@ -2014,7 +2069,40 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
 
 
 
-  const handleViewDevices = (seat: string, stageName: string) => {
+  const loadDevicesForModal = async () => {
+    const processId = String(selectedProcess?._id || "");
+    if (!processId) {
+      setAllDeviceTests([]);
+      setProcessDevices([]);
+      return;
+    }
+
+    try {
+      const [deviceTestEntry, deviceResult] = await Promise.all([
+        getDeviceTestRecordsByProcessId(processId).catch(() => null),
+        selectedProcess?.selectedProduct
+          ? getDeviceByProductId(selectedProcess.selectedProduct).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+
+      const deviceTests = Array.isArray(deviceTestEntry?.deviceTestRecords)
+        ? deviceTestEntry.deviceTestRecords
+        : [];
+      setAllDeviceTests(deviceTests);
+
+      const allDevices = Array.isArray(deviceResult?.data) ? deviceResult.data : [];
+      const onlyProcessDevices = allDevices.filter(
+        (d: any) => String(d?.processID || "") === processId,
+      );
+      setProcessDevices(onlyProcessDevices);
+    } catch (error) {
+      console.error("Failed to load modal device data:", error);
+      setAllDeviceTests([]);
+      setProcessDevices([]);
+    }
+  };
+
+  const handleViewDevices = async (seat: string, stageName: string) => {
     setSelectedSeatForDevices(seat);
     setSelectedStageNameForDevices(stageName);
     // Default to current week span for richer history
@@ -2027,6 +2115,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
       ).padStart(2, "0")}`;
     setModalFilterDateStart(toIsoDate(start));
     setModalFilterDateEnd(toIsoDate(today));
+    await loadDevicesForModal();
     setIsDevicesModalOpen(true);
   };
   const calculateEstimatedEndDate = async (totalDays: any) => {
@@ -2689,6 +2778,7 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
                                 </div>
                                 <div>
                                   <strong>Dimensions:</strong>{" "}
+                                  {packagingData[0].packagingData.cartonLength ?? packagingData[0].packagingData.cartonDepth ?? 0} x{" "}
                                   {packagingData[0].packagingData.cartonWidth} x{" "}
                                   {packagingData[0].packagingData.cartonHeight}
                                 </div>
