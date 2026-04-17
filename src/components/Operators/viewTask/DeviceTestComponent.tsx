@@ -304,6 +304,8 @@ export default function DeviceTestComponent({
   const normalizedCurrentStageName = String(currentStageName || "").trim().toLowerCase();
   const isPDIStage = stageHasKeyword(["pdi", "quality control", "quality check", "qc"]);
   const isFGToStoreStage = stageHasKeyword(["fg to store", "fg_to_store", "to store"]);
+  const isDevelopmentEnvironment =
+    String(process.env.NODE_ENV || "").toLowerCase() !== "production";
   const isPDIWeightVerificationStage = isPDIStage;
 
   const effectivePackagingConfig = React.useMemo(() => {
@@ -4968,6 +4970,7 @@ export default function DeviceTestComponent({
                           (s: any) => s.isPrinterEnable && !s?.disabled,
                         )}
                         setIsDevicePassed={setIsDevicePassed}
+                        enableAutoSuggestion={isDevelopmentEnvironment}
                         placeholder="Scan sticker / Serial / IMEI / CCID"
                       />
                       {searchResult && (
