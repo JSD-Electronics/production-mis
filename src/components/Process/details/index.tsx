@@ -8,7 +8,7 @@ import {
   createProcessLogs
 } from "@/lib/api";
 import Breadcrumb from "@/components/Breadcrumbs/Breadcrumb";
-import { RefreshCw, Activity, Package, CheckCircle, XCircle, AlertCircle, Clock } from "lucide-center";
+import { RefreshCw, Activity, Package, CheckCircle, XCircle, AlertCircle, Clock } from "lucide-react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import "./process-details.css";
