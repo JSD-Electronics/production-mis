@@ -3,7 +3,11 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import DataTable from "react-data-table-component";
-import { getTaskByUserId, updateStatusRecivedKitToLine } from "@/lib/api";
+import {
+  getPlaningAndSchedulingByProcessId,
+  getTaskByUserId,
+  updateStatusRecivedKitToLine,
+} from "@/lib/api";
 import Modal from "@/components/Modal/page";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -116,13 +120,26 @@ const TaskComponent = () => {
     }
   };
 
-  const handleViewProcess = (task: any) => {
-    const resolvedPlanId =
+  const handleViewProcess = async (task: any) => {
+    let resolvedPlanId =
       task?.planId ||
       task?.planDetails?._id ||
       task?.planDetails?.id ||
       task?.assignPlanId ||
       "";
+
+    if (!resolvedPlanId && task?.processId) {
+      try {
+        const fallbackPlan = await getPlaningAndSchedulingByProcessId(task.processId);
+        resolvedPlanId =
+          fallbackPlan?._id ||
+          fallbackPlan?.id ||
+          fallbackPlan?.planId ||
+          "";
+      } catch (error) {
+        console.error("Error resolving fallback plan by process:", error);
+      }
+    }
 
     if (!resolvedPlanId) {
       toast.error("Task plan id is missing for this assignment");
@@ -134,10 +151,12 @@ const TaskComponent = () => {
 
   // Memoized Calculations
   const filteredTasks = useMemo(() => {
-    return taskList.filter(task =>
-      task.processName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.roomDetails?.floorName?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const normalizedSearch = String(searchTerm || "").toLowerCase();
+    return taskList.filter((task) => {
+      const processName = String(task?.processName || "").toLowerCase();
+      const floorName = String(task?.roomDetails?.floorName || "").toLowerCase();
+      return processName.includes(normalizedSearch) || floorName.includes(normalizedSearch);
+    });
   }, [taskList, searchTerm]);
 
   const stats = useMemo(() => {
@@ -185,7 +204,12 @@ const TaskComponent = () => {
           </div>
           <div className="mt-1 flex items-center gap-1 text-[10px] text-gray-500 italic">
             <Calendar size={10} />
-            {new Date(row?.planDetails?.startDate).toLocaleDateString()}
+            {(() => {
+              const startDateValue = row?.planDetails?.startDate || row?.taskStartDate;
+              if (!startDateValue) return "N/A";
+              const parsed = new Date(startDateValue);
+              return Number.isNaN(parsed.getTime()) ? "N/A" : parsed.toLocaleDateString();
+            })()}
           </div>
         </div>
       ),

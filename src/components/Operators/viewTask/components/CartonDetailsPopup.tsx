@@ -23,6 +23,7 @@ import {
   fetchOpenCartonsByProcessID,
   fetchCartonByProcessID,
   closeLooseCarton,
+  fetchOrderConfirmation,
 } from "@/lib/api";
 import { resolveEffectivePackagingConfig } from "../utils/packagingConfig";
 
@@ -71,16 +72,36 @@ const CartonDetailsPopup = ({
   onUpdate,
   isLoading = false,
 }: CartonDetailsPopupProps) => {
+  const [orderConfirmationData, setOrderConfirmationData] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchOC = async () => {
+      const ocNo = processData?.orderConfirmationNo || product?.orderConfirmationNo || product?.product?.orderConfirmationNo;
+      if (ocNo) {
+        try {
+          const data = await fetchOrderConfirmation(ocNo);
+          if (data) {
+            setOrderConfirmationData(data);
+          }
+        } catch (error) {
+          console.error("Error fetching order confirmation in popup:", error);
+        }
+      }
+    };
+    fetchOC();
+  }, [processData?.orderConfirmationNo, product?.orderConfirmationNo, product?.product?.orderConfirmationNo]);
+
   const currentStageName = String(
+
     (Array.isArray(assignUserStage)
       ? assignUserStage?.[0]?.name ||
-        assignUserStage?.[0]?.stageName ||
-        assignUserStage?.[0]?.stage
+      assignUserStage?.[0]?.stageName ||
+      assignUserStage?.[0]?.stage
       : null) ||
-      assignUserStage?.stage ||
-      assignUserStage?.name ||
-      assignUserStage?.stageName ||
-      "",
+    assignUserStage?.stage ||
+    assignUserStage?.name ||
+    assignUserStage?.stageName ||
+    "",
   ).trim();
   const stageCandidates = React.useMemo(() => {
     return Array.from(
@@ -332,10 +353,10 @@ const CartonDetailsPopup = ({
       cartonHeight: String(carton?.cartonSize?.height || basePackagingConfig?.cartonHeight || ""),
       cartonLength: String(
         carton?.cartonSize?.length ||
-          carton?.cartonSize?.depth ||
-          basePackagingConfig?.cartonLength ||
-          basePackagingConfig?.cartonDepth ||
-          "",
+        carton?.cartonSize?.depth ||
+        basePackagingConfig?.cartonLength ||
+        basePackagingConfig?.cartonDepth ||
+        "",
       ),
       cartonWeight: String(carton?.weightCarton || basePackagingConfig?.cartonWeight || ""),
       quantity: String(carton?.devices?.length || 0),
@@ -683,35 +704,54 @@ const CartonDetailsPopup = ({
 
       const printWindow = window.open("", "_blank", "width=800,height=600");
       if (printWindow) {
-        const boxLength =
+        const boxLengthNum = parseFloat(String(
           packagingData.cartonLength ||
           packagingData.cartonDepth ||
           carton.cartonSize?.length ||
           carton.cartonSize?.depth ||
-          0;
-        const boxWidth = packagingData.cartonWidth || carton.cartonSize?.width || 0;
-        const boxHeight = packagingData.cartonHeight || carton.cartonSize?.height || 0;
-        const boxSize = `${boxLength}*${boxWidth}*${boxHeight}cm`.toUpperCase();
+          "0"
+        )) || 0;
+        const boxWidthNum = parseFloat(String(packagingData.cartonWidth || carton.cartonSize?.width || "0")) || 0;
+        const boxHeightNum = parseFloat(String(packagingData.cartonHeight || carton.cartonSize?.height || "0")) || 0;
+        
+        const boxSize = (boxLengthNum > 0 || boxWidthNum > 0 || boxHeightNum > 0)
+          ? `${boxLengthNum}*${boxWidthNum}*${boxHeightNum}CM`
+          : "N/A";
+        const pickValid = (...candidates: any[]) => {
+          for (const c of candidates) {
+            const val = String(c || "").trim();
+            const normalized = val.toLowerCase().replace(/[^a-z0-9]+/g, "");
+            if (val && !["na", "n/a", "none", "null", "undefined", "notcaptured", "productionorder"].includes(normalized)) {
+              return val;
+            }
+          }
+          return null;
+        };
+
         const processName = (
-          String(
-            processData?.customerName ||
-            processData?.productName ||
-            carton?.customerName ||
-            carton?.productName ||
-            carton?.packagingData?.customerName ||
-            carton?.packagingData?.productName ||
-            "",
-          ).trim() || "Production Order"
+          pickValid(
+            orderConfirmationData?.customerName,
+            processData?.customerName,
+            processData?.name,
+            processData?.productName,
+            carton?.customerName,
+            carton?.productName,
+            carton?.packagingData?.customerName,
+            carton?.packagingData?.productName,
+            product?.selectedProduct?.name,
+            product?.name,
+          ) || "Production Order"
         ).toUpperCase();
+
         const modelName = (
-          String(
-            processData?.modelName ||
-            carton?.modelName ||
-            carton?.packagingData?.modelName ||
-            product?.selectedProduct?.name ||
-            product?.name ||
-            "",
-          ).trim() || "N/A"
+          pickValid(
+            orderConfirmationData?.modelName,
+            processData?.modelName,
+            carton?.modelName,
+            carton?.packagingData?.modelName,
+            product?.selectedProduct?.name,
+            product?.name,
+          ) || "N/A"
         ).toUpperCase();
         const cartonNo = carton.cartonSerial;
         const quantity = carton.devices?.length || 0;
@@ -1016,7 +1056,7 @@ const CartonDetailsPopup = ({
         submitOption={isPDIStage}
         submitDisabled={!allVerified || !allWeightVerified || isMovingStage}
         onSubmit={handleMoveToNextStage}
-        submitText={isPDIStage ? "Move to Next Stage" : "Handover to Production Manager"}
+        submitText={isPDIStage ? "Move to Next Stage" : "MOVE TO PDI"}
         maxWidth="max-w-5xl"
       >
         <div className="flex flex-col gap-6">
@@ -1116,228 +1156,228 @@ const CartonDetailsPopup = ({
               </div>
             )}
             <div className="overflow-x-auto">
-            <table className="min-w-[980px] w-full table-fixed text-left text-sm">
-              <thead className="bg-gray-900 font-black uppercase tracking-widest text-white text-[10px]">
-                <tr>
-                  <th className="w-[240px] px-6 py-5">Carton Serial</th>
-                  <th className="w-[80px] px-4 py-5 text-center">Net Qty</th>
-                  <th className="w-[130px] px-4 py-5">Size (cm)</th>
-                  <th className="w-[180px] px-4 py-5">Gross Weight (KG)</th>
-                  <th className="w-[140px] px-4 py-5">Status</th>
-                  <th className="w-[260px] px-6 py-5 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {shouldShowBlockingLoader ? (
+              <table className="min-w-[980px] w-full table-fixed text-left text-sm">
+                <thead className="bg-gray-900 font-black uppercase tracking-widest text-white text-[10px]">
                   <tr>
-                    <td colSpan={6} className="p-24 text-center">
-                      <div className="flex flex-col items-center gap-4">
-                        <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-100 border-t-black" />
-                        <span className="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">
-                          Syncing Carton Data...
-                        </span>
-                      </div>
-                    </td>
+                    <th className="w-[240px] px-6 py-5">Carton Serial</th>
+                    <th className="w-[80px] px-4 py-5 text-center">Net Qty</th>
+                    <th className="w-[130px] px-4 py-5">Size (cm)</th>
+                    <th className="w-[180px] px-4 py-5">Gross Weight (KG)</th>
+                    <th className="w-[140px] px-4 py-5">Status</th>
+                    <th className="w-[260px] px-6 py-5 text-right">Action</th>
                   </tr>
-                ) : fullCartons.length > 0 ? (
-                  fullCartons.map((carton) => {
-                    const status = localCartonStatuses[carton.cartonSerial] || carton.status || "Pending";
-                    const isPrinted = status === "Printed" || status === "Verified";
-                    const isVerified = status === "Verified";
-                    const currentWeight = cartonWeights[carton.cartonSerial] || "";
-                    const shouldMatchConfiguredWeight = requiresConfiguredWeightValidation(carton);
-                    const isWeightVerified =
-                      !!weightVerifiedCartons[carton.cartonSerial] && isCartonWeightMatched(carton, currentWeight);
-                    const isReturnedFromPdi = Boolean(carton?.isReturnedFromPdi);
-                    const latestNgReason = String(carton?.lastPdiNgReasonText || "").trim();
-                    const latestNgNotes = String(carton?.lastPdiNgNotes || "").trim();
-                    const reworkCount = Number(carton?.cartonReworkCount || 0);
-                    const returnedAtLabel = carton?.returnedFromPdiAt
-                      ? new Date(carton.returnedFromPdiAt).toLocaleString("en-IN")
-                      : "";
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {shouldShowBlockingLoader ? (
+                    <tr>
+                      <td colSpan={6} className="p-24 text-center">
+                        <div className="flex flex-col items-center gap-4">
+                          <div className="h-12 w-12 animate-spin rounded-full border-4 border-gray-100 border-t-black" />
+                          <span className="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">
+                            Syncing Carton Data...
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : fullCartons.length > 0 ? (
+                    fullCartons.map((carton) => {
+                      const status = localCartonStatuses[carton.cartonSerial] || carton.status || "Pending";
+                      const isPrinted = status === "Printed" || status === "Verified";
+                      const isVerified = status === "Verified";
+                      const currentWeight = cartonWeights[carton.cartonSerial] || "";
+                      const shouldMatchConfiguredWeight = requiresConfiguredWeightValidation(carton);
+                      const isWeightVerified =
+                        !!weightVerifiedCartons[carton.cartonSerial] && isCartonWeightMatched(carton, currentWeight);
+                      const isReturnedFromPdi = Boolean(carton?.isReturnedFromPdi);
+                      const latestNgReason = String(carton?.lastPdiNgReasonText || "").trim();
+                      const latestNgNotes = String(carton?.lastPdiNgNotes || "").trim();
+                      const reworkCount = Number(carton?.cartonReworkCount || 0);
+                      const returnedAtLabel = carton?.returnedFromPdiAt
+                        ? new Date(carton.returnedFromPdiAt).toLocaleString("en-IN")
+                        : "";
 
-                    const packagingSubStep = assignUserStage?.subSteps?.find((s: any) => s.isPackagingStatus);
-                    const pkg = packagingSubStep?.packagingData || {};
-                    const sizeLength =
-                      carton?.cartonSize?.length ||
-                      carton?.cartonSize?.depth ||
-                      carton?.packagingData?.cartonLength ||
-                      carton?.packagingData?.cartonDepth ||
-                      pkg.cartonLength ||
-                      pkg.cartonDepth ||
-                      0;
-                    const sizeWidth = carton?.cartonSize?.width || carton?.packagingData?.cartonWidth || pkg.cartonWidth || 0;
-                    const sizeHeight = carton?.cartonSize?.height || carton?.packagingData?.cartonHeight || pkg.cartonHeight || 0;
-                    const dim = `${sizeLength}x${sizeWidth}x${sizeHeight}`;
+                      const packagingSubStep = assignUserStage?.subSteps?.find((s: any) => s.isPackagingStatus);
+                      const pkg = packagingSubStep?.packagingData || {};
+                      const sizeLength =
+                        carton?.cartonSize?.length ||
+                        carton?.cartonSize?.depth ||
+                        carton?.packagingData?.cartonLength ||
+                        carton?.packagingData?.cartonDepth ||
+                        pkg.cartonLength ||
+                        pkg.cartonDepth ||
+                        0;
+                      const sizeWidth = carton?.cartonSize?.width || carton?.packagingData?.cartonWidth || pkg.cartonWidth || 0;
+                      const sizeHeight = carton?.cartonSize?.height || carton?.packagingData?.cartonHeight || pkg.cartonHeight || 0;
+                      const dim = `${sizeLength}x${sizeWidth}x${sizeHeight}`;
 
-                    return (
-                      <tr key={carton.cartonSerial} className="group hover:bg-blue-50/30 transition-all duration-300">
-                        <td className="px-6 py-5 font-black text-gray-950">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${isVerified ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400 opacity-60'}`}>
-                              <Box className="h-4 w-4" />
+                      return (
+                        <tr key={carton.cartonSerial} className="group hover:bg-blue-50/30 transition-all duration-300">
+                          <td className="px-6 py-5 font-black text-gray-950">
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-lg ${isVerified ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400 opacity-60'}`}>
+                                <Box className="h-4 w-4" />
+                              </div>
+                              <div className="flex min-w-0 flex-col">
+                                <span className="break-words leading-5">{maskCartonSerialForDisplay(carton.cartonSerial)}</span>
+                                {carton.isLooseCarton && (
+                                  <span className="text-[9px] font-black text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded mt-0.5 w-fit">
+                                    LOOSE CARTON
+                                  </span>
+                                )}
+                                {isReturnedFromPdi && (
+                                  <>
+                                    <span className="mt-1 w-fit rounded bg-rose-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-rose-700">
+                                      Returned From PDI
+                                    </span>
+                                    <span className="mt-1 text-[10px] font-bold text-rose-700">
+                                      {latestNgReason || "Returned for carton rework"}
+                                      {reworkCount > 0 ? ` • Cycle ${reworkCount}` : ""}
+                                    </span>
+                                    {returnedAtLabel && (
+                                      <span className="mt-0.5 text-[10px] font-semibold text-slate-400">
+                                        Returned: {returnedAtLabel}
+                                      </span>
+                                    )}
+                                    {latestNgNotes && (
+                                      <span className="mt-0.5 text-[10px] font-semibold text-slate-500 break-words">
+                                        Note: {latestNgNotes}
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </div>
                             </div>
-                            <div className="flex min-w-0 flex-col">
-                              <span className="break-words leading-5">{maskCartonSerialForDisplay(carton.cartonSerial)}</span>
-                              {carton.isLooseCarton && (
-                                <span className="text-[9px] font-black text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded mt-0.5 w-fit">
-                                  LOOSE CARTON
+                          </td>
+                          <td className="px-4 py-5 text-center font-black text-blue-700">
+                            {carton.devices?.length || 0}
+                          </td>
+                          <td className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-tight">
+                            {dim}
+                          </td>
+                          <td className="px-4 py-5">
+                            {isWeightVerified ? (
+                              <div className="inline-flex min-w-[140px] items-center gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-1.5 text-sm font-black text-green-700">
+                                <Scale className="h-3.5 w-3.5" />
+                                {currentWeight} <span className="text-[10px] opacity-70">KG</span>
+                              </div>
+                            ) : (
+                              <div className="w-[160px] min-w-[160px]">
+                                <div className="relative group/input">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={currentWeight}
+                                    onChange={(e) => {
+                                      setCartonWeights({ ...cartonWeights, [carton.cartonSerial]: e.target.value });
+                                      setWeightVerifiedCartons((prev) => ({ ...prev, [carton.cartonSerial]: false }));
+                                      if (weightError) setWeightError("");
+                                    }}
+                                    placeholder="0.00"
+                                    className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-2 text-sm font-black text-gray-900 placeholder:text-gray-400 focus:border-black focus:bg-white outline-none transition-all pr-12"
+                                  />
+                                  <div className="absolute right-4 top-2 text-[10px] font-black text-gray-400">KG</div>
+                                </div>
+                                <div className="mt-1 text-[10px] font-semibold text-slate-400">
+                                  {getWeightRequirementLabel(carton)}
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-5">
+                            <div className="flex flex-col gap-2">
+                              <span className={`inline-flex whitespace-nowrap items-center gap-2 rounded-full px-4 py-1.5 text-[9px] font-black uppercase tracking-wider ${isVerified
+                                ? "bg-green-600 text-white shadow-lg shadow-green-100"
+                                : isPrinted
+                                  ? "bg-amber-500 text-white shadow-lg shadow-amber-100"
+                                  : "bg-gray-100 text-gray-400"
+                                }`}>
+                                {isVerified ? (
+                                  <CheckCircle2 className="h-3 w-3" />
+                                ) : isPrinted ? (
+                                  <Printer className="h-3 w-3" />
+                                ) : (
+                                  <Box className="h-3 w-3" />
+                                )}
+                                {status}
+                              </span>
+                              {isReturnedFromPdi && (
+                                <span className="inline-flex w-fit items-center gap-2 rounded-full bg-rose-50 px-3 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-rose-700">
+                                  <AlertCircle className="h-3 w-3" />
+                                  PDI NG History
                                 </span>
                               )}
-                              {isReturnedFromPdi && (
-                                <>
-                                  <span className="mt-1 w-fit rounded bg-rose-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-rose-700">
-                                    Returned From PDI
-                                  </span>
-                                  <span className="mt-1 text-[10px] font-bold text-rose-700">
-                                    {latestNgReason || "Returned for carton rework"}
-                                    {reworkCount > 0 ? ` • Cycle ${reworkCount}` : ""}
-                                  </span>
-                                  {returnedAtLabel && (
-                                    <span className="mt-0.5 text-[10px] font-semibold text-slate-400">
-                                      Returned: {returnedAtLabel}
-                                    </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-5 text-right">
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {!isWeightVerified && !isVerified && (
+                                <button
+                                  onClick={() => handleVerifyWeight(carton)}
+                                  disabled={!currentWeight || isSavingWeight === carton.cartonSerial}
+                                  className={`flex min-w-[104px] items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black text-white transition-all active:scale-95 ${currentWeight && isSavingWeight !== carton.cartonSerial
+                                    ? "bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100"
+                                    : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                                    }`}
+                                >
+                                  {isSavingWeight === carton.cartonSerial ? (
+                                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                  ) : (
+                                    <Scale className="h-3.5 w-3.5" />
                                   )}
-                                  {latestNgNotes && (
-                                    <span className="mt-0.5 text-[10px] font-semibold text-slate-500 break-words">
-                                      Note: {latestNgNotes}
-                                    </span>
+                                  VERIFY WEIGHT
+                                </button>
+                              )}
+                              {!isVerified && (
+                                <button
+                                  disabled={!isWeightVerified || isSavingWeight === carton.cartonSerial}
+                                  onClick={() => handlePrint(carton)}
+                                  className={`flex min-w-[104px] items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black transition-all active:scale-95 ${isWeightVerified && isSavingWeight !== carton.cartonSerial
+                                    ? "bg-black text-white hover:bg-gray-800 shadow-lg shadow-gray-200"
+                                    : "bg-gray-100 text-gray-300 cursor-not-allowed border-2 border-gray-50"
+                                    }`}
+                                >
+                                  {isSavingWeight === carton.cartonSerial ? (
+                                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                  ) : (
+                                    <Printer className="h-3.5 w-3.5" />
                                   )}
-                                </>
+                                  {isPrinted ? "RE-PRINT" : "PRINT"}
+                                </button>
+                              )}
+                              {isPrinted && !isVerified && (
+                                <button
+                                  onClick={() => handleVerifyClick(carton.cartonSerial)}
+                                  className="flex min-w-[104px] items-center justify-center gap-2 rounded-xl border-b-4 border-blue-900 bg-blue-600 px-4 py-2.5 text-xs font-black text-white shadow-xl shadow-blue-100 transition-all active:scale-95 hover:bg-blue-700"
+                                >
+                                  <QrCode className="h-3.5 w-3.5" />
+                                  VERIFY
+                                </button>
+                              )}
+                              {isVerified && (
+                                (
+                                  <div className="flex items-center gap-2 text-green-600 font-black text-xs px-3 py-2 bg-green-50 rounded-xl border border-green-100">
+                                    <CheckCircle className="h-4 w-4" />
+                                    OK
+                                  </div>
+                                )
                               )}
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-5 text-center font-black text-blue-700">
-                          {carton.devices?.length || 0}
-                        </td>
-                        <td className="px-4 py-5 text-[11px] font-bold text-gray-400 uppercase tracking-tight">
-                          {dim}
-                        </td>
-                        <td className="px-4 py-5">
-                          {isWeightVerified ? (
-                            <div className="inline-flex min-w-[140px] items-center gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-1.5 text-sm font-black text-green-700">
-                              <Scale className="h-3.5 w-3.5" />
-                              {currentWeight} <span className="text-[10px] opacity-70">KG</span>
-                            </div>
-                          ) : (
-                            <div className="w-[160px] min-w-[160px]">
-                              <div className="relative group/input">
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={currentWeight}
-                                onChange={(e) => {
-                                  setCartonWeights({ ...cartonWeights, [carton.cartonSerial]: e.target.value });
-                                  setWeightVerifiedCartons((prev) => ({ ...prev, [carton.cartonSerial]: false }));
-                                  if (weightError) setWeightError("");
-                                }}
-                                placeholder="0.00"
-                                className="w-full rounded-xl border-2 border-gray-100 bg-gray-50 px-4 py-2 text-sm font-black text-gray-900 placeholder:text-gray-400 focus:border-black focus:bg-white outline-none transition-all pr-12"
-                              />
-                              <div className="absolute right-4 top-2 text-[10px] font-black text-gray-400">KG</div>
-                              </div>
-                              <div className="mt-1 text-[10px] font-semibold text-slate-400">
-                                {getWeightRequirementLabel(carton)}
-                              </div>
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-5">
-                          <div className="flex flex-col gap-2">
-                            <span className={`inline-flex whitespace-nowrap items-center gap-2 rounded-full px-4 py-1.5 text-[9px] font-black uppercase tracking-wider ${isVerified
-                              ? "bg-green-600 text-white shadow-lg shadow-green-100"
-                              : isPrinted
-                                ? "bg-amber-500 text-white shadow-lg shadow-amber-100"
-                                : "bg-gray-100 text-gray-400"
-                              }`}>
-                              {isVerified ? (
-                                <CheckCircle2 className="h-3 w-3" />
-                              ) : isPrinted ? (
-                                <Printer className="h-3 w-3" />
-                              ) : (
-                                <Box className="h-3 w-3" />
-                              )}
-                              {status}
-                            </span>
-                            {isReturnedFromPdi && (
-                              <span className="inline-flex w-fit items-center gap-2 rounded-full bg-rose-50 px-3 py-1 text-[9px] font-black uppercase tracking-[0.12em] text-rose-700">
-                                <AlertCircle className="h-3 w-3" />
-                                PDI NG History
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-5 text-right">
-                          <div className="flex flex-wrap justify-end gap-2">
-                            {!isWeightVerified && !isVerified && (
-                              <button
-                                onClick={() => handleVerifyWeight(carton)}
-                                disabled={!currentWeight || isSavingWeight === carton.cartonSerial}
-                                className={`flex min-w-[104px] items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black text-white transition-all active:scale-95 ${currentWeight && isSavingWeight !== carton.cartonSerial
-                                  ? "bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100"
-                                  : "bg-gray-200 text-gray-400 cursor-not-allowed"
-                                  }`}
-                              >
-                                {isSavingWeight === carton.cartonSerial ? (
-                                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                                ) : (
-                                  <Scale className="h-3.5 w-3.5" />
-                                )}
-                                VERIFY WEIGHT
-                              </button>
-                            )}
-                            {!isVerified && (
-                              <button
-                                disabled={!isWeightVerified || isSavingWeight === carton.cartonSerial}
-                                onClick={() => handlePrint(carton)}
-                                className={`flex min-w-[104px] items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black transition-all active:scale-95 ${isWeightVerified && isSavingWeight !== carton.cartonSerial
-                                  ? "bg-black text-white hover:bg-gray-800 shadow-lg shadow-gray-200"
-                                  : "bg-gray-100 text-gray-300 cursor-not-allowed border-2 border-gray-50"
-                                  }`}
-                              >
-                                {isSavingWeight === carton.cartonSerial ? (
-                                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                                ) : (
-                                  <Printer className="h-3.5 w-3.5" />
-                                )}
-                                {isPrinted ? "RE-PRINT" : "PRINT"}
-                              </button>
-                            )}
-                            {isPrinted && !isVerified && (
-                              <button
-                                onClick={() => handleVerifyClick(carton.cartonSerial)}
-                                className="flex min-w-[104px] items-center justify-center gap-2 rounded-xl border-b-4 border-blue-900 bg-blue-600 px-4 py-2.5 text-xs font-black text-white shadow-xl shadow-blue-100 transition-all active:scale-95 hover:bg-blue-700"
-                              >
-                                <QrCode className="h-3.5 w-3.5" />
-                                VERIFY
-                              </button>
-                            )}
-                            {isVerified && (
-                              (
-                                <div className="flex items-center gap-2 text-green-600 font-black text-xs px-3 py-2 bg-green-50 rounded-xl border border-green-100">
-                                  <CheckCircle className="h-4 w-4" />
-                                  OK
-                                </div>
-                              )
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="p-20 text-center">
-                      <div className="flex flex-col items-center gap-3 text-gray-300">
-                        <Box className="h-12 w-12 stroke-[1px] opacity-20" />
-                        <p className="text-sm font-black uppercase tracking-widest opacity-30">Warehouse Buffer Empty</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="p-20 text-center">
+                        <div className="flex flex-col items-center gap-3 text-gray-300">
+                          <Box className="h-12 w-12 stroke-[1px] opacity-20" />
+                          <p className="text-sm font-black uppercase tracking-widest opacity-30">Warehouse Buffer Empty</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -1357,7 +1397,7 @@ const CartonDetailsPopup = ({
                 ) : (
                   <ArrowRightCircle className="h-6 w-6" />
                 )}
-                Handover to Production Manager
+                MOVE TO PDI
               </button>
             )}
             {(!allVerified || !allWeightVerified) && fullCartons.length > 0 && (

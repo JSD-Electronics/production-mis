@@ -20,6 +20,7 @@ interface SearchableInputProps {
   allowPassedOptions?: boolean;
   resolveSearchQuery?: (query: string) => Promise<any> | any;
   placeholder?: string;
+  enableAutoSuggestion?: boolean;
 }
 
 const normalizeSearchTerm = (value: any) =>
@@ -93,6 +94,7 @@ const SearchableInput = ({
   allowPassedOptions = false,
   resolveSearchQuery,
   placeholder = "Scan sticker / Serial / IMEI / CCID",
+  enableAutoSuggestion = true,
 }: SearchableInputProps) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const excludedSet = React.useMemo(
@@ -188,7 +190,12 @@ const SearchableInput = ({
         return;
       }
 
-      if (!query.includes(",") && exactMatches.length === 0 && filteredOptions.length > 0) {
+      if (
+        enableAutoSuggestion &&
+        !query.includes(",") &&
+        exactMatches.length === 0 &&
+        filteredOptions.length > 0
+      ) {
         handleSuggestionClick(filteredOptions[0]);
         return;
       }
@@ -216,7 +223,7 @@ const SearchableInput = ({
     const query = e.target.value;
     setSearchQuery(query);
 
-    if (query.trim() !== "") {
+    if (enableAutoSuggestion && query.trim() !== "") {
       setShowSuggestions(true);
     } else {
       setShowSuggestions(false);
@@ -250,7 +257,11 @@ const SearchableInput = ({
           type="text"
           value={searchQuery}
           onChange={handleInputChange}
-          onFocus={() => setShowSuggestions(true)}
+          onFocus={() => {
+            if (enableAutoSuggestion) {
+              setShowSuggestions(true);
+            }
+          }}
           onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
@@ -269,7 +280,7 @@ const SearchableInput = ({
         )}
       </div>
 
-      {showSuggestions && (
+      {enableAutoSuggestion && showSuggestions && (
         <div className="border-gray-200 absolute z-10 mt-1 w-full rounded-md border bg-white shadow-lg">
           {filteredOptions.length > 0 ? (
             <ul className="max-h-40 overflow-y-auto py-1 text-sm">

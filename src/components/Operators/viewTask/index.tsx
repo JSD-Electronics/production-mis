@@ -895,6 +895,15 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
       setNotFoundError("");
       setSearchedSerialNo(resolvedSerial);
       resolvedScanDeviceRef.current = resolvedDevice || null;
+
+      if (resolvedDevice) {
+        setDeviceList((prev) => {
+          const exists = prev.some((d) => String(d._id) === String(resolvedDevice._id));
+          if (!exists) return [...prev, resolvedDevice];
+          return prev;
+        });
+      }
+
       return { ok: true, device: resolvedDevice, history };
     };
 
