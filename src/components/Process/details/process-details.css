@@ -1,0 +1,44 @@
+/* Process Details Custom Styles */
+
+.process-details-container {
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.summary-card-hover {
+    transition: all 0.3s ease;
+}
+
+.summary-card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Glassmorphism effects */
+.glass-effect {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+/* Scrollbar styling for workflow grid */
+.workflow-grid::-webkit-scrollbar {
+    width: 6px;
+}
+
+.workflow-grid::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.workflow-grid::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+}
+
+.workflow-grid::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}

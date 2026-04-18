@@ -3,6 +3,7 @@ export interface StageEligibilityResult {
   previousStageName: string;
   isFirstStage: boolean;
   isEligible: boolean;
+  isAlreadyPassed: boolean;
   message: string;
   previousStageRecord: any | null;
 }
@@ -54,10 +55,20 @@ export const resolvePreviousStageEligibility = ({
       previousStageName: "",
       isFirstStage: false,
       isEligible: true,
+      isAlreadyPassed: false,
       message: "",
       previousStageRecord: null,
     };
   }
+
+  // Check if ALREADY PASSED at current stage
+  const currentStageHistory = (Array.isArray(deviceHistory) ? deviceHistory : [])
+    .filter((record: any) => {
+      const recordStage = normalize(record?.stageName || record?.stage || record?.name);
+      return recordStage === normalize(normalizedCurrentStage);
+    });
+  
+  const isAlreadyPassed = currentStageHistory.some(record => isPassingStatus(record?.status));
 
   if (currentStageIndex === 0) {
     return {
@@ -65,7 +76,8 @@ export const resolvePreviousStageEligibility = ({
       previousStageName: "",
       isFirstStage: true,
       isEligible: true,
-      message: "",
+      isAlreadyPassed,
+      message: isAlreadyPassed ? `This device has already passed ${normalizedCurrentStage}.` : "",
       previousStageRecord: null,
     };
   }
@@ -81,7 +93,8 @@ export const resolvePreviousStageEligibility = ({
       previousStageName: "",
       isFirstStage: false,
       isEligible: true,
-      message: "",
+      isAlreadyPassed,
+      message: isAlreadyPassed ? `This device has already passed ${normalizedCurrentStage}.` : "",
       previousStageRecord: null,
     };
   }
@@ -110,6 +123,7 @@ export const resolvePreviousStageEligibility = ({
       previousStageName,
       isFirstStage: false,
       isEligible: false,
+      isAlreadyPassed,
       message: `This device must first pass ${previousStageName} before testing can start at ${normalizedCurrentStage}.`,
       previousStageRecord: null,
     };
@@ -122,6 +136,7 @@ export const resolvePreviousStageEligibility = ({
       previousStageName,
       isFirstStage: false,
       isEligible: false,
+      isAlreadyPassed,
       message: `This device cannot start ${normalizedCurrentStage} because ${previousStageName} is not passed. Latest status: ${latestStatus}.`,
       previousStageRecord,
     };
@@ -132,7 +147,8 @@ export const resolvePreviousStageEligibility = ({
     previousStageName,
     isFirstStage: false,
     isEligible: true,
-    message: "",
+    isAlreadyPassed,
+    message: isAlreadyPassed ? `This device has already passed ${normalizedCurrentStage}.` : "",
     previousStageRecord,
   };
 };

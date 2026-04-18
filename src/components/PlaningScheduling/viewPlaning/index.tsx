@@ -298,7 +298,16 @@ const DraggableGridItem = ({
 };
 
 const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string; readOnly?: boolean; }) => {
-  const isReadOnly = Boolean(readOnly);
+  // Determine read-only mode: non-admin users are always read-only
+  const isAdmin = (() => {
+    try {
+      const userDetails = JSON.parse(localStorage.getItem("userDetails") || "{}");
+      return (userDetails?.userType || "").toLowerCase() === "admin";
+    } catch {
+      return false;
+    }
+  })();
+  const isReadOnly = !isAdmin || Boolean(readOnly);
   const [resolvedPlaningId, setResolvedPlaningId] = useState("");
   const [shiftTime, setShiftTime] = useState(0);
   const [selectedShift, setSelectedShift] = useState(null);
@@ -2500,61 +2509,65 @@ const ViewPlanSchedule = ({ planingId, readOnly = false }: { planingId?: string;
 
                       {selectedProcess?.status !== "completed" ? (
                         <div className="flex items-center gap-2 rounded-xl border border-stroke bg-gray-50 p-2 dark:border-strokedark dark:bg-meta-4">
-                          <button
-                            onClick={handleRefresh}
-                            title={lastRefreshed ? `Refresh (Last Sync: ${lastRefreshed})` : "Refresh"}
-                            aria-label="Refresh"
-                            className={`flex h-9 w-9 items-center justify-center rounded-lg border border-stroke bg-white text-primary transition hover:bg-gray-100 dark:border-strokedark dark:bg-boxdark dark:hover:bg-meta-4 ${isRefreshing ? "animate-spin cursor-not-allowed opacity-50" : ""}`}
-                          >
-                            <FiRefreshCcw size={16} />
-                          </button>
-                          {planData?.processStatus === "down_time_hold" ? (
-                            <button
-                              onClick={handleManualResume}
-                              title="Resume Process"
-                              aria-label="Resume Process"
-                              className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 text-white transition hover:bg-emerald-700"
-                            >
-                              <FiRefreshCcw size={16} />
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => setIsDownTimeModalOpen(true)}
-                              title="Downtime Hold"
-                              aria-label="Downtime Hold"
-                              className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500 text-white transition hover:bg-orange-600"
-                            >
-                              <FiClock size={16} />
-                            </button>
+                          {!isReadOnly && (
+                            <>
+                              <button
+                                onClick={handleRefresh}
+                                title={lastRefreshed ? `Refresh (Last Sync: ${lastRefreshed})` : "Refresh"}
+                                aria-label="Refresh"
+                                className={`flex h-9 w-9 items-center justify-center rounded-lg border border-stroke bg-white text-primary transition hover:bg-gray-100 dark:border-strokedark dark:bg-boxdark dark:hover:bg-meta-4 ${isRefreshing ? "animate-spin cursor-not-allowed opacity-50" : ""}`}
+                              >
+                                <FiRefreshCcw size={16} />
+                              </button>
+                              {planData?.processStatus === "down_time_hold" ? (
+                                <button
+                                  onClick={handleManualResume}
+                                  title="Resume Process"
+                                  aria-label="Resume Process"
+                                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 text-white transition hover:bg-emerald-700"
+                                >
+                                  <FiRefreshCcw size={16} />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setIsDownTimeModalOpen(true)}
+                                  title="Downtime Hold"
+                                  aria-label="Downtime Hold"
+                                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-500 text-white transition hover:bg-orange-600"
+                                >
+                                  <FiClock size={16} />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => {
+                                  setOvertimeConflictMessage("");
+                                  setIsOvertimeModalOpen(true);
+                                }}
+                                title="Add Overtime"
+                                aria-label="Add Overtime"
+                                className="flex h-9 w-9 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-700 transition hover:bg-indigo-50 dark:border-indigo-700/40 dark:bg-boxdark dark:text-indigo-300 dark:hover:bg-indigo-900/20"
+                              >
+                                <FiPlus size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleDeviceSerialNo}
+                                title="Generate Serials"
+                                aria-label="Generate Serials"
+                                className="flex h-9 w-9 items-center justify-center rounded-lg border border-stroke bg-white text-gray-800 transition hover:bg-gray-100 dark:border-strokedark dark:bg-boxdark dark:text-gray-100 dark:hover:bg-meta-4"
+                              >
+                                <FiCodepen size={16} />
+                              </button>
+                              <button
+                                onClick={handleEditPlaning}
+                                title="Edit Planning"
+                                aria-label="Edit Planning"
+                                className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white transition hover:bg-blue-700"
+                              >
+                                <FiEdit size={16} />
+                              </button>
+                            </>
                           )}
-                          <button
-                            onClick={() => {
-                              setOvertimeConflictMessage("");
-                              setIsOvertimeModalOpen(true);
-                            }}
-                            title="Add Overtime"
-                            aria-label="Add Overtime"
-                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-indigo-200 bg-white text-indigo-700 transition hover:bg-indigo-50 dark:border-indigo-700/40 dark:bg-boxdark dark:text-indigo-300 dark:hover:bg-indigo-900/20"
-                          >
-                            <FiPlus size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleDeviceSerialNo}
-                            title="Generate Serials"
-                            aria-label="Generate Serials"
-                            className="flex h-9 w-9 items-center justify-center rounded-lg border border-stroke bg-white text-gray-800 transition hover:bg-gray-100 dark:border-strokedark dark:bg-boxdark dark:text-gray-100 dark:hover:bg-meta-4"
-                          >
-                            <FiCodepen size={16} />
-                          </button>
-                          <button
-                            onClick={handleEditPlaning}
-                            title="Edit Planning"
-                            aria-label="Edit Planning"
-                            className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white transition hover:bg-blue-700"
-                          >
-                            <FiEdit size={16} />
-                          </button>
                         </div>
                       ) : (
                         <span className="rounded-lg bg-green-100 px-3 py-1 text-sm font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">

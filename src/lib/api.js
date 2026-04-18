@@ -2321,7 +2321,9 @@ export const getMesProductionDashboard = async (params = {}) => {
 
 export const fetchOrderConfirmation = async (orderConfirmationNo) => {
   try {
-    const response = await api.get(`/process/orderconfirmation/${orderConfirmationNo}`);
+    const response = await api.get(`/process/orderconfirmation`, {
+      params: { orderConfirmationNo }
+    });
     if (response.status === 200) {
       return response.data;
     } else {
