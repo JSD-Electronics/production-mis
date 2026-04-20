@@ -580,7 +580,7 @@ const ViewTaskDetailsComponent: React.FC<Props> = ({
           deviceCurrentStage === trimmedStageName ||
           (!deviceCurrentStage && trimmedStageName && trimmedStageName === firstStageName);
 
-        if (!(deviceProcessId === String(processId) && deviceStatus !== "ng" && stageMatches)) {
+        if (!(deviceProcessId === String(processId) && (deviceStatus !== "ng" || deviceCurrentStage === trimmedStageName) && stageMatches)) {
           return false;
         }
 

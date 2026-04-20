@@ -68,7 +68,15 @@ export const resolvePreviousStageEligibility = ({
       return recordStage === normalize(normalizedCurrentStage);
     });
   
-  const isAlreadyPassed = currentStageHistory.some(record => isPassingStatus(record?.status));
+  const hasPreviousPass = currentStageHistory.some(record => isPassingStatus(record?.status));
+  
+  // A device is considered "Already Passed" ONLY if it has a Pass record AND it is NOT currently
+  // assigned to this stage (which would indicate it's been sent back for rework).
+  const isReworkActive = 
+    normalize(deviceCurrentStage) === normalize(normalizedCurrentStage) ||
+    normalize(deviceCurrentStage) === normalize(normalizedCurrentStage).replace(/\s+/g, "");
+
+  const isAlreadyPassed = hasPreviousPass && !isReworkActive;
 
   if (currentStageIndex === 0) {
     return {

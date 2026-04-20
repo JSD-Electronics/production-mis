@@ -317,6 +317,19 @@ export default function DeviceTestComponent({
     });
   }, [assignUserStage, processAssignUserStage, processData, product]);
   const [orderConfirmationData, setOrderConfirmationData] = useState<any>(null);
+  const [showAlreadyPassedMsg, setShowAlreadyPassedMsg] = useState(false);
+
+  useEffect(() => {
+    if (stageEligibility?.isAlreadyPassed) {
+      setShowAlreadyPassedMsg(true);
+      const timer = setTimeout(() => {
+        setShowAlreadyPassedMsg(false);
+      }, 10000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowAlreadyPassedMsg(false);
+    }
+  }, [stageEligibility?.isAlreadyPassed, searchResult]);
   useEffect(() => {
     const fetchOC = async () => {
       const ocNo = processData?.orderConfirmationNo || product?.orderConfirmationNo || product?.product?.orderConfirmationNo;
@@ -3946,7 +3959,7 @@ export default function DeviceTestComponent({
         {/* Content */}
         <div className="mt-5 space-y-5">
           {/* Already Passed Message */}
-          {stageEligibility?.isAlreadyPassed && (
+          {showAlreadyPassedMsg && (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-6 text-emerald-900 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
               <div className="flex items-center gap-5">
                 <div className="relative">
@@ -5093,25 +5106,28 @@ export default function DeviceTestComponent({
 
           {/* Device Result */}
           {searchResult && (
-            <div className="mt-4">
+            <div className="sticky top-[65px] z-[25] -mx-4 bg-white/95 px-4 pb-2 pt-4 backdrop-blur-sm transition-all duration-300 sm:-mx-5 sm:px-5">
               <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between border-b pb-4">
-                  <h3 className="flex items-center gap-3 text-sm font-bold text-gray-800">
+                <div className="flex items-center justify-between border-b border-gray-50 pb-4">
+                  <h3 className="flex items-center gap-3 text-sm font-black tracking-tight text-gray-900">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                      <Cpu className="h-4 w-4" />
+                    </span>
                     {searchResult}
                   </h3>
                   {visibleDeviceHistory.length > 0 && (
                     <button
                       onClick={() => setIsPreviousStagesModalOpen(true)}
-                      className="flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-600 transition-colors hover:bg-indigo-100"
+                      className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-[10px] font-bold text-indigo-600 transition-all hover:bg-indigo-100 hover:shadow-sm active:scale-95"
                     >
-                      <ListChecks className="h-3 w-3" />
+                      <ListChecks className="h-3.5 w-3.5" />
                       View Previous Stages
                     </button>
                   )}
                 </div>
 
                 {/* Enhanced Stage Progress Badges */}
-                <div className="no-scrollbar flex flex-nowrap gap-2.5 overflow-x-auto pb-2">
+                <div className="flex flex-wrap gap-2.5 pb-2">
                   {(processData?.stages || []).map(
                     (stage: any, idx: number) => {
                       const stageHistories = visibleDeviceHistory.filter(
@@ -5132,7 +5148,7 @@ export default function DeviceTestComponent({
                           key={idx}
                           disabled={!hasHistory}
                           onClick={() => openStageLogs(stage.stageName, stageHistories)}
-                          className={`group relative flex shrink-0 items-center gap-2 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${isPass
+                          className={`group relative flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${isPass
                             ? "border-green-200 bg-green-50/50 text-green-700 shadow-sm hover:shadow-green-100/50"
                             : isNG
                               ? "border-red-200 bg-red-50/50 text-red-700 shadow-sm hover:shadow-red-100/50"
@@ -5242,24 +5258,48 @@ export default function DeviceTestComponent({
                                 {currentSubStep && (
                                   <>
                                     {/* PROGRESS BAR */}
-                                    <div className="mb-2">
-                                      <div className="mb-2 flex justify-between text-sm font-medium text-gray-500">
-                                        <span className="flex items-center gap-2">
-                                          <ListChecks className="h-4 w-4 text-primary" />
-                                          Process Progress
-                                        </span>
-                                        <span className="font-bold text-gray-700">
-                                          {Math.round(
-                                            (currentJigStepIndex /
-                                              testSteps.length) *
-                                            100,
-                                          )}
-                                          %
-                                        </span>
+                                    <div className="mb-6 rounded-2xl border border-gray-100 bg-gray-50/50 p-4 shadow-sm transition-all hover:shadow-md">
+                                      <div className="mb-3 flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-inner">
+                                            <ListChecks className="h-5 w-5" />
+                                          </div>
+                                          <div>
+                                            <h5 className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-700">
+                                              Process Progress
+                                            </h5>
+                                            <p className="text-[10px] font-bold text-gray-400">
+                                              Step {currentJigStepIndex + 1} of {testSteps.length}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <div className="flex flex-col items-end">
+                                          <span className="text-sm font-black text-primary">
+                                            {Math.round(
+                                              (currentJigStepIndex / testSteps.length) * 100,
+                                            )}
+                                            %
+                                          </span>
+                                          <div className="mt-0.5 flex gap-0.5">
+                                            {[...Array(5)].map((_, i) => (
+                                              <div
+                                                key={i}
+                                                className={`h-1 w-3 rounded-full transition-colors ${i < Math.floor((currentJigStepIndex / testSteps.length) * 5) ? "bg-primary" : "bg-gray-200"}`}
+                                              />
+                                            ))}
+                                          </div>
+                                        </div>
                                       </div>
-                                      <div className="h-2.5 w-full overflow-hidden rounded-full border border-gray-200 bg-gray-100">
+                                      <div className="relative h-3 w-full overflow-hidden rounded-full bg-gray-200/50 p-0.5 shadow-inner">
                                         <div
-                                          className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+                                          className="h-full rounded-full bg-gradient-to-r from-primary via-indigo-500 to-primary transition-all duration-1000 ease-out"
+                                          style={{
+                                            width: `${(currentJigStepIndex / testSteps.length) * 100}%`,
+                                            backgroundSize: "200% 100%",
+                                          }}
+                                        />
+                                        <div
+                                          className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.3)_50%,transparent_100%)] bg-[length:50%_100%] animate-[shimmer_2s_infinite]"
                                           style={{
                                             width: `${(currentJigStepIndex / testSteps.length) * 100}%`,
                                           }}
@@ -6066,9 +6106,11 @@ export default function DeviceTestComponent({
                                                       <div className="p-6">
                                                         <div className="flex flex-col gap-4 pt-4 sm:flex-row">
                                                           <button
-                                                            onClick={() =>
-                                                              setIsPackagingPreApproved(true)
-                                                            }
+                                                            onClick={() => {
+                                                              setIsPackagingPreApproved(true);
+                                                              handleAddToCart(currentSubStep);
+                                                              handleVerifyPackaging();
+                                                            }}
                                                             disabled={!!jigDecision}
                                                             className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-6 py-3.5 text-sm font-bold text-white shadow-sm transition-all active:scale-[0.98] ${jigDecision ? "cursor-not-allowed bg-gray-400 opacity-50 shadow-none" : "bg-success hover:bg-green-600"}`}
                                                           >
